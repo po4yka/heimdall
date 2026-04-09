@@ -2,7 +2,7 @@
 
 ## Project
 
-Local Claude Code usage analytics dashboard. Rust binary with embedded web UI.
+Local Claude Code usage analytics dashboard. Rust binary with embedded web UI, OAuth-based rate limit monitoring, and webhook notifications.
 
 ## Build & Run
 
@@ -18,7 +18,9 @@ cargo build                    # debug build
 cargo build --release          # release build
 cargo run -- dashboard         # scan + start dashboard
 cargo run -- today             # today's usage
+cargo run -- today --json      # JSON output for scripting
 cargo run -- stats             # all-time stats
+cargo run -- stats --json      # JSON output
 cargo run -- scan              # scan only
 ```
 
@@ -27,10 +29,14 @@ The compiled `src/ui/app.js` is committed to git so `cargo build` works without 
 ## Test
 
 ```bash
-cargo test                     # all Rust tests
-cargo test scanner             # scanner module tests
-cargo test pricing             # pricing tests
-cargo test -- --nocapture      # with stdout
+cargo test                        # all 118 tests
+cargo test scanner                # scanner module tests
+cargo test pricing                # pricing tests
+cargo test oauth                  # OAuth module tests
+cargo test config                 # config tests
+cargo test webhooks               # webhook tests
+cargo test cli_tests              # CLI command tests
+cargo test -- --nocapture         # with stdout
 ./node_modules/.bin/tsc --noEmit  # TypeScript type check
 ```
 
@@ -45,32 +51,47 @@ cargo fmt --check
 
 ```
 src/
-  main.rs              -- CLI (clap), entry point
-  models.rs            -- Shared types (Session, Turn, ScanResult)
-  pricing.rs           -- Pricing table, cost calculation (SINGLE source of truth)
+  main.rs              -- CLI (clap), entry point, cmd_today/cmd_stats
+  cli_tests.rs         -- CLI command tests
+  config.rs            -- TOML config: projects_dirs, db_path, host, port, oauth, webhooks, pricing
+  models.rs            -- Shared types (Session, Turn, ScanResult, DashboardData, SubagentSummary, etc.)
+  pricing.rs           -- Pricing table, calc_cost/calc_cost_nanos, volume discounts, overrides via OnceLock
+  webhooks.rs          -- Fire-and-forget webhook POSTs on session depletion / cost threshold
+  oauth/
+    mod.rs             -- poll_usage(): load creds -> refresh if needed -> fetch API -> attach identity
+    credentials.rs     -- Read ~/.claude/.credentials.json, token refresh via platform.claude.com
+    api.rs             -- GET api.anthropic.com/api/oauth/usage, response building
+    models.rs          -- CredentialsFile, OAuthUsageResponse, UsageWindowsResponse, Plan, Identity
   scanner/
-    mod.rs             -- scan() orchestration, incremental logic
-    parser.rs          -- JSONL parsing, streaming dedup by message.id
-    db.rs              -- SQLite schema, init, migrations, queries
+    mod.rs             -- scan() orchestration, incremental processing, walkdir
+    parser.rs          -- JSONL parsing, streaming dedup by message.id, subagent detection (isSidechain/agentId)
+    db.rs              -- SQLite schema, init, migrations, queries, rate_window_history table
+    tests.rs           -- Integration tests for scan pipeline
   server/
-    mod.rs             -- axum server setup, router
-    api.rs             -- GET /api/data, POST /api/rescan, GET /api/health
+    mod.rs             -- axum router: /, /api/data, /api/rescan, /api/usage-windows, /api/health
+    api.rs             -- Handlers with AppState (db_path, oauth cache via RwLock, webhook config)
     assets.rs          -- include_str! for HTML/CSS/JS
+    tests.rs           -- HTTP endpoint tests
   ui/
-    index.html         -- Dashboard HTML
-    style.css          -- Dashboard styles
-    app.ts             -- Dashboard logic (TypeScript source)
+    index.html         -- Dashboard HTML shell
+    style.css          -- Dark theme CSS
+    app.ts             -- Dashboard TypeScript source (types, rendering, filtering, charts)
     app.js             -- Compiled JS (committed, do not edit directly)
 ```
 
 ## Key Design Decisions
 
-- **Single pricing source**: pricing.rs is the only place model prices are defined. The JS dashboard receives cost values pre-calculated from the API, or recalculates using a pricing table injected into the HTML template from Rust. Never duplicate pricing in JS.
-- **Embedded assets**: HTML/CSS/JS are embedded via `include_str!` at compile time. No separate file serving.
-- **TypeScript source**: `src/ui/app.ts` is the source of truth for dashboard JS. Compiled to `src/ui/app.js` via esbuild. The compiled JS is committed so `cargo build` works without Node.js.
-- **Incremental scanning**: track file mtime + line count in `processed_files` table. Only re-read changed files, skip already-processed lines.
-- **Dedup correctness**: after all turn inserts, recompute session totals from the turns table via `SELECT SUM(...)`. This handles cases where `INSERT OR IGNORE` skipped duplicate message_ids.
-- **Atomic rescan**: on rescan, write to a temp DB file, then atomically rename over the old one. Never delete the DB then scan (crash = data loss).
+- **Single pricing source**: pricing.rs is the only place model prices are defined. The dashboard receives pre-computed costs from the API. No pricing logic in JS.
+- **Integer nanos**: `calc_cost_nanos()` computes cost in billionths of a dollar (i64) to avoid f64 drift. `calc_cost()` is a thin wrapper.
+- **Volume discounts**: `ModelPricing` has optional `threshold_tokens` + above-threshold rates. Sonnet 4.5 has a 200K threshold.
+- **Pricing overrides**: Config file can override any model's rates. Applied via `OnceLock<HashMap>` at startup.
+- **Embedded assets**: HTML/CSS/JS embedded via `include_str!` at compile time.
+- **TypeScript source**: `src/ui/app.ts` is the source of truth. Compiled via esbuild. Committed so `cargo build` works without Node.js.
+- **Incremental scanning**: Track file mtime + line count in `processed_files` table. Skip already-processed lines.
+- **Dedup correctness**: After all turn inserts, recompute session totals from turns table via `SELECT SUM(...)`.
+- **Atomic rescan**: Write to temp DB, then atomically rename. No data loss on crash.
+- **OAuth caching**: Usage windows cached in `RwLock<Option<(Instant, Data)>>` for configurable interval (default 60s).
+- **Subagent tracking**: `isSidechain` + `agentId` from JSONL stored as `is_subagent` + `agent_id` in turns table.
 
 ## Conventions
 
@@ -85,7 +106,7 @@ src/
 
 ### Adding a new model to pricing
 
-Edit `pricing.rs` only. The pricing table is a `const` array. Add the model name and rates. Tests will verify the lookup logic.
+Edit `pricing.rs` only. Add to `PRICING_TABLE`. Set `threshold_tokens: None` unless it has volume discounts. Tests verify the lookup logic.
 
 ### Adding a new JSONL field
 
@@ -93,8 +114,21 @@ Edit `pricing.rs` only. The pricing table is a `const` array. Add the model name
 2. Parse it in `parser.rs`
 3. Add column migration in `db.rs` (ALTER TABLE with try/catch pattern)
 4. Expose via API in `api.rs` if needed by the dashboard
-5. Update `index.html` / `app.js` if it should appear in the UI
+5. Update `app.ts` if it should appear in the UI, then recompile
+
+### Adding a new API endpoint
+
+1. Add handler in `server/api.rs`
+2. Add route in `server/mod.rs`
+3. Add test in `server/tests.rs` (include in `test_app()` router)
 
 ### Changing the database schema
 
 Always use additive migrations (ALTER TABLE ADD COLUMN). Check for column existence before adding. Never drop columns or tables in migrations -- only in full rescan.
+
+### Config file changes
+
+1. Add field to the appropriate struct in `config.rs` (with `#[serde(default)]`)
+2. Extract in `main.rs` before the match
+3. Pass through to where it's needed (server, scanner, etc.)
+4. Add test for parsing in `config.rs` tests
