@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rusqlite::Connection;
+use tracing::warn;
 
 use crate::models::{
     DailyModelRow, DashboardData, EntrypointSummary, ServiceTierSummary, SessionRow, Turn,
@@ -222,7 +223,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
     )?;
     let all_models: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => { warn!("Failed to read row: {}", e); None }
+        })
         .collect();
 
     // Daily by model
@@ -252,7 +256,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
                 cost,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => { warn!("Failed to read row: {}", e); None }
+        })
         .collect();
 
     // Sessions with subagent counts
@@ -305,7 +312,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
                 subagent_turns: row.get(11)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => { warn!("Failed to read row: {}", e); None }
+        })
         .collect();
 
     // Subagent summary
@@ -333,7 +343,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
                 })
             },
         )
-        .unwrap_or_default();
+        .unwrap_or_else(|e| {
+            warn!("Subagent summary query failed: {}", e);
+            Default::default()
+        });
 
     // Entrypoint breakdown
     let mut stmt = conn.prepare(
@@ -357,7 +370,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
                 output: row.get(4)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => { warn!("Failed to read row: {}", e); None }
+        })
         .collect();
 
     // Service tier summary
@@ -378,7 +394,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
                 turns: row.get(2)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => { warn!("Failed to read row: {}", e); None }
+        })
         .collect();
 
     let generated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -426,7 +445,10 @@ pub fn get_rate_window_history(
         .query_map(rusqlite::params![window_type, cutoff], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => { warn!("Failed to read row: {}", e); None }
+        })
         .collect();
     Ok(rows)
 }

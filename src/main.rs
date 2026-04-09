@@ -214,7 +214,10 @@ fn cmd_today(db_path: &std::path::Path, json_output: bool) -> Result<()> {
                 row.get(5)?,
             ))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => { tracing::warn!("Failed to read row: {}", e); None }
+        })
         .collect();
 
     if json_output {
@@ -320,7 +323,10 @@ fn cmd_stats(db_path: &std::path::Path, json_output: bool) -> Result<()> {
                 row.get(6)?,
             ))
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => { tracing::warn!("Failed to read row: {}", e); None }
+        })
         .collect();
 
     let total_cost: f64 = by_model

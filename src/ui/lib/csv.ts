@@ -2,10 +2,13 @@
 
 export function csvField(val: unknown): string {
   const s = String(val);
-  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-    return '"' + s.replace(/"/g, '""') + '"';
+  // Prevent CSV injection (formula execution in spreadsheets)
+  const needsPrefix = /^[=+\-@\t\r]/.test(s);
+  const escaped = needsPrefix ? "'" + s : s;
+  if (escaped.includes(',') || escaped.includes('"') || escaped.includes('\n')) {
+    return '"' + escaped.replace(/"/g, '""') + '"';
   }
-  return s;
+  return escaped;
 }
 
 export function csvTimestamp(): string {
@@ -22,5 +25,5 @@ export function downloadCSV(reportType: string, header: string[], rows: unknown[
   a.href = URL.createObjectURL(blob);
   a.download = reportType + '_' + csvTimestamp() + '.csv';
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

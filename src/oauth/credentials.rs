@@ -93,11 +93,11 @@ pub async fn refresh_token_to(creds: &OAuthCredentials, creds_path: &Path) -> Op
 
     let resp = client
         .post(REFRESH_ENDPOINT)
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(format!(
-            "grant_type=refresh_token&refresh_token={}&client_id={}",
-            refresh_tok, CLIENT_ID
-        ))
+        .form(&[
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_tok),
+            ("client_id", CLIENT_ID),
+        ])
         .send()
         .await
         .map_err(|e| warn!("Token refresh request failed: {}", e))

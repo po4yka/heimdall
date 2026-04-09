@@ -71,6 +71,11 @@ pub fn notify_if_configured(config: &WebhookConfig, event: WebhookEvent) {
         }
     };
 
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        tracing::warn!("Webhook URL must use http(s) scheme: {}", url);
+        return;
+    }
+
     let enabled = match event.event_type.as_str() {
         "session_depleted" | "session_restored" => config.session_depleted,
         "cost_threshold" => config.cost_threshold.is_some(),

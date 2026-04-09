@@ -302,6 +302,28 @@
     ] }) });
   }
 
+  // src/ui/lib/charts.ts
+  var TOKEN_COLORS = {
+    input: "rgba(79,142,247,0.8)",
+    output: "rgba(167,139,250,0.8)",
+    cache_read: "rgba(74,222,128,0.6)",
+    cache_creation: "rgba(251,191,36,0.6)"
+  };
+  var MODEL_COLORS = ["#d97757", "#4f8ef7", "#4ade80", "#a78bfa", "#fbbf24", "#f472b6", "#34d399", "#60a5fa"];
+  var RANGE_LABELS = {
+    "7d": "Last 7 Days",
+    "30d": "Last 30 Days",
+    "90d": "Last 90 Days",
+    "all": "All Time"
+  };
+  var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
+  function apexThemeMode() {
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  }
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
   // src/ui/lib/format.ts
   function esc(s4) {
     const d5 = document.createElement("div");
@@ -330,31 +352,9 @@
     return minutes + "m";
   }
   function progressColor(percent) {
-    if (percent >= 90) return "#ef4444";
-    if (percent >= 70) return "#fbbf24";
-    return "#4ade80";
-  }
-
-  // src/ui/lib/charts.ts
-  var TOKEN_COLORS = {
-    input: "rgba(79,142,247,0.8)",
-    output: "rgba(167,139,250,0.8)",
-    cache_read: "rgba(74,222,128,0.6)",
-    cache_creation: "rgba(251,191,36,0.6)"
-  };
-  var MODEL_COLORS = ["#d97757", "#4f8ef7", "#4ade80", "#a78bfa", "#fbbf24", "#f472b6", "#34d399", "#60a5fa"];
-  var RANGE_LABELS = {
-    "7d": "Last 7 Days",
-    "30d": "Last 30 Days",
-    "90d": "Last 90 Days",
-    "all": "All Time"
-  };
-  var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
-  function apexThemeMode() {
-    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-  }
-  function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    if (percent >= 90) return cssVar("--red");
+    if (percent >= 70) return cssVar("--yellow");
+    return cssVar("--green");
   }
 
   // node_modules/preact/hooks/dist/hooks.module.js
@@ -1126,11 +1126,11 @@
       { label: "Output Tokens", value: fmt(totals.output), sub: rangeLabel },
       { label: "Cache Read", value: fmt(totals.cache_read), sub: "from prompt cache" },
       { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "writes to prompt cache" },
-      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing estimate", color: "#4ade80" }
+      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing estimate", color: "var(--green)" }
     ];
     return /* @__PURE__ */ u2(S, { children: stats.map((s4) => /* @__PURE__ */ u2("div", { class: "stat-card", children: [
       /* @__PURE__ */ u2("div", { class: "label", children: s4.label }),
-      /* @__PURE__ */ u2("div", { class: "value", style: s4.color ? { color: s4.color } : void 0, children: s4.value }),
+      /* @__PURE__ */ u2("div", { class: "value num", style: s4.color ? { color: s4.color } : void 0, children: s4.value }),
       s4.sub ? /* @__PURE__ */ u2("div", { class: "sub", children: s4.sub }) : null
     ] }, s4.label)) });
   }
@@ -1168,7 +1168,7 @@
       borderRadius: "8px",
       fontSize: "13px",
       maxWidth: "400px",
-      boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+      boxShadow: document.documentElement.getAttribute("data-theme") === "dark" ? "none" : "0 1px 3px rgba(0,0,0,0.08)"
     }, children: t4.text }, t4.id)) });
   }
 
@@ -4076,7 +4076,9 @@
           return /* @__PURE__ */ u2(
             "th",
             {
+              scope: "col",
               class: canSort ? "sortable" : void 0,
+              "aria-sort": sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : void 0,
               onClick: canSort ? header.column.getToggleSortingHandler() : void 0,
               children: [
                 renderHeader(header),
@@ -4414,6 +4416,10 @@
   function ApexChart({ options, id }) {
     const ref = A2(null);
     const chartRef = A2(null);
+    const optionsKey = T2(
+      () => JSON.stringify(options, (_key, val) => typeof val === "function" ? void 0 : val),
+      [options]
+    );
     y2(() => {
       if (chartRef.current) chartRef.current.destroy();
       if (ref.current && options) {
@@ -4424,7 +4430,7 @@
         chartRef.current?.destroy();
         chartRef.current = null;
       };
-    });
+    }, [optionsKey]);
     return /* @__PURE__ */ u2("div", { ref, id, style: { width: "100%", height: "100%" } });
   }
 
@@ -4539,10 +4545,12 @@
   // src/ui/lib/csv.ts
   function csvField(val) {
     const s4 = String(val);
-    if (s4.includes(",") || s4.includes('"') || s4.includes("\n")) {
-      return '"' + s4.replace(/"/g, '""') + '"';
+    const needsPrefix = /^[=+\-@\t\r]/.test(s4);
+    const escaped = needsPrefix ? "'" + s4 : s4;
+    if (escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")) {
+      return '"' + escaped.replace(/"/g, '""') + '"';
     }
-    return s4;
+    return escaped;
   }
   function csvTimestamp() {
     const d5 = /* @__PURE__ */ new Date();
@@ -4556,7 +4564,7 @@
     a4.href = URL.createObjectURL(blob);
     a4.download = reportType + "_" + csvTimestamp() + ".csv";
     a4.click();
-    URL.revokeObjectURL(a4.href);
+    setTimeout(() => URL.revokeObjectURL(a4.href), 1e3);
   }
 
   // src/ui/lib/theme.ts
@@ -4574,7 +4582,7 @@
       document.documentElement.removeAttribute("data-theme");
     }
     const icon = document.getElementById("theme-icon");
-    if (icon) icon.innerHTML = theme === "dark" ? "&#x2600;" : "&#x263E;";
+    if (icon) icon.innerHTML = theme === "dark" ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
     if (rawData.value) applyFilter();
   }
   function toggleTheme() {
@@ -4840,7 +4848,7 @@
       <div style="background:var(--border);border-radius:4px;height:6px;margin:6px 0">
         <div style="background:${color};height:100%;border-radius:4px;width:${pct}%;transition:width 0.3s"></div>
       </div>
-      <div class="sub">${b4.currency}</div>
+      <div class="sub">${esc(b4.currency)}</div>
     </div>`;
     }
     container.innerHTML = cards;
@@ -4942,6 +4950,16 @@
       btn.disabled = false;
     }, 3e3);
   }
+  function renderLoadingSkeleton() {
+    const statsRow = document.getElementById("stats-row");
+    if (statsRow && !rawData.value) {
+      statsRow.innerHTML = Array.from(
+        { length: 7 },
+        () => '<div class="skeleton" style="height:80px"></div>'
+      ).join("");
+    }
+  }
+  renderLoadingSkeleton();
   async function loadData() {
     try {
       const resp = await fetch("/api/data");

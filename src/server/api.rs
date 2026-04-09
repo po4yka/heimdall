@@ -35,7 +35,8 @@ pub async fn api_data(State(state): State<Arc<AppState>>) -> Result<Json<Value>,
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(serde_json::to_value(result).unwrap()))
+    let value = serde_json::to_value(result).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
 }
 
 pub async fn api_rescan(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
@@ -55,16 +56,17 @@ pub async fn api_rescan(State(state): State<Arc<AppState>>) -> Result<Json<Value
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(serde_json::to_value(result).unwrap()))
+    let value = serde_json::to_value(result).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
 }
 
 pub async fn api_usage_windows(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
     if !state.oauth_enabled {
-        return Ok(Json(
-            serde_json::to_value(UsageWindowsResponse::unavailable()).unwrap(),
-        ));
+        let value = serde_json::to_value(UsageWindowsResponse::unavailable())
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        return Ok(Json(value));
     }
 
     // Check cache
@@ -73,7 +75,9 @@ pub async fn api_usage_windows(
         if let Some((fetched_at, ref data)) = *cache
             && fetched_at.elapsed().as_secs() < state.oauth_refresh_interval
         {
-            return Ok(Json(serde_json::to_value(data).unwrap()));
+            let value =
+                serde_json::to_value(data).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            return Ok(Json(value));
         }
     }
 
@@ -86,7 +90,8 @@ pub async fn api_usage_windows(
         *cache = Some((Instant::now(), resp.clone()));
     }
 
-    Ok(Json(serde_json::to_value(resp).unwrap()))
+    let value = serde_json::to_value(resp).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
 }
 
 pub async fn api_health() -> &'static str {
