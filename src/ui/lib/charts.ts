@@ -2,12 +2,12 @@ import type { RangeKey } from '../state/types';
 
 // ── Chart colors ───────────────────────────────────────────────────────
 export const TOKEN_COLORS: Record<string, string> = {
-  input:          'rgba(79,142,247,0.8)',
-  output:         'rgba(167,139,250,0.8)',
-  cache_read:     'rgba(74,222,128,0.6)',
-  cache_creation: 'rgba(251,191,36,0.6)',
+  input:          'rgba(59,130,246,0.8)',   // blue
+  output:         'rgba(167,139,250,0.8)',  // purple
+  cache_read:     'rgba(34,197,94,0.5)',    // green
+  cache_creation: 'rgba(234,179,8,0.5)',    // yellow
 };
-export const MODEL_COLORS = ['#d97757', '#4f8ef7', '#4ade80', '#a78bfa', '#fbbf24', '#f472b6', '#34d399', '#60a5fa'];
+export const MODEL_COLORS = ['#6366f1', '#3b82f6', '#22c55e', '#a78bfa', '#eab308', '#f472b6', '#14b8a6', '#60a5fa'];
 
 // ── Time range ─────────────────────────────────────────────────────────
 export const RANGE_LABELS: Record<RangeKey, string> = {
@@ -17,7 +17,7 @@ export const RANGE_TICKS: Record<RangeKey, number> = { '7d': 7, '30d': 15, '90d'
 
 // ── ApexCharts theme helper ───────────────────────────────────────────
 export function apexThemeMode(): 'light' | 'dark' {
-  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 }
 
 export function cssVar(name: string): string {

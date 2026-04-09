@@ -147,7 +147,9 @@ export function DataTable<T>({
                 return (
                   <th
                     key={header.id}
+                    scope="col"
                     class={canSort ? 'sortable' : undefined}
+                    aria-sort={sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : undefined}
                     onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                   >
                     {renderHeader(header)}

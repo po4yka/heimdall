@@ -280,7 +280,7 @@ mod tests {
         let html = assets::render_dashboard();
         assert!(html.contains("<!DOCTYPE html>"));
         assert!(html.contains("apexcharts"));
-        assert!(html.contains("Claude Code Usage Dashboard"));
+        assert!(html.contains("Claude"));
     }
 
     #[test]

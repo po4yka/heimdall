@@ -138,6 +138,7 @@ export interface StatCard {
   value: string;
   sub: string;
   color?: string;
+  isCost?: boolean;
 }
 
 export type SortDir = 'asc' | 'desc';

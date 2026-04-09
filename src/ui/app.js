@@ -304,12 +304,16 @@
 
   // src/ui/lib/charts.ts
   var TOKEN_COLORS = {
-    input: "rgba(79,142,247,0.8)",
+    input: "rgba(59,130,246,0.8)",
+    // blue
     output: "rgba(167,139,250,0.8)",
-    cache_read: "rgba(74,222,128,0.6)",
-    cache_creation: "rgba(251,191,36,0.6)"
+    // purple
+    cache_read: "rgba(34,197,94,0.5)",
+    // green
+    cache_creation: "rgba(234,179,8,0.5)"
+    // yellow
   };
-  var MODEL_COLORS = ["#d97757", "#4f8ef7", "#4ade80", "#a78bfa", "#fbbf24", "#f472b6", "#34d399", "#60a5fa"];
+  var MODEL_COLORS = ["#6366f1", "#3b82f6", "#22c55e", "#a78bfa", "#eab308", "#f472b6", "#14b8a6", "#60a5fa"];
   var RANGE_LABELS = {
     "7d": "Last 7 Days",
     "30d": "Last 30 Days",
@@ -318,7 +322,7 @@
   };
   var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
   function apexThemeMode() {
-    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
   }
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -1124,15 +1128,15 @@
       { label: "Turns", value: fmt(totals.turns), sub: rangeLabel },
       { label: "Input Tokens", value: fmt(totals.input), sub: rangeLabel },
       { label: "Output Tokens", value: fmt(totals.output), sub: rangeLabel },
-      { label: "Cache Read", value: fmt(totals.cache_read), sub: "from prompt cache" },
-      { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "writes to prompt cache" },
-      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing estimate", color: "var(--green)" }
+      { label: "Cache Read", value: fmt(totals.cache_read), sub: "prompt cache" },
+      { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "cache writes" },
+      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing", isCost: true }
     ];
-    return /* @__PURE__ */ u2(S, { children: stats.map((s4) => /* @__PURE__ */ u2("div", { class: "stat-card", children: [
-      /* @__PURE__ */ u2("div", { class: "label", children: s4.label }),
-      /* @__PURE__ */ u2("div", { class: "value num", style: s4.color ? { color: s4.color } : void 0, children: s4.value }),
-      s4.sub ? /* @__PURE__ */ u2("div", { class: "sub", children: s4.sub }) : null
-    ] }, s4.label)) });
+    return /* @__PURE__ */ u2(S, { children: stats.map((s4) => /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u2("div", { class: "stat-label", children: s4.label }),
+      /* @__PURE__ */ u2("div", { class: `stat-value ${s4.isCost ? "cost-value" : ""}`, children: s4.value }),
+      s4.sub ? /* @__PURE__ */ u2("div", { class: "stat-sub", children: s4.sub }) : null
+    ] }) }, s4.label)) });
   }
 
   // src/ui/components/Toast.tsx
@@ -1155,7 +1159,7 @@
   function ToastContainer() {
     return /* @__PURE__ */ u2("div", { style: {
       position: "fixed",
-      top: 16,
+      top: 56,
       right: 16,
       zIndex: 999,
       display: "flex",
@@ -1164,11 +1168,13 @@
     }, children: toasts.value.map((t4) => /* @__PURE__ */ u2("div", { style: {
       background: `var(--toast-${t4.type === "error" ? "error" : "success"}-bg)`,
       color: `var(--toast-${t4.type === "error" ? "error" : "success"}-text)`,
-      padding: "12px 20px",
+      padding: "10px 16px",
       borderRadius: "8px",
-      fontSize: "13px",
-      maxWidth: "400px",
-      boxShadow: document.documentElement.getAttribute("data-theme") === "dark" ? "none" : "0 1px 3px rgba(0,0,0,0.08)"
+      fontSize: "12px",
+      fontWeight: 500,
+      maxWidth: "360px",
+      border: "1px solid var(--border)",
+      animation: "slideIn 0.2s ease-out"
     }, children: t4.text }, t4.id)) });
   }
 
@@ -4438,7 +4444,7 @@
   function DailyChart({ daily }) {
     const options = {
       chart: {
-        type: "bar",
+        type: "area",
         height: "100%",
         stacked: true,
         background: "transparent",
@@ -4453,6 +4459,16 @@
         { name: "Cache Creation", data: daily.map((d5) => d5.cache_creation) }
       ],
       colors: [TOKEN_COLORS.input, TOKEN_COLORS.output, TOKEN_COLORS.cache_read, TOKEN_COLORS.cache_creation],
+      fill: {
+        type: "gradient",
+        gradient: {
+          shadeIntensity: 1,
+          opacityFrom: 0.4,
+          opacityTo: 0.05,
+          stops: [0, 95, 100]
+        }
+      },
+      stroke: { curve: "smooth", width: 2 },
       xaxis: {
         categories: daily.map((d5) => d5.day),
         labels: { rotate: -45, maxHeight: 60 },
@@ -4462,8 +4478,7 @@
       legend: { position: "top", fontSize: "11px" },
       dataLabels: { enabled: false },
       tooltip: { y: { formatter: (v4) => fmt(v4) + " tokens" } },
-      grid: { borderColor: cssVar("--chart-grid") },
-      plotOptions: { bar: { columnWidth: "70%" } }
+      grid: { borderColor: cssVar("--chart-grid"), strokeDashArray: 3 }
     };
     return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-daily" });
   }
@@ -4576,18 +4591,18 @@
 
   // src/ui/app.tsx
   function applyTheme(theme) {
-    if (theme === "dark") {
-      document.documentElement.setAttribute("data-theme", "dark");
+    if (theme === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
     const icon = document.getElementById("theme-icon");
-    if (icon) icon.innerHTML = theme === "dark" ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>' : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    if (icon) icon.innerHTML = theme === "dark" ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
     if (rawData.value) applyFilter();
   }
   function toggleTheme() {
-    const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-    const next = current === "dark" ? "light" : "dark";
+    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    const next = current === "light" ? "dark" : "light";
     localStorage.setItem("theme", next);
     applyTheme(next);
   }

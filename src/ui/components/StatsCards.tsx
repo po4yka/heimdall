@@ -10,18 +10,20 @@ export function StatsCards({ totals }: { totals: Totals }) {
     { label: 'Turns',          value: fmt(totals.turns),                sub: rangeLabel },
     { label: 'Input Tokens',   value: fmt(totals.input),                sub: rangeLabel },
     { label: 'Output Tokens',  value: fmt(totals.output),               sub: rangeLabel },
-    { label: 'Cache Read',     value: fmt(totals.cache_read),           sub: 'from prompt cache' },
-    { label: 'Cache Creation', value: fmt(totals.cache_creation),       sub: 'writes to prompt cache' },
-    { label: 'Est. Cost',      value: fmtCostBig(totals.cost),          sub: 'API pricing estimate', color: '#4ade80' },
+    { label: 'Cache Read',     value: fmt(totals.cache_read),           sub: 'prompt cache' },
+    { label: 'Cache Creation', value: fmt(totals.cache_creation),       sub: 'cache writes' },
+    { label: 'Est. Cost',      value: fmtCostBig(totals.cost),          sub: 'API pricing', isCost: true },
   ];
 
   return (
     <>
       {stats.map(s => (
-        <div class="stat-card" key={s.label}>
-          <div class="label">{s.label}</div>
-          <div class="value" style={s.color ? { color: s.color } : undefined}>{s.value}</div>
-          {s.sub ? <div class="sub">{s.sub}</div> : null}
+        <div class="card stat-card" key={s.label}>
+          <div class="stat-content">
+            <div class="stat-label">{s.label}</div>
+            <div class={`stat-value ${s.isCost ? 'cost-value' : ''}`}>{s.value}</div>
+            {s.sub ? <div class="stat-sub">{s.sub}</div> : null}
+          </div>
         </div>
       ))}
     </>

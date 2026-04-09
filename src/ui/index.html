@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude Code Usage Dashboard</title>
+<title>Claude Code Usage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@4/dist/apexcharts.min.js"></script>
 <style>
 /* __STYLE_CSS__ */
@@ -11,65 +14,71 @@
 </head>
 <body>
 <header>
-  <h1>Claude Code Usage Dashboard <span id="plan-badge" style="display:none;font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(217,119,87,0.15);color:var(--accent);vertical-align:middle;margin-left:8px"></span></h1>
-  <div class="meta" id="meta">Loading...</div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark theme">
-      <span id="theme-icon">&#x263E;</span>
+  <h1><span class="accent">Claude</span> Usage <span id="plan-badge" style="display:none;font-size:10px;padding:1px 6px;border-radius:3px;background:var(--accent-muted);color:var(--accent);vertical-align:middle;margin-left:6px;font-weight:500"></span></h1>
+  <div class="meta" id="meta"></div>
+  <div class="header-actions">
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+      <span id="theme-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
     </button>
-    <button id="rescan-btn" onclick="triggerRescan()" title="Rebuild the database from scratch">&#x21bb; Rescan</button>
+    <button id="rescan-btn" onclick="triggerRescan()" aria-label="Rescan database">Rescan</button>
   </div>
 </header>
 
-<div id="filter-bar">
+<div id="filter-bar" role="toolbar" aria-label="Filters">
   <div class="filter-label">Models</div>
-  <div id="model-checkboxes"></div>
+  <div id="model-checkboxes" role="group" aria-label="Model filters"></div>
   <button class="filter-btn" onclick="selectAllModels()">All</button>
   <button class="filter-btn" onclick="clearAllModels()">None</button>
   <div class="filter-sep"></div>
   <div class="filter-label">Range</div>
-  <div class="range-group">
-    <button class="range-btn" data-range="7d"  onclick="setRange('7d')">7d</button>
+  <div class="range-group" role="group" aria-label="Date range">
+    <button class="range-btn" data-range="7d" onclick="setRange('7d')">7d</button>
     <button class="range-btn" data-range="30d" onclick="setRange('30d')">30d</button>
     <button class="range-btn" data-range="90d" onclick="setRange('90d')">90d</button>
     <button class="range-btn" data-range="all" onclick="setRange('all')">All</button>
   </div>
   <div class="filter-sep"></div>
   <div class="filter-label">Project</div>
-  <input type="text" id="project-search" placeholder="Filter by project..." oninput="onProjectSearch(this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:12px;width:180px;outline:none;">
+  <input type="text" id="project-search" placeholder="Search..." aria-label="Filter by project" oninput="onProjectSearch(this.value)" style="background:transparent;border:1px solid var(--border);color:var(--text);padding:3px 10px;border-radius:6px;font-size:11px;width:140px;outline:none;font-family:inherit;">
   <button class="filter-btn" id="project-clear-btn" onclick="clearProjectSearch()" style="display:none">Clear</button>
 </div>
 
-<div class="container">
-  <div class="stats-row" id="usage-windows" style="display:none"></div>
-  <div class="stats-row" id="stats-row"></div>
-  <div id="cost-sparkline" style="display:none;margin-bottom:16px"></div>
-  <div class="charts-grid">
-    <div class="chart-card wide">
-      <h2 id="daily-chart-title">Daily Token Usage</h2>
-      <div class="chart-wrap tall"><div id="chart-daily"></div></div>
-    </div>
-    <div class="chart-card">
-      <h2>By Model</h2>
-      <div class="chart-wrap"><div id="chart-model"></div></div>
-    </div>
-    <div class="chart-card">
-      <h2>Top Projects by Tokens</h2>
-      <div class="chart-wrap"><div id="chart-project"></div></div>
-    </div>
+<div class="bento" role="main">
+  <!-- Rate windows (conditional) -->
+  <div id="usage-windows" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px"></div>
+
+  <!-- Stat cards -->
+  <div id="stats-row" class="bento-full" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"></div>
+
+  <!-- Charts row -->
+  <div class="card bento-2 chart-card">
+    <h2 id="daily-chart-title">Daily Token Usage</h2>
+    <div class="chart-wrap tall"><div id="chart-daily"></div></div>
   </div>
-  <div class="table-card" id="subagent-summary" style="display:none"></div>
-  <div class="table-card" id="entrypoint-breakdown" style="display:none"></div>
-  <div class="table-card" id="service-tiers" style="display:none"></div>
-  <div id="model-cost-mount"></div>
-  <div id="sessions-mount"></div>
-  <div id="project-cost-mount"></div>
+  <div class="card chart-card">
+    <h2>By Model</h2>
+    <div class="chart-wrap"><div id="chart-model"></div></div>
+  </div>
+  <div class="card chart-card">
+    <h2>Top Projects</h2>
+    <div class="chart-wrap"><div id="chart-project"></div></div>
+  </div>
+
+  <!-- Data sections -->
+  <div class="card card-flat bento-full table-card" id="subagent-summary" style="display:none"></div>
+  <div class="card card-flat bento-full table-card" id="entrypoint-breakdown" style="display:none"></div>
+  <div class="card card-flat bento-full table-card" id="service-tiers" style="display:none"></div>
+
+  <!-- Tables -->
+  <div class="bento-full" id="model-cost-mount"></div>
+  <div class="bento-full" id="sessions-mount"></div>
+  <div class="bento-full" id="project-cost-mount"></div>
 </div>
 
-<footer>
+<footer role="contentinfo">
   <div class="footer-content">
-    <p>Cost estimates based on Anthropic API pricing (<a href="https://docs.anthropic.com/en/docs/about-claude/pricing" target="_blank">docs.anthropic.com/pricing</a>). Actual costs for Max/Pro subscribers differ.</p>
-    <p>GitHub: <a href="https://github.com/po4yka/claude-usage-tracker" target="_blank">po4yka/claude-usage-tracker</a> &middot; License: MIT</p>
+    <p>Cost estimates based on <a href="https://docs.anthropic.com/en/docs/about-claude/pricing" target="_blank">Anthropic API pricing</a>. Actual costs for Max/Pro subscribers differ.</p>
+    <p><a href="https://github.com/po4yka/claude-usage-tracker" target="_blank">GitHub</a> &middot; MIT License</p>
   </div>
 </footer>
 
