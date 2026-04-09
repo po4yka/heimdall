@@ -302,6 +302,61 @@
     ] }) });
   }
 
+  // src/ui/lib/format.ts
+  function esc(s4) {
+    const d4 = document.createElement("div");
+    d4.textContent = String(s4);
+    return d4.innerHTML;
+  }
+  function $2(id) {
+    return document.getElementById(id);
+  }
+  function fmt(n3) {
+    if (n3 >= 1e9) return (n3 / 1e9).toFixed(2) + "B";
+    if (n3 >= 1e6) return (n3 / 1e6).toFixed(2) + "M";
+    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
+    return n3.toLocaleString();
+  }
+  function fmtCost(c4) {
+    return "$" + c4.toFixed(4);
+  }
+  function fmtCostBig(c4) {
+    return "$" + c4.toFixed(2);
+  }
+  function fmtResetTime(minutes) {
+    if (minutes == null || minutes <= 0) return "now";
+    if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
+    if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
+    return minutes + "m";
+  }
+  function progressColor(percent) {
+    if (percent >= 90) return "#ef4444";
+    if (percent >= 70) return "#fbbf24";
+    return "#4ade80";
+  }
+
+  // src/ui/lib/charts.ts
+  var TOKEN_COLORS = {
+    input: "rgba(79,142,247,0.8)",
+    output: "rgba(167,139,250,0.8)",
+    cache_read: "rgba(74,222,128,0.6)",
+    cache_creation: "rgba(251,191,36,0.6)"
+  };
+  var MODEL_COLORS = ["#d97757", "#4f8ef7", "#4ade80", "#a78bfa", "#fbbf24", "#f472b6", "#34d399", "#60a5fa"];
+  var RANGE_LABELS = {
+    "7d": "Last 7 Days",
+    "30d": "Last 30 Days",
+    "90d": "Last 90 Days",
+    "all": "All Time"
+  };
+  var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
+  function apexThemeMode() {
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  }
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
   // node_modules/preact/hooks/dist/hooks.module.js
   var t2;
   var r2;
@@ -1019,37 +1074,161 @@
   var lastFilteredSessions = y2([]);
   var lastByProject = y2([]);
 
-  // src/ui/lib/format.ts
-  function esc(s4) {
-    const d4 = document.createElement("div");
-    d4.textContent = String(s4);
-    return d4.innerHTML;
+  // src/ui/components/StatsCards.tsx
+  function StatsCards({ totals }) {
+    const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
+    const stats = [
+      { label: "Sessions", value: totals.sessions.toLocaleString(), sub: rangeLabel },
+      { label: "Turns", value: fmt(totals.turns), sub: rangeLabel },
+      { label: "Input Tokens", value: fmt(totals.input), sub: rangeLabel },
+      { label: "Output Tokens", value: fmt(totals.output), sub: rangeLabel },
+      { label: "Cache Read", value: fmt(totals.cache_read), sub: "from prompt cache" },
+      { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "writes to prompt cache" },
+      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing estimate", color: "#4ade80" }
+    ];
+    return /* @__PURE__ */ u2(S, { children: stats.map((s4) => /* @__PURE__ */ u2("div", { class: "stat-card", children: [
+      /* @__PURE__ */ u2("div", { class: "label", children: s4.label }),
+      /* @__PURE__ */ u2("div", { class: "value", style: s4.color ? { color: s4.color } : void 0, children: s4.value }),
+      s4.sub ? /* @__PURE__ */ u2("div", { class: "sub", children: s4.sub }) : null
+    ] }, s4.label)) });
   }
-  function $2(id) {
-    return document.getElementById(id);
+
+  // src/ui/components/Toast.tsx
+  var toasts = y2([]);
+  var toastId = 0;
+  function showError(msg) {
+    const id = ++toastId;
+    toasts.value = [...toasts.value, { text: msg, type: "error", id }];
+    setTimeout(() => {
+      toasts.value = toasts.value.filter((t4) => t4.id !== id);
+    }, 6e3);
   }
-  function fmt(n3) {
-    if (n3 >= 1e9) return (n3 / 1e9).toFixed(2) + "B";
-    if (n3 >= 1e6) return (n3 / 1e6).toFixed(2) + "M";
-    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
-    return n3.toLocaleString();
+  function showSuccess(msg) {
+    const id = ++toastId;
+    toasts.value = [...toasts.value, { text: msg, type: "success", id }];
+    setTimeout(() => {
+      toasts.value = toasts.value.filter((t4) => t4.id !== id);
+    }, 6e3);
   }
-  function fmtCost(c4) {
-    return "$" + c4.toFixed(4);
+  function ToastContainer() {
+    return /* @__PURE__ */ u2("div", { style: {
+      position: "fixed",
+      top: 16,
+      right: 16,
+      zIndex: 999,
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px"
+    }, children: toasts.value.map((t4) => /* @__PURE__ */ u2("div", { style: {
+      background: `var(--toast-${t4.type === "error" ? "error" : "success"}-bg)`,
+      color: `var(--toast-${t4.type === "error" ? "error" : "success"}-text)`,
+      padding: "12px 20px",
+      borderRadius: "8px",
+      fontSize: "13px",
+      maxWidth: "400px",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+    }, children: t4.text }, t4.id)) });
   }
-  function fmtCostBig(c4) {
-    return "$" + c4.toFixed(2);
+
+  // src/ui/components/SubagentSummary.tsx
+  function SubagentSummary({ summary }) {
+    if (summary.subagent_turns === 0) return null;
+    const totalInput = summary.parent_input + summary.subagent_input;
+    const totalOutput = summary.parent_output + summary.subagent_output;
+    const subPctInput = totalInput > 0 ? summary.subagent_input / totalInput * 100 : 0;
+    const subPctOutput = totalOutput > 0 ? summary.subagent_output / totalOutput * 100 : 0;
+    return /* @__PURE__ */ u2("div", { class: "table-card", children: [
+      /* @__PURE__ */ u2("div", { class: "section-title", children: "Subagent Breakdown" }),
+      /* @__PURE__ */ u2("div", { style: "display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px", children: [
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { class: "label", style: "color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px", children: "Turns" }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u2("strong", { children: fmt(summary.parent_turns) })
+          ] }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u2("strong", { children: fmt(summary.subagent_turns) })
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "sub", children: [
+            summary.unique_agents,
+            " unique agents"
+          ] })
+        ] }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { class: "label", style: "color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px", children: "Input Tokens" }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u2("strong", { children: fmt(summary.parent_input) })
+          ] }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u2("strong", { children: fmt(summary.subagent_input) }),
+            " (",
+            subPctInput.toFixed(1),
+            "%)"
+          ] })
+        ] }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { class: "label", style: "color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px", children: "Output Tokens" }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u2("strong", { children: fmt(summary.parent_output) })
+          ] }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u2("strong", { children: fmt(summary.subagent_output) }),
+            " (",
+            subPctOutput.toFixed(1),
+            "%)"
+          ] })
+        ] })
+      ] })
+    ] });
   }
-  function fmtResetTime(minutes) {
-    if (minutes == null || minutes <= 0) return "now";
-    if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
-    if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
-    return minutes + "m";
+
+  // src/ui/components/EntrypointTable.tsx
+  function EntrypointTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u2("div", { class: "table-card", children: [
+      /* @__PURE__ */ u2("div", { class: "section-title", children: "Usage by Entrypoint" }),
+      /* @__PURE__ */ u2("table", { children: [
+        /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { children: [
+          /* @__PURE__ */ u2("th", { children: "Entrypoint" }),
+          /* @__PURE__ */ u2("th", { children: "Sessions" }),
+          /* @__PURE__ */ u2("th", { children: "Turns" }),
+          /* @__PURE__ */ u2("th", { children: "Input" }),
+          /* @__PURE__ */ u2("th", { children: "Output" })
+        ] }) }),
+        /* @__PURE__ */ u2("tbody", { children: data.map((e4) => /* @__PURE__ */ u2("tr", { children: [
+          /* @__PURE__ */ u2("td", { children: /* @__PURE__ */ u2("span", { class: "model-tag", children: e4.entrypoint }) }),
+          /* @__PURE__ */ u2("td", { class: "num", children: e4.sessions }),
+          /* @__PURE__ */ u2("td", { class: "num", children: fmt(e4.turns) }),
+          /* @__PURE__ */ u2("td", { class: "num", children: fmt(e4.input) }),
+          /* @__PURE__ */ u2("td", { class: "num", children: fmt(e4.output) })
+        ] }, e4.entrypoint)) })
+      ] })
+    ] });
   }
-  function progressColor(percent) {
-    if (percent >= 90) return "#ef4444";
-    if (percent >= 70) return "#fbbf24";
-    return "#4ade80";
+
+  // src/ui/components/ServiceTiers.tsx
+  function ServiceTiersTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u2("div", { class: "table-card", children: [
+      /* @__PURE__ */ u2("div", { class: "section-title", children: "Service Tiers" }),
+      /* @__PURE__ */ u2("table", { children: [
+        /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { children: [
+          /* @__PURE__ */ u2("th", { children: "Tier" }),
+          /* @__PURE__ */ u2("th", { children: "Region" }),
+          /* @__PURE__ */ u2("th", { children: "Turns" })
+        ] }) }),
+        /* @__PURE__ */ u2("tbody", { children: data.map((s4) => /* @__PURE__ */ u2("tr", { children: [
+          /* @__PURE__ */ u2("td", { children: s4.service_tier }),
+          /* @__PURE__ */ u2("td", { children: s4.inference_geo }),
+          /* @__PURE__ */ u2("td", { class: "num", children: fmt(s4.turns) })
+        ] }, `${s4.service_tier}-${s4.inference_geo}`)) })
+      ] })
+    ] });
   }
 
   // src/ui/lib/csv.ts
@@ -1073,28 +1252,6 @@
     a4.download = reportType + "_" + csvTimestamp() + ".csv";
     a4.click();
     URL.revokeObjectURL(a4.href);
-  }
-
-  // src/ui/lib/charts.ts
-  var TOKEN_COLORS = {
-    input: "rgba(79,142,247,0.8)",
-    output: "rgba(167,139,250,0.8)",
-    cache_read: "rgba(74,222,128,0.6)",
-    cache_creation: "rgba(251,191,36,0.6)"
-  };
-  var MODEL_COLORS = ["#d97757", "#4f8ef7", "#4ade80", "#a78bfa", "#fbbf24", "#f472b6", "#34d399", "#60a5fa"];
-  var RANGE_LABELS = {
-    "7d": "Last 7 Days",
-    "30d": "Last 30 Days",
-    "90d": "Last 90 Days",
-    "all": "All Time"
-  };
-  var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
-  function apexThemeMode() {
-    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-  }
-  function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
   // src/ui/lib/theme.ts
@@ -1413,23 +1570,7 @@
     renderProjectCostTable(lastByProject.value.slice(0, 30));
   }
   function renderStats(t4) {
-    const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
-    const stats = [
-      { label: "Sessions", value: t4.sessions.toLocaleString(), sub: rangeLabel },
-      { label: "Turns", value: fmt(t4.turns), sub: rangeLabel },
-      { label: "Input Tokens", value: fmt(t4.input), sub: rangeLabel },
-      { label: "Output Tokens", value: fmt(t4.output), sub: rangeLabel },
-      { label: "Cache Read", value: fmt(t4.cache_read), sub: "from prompt cache" },
-      { label: "Cache Creation", value: fmt(t4.cache_creation), sub: "writes to prompt cache" },
-      { label: "Est. Cost", value: fmtCostBig(t4.cost), sub: "API pricing estimate", color: "#4ade80" }
-    ];
-    $2("stats-row").innerHTML = stats.map((s4) => `
-    <div class="stat-card">
-      <div class="label">${s4.label}</div>
-      <div class="value" style="${s4.color ? "color:" + s4.color : ""}">${esc(s4.value)}</div>
-      ${s4.sub ? `<div class="sub">${esc(s4.sub)}</div>` : ""}
-    </div>
-  `).join("");
+    R(/* @__PURE__ */ u2(StatsCards, { totals: t4 }), $2("stats-row"));
   }
   function renderDailyChart(daily) {
     const el = document.getElementById("chart-daily");
@@ -1640,84 +1781,38 @@
       badge.style.display = "none";
     }
   }
-  function showSuccess(msg) {
-    const el = document.createElement("div");
-    el.style.cssText = "position:fixed;top:16px;right:16px;background:var(--toast-success-bg);color:var(--toast-success-text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15)";
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 6e3);
-  }
   function renderSubagentSummary(summary) {
     const container = $2("subagent-summary");
     if (!container) return;
     if (summary.subagent_turns === 0) {
       container.style.display = "none";
+      R(null, container);
       return;
     }
     container.style.display = "";
-    const totalInput = summary.parent_input + summary.subagent_input;
-    const totalOutput = summary.parent_output + summary.subagent_output;
-    const subPctInput = totalInput > 0 ? summary.subagent_input / totalInput * 100 : 0;
-    const subPctOutput = totalOutput > 0 ? summary.subagent_output / totalOutput * 100 : 0;
-    container.innerHTML = `
-    <div class="section-title">Subagent Breakdown</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
-      <div>
-        <div class="label" style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px">Turns</div>
-        <div style="font-size:15px">Parent: <strong>${fmt(summary.parent_turns)}</strong></div>
-        <div style="font-size:15px">Subagent: <strong>${fmt(summary.subagent_turns)}</strong></div>
-        <div class="sub">${summary.unique_agents} unique agents</div>
-      </div>
-      <div>
-        <div class="label" style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px">Input Tokens</div>
-        <div style="font-size:15px">Parent: <strong>${fmt(summary.parent_input)}</strong></div>
-        <div style="font-size:15px">Subagent: <strong>${fmt(summary.subagent_input)}</strong> (${subPctInput.toFixed(1)}%)</div>
-      </div>
-      <div>
-        <div class="label" style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px">Output Tokens</div>
-        <div style="font-size:15px">Parent: <strong>${fmt(summary.parent_output)}</strong></div>
-        <div style="font-size:15px">Subagent: <strong>${fmt(summary.subagent_output)}</strong> (${subPctOutput.toFixed(1)}%)</div>
-      </div>
-    </div>
-  `;
+    R(/* @__PURE__ */ u2(SubagentSummary, { summary }), container);
   }
   function renderEntrypointBreakdown(data) {
     const container = $2("entrypoint-breakdown");
     if (!container) return;
     if (!data.length) {
       container.style.display = "none";
+      R(null, container);
       return;
     }
     container.style.display = "";
-    container.innerHTML = `
-    <div class="section-title">Usage by Entrypoint</div>
-    <table><thead><tr>
-      <th>Entrypoint</th><th>Sessions</th><th>Turns</th><th>Input</th><th>Output</th>
-    </tr></thead><tbody>${data.map((e4) => `<tr>
-      <td><span class="model-tag">${esc(e4.entrypoint)}</span></td>
-      <td class="num">${e4.sessions}</td>
-      <td class="num">${fmt(e4.turns)}</td>
-      <td class="num">${fmt(e4.input)}</td>
-      <td class="num">${fmt(e4.output)}</td>
-    </tr>`).join("")}</tbody></table>`;
+    R(/* @__PURE__ */ u2(EntrypointTable, { data }), container);
   }
   function renderServiceTiers(data) {
     const container = $2("service-tiers");
     if (!container) return;
     if (!data.length) {
       container.style.display = "none";
+      R(null, container);
       return;
     }
     container.style.display = "";
-    container.innerHTML = `
-    <div class="section-title">Service Tiers</div>
-    <table><thead><tr>
-      <th>Tier</th><th>Region</th><th>Turns</th>
-    </tr></thead><tbody>${data.map((s4) => `<tr>
-      <td>${esc(s4.service_tier)}</td>
-      <td>${esc(s4.inference_geo)}</td>
-      <td class="num">${fmt(s4.turns)}</td>
-    </tr>`).join("")}</tbody></table>`;
+    R(/* @__PURE__ */ u2(ServiceTiersTable, { data }), container);
   }
   function renderCostSparkline(daily) {
     const container = $2("cost-sparkline");
@@ -1754,13 +1849,6 @@
       renderUsageWindows(data);
     } catch {
     }
-  }
-  function showError(msg) {
-    const el = document.createElement("div");
-    el.style.cssText = "position:fixed;top:16px;right:16px;background:var(--toast-error-bg);color:var(--toast-error-text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15)";
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 6e3);
   }
   async function triggerRescan() {
     const btn = $2("rescan-btn");
@@ -1852,4 +1940,7 @@
   if (footerEl && footerEl.parentElement) {
     R(/* @__PURE__ */ u2(Footer, {}), footerEl.parentElement, footerEl);
   }
+  var toastRoot = document.createElement("div");
+  document.body.appendChild(toastRoot);
+  R(/* @__PURE__ */ u2(ToastContainer, {}), toastRoot);
 })();

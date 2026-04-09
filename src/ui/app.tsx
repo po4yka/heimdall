@@ -3,6 +3,11 @@ declare const ApexCharts: any;
 
 import { render } from 'preact';
 import { Footer } from './components/Footer';
+import { StatsCards } from './components/StatsCards';
+import { showError, showSuccess, ToastContainer } from './components/Toast';
+import { SubagentSummary as SubagentSummaryComponent } from './components/SubagentSummary';
+import { EntrypointTable } from './components/EntrypointTable';
+import { ServiceTiersTable } from './components/ServiceTiers';
 
 import type {
   WindowInfo,
@@ -19,7 +24,6 @@ import type {
   ModelAgg,
   ProjectAgg,
   Totals,
-  StatCard,
   SortDir,
   RangeKey,
 } from './state/types';
@@ -39,7 +43,7 @@ import {
   lastFilteredSessions,
   lastByProject,
 } from './state/store';
-import { esc, $, fmt, fmtCost, fmtCostBig, fmtResetTime, progressColor } from './lib/format';
+import { esc, $, fmt, fmtCost, fmtResetTime, progressColor } from './lib/format';
 import { csvField, csvTimestamp, downloadCSV } from './lib/csv';
 import { TOKEN_COLORS, MODEL_COLORS, RANGE_LABELS, RANGE_TICKS, apexThemeMode, cssVar } from './lib/charts';
 import { getTheme } from './lib/theme';
@@ -377,23 +381,7 @@ function applyFilter(): void {
 
 // ── Renderers ──────────────────────────────────────────────────────────
 function renderStats(t: Totals): void {
-  const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
-  const stats: StatCard[] = [
-    { label: 'Sessions',       value: t.sessions.toLocaleString(), sub: rangeLabel },
-    { label: 'Turns',          value: fmt(t.turns),                sub: rangeLabel },
-    { label: 'Input Tokens',   value: fmt(t.input),                sub: rangeLabel },
-    { label: 'Output Tokens',  value: fmt(t.output),               sub: rangeLabel },
-    { label: 'Cache Read',     value: fmt(t.cache_read),           sub: 'from prompt cache' },
-    { label: 'Cache Creation', value: fmt(t.cache_creation),       sub: 'writes to prompt cache' },
-    { label: 'Est. Cost',      value: fmtCostBig(t.cost),          sub: 'API pricing estimate', color: '#4ade80' },
-  ];
-  $('stats-row').innerHTML = stats.map(s => `
-    <div class="stat-card">
-      <div class="label">${s.label}</div>
-      <div class="value" style="${s.color ? 'color:' + s.color : ''}">${esc(s.value)}</div>
-      ${s.sub ? `<div class="sub">${esc(s.sub)}</div>` : ''}
-    </div>
-  `).join('');
+  render(<StatsCards totals={t} />, $('stats-row'));
 }
 
 function renderDailyChart(daily: DailyAgg[]): void {
@@ -606,84 +594,42 @@ function renderUsageWindows(data: UsageWindowsResponse): void {
   }
 }
 
-function showSuccess(msg: string): void {
-  const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:16px;right:16px;background:var(--toast-success-bg);color:var(--toast-success-text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15)';
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 6000);
-}
+
 
 function renderSubagentSummary(summary: SubagentSummary): void {
   const container = $('subagent-summary');
   if (!container) return;
-
   if (summary.subagent_turns === 0) {
     container.style.display = 'none';
+    render(null, container);
     return;
   }
-
   container.style.display = '';
-  const totalInput = summary.parent_input + summary.subagent_input;
-  const totalOutput = summary.parent_output + summary.subagent_output;
-  const subPctInput = totalInput > 0 ? (summary.subagent_input / totalInput * 100) : 0;
-  const subPctOutput = totalOutput > 0 ? (summary.subagent_output / totalOutput * 100) : 0;
-
-  container.innerHTML = `
-    <div class="section-title">Subagent Breakdown</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
-      <div>
-        <div class="label" style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px">Turns</div>
-        <div style="font-size:15px">Parent: <strong>${fmt(summary.parent_turns)}</strong></div>
-        <div style="font-size:15px">Subagent: <strong>${fmt(summary.subagent_turns)}</strong></div>
-        <div class="sub">${summary.unique_agents} unique agents</div>
-      </div>
-      <div>
-        <div class="label" style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px">Input Tokens</div>
-        <div style="font-size:15px">Parent: <strong>${fmt(summary.parent_input)}</strong></div>
-        <div style="font-size:15px">Subagent: <strong>${fmt(summary.subagent_input)}</strong> (${subPctInput.toFixed(1)}%)</div>
-      </div>
-      <div>
-        <div class="label" style="color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px">Output Tokens</div>
-        <div style="font-size:15px">Parent: <strong>${fmt(summary.parent_output)}</strong></div>
-        <div style="font-size:15px">Subagent: <strong>${fmt(summary.subagent_output)}</strong> (${subPctOutput.toFixed(1)}%)</div>
-      </div>
-    </div>
-  `;
+  render(<SubagentSummaryComponent summary={summary} />, container);
 }
 
 function renderEntrypointBreakdown(data: EntrypointSummary[]): void {
   const container = $('entrypoint-breakdown');
   if (!container) return;
-  if (!data.length) { container.style.display = 'none'; return; }
+  if (!data.length) {
+    container.style.display = 'none';
+    render(null, container);
+    return;
+  }
   container.style.display = '';
-  container.innerHTML = `
-    <div class="section-title">Usage by Entrypoint</div>
-    <table><thead><tr>
-      <th>Entrypoint</th><th>Sessions</th><th>Turns</th><th>Input</th><th>Output</th>
-    </tr></thead><tbody>${data.map(e => `<tr>
-      <td><span class="model-tag">${esc(e.entrypoint)}</span></td>
-      <td class="num">${e.sessions}</td>
-      <td class="num">${fmt(e.turns)}</td>
-      <td class="num">${fmt(e.input)}</td>
-      <td class="num">${fmt(e.output)}</td>
-    </tr>`).join('')}</tbody></table>`;
+  render(<EntrypointTable data={data} />, container);
 }
 
 function renderServiceTiers(data: ServiceTierSummary[]): void {
   const container = $('service-tiers');
   if (!container) return;
-  if (!data.length) { container.style.display = 'none'; return; }
+  if (!data.length) {
+    container.style.display = 'none';
+    render(null, container);
+    return;
+  }
   container.style.display = '';
-  container.innerHTML = `
-    <div class="section-title">Service Tiers</div>
-    <table><thead><tr>
-      <th>Tier</th><th>Region</th><th>Turns</th>
-    </tr></thead><tbody>${data.map(s => `<tr>
-      <td>${esc(s.service_tier)}</td>
-      <td>${esc(s.inference_geo)}</td>
-      <td class="num">${fmt(s.turns)}</td>
-    </tr>`).join('')}</tbody></table>`;
+  render(<ServiceTiersTable data={data} />, container);
 }
 
 function renderCostSparkline(daily: DailyAgg[]): void {
@@ -716,14 +662,6 @@ async function loadUsageWindows(): Promise<void> {
 }
 
 // ── Rescan ──────────────────────────────────────────────────────────────
-function showError(msg: string): void {
-  const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:16px;right:16px;background:var(--toast-error-bg);color:var(--toast-error-text);padding:12px 20px;border-radius:8px;font-size:13px;z-index:999;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,0.15)';
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 6000);
-}
-
 async function triggerRescan(): Promise<void> {
   const btn = $('rescan-btn') as HTMLButtonElement;
   btn.disabled = true;
@@ -813,3 +751,8 @@ const footerEl = document.querySelector('footer');
 if (footerEl && footerEl.parentElement) {
   render(<Footer />, footerEl.parentElement, footerEl);
 }
+
+// ── Preact mount: toast container ─────────────────────────────────────
+const toastRoot = document.createElement('div');
+document.body.appendChild(toastRoot);
+render(<ToastContainer />, toastRoot);
