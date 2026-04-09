@@ -20,6 +20,22 @@ import type {
   SortDir,
   RangeKey,
 } from './state/types';
+import {
+  rawData,
+  selectedModels,
+  selectedRange,
+  projectSearchQuery,
+  sessionSortCol,
+  sessionSortDir,
+  modelSortCol,
+  modelSortDir,
+  projectSortCol,
+  projectSortDir,
+  sessionsCurrentPage,
+  SESSIONS_PAGE_SIZE,
+  lastFilteredSessions,
+  lastByProject,
+} from './state/store';
 import { esc, $, fmt, fmtCost, fmtCostBig, fmtResetTime, progressColor } from './lib/format';
 import { csvField, csvTimestamp, downloadCSV } from './lib/csv';
 import { TOKEN_COLORS, MODEL_COLORS, RANGE_LABELS, RANGE_TICKS, apexThemeMode, cssVar } from './lib/charts';
@@ -35,7 +51,7 @@ function applyTheme(theme: 'light' | 'dark'): void {
   const icon = document.getElementById('theme-icon');
   if (icon) icon.innerHTML = theme === 'dark' ? '&#x2600;' : '&#x263E;';
   // Re-render charts with new theme colors
-  if (rawData) applyFilter();
+  if (rawData.value) applyFilter();
 }
 
 function toggleTheme(): void {
@@ -48,23 +64,8 @@ function toggleTheme(): void {
 // Apply theme immediately before render
 applyTheme(getTheme());
 
-// ── State ──────────────────────────────────────────────────────────────
-let rawData: DashboardData | null = null;
-let selectedModels = new Set<string>();
-let selectedRange: RangeKey = '30d';
+// ── Local-only state (not reactive) ───────────────────────────────────
 let charts: Record<string, any> = {};
-
-let sessionSortCol = 'last';
-let sessionSortDir: SortDir = 'desc';
-let modelSortCol = 'cost';
-let modelSortDir: SortDir = 'desc';
-let projectSortCol = 'cost';
-let projectSortDir: SortDir = 'desc';
-let lastFilteredSessions: SessionRow[] = [];
-let lastByProject: ProjectAgg[] = [];
-let projectSearchQuery = '';
-let sessionsCurrentPage = 0;
-const SESSIONS_PAGE_SIZE = 25;
 let previousSessionPercent: number | null = null;
 
 // ── Model classification (for filter defaults only, costs come from server) ──
@@ -88,7 +89,7 @@ function readURLRange(): RangeKey {
 }
 
 function setRange(range: RangeKey): void {
-  selectedRange = range;
+  selectedRange.value = range;
   document.querySelectorAll<HTMLButtonElement>('.range-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.range === range)
   );
@@ -114,8 +115,8 @@ function readURLModels(allModels: string[]): Set<string> {
 
 function isDefaultModelSelection(allModels: string[]): boolean {
   const billable = allModels.filter(m => isAnthropicModel(m));
-  if (selectedModels.size !== billable.length) return false;
-  return billable.every(m => selectedModels.has(m));
+  if (selectedModels.value.size !== billable.length) return false;
+  return billable.every(m => selectedModels.value.has(m));
 }
 
 function buildFilterUI(allModels: string[]): void {
@@ -123,10 +124,10 @@ function buildFilterUI(allModels: string[]): void {
     const pa = modelPriority(a), pb = modelPriority(b);
     return pa !== pb ? pa - pb : a.localeCompare(b);
   });
-  selectedModels = readURLModels(allModels);
+  selectedModels.value = readURLModels(allModels);
   const container = $('model-checkboxes');
   container.innerHTML = sorted.map(m => {
-    const checked = selectedModels.has(m);
+    const checked = selectedModels.value.has(m);
     return `<label class="model-cb-label ${checked ? 'checked' : ''}" data-model="${esc(m)}">
       <input type="checkbox" value="${esc(m)}" ${checked ? 'checked' : ''} onchange="onModelToggle(this)">
       ${esc(m)}
@@ -136,57 +137,62 @@ function buildFilterUI(allModels: string[]): void {
 
 function onModelToggle(cb: HTMLInputElement): void {
   const label = cb.closest('label')!;
-  if (cb.checked) { selectedModels.add(cb.value); label.classList.add('checked'); }
-  else            { selectedModels.delete(cb.value); label.classList.remove('checked'); }
+  const next = new Set(selectedModels.value);
+  if (cb.checked) { next.add(cb.value); label.classList.add('checked'); }
+  else            { next.delete(cb.value); label.classList.remove('checked'); }
+  selectedModels.value = next;
   updateURL();
   applyFilter();
 }
 
 function selectAllModels(): void {
+  const next = new Set(selectedModels.value);
   document.querySelectorAll<HTMLInputElement>('#model-checkboxes input').forEach(cb => {
-    cb.checked = true; selectedModels.add(cb.value); cb.closest('label')!.classList.add('checked');
+    cb.checked = true; next.add(cb.value); cb.closest('label')!.classList.add('checked');
   });
+  selectedModels.value = next;
   updateURL(); applyFilter();
 }
 
 function clearAllModels(): void {
   document.querySelectorAll<HTMLInputElement>('#model-checkboxes input').forEach(cb => {
-    cb.checked = false; selectedModels.delete(cb.value); cb.closest('label')!.classList.remove('checked');
+    cb.checked = false; cb.closest('label')!.classList.remove('checked');
   });
+  selectedModels.value = new Set();
   updateURL(); applyFilter();
 }
 
 // ── Project search ─────────────────────────────────────────────────────
 function onProjectSearch(query: string): void {
-  projectSearchQuery = query.toLowerCase().trim();
+  projectSearchQuery.value = query.toLowerCase().trim();
   const clearBtn = document.getElementById('project-clear-btn');
-  if (clearBtn) clearBtn.style.display = projectSearchQuery ? '' : 'none';
+  if (clearBtn) clearBtn.style.display = projectSearchQuery.value ? '' : 'none';
   updateURL();
   applyFilter();
 }
 
 function sessionsPage(delta: number): void {
-  const maxPage = Math.max(0, Math.ceil(lastFilteredSessions.length / SESSIONS_PAGE_SIZE) - 1);
-  sessionsCurrentPage = Math.max(0, Math.min(maxPage, sessionsCurrentPage + delta));
+  const maxPage = Math.max(0, Math.ceil(lastFilteredSessions.value.length / SESSIONS_PAGE_SIZE) - 1);
+  sessionsCurrentPage.value = Math.max(0, Math.min(maxPage, sessionsCurrentPage.value + delta));
   renderSessionsPage();
 }
 
 function renderSessionsPage(): void {
-  const start = sessionsCurrentPage * SESSIONS_PAGE_SIZE;
-  const page = lastFilteredSessions.slice(start, start + SESSIONS_PAGE_SIZE);
+  const start = sessionsCurrentPage.value * SESSIONS_PAGE_SIZE;
+  const page = lastFilteredSessions.value.slice(start, start + SESSIONS_PAGE_SIZE);
   renderSessionsTable(page);
 
-  const total = lastFilteredSessions.length;
+  const total = lastFilteredSessions.value.length;
   const maxPage = Math.max(0, Math.ceil(total / SESSIONS_PAGE_SIZE) - 1);
   $('sessions-page-info').textContent = total > 0
     ? `Showing ${start + 1}\u2013${Math.min(start + SESSIONS_PAGE_SIZE, total)} of ${total}`
     : 'No sessions';
-  ($('sessions-prev') as HTMLButtonElement).disabled = sessionsCurrentPage <= 0;
-  ($('sessions-next') as HTMLButtonElement).disabled = sessionsCurrentPage >= maxPage;
+  ($('sessions-prev') as HTMLButtonElement).disabled = sessionsCurrentPage.value <= 0;
+  ($('sessions-next') as HTMLButtonElement).disabled = sessionsCurrentPage.value >= maxPage;
 }
 
 function clearProjectSearch(): void {
-  projectSearchQuery = '';
+  projectSearchQuery.value = '';
   const input = document.getElementById('project-search') as HTMLInputElement;
   if (input) input.value = '';
   const clearBtn = document.getElementById('project-clear-btn');
@@ -196,110 +202,110 @@ function clearProjectSearch(): void {
 }
 
 function matchesProjectSearch(project: string): boolean {
-  if (!projectSearchQuery) return true;
-  return project.toLowerCase().includes(projectSearchQuery);
+  if (!projectSearchQuery.value) return true;
+  return project.toLowerCase().includes(projectSearchQuery.value);
 }
 
 // ── URL persistence ────────────────────────────────────────────────────
 function updateURL(): void {
   const allModels = Array.from(document.querySelectorAll<HTMLInputElement>('#model-checkboxes input')).map(cb => cb.value);
   const params = new URLSearchParams();
-  if (selectedRange !== '30d') params.set('range', selectedRange);
-  if (!isDefaultModelSelection(allModels)) params.set('models', Array.from(selectedModels).join(','));
-  if (projectSearchQuery) params.set('project', projectSearchQuery);
+  if (selectedRange.value !== '30d') params.set('range', selectedRange.value);
+  if (!isDefaultModelSelection(allModels)) params.set('models', Array.from(selectedModels.value).join(','));
+  if (projectSearchQuery.value) params.set('project', projectSearchQuery.value);
   const search = params.toString() ? '?' + params.toString() : '';
   history.replaceState(null, '', window.location.pathname + search);
 }
 
 // ── Sort helpers ───────────────────────────────────────────────────────
 function setSessionSort(col: string): void {
-  if (sessionSortCol === col) sessionSortDir = sessionSortDir === 'desc' ? 'asc' : 'desc';
-  else { sessionSortCol = col; sessionSortDir = 'desc'; }
+  if (sessionSortCol.value === col) sessionSortDir.value = sessionSortDir.value === 'desc' ? 'asc' : 'desc';
+  else { sessionSortCol.value = col; sessionSortDir.value = 'desc'; }
   updateSortIcons(); applyFilter();
 }
 
 function updateSortIcons(): void {
   document.querySelectorAll('.sort-icon').forEach(el => el.textContent = '');
-  const icon = document.getElementById('sort-icon-' + sessionSortCol);
-  if (icon) icon.textContent = sessionSortDir === 'desc' ? ' \u25bc' : ' \u25b2';
+  const icon = document.getElementById('sort-icon-' + sessionSortCol.value);
+  if (icon) icon.textContent = sessionSortDir.value === 'desc' ? ' \u25bc' : ' \u25b2';
 }
 
 function sortSessions(sessions: SessionRow[]): SessionRow[] {
   return [...sessions].sort((a, b) => {
     let av: number | string, bv: number | string;
-    if (sessionSortCol === 'cost') {
+    if (sessionSortCol.value === 'cost') {
       av = a.cost;
       bv = b.cost;
-    } else if (sessionSortCol === 'duration_min') {
+    } else if (sessionSortCol.value === 'duration_min') {
       av = a.duration_min || 0;
       bv = b.duration_min || 0;
     } else {
-      av = (a as any)[sessionSortCol] ?? 0;
-      bv = (b as any)[sessionSortCol] ?? 0;
+      av = (a as any)[sessionSortCol.value] ?? 0;
+      bv = (b as any)[sessionSortCol.value] ?? 0;
     }
-    if (av < bv) return sessionSortDir === 'desc' ? 1 : -1;
-    if (av > bv) return sessionSortDir === 'desc' ? -1 : 1;
+    if (av < bv) return sessionSortDir.value === 'desc' ? 1 : -1;
+    if (av > bv) return sessionSortDir.value === 'desc' ? -1 : 1;
     return 0;
   });
 }
 
 function setModelSort(col: string): void {
-  if (modelSortCol === col) modelSortDir = modelSortDir === 'desc' ? 'asc' : 'desc';
-  else { modelSortCol = col; modelSortDir = 'desc'; }
+  if (modelSortCol.value === col) modelSortDir.value = modelSortDir.value === 'desc' ? 'asc' : 'desc';
+  else { modelSortCol.value = col; modelSortDir.value = 'desc'; }
   updateModelSortIcons(); applyFilter();
 }
 
 function updateModelSortIcons(): void {
   document.querySelectorAll('[id^="msort-"]').forEach(el => el.textContent = '');
-  const icon = document.getElementById('msort-' + modelSortCol);
-  if (icon) icon.textContent = modelSortDir === 'desc' ? ' \u25bc' : ' \u25b2';
+  const icon = document.getElementById('msort-' + modelSortCol.value);
+  if (icon) icon.textContent = modelSortDir.value === 'desc' ? ' \u25bc' : ' \u25b2';
 }
 
 function sortModels(byModel: ModelAgg[]): ModelAgg[] {
   return [...byModel].sort((a, b) => {
     let av: number, bv: number;
-    if (modelSortCol === 'cost') {
+    if (modelSortCol.value === 'cost') {
       av = a.cost;
       bv = b.cost;
     } else {
-      av = (a as any)[modelSortCol] ?? 0;
-      bv = (b as any)[modelSortCol] ?? 0;
+      av = (a as any)[modelSortCol.value] ?? 0;
+      bv = (b as any)[modelSortCol.value] ?? 0;
     }
-    if (av < bv) return modelSortDir === 'desc' ? 1 : -1;
-    if (av > bv) return modelSortDir === 'desc' ? -1 : 1;
+    if (av < bv) return modelSortDir.value === 'desc' ? 1 : -1;
+    if (av > bv) return modelSortDir.value === 'desc' ? -1 : 1;
     return 0;
   });
 }
 
 function setProjectSort(col: string): void {
-  if (projectSortCol === col) projectSortDir = projectSortDir === 'desc' ? 'asc' : 'desc';
-  else { projectSortCol = col; projectSortDir = 'desc'; }
+  if (projectSortCol.value === col) projectSortDir.value = projectSortDir.value === 'desc' ? 'asc' : 'desc';
+  else { projectSortCol.value = col; projectSortDir.value = 'desc'; }
   updateProjectSortIcons(); applyFilter();
 }
 
 function updateProjectSortIcons(): void {
   document.querySelectorAll('[id^="psort-"]').forEach(el => el.textContent = '');
-  const icon = document.getElementById('psort-' + projectSortCol);
-  if (icon) icon.textContent = projectSortDir === 'desc' ? ' \u25bc' : ' \u25b2';
+  const icon = document.getElementById('psort-' + projectSortCol.value);
+  if (icon) icon.textContent = projectSortDir.value === 'desc' ? ' \u25bc' : ' \u25b2';
 }
 
 function sortProjects(byProject: ProjectAgg[]): ProjectAgg[] {
   return [...byProject].sort((a, b) => {
-    const av = (a as any)[projectSortCol] ?? 0;
-    const bv = (b as any)[projectSortCol] ?? 0;
-    if (av < bv) return projectSortDir === 'desc' ? 1 : -1;
-    if (av > bv) return projectSortDir === 'desc' ? -1 : 1;
+    const av = (a as any)[projectSortCol.value] ?? 0;
+    const bv = (b as any)[projectSortCol.value] ?? 0;
+    if (av < bv) return projectSortDir.value === 'desc' ? 1 : -1;
+    if (av > bv) return projectSortDir.value === 'desc' ? -1 : 1;
     return 0;
   });
 }
 
 // ── Aggregation & filtering ────────────────────────────────────────────
 function applyFilter(): void {
-  if (!rawData) return;
-  const cutoff = getRangeCutoff(selectedRange);
+  if (!rawData.value) return;
+  const cutoff = getRangeCutoff(selectedRange.value);
 
-  const filteredDaily = rawData.daily_by_model.filter(r =>
-    selectedModels.has(r.model) && (!cutoff || r.day >= cutoff)
+  const filteredDaily = rawData.value.daily_by_model.filter(r =>
+    selectedModels.value.has(r.model) && (!cutoff || r.day >= cutoff)
   );
 
   const dailyMap: Record<string, DailyAgg> = {};
@@ -320,8 +326,8 @@ function applyFilter(): void {
     m.turns += r.turns; m.cost += r.cost;
   }
 
-  const filteredSessions = rawData.sessions_all.filter(s =>
-    selectedModels.has(s.model) && (!cutoff || s.last_date >= cutoff) && matchesProjectSearch(s.project)
+  const filteredSessions = rawData.value.sessions_all.filter(s =>
+    selectedModels.value.has(s.model) && (!cutoff || s.last_date >= cutoff) && matchesProjectSearch(s.project)
   );
 
   for (const s of filteredSessions) {
@@ -351,24 +357,24 @@ function applyFilter(): void {
     cost: filteredSessions.reduce((s, sess) => s + sess.cost, 0),
   };
 
-  $('daily-chart-title').textContent = 'Daily Token Usage \u2014 ' + RANGE_LABELS[selectedRange];
+  $('daily-chart-title').textContent = 'Daily Token Usage \u2014 ' + RANGE_LABELS[selectedRange.value];
 
   renderStats(totals);
   renderCostSparkline(daily);
   renderDailyChart(daily);
   renderModelChart(byModel);
   renderProjectChart(byProject);
-  lastFilteredSessions = sortSessions(filteredSessions);
-  lastByProject = sortProjects(byProject);
-  sessionsCurrentPage = 0;
+  lastFilteredSessions.value = sortSessions(filteredSessions);
+  lastByProject.value = sortProjects(byProject);
+  sessionsCurrentPage.value = 0;
   renderSessionsPage();
   renderModelCostTable(byModel);
-  renderProjectCostTable(lastByProject.slice(0, 30));
+  renderProjectCostTable(lastByProject.value.slice(0, 30));
 }
 
 // ── Renderers ──────────────────────────────────────────────────────────
 function renderStats(t: Totals): void {
-  const rangeLabel = RANGE_LABELS[selectedRange].toLowerCase();
+  const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
   const stats: StatCard[] = [
     { label: 'Sessions',       value: t.sessions.toLocaleString(), sub: rangeLabel },
     { label: 'Turns',          value: fmt(t.turns),                sub: rangeLabel },
@@ -403,7 +409,7 @@ function renderDailyChart(daily: DailyAgg[]): void {
     colors: [TOKEN_COLORS.input, TOKEN_COLORS.output, TOKEN_COLORS.cache_read, TOKEN_COLORS.cache_creation],
     xaxis: { categories: daily.map(d => d.day),
              labels: { rotate: -45, maxHeight: 60 },
-             tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange]) },
+             tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange.value]) },
     yaxis: { labels: { formatter: (v: number) => fmt(v) } },
     legend: { position: 'top', fontSize: '11px' },
     dataLabels: { enabled: false },
@@ -511,7 +517,7 @@ function renderProjectCostTable(byProject: ProjectAgg[]): void {
 // ── CSV Export ──────────────────────────────────────────────────────────
 function exportSessionsCSV(): void {
   const header = ['Session', 'Project', 'Last Active', 'Duration (min)', 'Model', 'Turns', 'Input', 'Output', 'Cache Read', 'Cache Creation', 'Est. Cost'];
-  const rows = lastFilteredSessions.map(s => {
+  const rows = lastFilteredSessions.value.map(s => {
     const cost = s.cost;
     return [s.session_id, s.project, s.last, s.duration_min, s.model, s.turns, s.input, s.output, s.cache_read, s.cache_creation, cost.toFixed(4)];
   });
@@ -520,7 +526,7 @@ function exportSessionsCSV(): void {
 
 function exportProjectsCSV(): void {
   const header = ['Project', 'Sessions', 'Turns', 'Input', 'Output', 'Cache Read', 'Cache Creation', 'Est. Cost'];
-  const rows = lastByProject.map(p =>
+  const rows = lastByProject.value.map(p =>
     [p.project, p.sessions, p.turns, p.input, p.output, p.cache_read, p.cache_creation, p.cost.toFixed(4)]
   );
   downloadCSV('projects', header, rows);
@@ -753,13 +759,13 @@ async function loadData(): Promise<void> {
     }
     $('meta').textContent = 'Updated: ' + d.generated_at + ' \u00b7 Auto-refresh 30s';
 
-    const isFirstLoad = rawData === null;
-    rawData = d;
+    const isFirstLoad = rawData.value === null;
+    rawData.value = d;
 
     if (isFirstLoad) {
-      selectedRange = readURLRange();
+      selectedRange.value = readURLRange();
       document.querySelectorAll<HTMLButtonElement>('.range-btn').forEach(btn =>
-        btn.classList.toggle('active', btn.dataset.range === selectedRange)
+        btn.classList.toggle('active', btn.dataset.range === selectedRange.value)
       );
       buildFilterUI(d.all_models);
       updateSortIcons();
@@ -769,7 +775,7 @@ async function loadData(): Promise<void> {
       // Restore project search from URL
       const urlProject = new URLSearchParams(window.location.search).get('project');
       if (urlProject) {
-        projectSearchQuery = urlProject;
+        projectSearchQuery.value = urlProject;
         const input = document.getElementById('project-search') as HTMLInputElement;
         if (input) input.value = urlProject;
         const clearBtn = document.getElementById('project-clear-btn');
@@ -778,9 +784,9 @@ async function loadData(): Promise<void> {
     }
 
     applyFilter();
-    if (rawData.subagent_summary) renderSubagentSummary(rawData.subagent_summary);
-    if (rawData.entrypoint_breakdown) renderEntrypointBreakdown(rawData.entrypoint_breakdown);
-    if (rawData.service_tiers) renderServiceTiers(rawData.service_tiers);
+    if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
+    if (rawData.value.entrypoint_breakdown) renderEntrypointBreakdown(rawData.value.entrypoint_breakdown);
+    if (rawData.value.service_tiers) renderServiceTiers(rawData.value.service_tiers);
   } catch (e) {
     console.error(e);
   }
