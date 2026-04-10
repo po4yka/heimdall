@@ -66,6 +66,7 @@ export function ProjectCostTable({
       title="Cost by Project"
       exportFn={onExportCSV}
       defaultSort={defaultSort}
+      costRows
     />
   );
 }

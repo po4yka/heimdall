@@ -16,7 +16,6 @@ import { ProjectCostTable } from './components/ProjectCostTable';
 import { DailyChart } from './components/DailyChart';
 import { ModelChart } from './components/ModelChart';
 import { ProjectChart } from './components/ProjectChart';
-import { Sparkline } from './components/Sparkline';
 
 import type {
   WindowInfo,
@@ -140,7 +139,7 @@ function buildFilterUI(allModels: string[]): void {
   container.innerHTML = sorted.map(m => {
     const checked = selectedModels.value.has(m);
     return `<label class="model-cb-label ${checked ? 'checked' : ''}" data-model="${esc(m)}">
-      <input type="checkbox" value="${esc(m)}" ${checked ? 'checked' : ''} onchange="onModelToggle(this)">
+      <input type="checkbox" value="${esc(m)}" ${checked ? 'checked' : ''} onchange="onModelToggle(this)" aria-label="${esc(m)}">
       ${esc(m)}
     </label>`;
   }).join('');
@@ -271,8 +270,7 @@ function applyFilter(): void {
 
   $('daily-chart-title').textContent = 'Daily Token Usage \u2014 ' + RANGE_LABELS[selectedRange.value];
 
-  renderStats(totals);
-  renderCostSparkline(daily);
+  renderStats(totals, daily);
   renderDailyChart(daily);
   renderModelChart(byModel);
   renderProjectChart(byProject);
@@ -284,8 +282,8 @@ function applyFilter(): void {
 }
 
 // ── Renderers ──────────────────────────────────────────────────────────
-function renderStats(t: Totals): void {
-  render(<StatsCards totals={t} />, $('stats-row'));
+function renderStats(t: Totals, daily: DailyAgg[]): void {
+  render(<StatsCards totals={t} daily={daily} />, $('stats-row'));
 }
 
 function renderDailyChart(daily: DailyAgg[]): void {
@@ -328,12 +326,12 @@ function renderWindowCard(label: string, w: WindowInfo): string {
   const color = progressColor(pct);
   const resetText = w.resets_in_minutes != null ? `Resets in ${fmtResetTime(w.resets_in_minutes)}` : '';
   return `<div class="stat-card">
-    <div class="label">${esc(label)}</div>
-    <div class="value" style="font-size:18px;color:${color}">${pct.toFixed(1)}%</div>
-    <div style="background:var(--border);border-radius:4px;height:6px;margin:6px 0">
-      <div style="background:${color};height:100%;border-radius:4px;width:${pct}%;transition:width 0.3s"></div>
+    <div class="stat-label">${esc(label)}</div>
+    <div class="stat-value" style="font-size:18px;color:${color}">${esc(pct.toFixed(1))}%</div>
+    <div class="progress-track">
+      <div class="progress-fill" style="background:${color};width:${pct}%"></div>
     </div>
-    <div class="sub">${esc(resetText)}</div>
+    <div class="stat-sub">${esc(resetText)}</div>
   </div>`;
 }
 
@@ -345,11 +343,11 @@ function renderUsageWindows(data: UsageWindowsResponse): void {
     const badge = $('plan-badge');
     if (badge) badge.style.display = 'none';
     if (data.error) {
-      container.style.display = '';
+      container.style.display = 'grid';
       container.innerHTML = `<div class="stat-card">
-        <div class="label">Rate Windows</div>
-        <div class="value" style="font-size:16px">Unavailable</div>
-        <div class="sub">${esc(data.error)}</div>
+        <div class="stat-label">Rate Windows</div>
+        <div class="stat-value" style="font-size:16px">Unavailable</div>
+        <div class="stat-sub">${esc(data.error)}</div>
       </div>`;
     } else {
       container.innerHTML = '';
@@ -358,7 +356,7 @@ function renderUsageWindows(data: UsageWindowsResponse): void {
     return;
   }
 
-  container.style.display = '';
+  container.style.display = 'grid';
   let cards = '';
   if (data.session) cards += renderWindowCard('Session (5h)', data.session);
   if (data.weekly) cards += renderWindowCard('Weekly', data.weekly);
@@ -370,12 +368,12 @@ function renderUsageWindows(data: UsageWindowsResponse): void {
     const pct = Math.min(100, b.utilization);
     const color = progressColor(pct);
     cards += `<div class="stat-card">
-      <div class="label">Monthly Budget</div>
-      <div class="value" style="font-size:18px;color:${color}">$${b.used.toFixed(2)} / $${b.limit.toFixed(2)}</div>
-      <div style="background:var(--border);border-radius:4px;height:6px;margin:6px 0">
-        <div style="background:${color};height:100%;border-radius:4px;width:${pct}%;transition:width 0.3s"></div>
+      <div class="stat-label">Monthly Budget</div>
+      <div class="stat-value" style="font-size:18px;color:${color}">${esc('$' + b.used.toFixed(2) + ' / $' + b.limit.toFixed(2))}</div>
+      <div class="progress-track">
+        <div class="progress-fill" style="background:${color};width:${pct}%"></div>
       </div>
-      <div class="sub">${esc(b.currency)}</div>
+      <div class="stat-sub">${esc(b.currency)}</div>
     </div>`;
   }
 
@@ -502,18 +500,6 @@ function renderHourlyChart(data: HourlyRow[]): void {
   render(<HourlyChart data={data} />, container);
 }
 
-function renderCostSparkline(daily: DailyAgg[]): void {
-  const container = $('cost-sparkline');
-  if (!container) return;
-  const last7 = daily.slice(-7);
-  if (last7.length < 2) {
-    container.style.display = 'none';
-    render(null, container);
-    return;
-  }
-  container.style.display = '';
-  render(<Sparkline daily={daily} />, container);
-}
 
 async function loadUsageWindows(): Promise<void> {
   if (loadUsageWindowsInFlight) return;

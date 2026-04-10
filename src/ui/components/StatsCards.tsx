@@ -1,9 +1,10 @@
 import { fmt, fmtCostBig } from '../lib/format';
 import { RANGE_LABELS } from '../lib/charts';
 import { selectedRange } from '../state/store';
-import type { Totals, StatCard } from '../state/types';
+import { Sparkline } from './Sparkline';
+import type { Totals, StatCard, DailyAgg } from '../state/types';
 
-export function StatsCards({ totals }: { totals: Totals }) {
+export function StatsCards({ totals, daily }: { totals: Totals; daily?: DailyAgg[] }) {
   const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
   const stats: StatCard[] = [
     { label: 'Sessions',       value: totals.sessions.toLocaleString(), sub: rangeLabel },
@@ -24,6 +25,11 @@ export function StatsCards({ totals }: { totals: Totals }) {
             <div class={`stat-value ${s.isCost ? 'cost-value' : ''}`}>{s.value}</div>
             {s.sub ? <div class="stat-sub">{s.sub}</div> : null}
           </div>
+          {s.isCost && daily && daily.length >= 2 ? (
+            <div class="stat-sparkline">
+              <Sparkline daily={daily} />
+            </div>
+          ) : null}
         </div>
       ))}
     </>

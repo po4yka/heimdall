@@ -8,9 +8,7 @@ export function HourlyChart({ data }: { data: HourlyRow[] }) {
 
   return (
     <div>
-      <h3 style={{ margin: '0 0 12px', fontSize: '13px', fontWeight: 600, letterSpacing: '0.02em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-        Activity by Hour of Day
-      </h3>
+      <div class="section-title" style={{ padding: '0', marginBottom: '12px' }}>Activity by Hour of Day</div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '80px' }}>
         {Array.from({ length: 24 }, (_, h) => {
           const row = data.find(d => d.hour === h);

@@ -9,6 +9,9 @@
     --card-hover: #1a1a1a;
     --border: rgba(255,255,255,0.06);
     --border-hover: rgba(255,255,255,0.12);
+    --border-subtle: rgba(255,255,255,0.03);
+    --border-strong: rgba(255,255,255,0.12);
+    --border-accent: rgba(99,102,241,0.30);
     --text: #ededed;
     --text-secondary: #888888;
     --muted: #666666;
@@ -40,6 +43,9 @@
     --card-hover: #f9f9f9;
     --border: rgba(0,0,0,0.07);
     --border-hover: rgba(0,0,0,0.14);
+    --border-subtle: rgba(0,0,0,0.04);
+    --border-strong: rgba(0,0,0,0.14);
+    --border-accent: rgba(79,70,229,0.25);
     --text: #171717;
     --text-secondary: #737373;
     --muted: #a3a3a3;
@@ -131,7 +137,12 @@
 
   /* ── Filter Bar ──────────────────────────────────────────────────── */
   #filter-bar {
-    background: var(--bg-secondary);
+    position: sticky;
+    top: 48px;
+    z-index: 40;
+    background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
     border-bottom: 1px solid var(--border);
     padding: 8px 24px;
     display: flex;
@@ -140,6 +151,7 @@
     flex-wrap: wrap;
   }
   .filter-label {
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
     font-size: 10px;
     font-weight: 600;
     text-transform: uppercase;
@@ -168,6 +180,7 @@
     background: var(--accent-muted);
     border-color: var(--accent);
     color: var(--text);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);
   }
   .model-cb-label input { display: none; }
 
@@ -177,6 +190,7 @@
     border: 1px solid var(--border);
     background: transparent;
     color: var(--muted);
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
     font-size: 10px;
     cursor: pointer;
     white-space: nowrap;
@@ -197,6 +211,7 @@
     border: none;
     border-right: 1px solid var(--border);
     color: var(--text-secondary);
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
     font-size: 11px;
     cursor: pointer;
     transition: all 0.15s;
@@ -207,6 +222,7 @@
     background: var(--accent-muted);
     color: var(--accent);
     font-weight: 600;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);
   }
 
   /* ── Bento Grid ──────────────────────────────────────────────────── */
@@ -225,17 +241,18 @@
   /* ── Cards ───────────────────────────────────────────────────────── */
   .card {
     background: var(--card);
-    border: 1px solid var(--border);
+    border: none;
+    box-shadow: 0 0 0 1px var(--border);
     border-radius: 12px;
     padding: 20px;
-    transition: border-color 0.15s ease, transform 0.15s ease;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
   }
   .card:hover {
-    border-color: var(--border-hover);
+    box-shadow: 0 0 0 1px var(--border-hover);
     transform: translateY(-1px);
   }
   .card-flat { /* no hover effect */ transition: none; }
-  .card-flat:hover { transform: none; border-color: var(--border); }
+  .card-flat:hover { transform: none; box-shadow: 0 0 0 1px var(--border); }
 
   /* ── Stat Cards ──────────────────────────────────────────────────── */
   .stat-card {
@@ -246,10 +263,11 @@
   }
   .stat-content { flex: 1; min-width: 0; }
   .stat-label {
-    font-size: 11px;
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 10px;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     color: var(--muted);
     margin-bottom: 8px;
   }
@@ -260,6 +278,7 @@
     line-height: 1;
     letter-spacing: -0.02em;
     color: var(--text);
+    font-feature-settings: "tnum";
     animation: fadeUp 0.4s ease-out;
   }
   .stat-value.cost-value { color: var(--green); }
@@ -286,9 +305,11 @@
     height: 32px;
     opacity: 0.7;
   }
+  .stat-card:hover { background: color-mix(in srgb, var(--accent) 3%, var(--card)); }
 
   /* ── Section Headers ─────────────────────────────────────────────── */
   .section-title {
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
@@ -306,7 +327,8 @@
 
   /* ── Charts ──────────────────────────────────────────────────────── */
   .chart-card h2 {
-    font-size: 11px;
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 10px;
     font-weight: 600;
     color: var(--muted);
     text-transform: uppercase;
@@ -331,10 +353,11 @@
   th {
     text-align: left;
     padding: 10px 16px;
-    font-size: 11px;
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 10px;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     color: var(--muted);
     border-bottom: 1px solid var(--border);
     background: var(--card);
@@ -350,6 +373,8 @@
   }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: var(--hover-bg); }
+  tr.cost-row:hover td { background: rgba(34,197,94,0.04); }
+  [data-theme="light"] tr.cost-row:hover td { background: rgba(22,163,74,0.04); }
 
   .model-tag {
     display: inline-block;
@@ -360,9 +385,9 @@
     background: rgba(99,102,241,0.1);
     color: var(--accent);
   }
-  .cost { color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 500; }
-  .cost-na { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
-  .num { font-family: 'JetBrains Mono', monospace; }
+  .cost { color: var(--green); font-family: 'JetBrains Mono', monospace; font-weight: 500; font-feature-settings: "tnum"; }
+  .cost-na { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-feature-settings: "tnum"; }
+  .num { font-family: 'JetBrains Mono', monospace; font-feature-settings: "tnum"; }
   .muted { color: var(--muted); }
 
   /* ── Export & Action Buttons ─────────────────────────────────────── */
@@ -371,7 +396,7 @@
     border: 1px solid var(--border);
     color: var(--text-secondary);
     padding: 3px 10px;
-    border-radius: 5px;
+    border-radius: 4px;
     cursor: pointer;
     font-size: 11px;
     transition: all 0.15s;

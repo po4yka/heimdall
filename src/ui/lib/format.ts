@@ -30,10 +30,8 @@ export function fmtResetTime(minutes: number | null | undefined): string {
   return minutes + 'm';
 }
 
-import { cssVar } from './charts';
-
 export function progressColor(percent: number): string {
-  if (percent >= 90) return cssVar('--red');
-  if (percent >= 70) return cssVar('--yellow');
-  return cssVar('--green');
+  if (percent >= 90) return 'var(--red)';
+  if (percent >= 70) return 'var(--yellow)';
+  return 'var(--green)';
 }

@@ -6,7 +6,7 @@ import type { DailyAgg } from '../state/types';
 
 export function DailyChart({ daily }: { daily: DailyAgg[] }) {
   const options = {
-    chart: { type: 'area', height: '100%', stacked: true, background: 'transparent',
+    chart: { type: 'bar', height: '100%', stacked: true, background: 'transparent',
              toolbar: { show: false }, fontFamily: 'inherit' },
     theme: { mode: apexThemeMode() },
     series: [
@@ -16,16 +16,7 @@ export function DailyChart({ daily }: { daily: DailyAgg[] }) {
       { name: 'Cache Creation', data: daily.map(d => d.cache_creation) },
     ],
     colors: [TOKEN_COLORS.input, TOKEN_COLORS.output, TOKEN_COLORS.cache_read, TOKEN_COLORS.cache_creation],
-    fill: {
-      type: 'gradient',
-      gradient: {
-        shadeIntensity: 1,
-        opacityFrom: 0.4,
-        opacityTo: 0.05,
-        stops: [0, 95, 100],
-      },
-    },
-    stroke: { curve: 'smooth' as const, width: 2 },
+    fill: { type: 'solid' },
     xaxis: { categories: daily.map(d => d.day),
              labels: { rotate: -45, maxHeight: 60 },
              tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange.value]) },

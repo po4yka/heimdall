@@ -1,2216 +1,5364 @@
-// src/ui/app.tsx
-import { render } from "preact";
-
-// src/ui/components/Footer.tsx
-import { jsx, jsxs } from "preact/jsx-runtime";
-function Footer() {
-  return /* @__PURE__ */ jsx("footer", { children: /* @__PURE__ */ jsxs("div", { class: "footer-content", children: [
-    /* @__PURE__ */ jsxs("p", { children: [
-      "Cost estimates based on Anthropic API pricing (",
-      /* @__PURE__ */ jsx(
-        "a",
-        {
-          href: "https://docs.anthropic.com/en/docs/about-claude/pricing",
-          target: "_blank",
-          rel: "noopener noreferrer",
-          children: "docs.anthropic.com/pricing"
-        }
-      ),
-      "). Actual costs for Max/Pro subscribers differ."
-    ] }),
-    /* @__PURE__ */ jsxs("p", { children: [
-      "GitHub:",
-      " ",
-      /* @__PURE__ */ jsx(
-        "a",
-        {
-          href: "https://github.com/po4yka/claude-usage-tracker",
-          target: "_blank",
-          rel: "noopener noreferrer",
-          children: "po4yka/claude-usage-tracker"
-        }
-      ),
-      " ",
-      "\xB7 License: MIT"
-    ] })
-  ] }) });
-}
-
-// src/ui/lib/charts.ts
-var TOKEN_COLORS = {
-  input: "rgba(59,130,246,0.8)",
-  // blue
-  output: "rgba(167,139,250,0.8)",
-  // purple
-  cache_read: "rgba(34,197,94,0.5)",
-  // green
-  cache_creation: "rgba(234,179,8,0.5)"
-  // yellow
-};
-var MODEL_COLORS = ["#6366f1", "#3b82f6", "#22c55e", "#a78bfa", "#eab308", "#f472b6", "#14b8a6", "#60a5fa"];
-var RANGE_LABELS = {
-  "7d": "Last 7 Days",
-  "30d": "Last 30 Days",
-  "90d": "Last 90 Days",
-  "all": "All Time"
-};
-var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
-function apexThemeMode() {
-  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-}
-function cssVar(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-// src/ui/lib/format.ts
-function esc(s2) {
-  const d3 = document.createElement("div");
-  d3.textContent = String(s2);
-  return d3.innerHTML;
-}
-function $(id) {
-  return document.getElementById(id);
-}
-function fmt(n3) {
-  if (n3 >= 1e9) return (n3 / 1e9).toFixed(2) + "B";
-  if (n3 >= 1e6) return (n3 / 1e6).toFixed(2) + "M";
-  if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
-  return n3.toLocaleString();
-}
-function fmtCost(c2) {
-  return "$" + c2.toFixed(4);
-}
-function fmtCostBig(c2) {
-  return "$" + c2.toFixed(2);
-}
-function fmtResetTime(minutes) {
-  if (minutes == null || minutes <= 0) return "now";
-  if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
-  if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
-  return minutes + "m";
-}
-function progressColor(percent) {
-  if (percent >= 90) return cssVar("--red");
-  if (percent >= 70) return cssVar("--yellow");
-  return cssVar("--green");
-}
-
-// node_modules/@preact/signals/dist/signals.module.js
-import { Component as i2, options as n2, isValidElement as r2, Fragment as t2 } from "preact";
-import { useMemo as o2, useRef as e2, useEffect as f2 } from "preact/hooks";
-
-// node_modules/@preact/signals-core/dist/signals-core.module.js
-var i = /* @__PURE__ */ Symbol.for("preact-signals");
-function t() {
-  if (!(s > 1)) {
-    var i3, t3 = false;
-    !(function() {
-      var i4 = c;
-      c = void 0;
-      while (void 0 !== i4) {
-        if (i4.S.v === i4.v) i4.S.i = i4.i;
-        i4 = i4.o;
-      }
-    })();
-    while (void 0 !== h) {
-      var n3 = h;
-      h = void 0;
-      v++;
-      while (void 0 !== n3) {
-        var r3 = n3.u;
-        n3.u = void 0;
-        n3.f &= -3;
-        if (!(8 & n3.f) && w(n3)) try {
-          n3.c();
-        } catch (n4) {
-          if (!t3) {
-            i3 = n4;
-            t3 = true;
-          }
-        }
-        n3 = r3;
-      }
-    }
-    v = 0;
-    s--;
-    if (t3) throw i3;
-  } else s--;
-}
-function n(i3) {
-  if (s > 0) return i3();
-  e = ++u;
-  s++;
-  try {
-    return i3();
-  } finally {
-    t();
+"use strict";
+(() => {
+  // node_modules/preact/dist/preact.module.js
+  var n;
+  var l;
+  var u;
+  var t;
+  var i;
+  var r;
+  var o;
+  var e;
+  var f;
+  var c;
+  var s;
+  var a;
+  var h;
+  var p;
+  var v;
+  var y;
+  var d = {};
+  var w = [];
+  var _ = /acit|ex(?:s|g|n|p|$)|rph|grid|ows|mnc|ntw|ine[ch]|zoo|^ord|itera/i;
+  var g = Array.isArray;
+  function m(n3, l5) {
+    for (var u5 in l5) n3[u5] = l5[u5];
+    return n3;
   }
-}
-var r = void 0;
-function o(i3) {
-  var t3 = r;
-  r = void 0;
-  try {
-    return i3();
-  } finally {
-    r = t3;
+  function b(n3) {
+    n3 && n3.parentNode && n3.parentNode.removeChild(n3);
   }
-}
-var f;
-var h = void 0;
-var s = 0;
-var v = 0;
-var u = 0;
-var e = 0;
-var c = void 0;
-var d = 0;
-function a(i3) {
-  if (void 0 !== r) {
-    var t3 = i3.n;
-    if (void 0 === t3 || t3.t !== r) {
-      t3 = { i: 0, S: i3, p: r.s, n: void 0, t: r, e: void 0, x: void 0, r: t3 };
-      if (void 0 !== r.s) r.s.n = t3;
-      r.s = t3;
-      i3.n = t3;
-      if (32 & r.f) i3.S(t3);
-      return t3;
-    } else if (-1 === t3.i) {
-      t3.i = 0;
-      if (void 0 !== t3.n) {
-        t3.n.p = t3.p;
-        if (void 0 !== t3.p) t3.p.n = t3.n;
-        t3.p = r.s;
-        t3.n = void 0;
-        r.s.n = t3;
-        r.s = t3;
-      }
-      return t3;
+  function k(l5, u5, t4) {
+    var i4, r4, o4, e4 = {};
+    for (o4 in u5) "key" == o4 ? i4 = u5[o4] : "ref" == o4 ? r4 = u5[o4] : e4[o4] = u5[o4];
+    if (arguments.length > 2 && (e4.children = arguments.length > 3 ? n.call(arguments, 2) : t4), "function" == typeof l5 && null != l5.defaultProps) for (o4 in l5.defaultProps) void 0 === e4[o4] && (e4[o4] = l5.defaultProps[o4]);
+    return x(l5, e4, i4, r4, null);
+  }
+  function x(n3, t4, i4, r4, o4) {
+    var e4 = { type: n3, props: t4, key: i4, ref: r4, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: null == o4 ? ++u : o4, __i: -1, __u: 0 };
+    return null == o4 && null != l.vnode && l.vnode(e4), e4;
+  }
+  function S(n3) {
+    return n3.children;
+  }
+  function C(n3, l5) {
+    this.props = n3, this.context = l5;
+  }
+  function $(n3, l5) {
+    if (null == l5) return n3.__ ? $(n3.__, n3.__i + 1) : null;
+    for (var u5; l5 < n3.__k.length; l5++) if (null != (u5 = n3.__k[l5]) && null != u5.__e) return u5.__e;
+    return "function" == typeof n3.type ? $(n3) : null;
+  }
+  function I(n3) {
+    if (n3.__P && n3.__d) {
+      var u5 = n3.__v, t4 = u5.__e, i4 = [], r4 = [], o4 = m({}, u5);
+      o4.__v = u5.__v + 1, l.vnode && l.vnode(o4), q(n3.__P, o4, u5, n3.__n, n3.__P.namespaceURI, 32 & u5.__u ? [t4] : null, i4, null == t4 ? $(u5) : t4, !!(32 & u5.__u), r4), o4.__v = u5.__v, o4.__.__k[o4.__i] = o4, D(i4, o4, r4), u5.__e = u5.__ = null, o4.__e != t4 && P(o4);
     }
   }
-}
-function l(i3, t3) {
-  this.v = i3;
-  this.i = 0;
-  this.n = void 0;
-  this.t = void 0;
-  this.l = 0;
-  this.W = null == t3 ? void 0 : t3.watched;
-  this.Z = null == t3 ? void 0 : t3.unwatched;
-  this.name = null == t3 ? void 0 : t3.name;
-}
-l.prototype.brand = i;
-l.prototype.h = function() {
-  return true;
-};
-l.prototype.S = function(i3) {
-  var t3 = this, n3 = this.t;
-  if (n3 !== i3 && void 0 === i3.e) {
-    i3.x = n3;
-    this.t = i3;
-    if (void 0 !== n3) n3.e = i3;
-    else o(function() {
-      var i4;
-      null == (i4 = t3.W) || i4.call(t3);
+  function P(n3) {
+    if (null != (n3 = n3.__) && null != n3.__c) return n3.__e = n3.__c.base = null, n3.__k.some(function(l5) {
+      if (null != l5 && null != l5.__e) return n3.__e = n3.__c.base = l5.__e;
+    }), P(n3);
+  }
+  function A(n3) {
+    (!n3.__d && (n3.__d = true) && i.push(n3) && !H.__r++ || r != l.debounceRendering) && ((r = l.debounceRendering) || o)(H);
+  }
+  function H() {
+    try {
+      for (var n3, l5 = 1; i.length; ) i.length > l5 && i.sort(e), n3 = i.shift(), l5 = i.length, I(n3);
+    } finally {
+      i.length = H.__r = 0;
+    }
+  }
+  function L(n3, l5, u5, t4, i4, r4, o4, e4, f5, c4, s4) {
+    var a4, h5, p5, v4, y5, _4, g4, m4 = t4 && t4.__k || w, b4 = l5.length;
+    for (f5 = T(u5, l5, m4, f5, b4), a4 = 0; a4 < b4; a4++) null != (p5 = u5.__k[a4]) && (h5 = -1 != p5.__i && m4[p5.__i] || d, p5.__i = a4, _4 = q(n3, p5, h5, i4, r4, o4, e4, f5, c4, s4), v4 = p5.__e, p5.ref && h5.ref != p5.ref && (h5.ref && J(h5.ref, null, p5), s4.push(p5.ref, p5.__c || v4, p5)), null == y5 && null != v4 && (y5 = v4), (g4 = !!(4 & p5.__u)) || h5.__k === p5.__k ? (f5 = j(p5, f5, n3, g4), g4 && h5.__e && (h5.__e = null)) : "function" == typeof p5.type && void 0 !== _4 ? f5 = _4 : v4 && (f5 = v4.nextSibling), p5.__u &= -7);
+    return u5.__e = y5, f5;
+  }
+  function T(n3, l5, u5, t4, i4) {
+    var r4, o4, e4, f5, c4, s4 = u5.length, a4 = s4, h5 = 0;
+    for (n3.__k = new Array(i4), r4 = 0; r4 < i4; r4++) null != (o4 = l5[r4]) && "boolean" != typeof o4 && "function" != typeof o4 ? ("string" == typeof o4 || "number" == typeof o4 || "bigint" == typeof o4 || o4.constructor == String ? o4 = n3.__k[r4] = x(null, o4, null, null, null) : g(o4) ? o4 = n3.__k[r4] = x(S, { children: o4 }, null, null, null) : void 0 === o4.constructor && o4.__b > 0 ? o4 = n3.__k[r4] = x(o4.type, o4.props, o4.key, o4.ref ? o4.ref : null, o4.__v) : n3.__k[r4] = o4, f5 = r4 + h5, o4.__ = n3, o4.__b = n3.__b + 1, e4 = null, -1 != (c4 = o4.__i = O(o4, u5, f5, a4)) && (a4--, (e4 = u5[c4]) && (e4.__u |= 2)), null == e4 || null == e4.__v ? (-1 == c4 && (i4 > s4 ? h5-- : i4 < s4 && h5++), "function" != typeof o4.type && (o4.__u |= 4)) : c4 != f5 && (c4 == f5 - 1 ? h5-- : c4 == f5 + 1 ? h5++ : (c4 > f5 ? h5-- : h5++, o4.__u |= 4))) : n3.__k[r4] = null;
+    if (a4) for (r4 = 0; r4 < s4; r4++) null != (e4 = u5[r4]) && 0 == (2 & e4.__u) && (e4.__e == t4 && (t4 = $(e4)), K(e4, e4));
+    return t4;
+  }
+  function j(n3, l5, u5, t4) {
+    var i4, r4;
+    if ("function" == typeof n3.type) {
+      for (i4 = n3.__k, r4 = 0; i4 && r4 < i4.length; r4++) i4[r4] && (i4[r4].__ = n3, l5 = j(i4[r4], l5, u5, t4));
+      return l5;
+    }
+    n3.__e != l5 && (t4 && (l5 && n3.type && !l5.parentNode && (l5 = $(n3)), u5.insertBefore(n3.__e, l5 || null)), l5 = n3.__e);
+    do {
+      l5 = l5 && l5.nextSibling;
+    } while (null != l5 && 8 == l5.nodeType);
+    return l5;
+  }
+  function O(n3, l5, u5, t4) {
+    var i4, r4, o4, e4 = n3.key, f5 = n3.type, c4 = l5[u5], s4 = null != c4 && 0 == (2 & c4.__u);
+    if (null === c4 && null == e4 || s4 && e4 == c4.key && f5 == c4.type) return u5;
+    if (t4 > (s4 ? 1 : 0)) {
+      for (i4 = u5 - 1, r4 = u5 + 1; i4 >= 0 || r4 < l5.length; ) if (null != (c4 = l5[o4 = i4 >= 0 ? i4-- : r4++]) && 0 == (2 & c4.__u) && e4 == c4.key && f5 == c4.type) return o4;
+    }
+    return -1;
+  }
+  function z(n3, l5, u5) {
+    "-" == l5[0] ? n3.setProperty(l5, null == u5 ? "" : u5) : n3[l5] = null == u5 ? "" : "number" != typeof u5 || _.test(l5) ? u5 : u5 + "px";
+  }
+  function N(n3, l5, u5, t4, i4) {
+    var r4, o4;
+    n: if ("style" == l5) if ("string" == typeof u5) n3.style.cssText = u5;
+    else {
+      if ("string" == typeof t4 && (n3.style.cssText = t4 = ""), t4) for (l5 in t4) u5 && l5 in u5 || z(n3.style, l5, "");
+      if (u5) for (l5 in u5) t4 && u5[l5] == t4[l5] || z(n3.style, l5, u5[l5]);
+    }
+    else if ("o" == l5[0] && "n" == l5[1]) r4 = l5 != (l5 = l5.replace(a, "$1")), o4 = l5.toLowerCase(), l5 = o4 in n3 || "onFocusOut" == l5 || "onFocusIn" == l5 ? o4.slice(2) : l5.slice(2), n3.l || (n3.l = {}), n3.l[l5 + r4] = u5, u5 ? t4 ? u5[s] = t4[s] : (u5[s] = h, n3.addEventListener(l5, r4 ? v : p, r4)) : n3.removeEventListener(l5, r4 ? v : p, r4);
+    else {
+      if ("http://www.w3.org/2000/svg" == i4) l5 = l5.replace(/xlink(H|:h)/, "h").replace(/sName$/, "s");
+      else if ("width" != l5 && "height" != l5 && "href" != l5 && "list" != l5 && "form" != l5 && "tabIndex" != l5 && "download" != l5 && "rowSpan" != l5 && "colSpan" != l5 && "role" != l5 && "popover" != l5 && l5 in n3) try {
+        n3[l5] = null == u5 ? "" : u5;
+        break n;
+      } catch (n4) {
+      }
+      "function" == typeof u5 || (null == u5 || false === u5 && "-" != l5[4] ? n3.removeAttribute(l5) : n3.setAttribute(l5, "popover" == l5 && 1 == u5 ? "" : u5));
+    }
+  }
+  function V(n3) {
+    return function(u5) {
+      if (this.l) {
+        var t4 = this.l[u5.type + n3];
+        if (null == u5[c]) u5[c] = h++;
+        else if (u5[c] < t4[s]) return;
+        return t4(l.event ? l.event(u5) : u5);
+      }
+    };
+  }
+  function q(n3, u5, t4, i4, r4, o4, e4, f5, c4, s4) {
+    var a4, h5, p5, v4, y5, d5, _4, k3, x4, M, $3, I2, P2, A3, H2, T4 = u5.type;
+    if (void 0 !== u5.constructor) return null;
+    128 & t4.__u && (c4 = !!(32 & t4.__u), o4 = [f5 = u5.__e = t4.__e]), (a4 = l.__b) && a4(u5);
+    n: if ("function" == typeof T4) try {
+      if (k3 = u5.props, x4 = T4.prototype && T4.prototype.render, M = (a4 = T4.contextType) && i4[a4.__c], $3 = a4 ? M ? M.props.value : a4.__ : i4, t4.__c ? _4 = (h5 = u5.__c = t4.__c).__ = h5.__E : (x4 ? u5.__c = h5 = new T4(k3, $3) : (u5.__c = h5 = new C(k3, $3), h5.constructor = T4, h5.render = Q), M && M.sub(h5), h5.state || (h5.state = {}), h5.__n = i4, p5 = h5.__d = true, h5.__h = [], h5._sb = []), x4 && null == h5.__s && (h5.__s = h5.state), x4 && null != T4.getDerivedStateFromProps && (h5.__s == h5.state && (h5.__s = m({}, h5.__s)), m(h5.__s, T4.getDerivedStateFromProps(k3, h5.__s))), v4 = h5.props, y5 = h5.state, h5.__v = u5, p5) x4 && null == T4.getDerivedStateFromProps && null != h5.componentWillMount && h5.componentWillMount(), x4 && null != h5.componentDidMount && h5.__h.push(h5.componentDidMount);
+      else {
+        if (x4 && null == T4.getDerivedStateFromProps && k3 !== v4 && null != h5.componentWillReceiveProps && h5.componentWillReceiveProps(k3, $3), u5.__v == t4.__v || !h5.__e && null != h5.shouldComponentUpdate && false === h5.shouldComponentUpdate(k3, h5.__s, $3)) {
+          u5.__v != t4.__v && (h5.props = k3, h5.state = h5.__s, h5.__d = false), u5.__e = t4.__e, u5.__k = t4.__k, u5.__k.some(function(n4) {
+            n4 && (n4.__ = u5);
+          }), w.push.apply(h5.__h, h5._sb), h5._sb = [], h5.__h.length && e4.push(h5);
+          break n;
+        }
+        null != h5.componentWillUpdate && h5.componentWillUpdate(k3, h5.__s, $3), x4 && null != h5.componentDidUpdate && h5.__h.push(function() {
+          h5.componentDidUpdate(v4, y5, d5);
+        });
+      }
+      if (h5.context = $3, h5.props = k3, h5.__P = n3, h5.__e = false, I2 = l.__r, P2 = 0, x4) h5.state = h5.__s, h5.__d = false, I2 && I2(u5), a4 = h5.render(h5.props, h5.state, h5.context), w.push.apply(h5.__h, h5._sb), h5._sb = [];
+      else do {
+        h5.__d = false, I2 && I2(u5), a4 = h5.render(h5.props, h5.state, h5.context), h5.state = h5.__s;
+      } while (h5.__d && ++P2 < 25);
+      h5.state = h5.__s, null != h5.getChildContext && (i4 = m(m({}, i4), h5.getChildContext())), x4 && !p5 && null != h5.getSnapshotBeforeUpdate && (d5 = h5.getSnapshotBeforeUpdate(v4, y5)), A3 = null != a4 && a4.type === S && null == a4.key ? E(a4.props.children) : a4, f5 = L(n3, g(A3) ? A3 : [A3], u5, t4, i4, r4, o4, e4, f5, c4, s4), h5.base = u5.__e, u5.__u &= -161, h5.__h.length && e4.push(h5), _4 && (h5.__E = h5.__ = null);
+    } catch (n4) {
+      if (u5.__v = null, c4 || null != o4) if (n4.then) {
+        for (u5.__u |= c4 ? 160 : 128; f5 && 8 == f5.nodeType && f5.nextSibling; ) f5 = f5.nextSibling;
+        o4[o4.indexOf(f5)] = null, u5.__e = f5;
+      } else {
+        for (H2 = o4.length; H2--; ) b(o4[H2]);
+        B(u5);
+      }
+      else u5.__e = t4.__e, u5.__k = t4.__k, n4.then || B(u5);
+      l.__e(n4, u5, t4);
+    }
+    else null == o4 && u5.__v == t4.__v ? (u5.__k = t4.__k, u5.__e = t4.__e) : f5 = u5.__e = G(t4.__e, u5, t4, i4, r4, o4, e4, c4, s4);
+    return (a4 = l.diffed) && a4(u5), 128 & u5.__u ? void 0 : f5;
+  }
+  function B(n3) {
+    n3 && (n3.__c && (n3.__c.__e = true), n3.__k && n3.__k.some(B));
+  }
+  function D(n3, u5, t4) {
+    for (var i4 = 0; i4 < t4.length; i4++) J(t4[i4], t4[++i4], t4[++i4]);
+    l.__c && l.__c(u5, n3), n3.some(function(u6) {
+      try {
+        n3 = u6.__h, u6.__h = [], n3.some(function(n4) {
+          n4.call(u6);
+        });
+      } catch (n4) {
+        l.__e(n4, u6.__v);
+      }
     });
   }
-};
-l.prototype.U = function(i3) {
-  var t3 = this;
-  if (void 0 !== this.t) {
-    var n3 = i3.e, r3 = i3.x;
-    if (void 0 !== n3) {
-      n3.x = r3;
-      i3.e = void 0;
+  function E(n3) {
+    return "object" != typeof n3 || null == n3 || n3.__b > 0 ? n3 : g(n3) ? n3.map(E) : m({}, n3);
+  }
+  function G(u5, t4, i4, r4, o4, e4, f5, c4, s4) {
+    var a4, h5, p5, v4, y5, w5, _4, m4 = i4.props || d, k3 = t4.props, x4 = t4.type;
+    if ("svg" == x4 ? o4 = "http://www.w3.org/2000/svg" : "math" == x4 ? o4 = "http://www.w3.org/1998/Math/MathML" : o4 || (o4 = "http://www.w3.org/1999/xhtml"), null != e4) {
+      for (a4 = 0; a4 < e4.length; a4++) if ((y5 = e4[a4]) && "setAttribute" in y5 == !!x4 && (x4 ? y5.localName == x4 : 3 == y5.nodeType)) {
+        u5 = y5, e4[a4] = null;
+        break;
+      }
     }
+    if (null == u5) {
+      if (null == x4) return document.createTextNode(k3);
+      u5 = document.createElementNS(o4, x4, k3.is && k3), c4 && (l.__m && l.__m(t4, e4), c4 = false), e4 = null;
+    }
+    if (null == x4) m4 === k3 || c4 && u5.data == k3 || (u5.data = k3);
+    else {
+      if (e4 = e4 && n.call(u5.childNodes), !c4 && null != e4) for (m4 = {}, a4 = 0; a4 < u5.attributes.length; a4++) m4[(y5 = u5.attributes[a4]).name] = y5.value;
+      for (a4 in m4) y5 = m4[a4], "dangerouslySetInnerHTML" == a4 ? p5 = y5 : "children" == a4 || a4 in k3 || "value" == a4 && "defaultValue" in k3 || "checked" == a4 && "defaultChecked" in k3 || N(u5, a4, null, y5, o4);
+      for (a4 in k3) y5 = k3[a4], "children" == a4 ? v4 = y5 : "dangerouslySetInnerHTML" == a4 ? h5 = y5 : "value" == a4 ? w5 = y5 : "checked" == a4 ? _4 = y5 : c4 && "function" != typeof y5 || m4[a4] === y5 || N(u5, a4, y5, m4[a4], o4);
+      if (h5) c4 || p5 && (h5.__html == p5.__html || h5.__html == u5.innerHTML) || (u5.innerHTML = h5.__html), t4.__k = [];
+      else if (p5 && (u5.innerHTML = ""), L("template" == t4.type ? u5.content : u5, g(v4) ? v4 : [v4], t4, i4, r4, "foreignObject" == x4 ? "http://www.w3.org/1999/xhtml" : o4, e4, f5, e4 ? e4[0] : i4.__k && $(i4, 0), c4, s4), null != e4) for (a4 = e4.length; a4--; ) b(e4[a4]);
+      c4 || (a4 = "value", "progress" == x4 && null == w5 ? u5.removeAttribute("value") : null != w5 && (w5 !== u5[a4] || "progress" == x4 && !w5 || "option" == x4 && w5 != m4[a4]) && N(u5, a4, w5, m4[a4], o4), a4 = "checked", null != _4 && _4 != u5[a4] && N(u5, a4, _4, m4[a4], o4));
+    }
+    return u5;
+  }
+  function J(n3, u5, t4) {
+    try {
+      if ("function" == typeof n3) {
+        var i4 = "function" == typeof n3.__u;
+        i4 && n3.__u(), i4 && null == u5 || (n3.__u = n3(u5));
+      } else n3.current = u5;
+    } catch (n4) {
+      l.__e(n4, t4);
+    }
+  }
+  function K(n3, u5, t4) {
+    var i4, r4;
+    if (l.unmount && l.unmount(n3), (i4 = n3.ref) && (i4.current && i4.current != n3.__e || J(i4, null, u5)), null != (i4 = n3.__c)) {
+      if (i4.componentWillUnmount) try {
+        i4.componentWillUnmount();
+      } catch (n4) {
+        l.__e(n4, u5);
+      }
+      i4.base = i4.__P = null;
+    }
+    if (i4 = n3.__k) for (r4 = 0; r4 < i4.length; r4++) i4[r4] && K(i4[r4], u5, t4 || "function" != typeof n3.type);
+    t4 || b(n3.__e), n3.__c = n3.__ = n3.__e = void 0;
+  }
+  function Q(n3, l5, u5) {
+    return this.constructor(n3, u5);
+  }
+  function R(u5, t4, i4) {
+    var r4, o4, e4, f5;
+    t4 == document && (t4 = document.documentElement), l.__ && l.__(u5, t4), o4 = (r4 = "function" == typeof i4) ? null : i4 && i4.__k || t4.__k, e4 = [], f5 = [], q(t4, u5 = (!r4 && i4 || t4).__k = k(S, null, [u5]), o4 || d, d, t4.namespaceURI, !r4 && i4 ? [i4] : o4 ? null : t4.firstChild ? n.call(t4.childNodes) : null, e4, !r4 && i4 ? i4 : o4 ? o4.__e : t4.firstChild, r4, f5), D(e4, u5, f5);
+  }
+  n = w.slice, l = { __e: function(n3, l5, u5, t4) {
+    for (var i4, r4, o4; l5 = l5.__; ) if ((i4 = l5.__c) && !i4.__) try {
+      if ((r4 = i4.constructor) && null != r4.getDerivedStateFromError && (i4.setState(r4.getDerivedStateFromError(n3)), o4 = i4.__d), null != i4.componentDidCatch && (i4.componentDidCatch(n3, t4 || {}), o4 = i4.__d), o4) return i4.__E = i4;
+    } catch (l6) {
+      n3 = l6;
+    }
+    throw n3;
+  } }, u = 0, t = function(n3) {
+    return null != n3 && void 0 === n3.constructor;
+  }, C.prototype.setState = function(n3, l5) {
+    var u5;
+    u5 = null != this.__s && this.__s != this.state ? this.__s : this.__s = m({}, this.state), "function" == typeof n3 && (n3 = n3(m({}, u5), this.props)), n3 && m(u5, n3), null != n3 && this.__v && (l5 && this._sb.push(l5), A(this));
+  }, C.prototype.forceUpdate = function(n3) {
+    this.__v && (this.__e = true, n3 && this.__h.push(n3), A(this));
+  }, C.prototype.render = S, i = [], o = "function" == typeof Promise ? Promise.prototype.then.bind(Promise.resolve()) : setTimeout, e = function(n3, l5) {
+    return n3.__v.__b - l5.__v.__b;
+  }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, s = "__a" + f, a = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
+
+  // node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js
+  var f2 = 0;
+  function u2(e4, t4, n3, o4, i4, u5) {
+    t4 || (t4 = {});
+    var a4, c4, p5 = t4;
+    if ("ref" in p5) for (c4 in p5 = {}, t4) "ref" == c4 ? a4 = t4[c4] : p5[c4] = t4[c4];
+    var l5 = { type: e4, props: p5, key: n3, ref: a4, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: --f2, __i: -1, __u: 0, __source: i4, __self: u5 };
+    if ("function" == typeof e4 && (a4 = e4.defaultProps)) for (c4 in a4) void 0 === p5[c4] && (p5[c4] = a4[c4]);
+    return l.vnode && l.vnode(l5), l5;
+  }
+
+  // src/ui/components/Footer.tsx
+  function Footer() {
+    return /* @__PURE__ */ u2("footer", { children: /* @__PURE__ */ u2("div", { class: "footer-content", children: [
+      /* @__PURE__ */ u2("p", { children: [
+        "Cost estimates based on Anthropic API pricing (",
+        /* @__PURE__ */ u2(
+          "a",
+          {
+            href: "https://docs.anthropic.com/en/docs/about-claude/pricing",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            children: "docs.anthropic.com/pricing"
+          }
+        ),
+        "). Actual costs for Max/Pro subscribers differ."
+      ] }),
+      /* @__PURE__ */ u2("p", { children: [
+        "GitHub:",
+        " ",
+        /* @__PURE__ */ u2(
+          "a",
+          {
+            href: "https://github.com/po4yka/claude-usage-tracker",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            children: "po4yka/claude-usage-tracker"
+          }
+        ),
+        " ",
+        "\xB7 License: MIT"
+      ] })
+    ] }) });
+  }
+
+  // src/ui/lib/format.ts
+  function esc(s4) {
+    const d5 = document.createElement("div");
+    d5.textContent = String(s4);
+    return d5.innerHTML;
+  }
+  function $2(id) {
+    return document.getElementById(id);
+  }
+  function fmt(n3) {
+    if (n3 >= 1e9) return (n3 / 1e9).toFixed(2) + "B";
+    if (n3 >= 1e6) return (n3 / 1e6).toFixed(2) + "M";
+    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
+    return n3.toLocaleString();
+  }
+  function fmtCost(c4) {
+    return "$" + c4.toFixed(4);
+  }
+  function fmtCostBig(c4) {
+    return "$" + c4.toFixed(2);
+  }
+  function fmtResetTime(minutes) {
+    if (minutes == null || minutes <= 0) return "now";
+    if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
+    if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
+    return minutes + "m";
+  }
+  function progressColor(percent) {
+    if (percent >= 90) return "var(--red)";
+    if (percent >= 70) return "var(--yellow)";
+    return "var(--green)";
+  }
+
+  // src/ui/lib/charts.ts
+  var TOKEN_COLORS = {
+    input: "rgba(59,130,246,0.8)",
+    // blue
+    output: "rgba(167,139,250,0.8)",
+    // purple
+    cache_read: "rgba(34,197,94,0.5)",
+    // green
+    cache_creation: "rgba(234,179,8,0.5)"
+    // yellow
+  };
+  var MODEL_COLORS = ["#6366f1", "#3b82f6", "#22c55e", "#a78bfa", "#eab308", "#f472b6", "#14b8a6", "#60a5fa"];
+  var RANGE_LABELS = {
+    "7d": "Last 7 Days",
+    "30d": "Last 30 Days",
+    "90d": "Last 90 Days",
+    "all": "All Time"
+  };
+  var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
+  function apexThemeMode() {
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  }
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  // node_modules/preact/hooks/dist/hooks.module.js
+  var t2;
+  var r2;
+  var u3;
+  var i2;
+  var o2 = 0;
+  var f3 = [];
+  var c2 = l;
+  var e2 = c2.__b;
+  var a2 = c2.__r;
+  var v2 = c2.diffed;
+  var l2 = c2.__c;
+  var m2 = c2.unmount;
+  var s2 = c2.__;
+  function p2(n3, t4) {
+    c2.__h && c2.__h(r2, n3, o2 || t4), o2 = 0;
+    var u5 = r2.__H || (r2.__H = { __: [], __h: [] });
+    return n3 >= u5.__.length && u5.__.push({}), u5.__[n3];
+  }
+  function d2(n3) {
+    return o2 = 1, h2(D2, n3);
+  }
+  function h2(n3, u5, i4) {
+    var o4 = p2(t2++, 2);
+    if (o4.t = n3, !o4.__c && (o4.__ = [i4 ? i4(u5) : D2(void 0, u5), function(n4) {
+      var t4 = o4.__N ? o4.__N[0] : o4.__[0], r4 = o4.t(t4, n4);
+      t4 !== r4 && (o4.__N = [r4, o4.__[1]], o4.__c.setState({}));
+    }], o4.__c = r2, !r2.__f)) {
+      var f5 = function(n4, t4, r4) {
+        if (!o4.__c.__H) return true;
+        var u6 = o4.__c.__H.__.filter(function(n5) {
+          return n5.__c;
+        });
+        if (u6.every(function(n5) {
+          return !n5.__N;
+        })) return !c4 || c4.call(this, n4, t4, r4);
+        var i5 = o4.__c.props !== n4;
+        return u6.some(function(n5) {
+          if (n5.__N) {
+            var t5 = n5.__[0];
+            n5.__ = n5.__N, n5.__N = void 0, t5 !== n5.__[0] && (i5 = true);
+          }
+        }), c4 && c4.call(this, n4, t4, r4) || i5;
+      };
+      r2.__f = true;
+      var c4 = r2.shouldComponentUpdate, e4 = r2.componentWillUpdate;
+      r2.componentWillUpdate = function(n4, t4, r4) {
+        if (this.__e) {
+          var u6 = c4;
+          c4 = void 0, f5(n4, t4, r4), c4 = u6;
+        }
+        e4 && e4.call(this, n4, t4, r4);
+      }, r2.shouldComponentUpdate = f5;
+    }
+    return o4.__N || o4.__;
+  }
+  function y2(n3, u5) {
+    var i4 = p2(t2++, 3);
+    !c2.__s && C2(i4.__H, u5) && (i4.__ = n3, i4.u = u5, r2.__H.__h.push(i4));
+  }
+  function A2(n3) {
+    return o2 = 5, T2(function() {
+      return { current: n3 };
+    }, []);
+  }
+  function T2(n3, r4) {
+    var u5 = p2(t2++, 7);
+    return C2(u5.__H, r4) && (u5.__ = n3(), u5.__H = r4, u5.__h = n3), u5.__;
+  }
+  function j2() {
+    for (var n3; n3 = f3.shift(); ) {
+      var t4 = n3.__H;
+      if (n3.__P && t4) try {
+        t4.__h.some(z2), t4.__h.some(B2), t4.__h = [];
+      } catch (r4) {
+        t4.__h = [], c2.__e(r4, n3.__v);
+      }
+    }
+  }
+  c2.__b = function(n3) {
+    r2 = null, e2 && e2(n3);
+  }, c2.__ = function(n3, t4) {
+    n3 && t4.__k && t4.__k.__m && (n3.__m = t4.__k.__m), s2 && s2(n3, t4);
+  }, c2.__r = function(n3) {
+    a2 && a2(n3), t2 = 0;
+    var i4 = (r2 = n3.__c).__H;
+    i4 && (u3 === r2 ? (i4.__h = [], r2.__h = [], i4.__.some(function(n4) {
+      n4.__N && (n4.__ = n4.__N), n4.u = n4.__N = void 0;
+    })) : (i4.__h.some(z2), i4.__h.some(B2), i4.__h = [], t2 = 0)), u3 = r2;
+  }, c2.diffed = function(n3) {
+    v2 && v2(n3);
+    var t4 = n3.__c;
+    t4 && t4.__H && (t4.__H.__h.length && (1 !== f3.push(t4) && i2 === c2.requestAnimationFrame || ((i2 = c2.requestAnimationFrame) || w2)(j2)), t4.__H.__.some(function(n4) {
+      n4.u && (n4.__H = n4.u), n4.u = void 0;
+    })), u3 = r2 = null;
+  }, c2.__c = function(n3, t4) {
+    t4.some(function(n4) {
+      try {
+        n4.__h.some(z2), n4.__h = n4.__h.filter(function(n5) {
+          return !n5.__ || B2(n5);
+        });
+      } catch (r4) {
+        t4.some(function(n5) {
+          n5.__h && (n5.__h = []);
+        }), t4 = [], c2.__e(r4, n4.__v);
+      }
+    }), l2 && l2(n3, t4);
+  }, c2.unmount = function(n3) {
+    m2 && m2(n3);
+    var t4, r4 = n3.__c;
+    r4 && r4.__H && (r4.__H.__.some(function(n4) {
+      try {
+        z2(n4);
+      } catch (n5) {
+        t4 = n5;
+      }
+    }), r4.__H = void 0, t4 && c2.__e(t4, r4.__v));
+  };
+  var k2 = "function" == typeof requestAnimationFrame;
+  function w2(n3) {
+    var t4, r4 = function() {
+      clearTimeout(u5), k2 && cancelAnimationFrame(t4), setTimeout(n3);
+    }, u5 = setTimeout(r4, 35);
+    k2 && (t4 = requestAnimationFrame(r4));
+  }
+  function z2(n3) {
+    var t4 = r2, u5 = n3.__c;
+    "function" == typeof u5 && (n3.__c = void 0, u5()), r2 = t4;
+  }
+  function B2(n3) {
+    var t4 = r2;
+    n3.__c = n3.__(), r2 = t4;
+  }
+  function C2(n3, t4) {
+    return !n3 || n3.length !== t4.length || t4.some(function(t5, r4) {
+      return t5 !== n3[r4];
+    });
+  }
+  function D2(n3, t4) {
+    return "function" == typeof t4 ? t4(n3) : t4;
+  }
+
+  // node_modules/@preact/signals-core/dist/signals-core.module.js
+  var i3 = /* @__PURE__ */ Symbol.for("preact-signals");
+  function t3() {
+    if (!(s3 > 1)) {
+      var i4, t4 = false;
+      !(function() {
+        var i5 = c3;
+        c3 = void 0;
+        while (void 0 !== i5) {
+          if (i5.S.v === i5.v) i5.S.i = i5.i;
+          i5 = i5.o;
+        }
+      })();
+      while (void 0 !== h3) {
+        var n3 = h3;
+        h3 = void 0;
+        v3++;
+        while (void 0 !== n3) {
+          var r4 = n3.u;
+          n3.u = void 0;
+          n3.f &= -3;
+          if (!(8 & n3.f) && w3(n3)) try {
+            n3.c();
+          } catch (n4) {
+            if (!t4) {
+              i4 = n4;
+              t4 = true;
+            }
+          }
+          n3 = r4;
+        }
+      }
+      v3 = 0;
+      s3--;
+      if (t4) throw i4;
+    } else s3--;
+  }
+  function n2(i4) {
+    if (s3 > 0) return i4();
+    e3 = ++u4;
+    s3++;
+    try {
+      return i4();
+    } finally {
+      t3();
+    }
+  }
+  var r3 = void 0;
+  function o3(i4) {
+    var t4 = r3;
+    r3 = void 0;
+    try {
+      return i4();
+    } finally {
+      r3 = t4;
+    }
+  }
+  var f4;
+  var h3 = void 0;
+  var s3 = 0;
+  var v3 = 0;
+  var u4 = 0;
+  var e3 = 0;
+  var c3 = void 0;
+  var d3 = 0;
+  function a3(i4) {
     if (void 0 !== r3) {
-      r3.e = n3;
-      i3.x = void 0;
+      var t4 = i4.n;
+      if (void 0 === t4 || t4.t !== r3) {
+        t4 = { i: 0, S: i4, p: r3.s, n: void 0, t: r3, e: void 0, x: void 0, r: t4 };
+        if (void 0 !== r3.s) r3.s.n = t4;
+        r3.s = t4;
+        i4.n = t4;
+        if (32 & r3.f) i4.S(t4);
+        return t4;
+      } else if (-1 === t4.i) {
+        t4.i = 0;
+        if (void 0 !== t4.n) {
+          t4.n.p = t4.p;
+          if (void 0 !== t4.p) t4.p.n = t4.n;
+          t4.p = r3.s;
+          t4.n = void 0;
+          r3.s.n = t4;
+          r3.s = t4;
+        }
+        return t4;
+      }
     }
-    if (i3 === this.t) {
-      this.t = r3;
-      if (void 0 === r3) o(function() {
-        var i4;
-        null == (i4 = t3.Z) || i4.call(t3);
+  }
+  function l3(i4, t4) {
+    this.v = i4;
+    this.i = 0;
+    this.n = void 0;
+    this.t = void 0;
+    this.l = 0;
+    this.W = null == t4 ? void 0 : t4.watched;
+    this.Z = null == t4 ? void 0 : t4.unwatched;
+    this.name = null == t4 ? void 0 : t4.name;
+  }
+  l3.prototype.brand = i3;
+  l3.prototype.h = function() {
+    return true;
+  };
+  l3.prototype.S = function(i4) {
+    var t4 = this, n3 = this.t;
+    if (n3 !== i4 && void 0 === i4.e) {
+      i4.x = n3;
+      this.t = i4;
+      if (void 0 !== n3) n3.e = i4;
+      else o3(function() {
+        var i5;
+        null == (i5 = t4.W) || i5.call(t4);
       });
     }
-  }
-};
-l.prototype.subscribe = function(i3) {
-  var t3 = this;
-  return j(function() {
-    var n3 = t3.value, o3 = r;
-    r = void 0;
-    try {
-      i3(n3);
-    } finally {
-      r = o3;
-    }
-  }, { name: "sub" });
-};
-l.prototype.valueOf = function() {
-  return this.value;
-};
-l.prototype.toString = function() {
-  return this.value + "";
-};
-l.prototype.toJSON = function() {
-  return this.value;
-};
-l.prototype.peek = function() {
-  var i3 = r;
-  r = void 0;
-  try {
-    return this.value;
-  } finally {
-    r = i3;
-  }
-};
-Object.defineProperty(l.prototype, "value", { get: function() {
-  var i3 = a(this);
-  if (void 0 !== i3) i3.i = this.i;
-  return this.v;
-}, set: function(i3) {
-  if (i3 !== this.v) {
-    if (v > 100) throw new Error("Cycle detected");
-    !(function(i4) {
-      if (0 !== s && 0 === v) {
-        if (i4.l !== e) {
-          i4.l = e;
-          c = { S: i4, v: i4.v, i: i4.i, o: c };
-        }
+  };
+  l3.prototype.U = function(i4) {
+    var t4 = this;
+    if (void 0 !== this.t) {
+      var n3 = i4.e, r4 = i4.x;
+      if (void 0 !== n3) {
+        n3.x = r4;
+        i4.e = void 0;
       }
-    })(this);
-    this.v = i3;
-    this.i++;
-    d++;
-    s++;
+      if (void 0 !== r4) {
+        r4.e = n3;
+        i4.x = void 0;
+      }
+      if (i4 === this.t) {
+        this.t = r4;
+        if (void 0 === r4) o3(function() {
+          var i5;
+          null == (i5 = t4.Z) || i5.call(t4);
+        });
+      }
+    }
+  };
+  l3.prototype.subscribe = function(i4) {
+    var t4 = this;
+    return j3(function() {
+      var n3 = t4.value, o4 = r3;
+      r3 = void 0;
+      try {
+        i4(n3);
+      } finally {
+        r3 = o4;
+      }
+    }, { name: "sub" });
+  };
+  l3.prototype.valueOf = function() {
+    return this.value;
+  };
+  l3.prototype.toString = function() {
+    return this.value + "";
+  };
+  l3.prototype.toJSON = function() {
+    return this.value;
+  };
+  l3.prototype.peek = function() {
+    var i4 = r3;
+    r3 = void 0;
     try {
-      for (var n3 = this.t; void 0 !== n3; n3 = n3.x) n3.t.N();
+      return this.value;
     } finally {
-      t();
+      r3 = i4;
+    }
+  };
+  Object.defineProperty(l3.prototype, "value", { get: function() {
+    var i4 = a3(this);
+    if (void 0 !== i4) i4.i = this.i;
+    return this.v;
+  }, set: function(i4) {
+    if (i4 !== this.v) {
+      if (v3 > 100) throw new Error("Cycle detected");
+      !(function(i5) {
+        if (0 !== s3 && 0 === v3) {
+          if (i5.l !== e3) {
+            i5.l = e3;
+            c3 = { S: i5, v: i5.v, i: i5.i, o: c3 };
+          }
+        }
+      })(this);
+      this.v = i4;
+      this.i++;
+      d3++;
+      s3++;
+      try {
+        for (var n3 = this.t; void 0 !== n3; n3 = n3.x) n3.t.N();
+      } finally {
+        t3();
+      }
+    }
+  } });
+  function y3(i4, t4) {
+    return new l3(i4, t4);
+  }
+  function w3(i4) {
+    for (var t4 = i4.s; void 0 !== t4; t4 = t4.n) if (t4.S.i !== t4.i || !t4.S.h() || t4.S.i !== t4.i) return true;
+    return false;
+  }
+  function _2(i4) {
+    for (var t4 = i4.s; void 0 !== t4; t4 = t4.n) {
+      var n3 = t4.S.n;
+      if (void 0 !== n3) t4.r = n3;
+      t4.S.n = t4;
+      t4.i = -1;
+      if (void 0 === t4.n) {
+        i4.s = t4;
+        break;
+      }
     }
   }
-} });
-function y(i3, t3) {
-  return new l(i3, t3);
-}
-function w(i3) {
-  for (var t3 = i3.s; void 0 !== t3; t3 = t3.n) if (t3.S.i !== t3.i || !t3.S.h() || t3.S.i !== t3.i) return true;
-  return false;
-}
-function _(i3) {
-  for (var t3 = i3.s; void 0 !== t3; t3 = t3.n) {
-    var n3 = t3.S.n;
-    if (void 0 !== n3) t3.r = n3;
-    t3.S.n = t3;
-    t3.i = -1;
-    if (void 0 === t3.n) {
-      i3.s = t3;
-      break;
+  function b2(i4) {
+    var t4 = i4.s, n3 = void 0;
+    while (void 0 !== t4) {
+      var r4 = t4.p;
+      if (-1 === t4.i) {
+        t4.S.U(t4);
+        if (void 0 !== r4) r4.n = t4.n;
+        if (void 0 !== t4.n) t4.n.p = r4;
+      } else n3 = t4;
+      t4.S.n = t4.r;
+      if (void 0 !== t4.r) t4.r = void 0;
+      t4 = r4;
     }
+    i4.s = n3;
   }
-}
-function b(i3) {
-  var t3 = i3.s, n3 = void 0;
-  while (void 0 !== t3) {
-    var r3 = t3.p;
-    if (-1 === t3.i) {
-      t3.S.U(t3);
-      if (void 0 !== r3) r3.n = t3.n;
-      if (void 0 !== t3.n) t3.n.p = r3;
-    } else n3 = t3;
-    t3.S.n = t3.r;
-    if (void 0 !== t3.r) t3.r = void 0;
-    t3 = r3;
+  function p3(i4, t4) {
+    l3.call(this, void 0);
+    this.x = i4;
+    this.s = void 0;
+    this.g = d3 - 1;
+    this.f = 4;
+    this.W = null == t4 ? void 0 : t4.watched;
+    this.Z = null == t4 ? void 0 : t4.unwatched;
+    this.name = null == t4 ? void 0 : t4.name;
   }
-  i3.s = n3;
-}
-function p(i3, t3) {
-  l.call(this, void 0);
-  this.x = i3;
-  this.s = void 0;
-  this.g = d - 1;
-  this.f = 4;
-  this.W = null == t3 ? void 0 : t3.watched;
-  this.Z = null == t3 ? void 0 : t3.unwatched;
-  this.name = null == t3 ? void 0 : t3.name;
-}
-p.prototype = new l();
-p.prototype.h = function() {
-  this.f &= -3;
-  if (1 & this.f) return false;
-  if (32 == (36 & this.f)) return true;
-  this.f &= -5;
-  if (this.g === d) return true;
-  this.g = d;
-  this.f |= 1;
-  if (this.i > 0 && !w(this)) {
-    this.f &= -2;
-    return true;
-  }
-  var i3 = r;
-  try {
-    _(this);
-    r = this;
-    var t3 = this.x();
-    if (16 & this.f || this.v !== t3 || 0 === this.i) {
-      this.v = t3;
-      this.f &= -17;
+  p3.prototype = new l3();
+  p3.prototype.h = function() {
+    this.f &= -3;
+    if (1 & this.f) return false;
+    if (32 == (36 & this.f)) return true;
+    this.f &= -5;
+    if (this.g === d3) return true;
+    this.g = d3;
+    this.f |= 1;
+    if (this.i > 0 && !w3(this)) {
+      this.f &= -2;
+      return true;
+    }
+    var i4 = r3;
+    try {
+      _2(this);
+      r3 = this;
+      var t4 = this.x();
+      if (16 & this.f || this.v !== t4 || 0 === this.i) {
+        this.v = t4;
+        this.f &= -17;
+        this.i++;
+      }
+    } catch (i5) {
+      this.v = i5;
+      this.f |= 16;
       this.i++;
     }
-  } catch (i4) {
-    this.v = i4;
-    this.f |= 16;
-    this.i++;
-  }
-  r = i3;
-  b(this);
-  this.f &= -2;
-  return true;
-};
-p.prototype.S = function(i3) {
-  if (void 0 === this.t) {
-    this.f |= 36;
-    for (var t3 = this.s; void 0 !== t3; t3 = t3.n) t3.S.S(t3);
-  }
-  l.prototype.S.call(this, i3);
-};
-p.prototype.U = function(i3) {
-  if (void 0 !== this.t) {
-    l.prototype.U.call(this, i3);
+    r3 = i4;
+    b2(this);
+    this.f &= -2;
+    return true;
+  };
+  p3.prototype.S = function(i4) {
     if (void 0 === this.t) {
-      this.f &= -33;
-      for (var t3 = this.s; void 0 !== t3; t3 = t3.n) t3.S.U(t3);
+      this.f |= 36;
+      for (var t4 = this.s; void 0 !== t4; t4 = t4.n) t4.S.S(t4);
+    }
+    l3.prototype.S.call(this, i4);
+  };
+  p3.prototype.U = function(i4) {
+    if (void 0 !== this.t) {
+      l3.prototype.U.call(this, i4);
+      if (void 0 === this.t) {
+        this.f &= -33;
+        for (var t4 = this.s; void 0 !== t4; t4 = t4.n) t4.S.U(t4);
+      }
+    }
+  };
+  p3.prototype.N = function() {
+    if (!(2 & this.f)) {
+      this.f |= 6;
+      for (var i4 = this.t; void 0 !== i4; i4 = i4.x) i4.t.N();
+    }
+  };
+  Object.defineProperty(p3.prototype, "value", { get: function() {
+    if (1 & this.f) throw new Error("Cycle detected");
+    var i4 = a3(this);
+    this.h();
+    if (void 0 !== i4) i4.i = this.i;
+    if (16 & this.f) throw this.v;
+    return this.v;
+  } });
+  function g2(i4, t4) {
+    return new p3(i4, t4);
+  }
+  function S2(i4) {
+    var n3 = i4.m;
+    i4.m = void 0;
+    if ("function" == typeof n3) {
+      s3++;
+      var o4 = r3;
+      r3 = void 0;
+      try {
+        n3();
+      } catch (t4) {
+        i4.f &= -2;
+        i4.f |= 8;
+        m3(i4);
+        throw t4;
+      } finally {
+        r3 = o4;
+        t3();
+      }
     }
   }
-};
-p.prototype.N = function() {
-  if (!(2 & this.f)) {
-    this.f |= 6;
-    for (var i3 = this.t; void 0 !== i3; i3 = i3.x) i3.t.N();
+  function m3(i4) {
+    for (var t4 = i4.s; void 0 !== t4; t4 = t4.n) t4.S.U(t4);
+    i4.x = void 0;
+    i4.s = void 0;
+    S2(i4);
   }
-};
-Object.defineProperty(p.prototype, "value", { get: function() {
-  if (1 & this.f) throw new Error("Cycle detected");
-  var i3 = a(this);
-  this.h();
-  if (void 0 !== i3) i3.i = this.i;
-  if (16 & this.f) throw this.v;
-  return this.v;
-} });
-function g(i3, t3) {
-  return new p(i3, t3);
-}
-function S(i3) {
-  var n3 = i3.m;
-  i3.m = void 0;
-  if ("function" == typeof n3) {
-    s++;
-    var o3 = r;
-    r = void 0;
+  function x2(i4) {
+    if (r3 !== this) throw new Error("Out-of-order effect");
+    b2(this);
+    r3 = i4;
+    this.f &= -2;
+    if (8 & this.f) m3(this);
+    t3();
+  }
+  function E2(i4, t4) {
+    this.x = i4;
+    this.m = void 0;
+    this.s = void 0;
+    this.u = void 0;
+    this.f = 32;
+    this.name = null == t4 ? void 0 : t4.name;
+    if (f4) f4.push(this);
+  }
+  E2.prototype.c = function() {
+    var i4 = this.S();
     try {
-      n3();
-    } catch (t3) {
-      i3.f &= -2;
-      i3.f |= 8;
-      m(i3);
-      throw t3;
+      if (8 & this.f) return;
+      if (void 0 === this.x) return;
+      var t4 = this.x();
+      if ("function" == typeof t4) this.m = t4;
     } finally {
-      r = o3;
-      t();
+      i4();
     }
+  };
+  E2.prototype.S = function() {
+    if (1 & this.f) throw new Error("Cycle detected");
+    this.f |= 1;
+    this.f &= -9;
+    S2(this);
+    _2(this);
+    s3++;
+    var i4 = r3;
+    r3 = this;
+    return x2.bind(this, i4);
+  };
+  E2.prototype.N = function() {
+    if (!(2 & this.f)) {
+      this.f |= 2;
+      this.u = h3;
+      h3 = this;
+    }
+  };
+  E2.prototype.d = function() {
+    this.f |= 8;
+    if (!(1 & this.f)) m3(this);
+  };
+  E2.prototype.dispose = function() {
+    this.d();
+  };
+  function j3(i4, t4) {
+    var n3 = new E2(i4, t4);
+    try {
+      n3.c();
+    } catch (i5) {
+      n3.d();
+      throw i5;
+    }
+    var r4 = n3.d.bind(n3);
+    r4[Symbol.dispose] = r4;
+    return r4;
   }
-}
-function m(i3) {
-  for (var t3 = i3.s; void 0 !== t3; t3 = t3.n) t3.S.U(t3);
-  i3.x = void 0;
-  i3.s = void 0;
-  S(i3);
-}
-function x(i3) {
-  if (r !== this) throw new Error("Out-of-order effect");
-  b(this);
-  r = i3;
-  this.f &= -2;
-  if (8 & this.f) m(this);
-  t();
-}
-function E(i3, t3) {
-  this.x = i3;
-  this.m = void 0;
-  this.s = void 0;
-  this.u = void 0;
-  this.f = 32;
-  this.name = null == t3 ? void 0 : t3.name;
-  if (f) f.push(this);
-}
-E.prototype.c = function() {
-  var i3 = this.S();
-  try {
-    if (8 & this.f) return;
-    if (void 0 === this.x) return;
-    var t3 = this.x();
-    if ("function" == typeof t3) this.m = t3;
-  } finally {
-    i3();
-  }
-};
-E.prototype.S = function() {
-  if (1 & this.f) throw new Error("Cycle detected");
-  this.f |= 1;
-  this.f &= -9;
-  S(this);
-  _(this);
-  s++;
-  var i3 = r;
-  r = this;
-  return x.bind(this, i3);
-};
-E.prototype.N = function() {
-  if (!(2 & this.f)) {
-    this.f |= 2;
-    this.u = h;
-    h = this;
-  }
-};
-E.prototype.d = function() {
-  this.f |= 8;
-  if (!(1 & this.f)) m(this);
-};
-E.prototype.dispose = function() {
-  this.d();
-};
-function j(i3, t3) {
-  var n3 = new E(i3, t3);
-  try {
-    n3.c();
-  } catch (i4) {
-    n3.d();
-    throw i4;
-  }
-  var r3 = n3.d.bind(n3);
-  r3[Symbol.dispose] = r3;
-  return r3;
-}
 
-// node_modules/@preact/signals/dist/signals.module.js
-var l2;
-var d2;
-var h2;
-var p2 = "undefined" != typeof window && !!window.__PREACT_SIGNALS_DEVTOOLS__;
-var _2 = [];
-j(function() {
-  l2 = this.N;
-})();
-function g2(i3, r3) {
-  n2[i3] = r3.bind(null, n2[i3] || function() {
-  });
-}
-function b2(i3) {
-  if (h2) {
-    var n3 = h2;
-    h2 = void 0;
-    n3();
-  }
-  h2 = i3 && i3.S();
-}
-function y2(i3) {
-  var n3 = this, t3 = i3.data, e3 = useSignal(t3);
-  e3.value = t3;
-  var f3 = o2(function() {
-    var i4 = n3, t4 = n3.__v;
-    while (t4 = t4.__) if (t4.__c) {
-      t4.__c.__$f |= 4;
-      break;
-    }
-    var o3 = g(function() {
-      var i5 = e3.value.value;
-      return 0 === i5 ? 0 : true === i5 ? "" : i5 || "";
-    }), f4 = g(function() {
-      return !Array.isArray(o3.value) && !r2(o3.value);
-    }), a3 = j(function() {
-      this.N = F;
-      if (f4.value) {
-        var n4 = o3.value;
-        if (i4.__v && i4.__v.__e && 3 === i4.__v.__e.nodeType) i4.__v.__e.data = n4;
-      }
-    }), v3 = n3.__$u.d;
-    n3.__$u.d = function() {
-      a3();
-      v3.call(this);
-    };
-    return [f4, o3];
-  }, []), a2 = f3[0], v2 = f3[1];
-  return a2.value ? v2.peek() : v2.value;
-}
-y2.displayName = "ReactiveTextNode";
-Object.defineProperties(l.prototype, { constructor: { configurable: true, value: void 0 }, type: { configurable: true, value: y2 }, props: { configurable: true, get: function() {
-  var i3 = this;
-  return { data: { get value() {
-    return i3.value;
-  } } };
-} }, __b: { configurable: true, value: 1 } });
-g2("__b", function(i3, n3) {
-  if ("string" == typeof n3.type) {
-    var r3, t3 = n3.props;
-    for (var o3 in t3) if ("children" !== o3) {
-      var e3 = t3[o3];
-      if (e3 instanceof l) {
-        if (!r3) n3.__np = r3 = {};
-        r3[o3] = e3;
-        t3[o3] = e3.peek();
-      }
-    }
-  }
-  i3(n3);
-});
-g2("__r", function(i3, n3) {
-  i3(n3);
-  if (n3.type !== t2) {
-    b2();
-    var r3, o3 = n3.__c;
-    if (o3) {
-      o3.__$f &= -2;
-      if (void 0 === (r3 = o3.__$u)) o3.__$u = r3 = (function(i4, n4) {
-        var r4;
-        j(function() {
-          r4 = this;
-        }, { name: n4 });
-        r4.c = i4;
-        return r4;
-      })(function() {
-        var i4;
-        if (p2) null == (i4 = r3.y) || i4.call(r3);
-        o3.__$f |= 1;
-        o3.setState({});
-      }, "function" == typeof n3.type ? n3.type.displayName || n3.type.name : "");
-    }
-    d2 = o3;
-    b2(r3);
-  }
-});
-g2("__e", function(i3, n3, r3, t3) {
-  b2();
-  d2 = void 0;
-  i3(n3, r3, t3);
-});
-g2("diffed", function(i3, n3) {
-  b2();
-  d2 = void 0;
-  var r3;
-  if ("string" == typeof n3.type && (r3 = n3.__e)) {
-    var t3 = n3.__np, o3 = n3.props;
-    if (t3) {
-      var e3 = r3.U;
-      if (e3) for (var f3 in e3) {
-        var u2 = e3[f3];
-        if (void 0 !== u2 && !(f3 in t3)) {
-          u2.d();
-          e3[f3] = void 0;
-        }
-      }
-      else {
-        e3 = {};
-        r3.U = e3;
-      }
-      for (var a2 in t3) {
-        var c2 = e3[a2], v2 = t3[a2];
-        if (void 0 === c2) {
-          c2 = w2(r3, a2, v2);
-          e3[a2] = c2;
-        } else c2.o(v2, o3);
-      }
-      for (var s2 in t3) o3[s2] = t3[s2];
-    }
-  }
-  i3(n3);
-});
-function w2(i3, n3, r3, t3) {
-  var o3 = n3 in i3 && void 0 === i3.ownerSVGElement, e3 = y(r3), f3 = r3.peek();
-  return { o: function(i4, n4) {
-    e3.value = i4;
-    f3 = i4.peek();
-  }, d: j(function() {
-    this.N = F;
-    var r4 = e3.value.value;
-    if (f3 !== r4) {
-      f3 = void 0;
-      if (o3) i3[n3] = r4;
-      else if (null != r4 && (false !== r4 || "-" === n3[4])) i3.setAttribute(n3, r4);
-      else i3.removeAttribute(n3);
-    } else f3 = void 0;
-  }) };
-}
-g2("unmount", function(i3, n3) {
-  if ("string" == typeof n3.type) {
-    var r3 = n3.__e;
-    if (r3) {
-      var t3 = r3.U;
-      if (t3) {
-        r3.U = void 0;
-        for (var o3 in t3) {
-          var e3 = t3[o3];
-          if (e3) e3.d();
-        }
-      }
-    }
-    n3.__np = void 0;
-  } else {
-    var f3 = n3.__c;
-    if (f3) {
-      var u2 = f3.__$u;
-      if (u2) {
-        f3.__$u = void 0;
-        u2.d();
-      }
-    }
-  }
-  i3(n3);
-});
-g2("__h", function(i3, n3, r3, t3) {
-  if (t3 < 3 || 9 === t3) n3.__$f |= 2;
-  i3(n3, r3, t3);
-});
-i2.prototype.shouldComponentUpdate = function(i3, n3) {
-  if (this.__R) return true;
-  var r3 = this.__$u, t3 = r3 && void 0 !== r3.s;
-  for (var o3 in n3) return true;
-  if (this.__f || "boolean" == typeof this.u && true === this.u) {
-    var e3 = 2 & this.__$f;
-    if (!(t3 || e3 || 4 & this.__$f)) return true;
-    if (1 & this.__$f) return true;
-  } else {
-    if (!(t3 || 4 & this.__$f)) return true;
-    if (3 & this.__$f) return true;
-  }
-  for (var f3 in i3) if ("__source" !== f3 && i3[f3] !== this.props[f3]) return true;
-  for (var u2 in this.props) if (!(u2 in i3)) return true;
-  return false;
-};
-function useSignal(i3, n3) {
-  return o2(function() {
-    return y(i3, n3);
-  }, []);
-}
-var q = function(i3) {
-  queueMicrotask(function() {
-    queueMicrotask(i3);
-  });
-};
-function x2() {
-  n(function() {
-    var i3;
-    while (i3 = _2.shift()) l2.call(i3);
-  });
-}
-function F() {
-  if (1 === _2.push(this)) (n2.requestAnimationFrame || q)(x2);
-}
-
-// src/ui/state/store.ts
-var rawData = y(null);
-var selectedModels = y(/* @__PURE__ */ new Set());
-var selectedRange = y("30d");
-var projectSearchQuery = y("");
-var SESSIONS_PAGE_SIZE = 25;
-var lastFilteredSessions = y([]);
-var lastByProject = y([]);
-
-// src/ui/components/StatsCards.tsx
-import { Fragment, jsx as jsx2, jsxs as jsxs2 } from "preact/jsx-runtime";
-function StatsCards({ totals }) {
-  const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
-  const stats = [
-    { label: "Sessions", value: totals.sessions.toLocaleString(), sub: rangeLabel },
-    { label: "Turns", value: fmt(totals.turns), sub: rangeLabel },
-    { label: "Input Tokens", value: fmt(totals.input), sub: rangeLabel },
-    { label: "Output Tokens", value: fmt(totals.output), sub: rangeLabel },
-    { label: "Cache Read", value: fmt(totals.cache_read), sub: "prompt cache" },
-    { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "cache writes" },
-    { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing", isCost: true }
-  ];
-  return /* @__PURE__ */ jsx2(Fragment, { children: stats.map((s2) => /* @__PURE__ */ jsx2("div", { class: "card stat-card", children: /* @__PURE__ */ jsxs2("div", { class: "stat-content", children: [
-    /* @__PURE__ */ jsx2("div", { class: "stat-label", children: s2.label }),
-    /* @__PURE__ */ jsx2("div", { class: `stat-value ${s2.isCost ? "cost-value" : ""}`, children: s2.value }),
-    s2.sub ? /* @__PURE__ */ jsx2("div", { class: "stat-sub", children: s2.sub }) : null
-  ] }) }, s2.label)) });
-}
-
-// src/ui/components/Toast.tsx
-import { jsx as jsx3 } from "preact/jsx-runtime";
-var toasts = y([]);
-var toastId = 0;
-function showError(msg) {
-  const id = ++toastId;
-  toasts.value = [...toasts.value, { text: msg, type: "error", id }];
-  setTimeout(() => {
-    toasts.value = toasts.value.filter((t3) => t3.id !== id);
-  }, 6e3);
-}
-function showSuccess(msg) {
-  const id = ++toastId;
-  toasts.value = [...toasts.value, { text: msg, type: "success", id }];
-  setTimeout(() => {
-    toasts.value = toasts.value.filter((t3) => t3.id !== id);
-  }, 6e3);
-}
-function ToastContainer() {
-  return /* @__PURE__ */ jsx3("div", { style: {
-    position: "fixed",
-    top: 56,
-    right: 16,
-    zIndex: 999,
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px"
-  }, children: toasts.value.map((t3) => /* @__PURE__ */ jsx3("div", { style: {
-    background: `var(--toast-${t3.type === "error" ? "error" : "success"}-bg)`,
-    color: `var(--toast-${t3.type === "error" ? "error" : "success"}-text)`,
-    padding: "10px 16px",
-    borderRadius: "8px",
-    fontSize: "12px",
-    fontWeight: 500,
-    maxWidth: "360px",
-    border: "1px solid var(--border)",
-    animation: "slideIn 0.2s ease-out"
-  }, children: t3.text }, t3.id)) });
-}
-
-// src/ui/components/SubagentSummary.tsx
-import { jsx as jsx4, jsxs as jsxs3 } from "preact/jsx-runtime";
-function SubagentSummary({ summary }) {
-  if (summary.subagent_turns === 0) return null;
-  const totalInput = summary.parent_input + summary.subagent_input;
-  const totalOutput = summary.parent_output + summary.subagent_output;
-  const subPctInput = totalInput > 0 ? summary.subagent_input / totalInput * 100 : 0;
-  const subPctOutput = totalOutput > 0 ? summary.subagent_output / totalOutput * 100 : 0;
-  return /* @__PURE__ */ jsxs3("div", { class: "table-card", children: [
-    /* @__PURE__ */ jsx4("div", { class: "section-title", children: "Subagent Breakdown" }),
-    /* @__PURE__ */ jsxs3("div", { style: "display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px", children: [
-      /* @__PURE__ */ jsxs3("div", { children: [
-        /* @__PURE__ */ jsx4("div", { class: "label", style: "color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px", children: "Turns" }),
-        /* @__PURE__ */ jsxs3("div", { style: "font-size:15px", children: [
-          "Parent: ",
-          /* @__PURE__ */ jsx4("strong", { children: fmt(summary.parent_turns) })
-        ] }),
-        /* @__PURE__ */ jsxs3("div", { style: "font-size:15px", children: [
-          "Subagent: ",
-          /* @__PURE__ */ jsx4("strong", { children: fmt(summary.subagent_turns) })
-        ] }),
-        /* @__PURE__ */ jsxs3("div", { class: "sub", children: [
-          summary.unique_agents,
-          " unique agents"
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxs3("div", { children: [
-        /* @__PURE__ */ jsx4("div", { class: "label", style: "color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px", children: "Input Tokens" }),
-        /* @__PURE__ */ jsxs3("div", { style: "font-size:15px", children: [
-          "Parent: ",
-          /* @__PURE__ */ jsx4("strong", { children: fmt(summary.parent_input) })
-        ] }),
-        /* @__PURE__ */ jsxs3("div", { style: "font-size:15px", children: [
-          "Subagent: ",
-          /* @__PURE__ */ jsx4("strong", { children: fmt(summary.subagent_input) }),
-          " (",
-          subPctInput.toFixed(1),
-          "%)"
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxs3("div", { children: [
-        /* @__PURE__ */ jsx4("div", { class: "label", style: "color:var(--muted);font-size:11px;text-transform:uppercase;margin-bottom:4px", children: "Output Tokens" }),
-        /* @__PURE__ */ jsxs3("div", { style: "font-size:15px", children: [
-          "Parent: ",
-          /* @__PURE__ */ jsx4("strong", { children: fmt(summary.parent_output) })
-        ] }),
-        /* @__PURE__ */ jsxs3("div", { style: "font-size:15px", children: [
-          "Subagent: ",
-          /* @__PURE__ */ jsx4("strong", { children: fmt(summary.subagent_output) }),
-          " (",
-          subPctOutput.toFixed(1),
-          "%)"
-        ] })
-      ] })
-    ] })
-  ] });
-}
-
-// src/ui/components/DataTable.tsx
-import { useState, useRef, useEffect } from "preact/hooks";
-import {
-  createTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  getPaginationRowModel
-} from "@tanstack/table-core";
-import { jsx as jsx5, jsxs as jsxs4 } from "preact/jsx-runtime";
-function renderCell(cell) {
-  const def = cell.column.columnDef.cell;
-  if (typeof def === "function") {
-    return def(cell.getContext());
-  }
-  return cell.getValue();
-}
-function renderHeader(header) {
-  const def = header.column.columnDef.header;
-  if (typeof def === "function") {
-    return def(header.getContext());
-  }
-  return def;
-}
-function resolveUpdater(updater, prev) {
-  return typeof updater === "function" ? updater(prev) : updater;
-}
-function DataTable({
-  columns: columns7,
-  data,
-  title,
-  exportFn,
-  pageSize,
-  defaultSort: defaultSort4,
-  enableColumnVisibility
-}) {
-  const [sorting, setSorting] = useState(defaultSort4 || []);
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: pageSize || data.length || 100
-  });
-  const [columnVisibility, setColumnVisibility] = useState({});
-  const [, rerender] = useState(0);
-  useEffect(() => {
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [data]);
-  const tableRef = useRef(null);
-  const stateRef = useRef({ sorting, pagination, columnVisibility });
-  stateRef.current = { sorting, pagination, columnVisibility };
-  if (!tableRef.current) {
-    tableRef.current = createTable({
-      columns: columns7,
-      data,
-      state: { sorting, pagination, columnVisibility, columnPinning: { left: [], right: [] } },
-      onStateChange: (updater) => {
-        const newState = resolveUpdater(updater, tableRef.current.getState());
-        if (newState.sorting !== stateRef.current.sorting) setSorting(newState.sorting);
-        if (newState.pagination !== stateRef.current.pagination) setPagination(newState.pagination);
-        if (newState.columnVisibility !== stateRef.current.columnVisibility) setColumnVisibility(newState.columnVisibility);
-        rerender((n3) => n3 + 1);
-      },
-      onSortingChange: (updater) => setSorting((prev) => resolveUpdater(updater, prev)),
-      onPaginationChange: (updater) => setPagination((prev) => resolveUpdater(updater, prev)),
-      onColumnVisibilityChange: (updater) => setColumnVisibility((prev) => resolveUpdater(updater, prev)),
-      getCoreRowModel: getCoreRowModel(),
-      getSortedRowModel: getSortedRowModel(),
-      ...pageSize ? { getPaginationRowModel: getPaginationRowModel() } : {},
-      renderFallbackValue: ""
+  // node_modules/@preact/signals/dist/signals.module.js
+  var l4;
+  var d4;
+  var h4;
+  var p4 = "undefined" != typeof window && !!window.__PREACT_SIGNALS_DEVTOOLS__;
+  var _3 = [];
+  j3(function() {
+    l4 = this.N;
+  })();
+  function g3(i4, r4) {
+    l[i4] = r4.bind(null, l[i4] || function() {
     });
   }
-  tableRef.current.setOptions((prev) => ({
-    ...prev,
-    columns: columns7,
-    data,
-    state: { ...tableRef.current.getState(), sorting, pagination, columnVisibility }
-  }));
-  const table = tableRef.current;
-  const headerGroups = table.getHeaderGroups();
-  const rows = table.getRowModel().rows;
-  return /* @__PURE__ */ jsxs4("div", { class: "table-card", children: [
-    (title || exportFn) && /* @__PURE__ */ jsxs4("div", { class: exportFn ? "section-header" : "", children: [
-      title && /* @__PURE__ */ jsx5("div", { class: "section-title", children: title }),
-      exportFn && /* @__PURE__ */ jsx5("button", { class: "export-btn", onClick: exportFn, title: "Export to CSV", children: "\u2913 CSV" })
-    ] }),
-    enableColumnVisibility && /* @__PURE__ */ jsx5("div", { class: "column-toggle", children: table.getAllLeafColumns().map((column) => /* @__PURE__ */ jsxs4("label", { children: [
-      /* @__PURE__ */ jsx5(
-        "input",
-        {
-          type: "checkbox",
-          checked: column.getIsVisible(),
-          onChange: column.getToggleVisibilityHandler()
-        }
-      ),
-      typeof column.columnDef.header === "string" ? column.columnDef.header : column.id
-    ] }, column.id)) }),
-    /* @__PURE__ */ jsxs4("table", { children: [
-      /* @__PURE__ */ jsx5("thead", { children: headerGroups.map((headerGroup) => /* @__PURE__ */ jsx5("tr", { children: headerGroup.headers.map((header) => {
-        const canSort = header.column.getCanSort();
-        const sorted = header.column.getIsSorted();
-        return /* @__PURE__ */ jsxs4(
-          "th",
-          {
-            scope: "col",
-            class: canSort ? "sortable" : void 0,
-            "aria-sort": sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : void 0,
-            onClick: canSort ? header.column.getToggleSortingHandler() : void 0,
-            children: [
-              renderHeader(header),
-              canSort && /* @__PURE__ */ jsx5("span", { class: "sort-icon", children: sorted === "desc" ? " \u25BC" : sorted === "asc" ? " \u25B2" : "" })
-            ]
-          },
-          header.id
-        );
-      }) }, headerGroup.id)) }),
-      /* @__PURE__ */ jsx5("tbody", { children: rows.map((row) => /* @__PURE__ */ jsx5("tr", { children: row.getVisibleCells().map((cell) => /* @__PURE__ */ jsx5("td", { children: renderCell(cell) }, cell.id)) }, row.id)) })
-    ] }),
-    pageSize && /* @__PURE__ */ jsxs4(
-      "div",
-      {
-        style: {
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: "12px",
-          fontSize: "12px",
-          color: "var(--muted)"
-        },
-        children: [
-          /* @__PURE__ */ jsx5("span", { children: table.getRowCount() > 0 ? `Showing ${pagination.pageIndex * pagination.pageSize + 1}\u2013${Math.min(
-            (pagination.pageIndex + 1) * pagination.pageSize,
-            table.getRowCount()
-          )} of ${table.getRowCount()}` : "No sessions" }),
-          /* @__PURE__ */ jsxs4("div", { style: { display: "flex", gap: "6px" }, children: [
-            /* @__PURE__ */ jsx5(
-              "button",
-              {
-                class: "filter-btn",
-                disabled: !table.getCanPreviousPage(),
-                onClick: () => table.previousPage(),
-                children: "\xAB Prev"
-              }
-            ),
-            /* @__PURE__ */ jsx5(
-              "button",
-              {
-                class: "filter-btn",
-                disabled: !table.getCanNextPage(),
-                onClick: () => table.nextPage(),
-                children: "Next \xBB"
-              }
-            )
-          ] })
-        ]
+  function b3(i4) {
+    if (h4) {
+      var n3 = h4;
+      h4 = void 0;
+      n3();
+    }
+    h4 = i4 && i4.S();
+  }
+  function y4(i4) {
+    var n3 = this, t4 = i4.data, e4 = useSignal(t4);
+    e4.value = t4;
+    var f5 = T2(function() {
+      var i5 = n3, t5 = n3.__v;
+      while (t5 = t5.__) if (t5.__c) {
+        t5.__c.__$f |= 4;
+        break;
       }
-    )
-  ] });
-}
-
-// src/ui/components/EntrypointTable.tsx
-import { jsx as jsx6 } from "preact/jsx-runtime";
-var columns = [
-  {
-    accessorKey: "entrypoint",
-    header: "Entrypoint",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx6("span", { class: "model-tag", children: String(getValue()) })
-  },
-  {
-    accessorKey: "sessions",
-    header: "Sessions",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx6("span", { class: "num", children: getValue() })
-  },
-  {
-    accessorKey: "turns",
-    header: "Turns",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx6("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "input",
-    header: "Input",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx6("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "output",
-    header: "Output",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx6("span", { class: "num", children: fmt(getValue()) })
+      var o4 = g2(function() {
+        var i6 = e4.value.value;
+        return 0 === i6 ? 0 : true === i6 ? "" : i6 || "";
+      }), f6 = g2(function() {
+        return !Array.isArray(o4.value) && !t(o4.value);
+      }), a5 = j3(function() {
+        this.N = F;
+        if (f6.value) {
+          var n4 = o4.value;
+          if (i5.__v && i5.__v.__e && 3 === i5.__v.__e.nodeType) i5.__v.__e.data = n4;
+        }
+      }), v5 = n3.__$u.d;
+      n3.__$u.d = function() {
+        a5();
+        v5.call(this);
+      };
+      return [f6, o4];
+    }, []), a4 = f5[0], v4 = f5[1];
+    return a4.value ? v4.peek() : v4.value;
   }
-];
-function EntrypointTable({ data }) {
-  if (!data.length) return null;
-  return /* @__PURE__ */ jsx6(DataTable, { columns, data, title: "Usage by Entrypoint" });
-}
-
-// src/ui/components/ServiceTiers.tsx
-import { jsx as jsx7 } from "preact/jsx-runtime";
-var columns2 = [
-  { accessorKey: "service_tier", header: "Tier" },
-  { accessorKey: "inference_geo", header: "Region" },
-  {
-    accessorKey: "turns",
-    header: "Turns",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx7("span", { class: "num", children: fmt(getValue()) })
-  }
-];
-function ServiceTiersTable({ data }) {
-  if (!data.length) return null;
-  return /* @__PURE__ */ jsx7(DataTable, { columns: columns2, data, title: "Service Tiers" });
-}
-
-// src/ui/components/ToolUsageTable.tsx
-import { jsx as jsx8, jsxs as jsxs5 } from "preact/jsx-runtime";
-var columns3 = [
-  {
-    accessorKey: "tool_name",
-    header: "Tool",
-    cell: ({ row }) => {
-      const cat = row.original.category;
-      const badge = cat === "mcp" ? "mcp" : "builtin";
-      return /* @__PURE__ */ jsxs5("span", { children: [
-        /* @__PURE__ */ jsx8("span", { class: `model-tag ${badge}`, children: cat }),
-        " ",
-        row.original.tool_name
-      ] });
+  y4.displayName = "ReactiveTextNode";
+  Object.defineProperties(l3.prototype, { constructor: { configurable: true, value: void 0 }, type: { configurable: true, value: y4 }, props: { configurable: true, get: function() {
+    var i4 = this;
+    return { data: { get value() {
+      return i4.value;
+    } } };
+  } }, __b: { configurable: true, value: 1 } });
+  g3("__b", function(i4, n3) {
+    if ("string" == typeof n3.type) {
+      var r4, t4 = n3.props;
+      for (var o4 in t4) if ("children" !== o4) {
+        var e4 = t4[o4];
+        if (e4 instanceof l3) {
+          if (!r4) n3.__np = r4 = {};
+          r4[o4] = e4;
+          t4[o4] = e4.peek();
+        }
+      }
     }
-  },
-  {
-    accessorKey: "mcp_server",
-    header: "MCP Server",
-    cell: ({ getValue }) => {
-      const v2 = getValue();
-      return v2 ? /* @__PURE__ */ jsx8("span", { class: "dim", children: v2 }) : /* @__PURE__ */ jsx8("span", { class: "dim", children: "--" });
+    i4(n3);
+  });
+  g3("__r", function(i4, n3) {
+    i4(n3);
+    if (n3.type !== S) {
+      b3();
+      var r4, o4 = n3.__c;
+      if (o4) {
+        o4.__$f &= -2;
+        if (void 0 === (r4 = o4.__$u)) o4.__$u = r4 = (function(i5, n4) {
+          var r5;
+          j3(function() {
+            r5 = this;
+          }, { name: n4 });
+          r5.c = i5;
+          return r5;
+        })(function() {
+          var i5;
+          if (p4) null == (i5 = r4.y) || i5.call(r4);
+          o4.__$f |= 1;
+          o4.setState({});
+        }, "function" == typeof n3.type ? n3.type.displayName || n3.type.name : "");
+      }
+      d4 = o4;
+      b3(r4);
     }
-  },
-  {
-    accessorKey: "invocations",
-    header: "Calls",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx8("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "turns_used",
-    header: "Turns",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx8("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "sessions_used",
-    header: "Sessions",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx8("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "errors",
-    header: "Errors",
-    cell: ({ row }) => {
-      const e3 = row.original.errors;
-      if (!e3) return /* @__PURE__ */ jsx8("span", { class: "dim", children: "0" });
-      const pct = row.original.invocations > 0 ? (e3 / row.original.invocations * 100).toFixed(1) : "0";
-      return /* @__PURE__ */ jsxs5("span", { class: "num", style: { color: "var(--red)" }, children: [
-        e3,
-        " (",
-        pct,
-        "%)"
-      ] });
-    }
-  }
-];
-function ToolUsageTable({ data }) {
-  if (!data.length) return null;
-  return /* @__PURE__ */ jsx8(DataTable, { columns: columns3, data, title: "Tool Usage" });
-}
-
-// src/ui/components/McpSummaryTable.tsx
-import { jsx as jsx9 } from "preact/jsx-runtime";
-var columns4 = [
-  {
-    accessorKey: "server",
-    header: "MCP Server",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx9("span", { class: "model-tag mcp", children: String(getValue()) })
-  },
-  {
-    accessorKey: "tools_used",
-    header: "Tools",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx9("span", { class: "num", children: getValue() })
-  },
-  {
-    accessorKey: "invocations",
-    header: "Calls",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx9("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "sessions_used",
-    header: "Sessions",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx9("span", { class: "num", children: fmt(getValue()) })
-  }
-];
-function McpSummaryTable({ data }) {
-  if (!data.length) return null;
-  return /* @__PURE__ */ jsx9(DataTable, { columns: columns4, data, title: "MCP Server Usage" });
-}
-
-// src/ui/components/BranchTable.tsx
-import { jsx as jsx10 } from "preact/jsx-runtime";
-var columns5 = [
-  {
-    accessorKey: "branch",
-    header: "Branch",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx10("span", { class: "model-tag", children: String(getValue()) })
-  },
-  {
-    accessorKey: "sessions",
-    header: "Sessions",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx10("span", { class: "num", children: getValue() })
-  },
-  {
-    accessorKey: "turns",
-    header: "Turns",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx10("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "input",
-    header: "Input",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx10("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "output",
-    header: "Output",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx10("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "cost",
-    header: "Est. Cost",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx10("span", { class: "cost", children: fmtCost(getValue()) })
-  }
-];
-function BranchTable({ data }) {
-  if (!data.length) return null;
-  return /* @__PURE__ */ jsx10(DataTable, { columns: columns5, data, title: "Usage by Git Branch" });
-}
-
-// src/ui/components/VersionTable.tsx
-import { jsx as jsx11 } from "preact/jsx-runtime";
-var columns6 = [
-  {
-    accessorKey: "version",
-    header: "Version",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx11("span", { class: "model-tag", children: String(getValue()) })
-  },
-  {
-    accessorKey: "turns",
-    header: "Turns",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx11("span", { class: "num", children: fmt(getValue()) })
-  },
-  {
-    accessorKey: "sessions",
-    header: "Sessions",
-    cell: ({ getValue }) => /* @__PURE__ */ jsx11("span", { class: "num", children: getValue() })
-  }
-];
-function VersionTable({ data }) {
-  if (!data.length) return null;
-  return /* @__PURE__ */ jsx11(DataTable, { columns: columns6, data, title: "Claude Code Versions" });
-}
-
-// src/ui/components/HourlyChart.tsx
-import { jsx as jsx12, jsxs as jsxs6 } from "preact/jsx-runtime";
-function HourlyChart({ data }) {
-  if (!data.length) return null;
-  const maxTurns = Math.max(...data.map((d3) => d3.turns), 1);
-  return /* @__PURE__ */ jsxs6("div", { children: [
-    /* @__PURE__ */ jsx12("h3", { style: { margin: "0 0 12px", fontSize: "13px", fontWeight: 600, letterSpacing: "0.02em", textTransform: "uppercase", color: "var(--text-secondary)" }, children: "Activity by Hour of Day" }),
-    /* @__PURE__ */ jsx12("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", height: "80px" }, children: Array.from({ length: 24 }, (_3, h3) => {
-      const row = data.find((d3) => d3.hour === h3);
-      const turns = row?.turns ?? 0;
-      const pct = turns / maxTurns * 100;
-      return /* @__PURE__ */ jsx12(
-        "div",
-        {
-          title: `${h3}:00 -- ${fmt(turns)} turns`,
-          style: {
-            flex: 1,
-            height: `${Math.max(pct, 2)}%`,
-            background: turns > 0 ? "var(--accent)" : "var(--border)",
-            borderRadius: "2px 2px 0 0",
-            opacity: turns > 0 ? 0.6 + pct / 100 * 0.4 : 0.3
+  });
+  g3("__e", function(i4, n3, r4, t4) {
+    b3();
+    d4 = void 0;
+    i4(n3, r4, t4);
+  });
+  g3("diffed", function(i4, n3) {
+    b3();
+    d4 = void 0;
+    var r4;
+    if ("string" == typeof n3.type && (r4 = n3.__e)) {
+      var t4 = n3.__np, o4 = n3.props;
+      if (t4) {
+        var e4 = r4.U;
+        if (e4) for (var f5 in e4) {
+          var u5 = e4[f5];
+          if (void 0 !== u5 && !(f5 in t4)) {
+            u5.d();
+            e4[f5] = void 0;
           }
-        },
-        h3
-      );
-    }) }),
-    /* @__PURE__ */ jsx12("div", { style: { display: "flex", gap: "2px", marginTop: "4px" }, children: [0, 6, 12, 18, 23].map((h3) => /* @__PURE__ */ jsxs6("span", { class: "muted", style: { flex: 1, fontSize: "9px", textAlign: h3 === 0 ? "left" : h3 === 23 ? "right" : "center" }, children: [
-      h3,
-      ":00"
-    ] }, h3)) })
-  ] });
-}
-
-// src/ui/components/SessionsTable.tsx
-import { useMemo } from "preact/hooks";
-import { Fragment as Fragment2, jsx as jsx13, jsxs as jsxs7 } from "preact/jsx-runtime";
-var defaultSort = [{ id: "last", desc: true }];
-function useSessionColumns() {
-  return useMemo(
-    () => [
-      {
-        id: "session",
-        accessorKey: "session_id",
-        header: "Session",
-        enableSorting: false,
-        cell: (info) => {
-          const row = info.row.original;
-          const title = row.title;
-          return /* @__PURE__ */ jsx13("span", { class: "muted", style: { fontFamily: "monospace" }, title: title || void 0, children: title || /* @__PURE__ */ jsxs7(Fragment2, { children: [
-            info.getValue(),
-            "\u2026"
-          ] }) });
         }
-      },
-      {
-        id: "project",
-        accessorKey: "project",
-        header: "Project",
-        enableSorting: false
-      },
-      {
-        id: "last",
-        accessorKey: "last",
-        header: "Last Active",
-        cell: (info) => /* @__PURE__ */ jsx13("span", { class: "muted", children: info.getValue() })
-      },
-      {
-        id: "duration_min",
-        accessorKey: "duration_min",
-        header: "Duration",
-        cell: (info) => /* @__PURE__ */ jsxs7("span", { class: "muted", children: [
-          info.getValue(),
-          "m"
-        ] })
-      },
-      {
-        id: "model",
-        accessorKey: "model",
-        header: "Model",
-        enableSorting: false,
-        cell: (info) => /* @__PURE__ */ jsx13("span", { class: "model-tag", children: info.getValue() })
-      },
-      {
-        id: "turns",
-        accessorKey: "turns",
-        header: "Turns",
-        cell: (info) => {
-          const row = info.row.original;
-          return /* @__PURE__ */ jsxs7("span", { class: "num", children: [
-            fmt(info.getValue()),
-            row.subagent_count > 0 && /* @__PURE__ */ jsxs7("span", { class: "muted", style: { fontSize: "10px" }, children: [
-              " ",
-              "(",
-              row.subagent_count,
-              " agents)"
-            ] })
-          ] });
+        else {
+          e4 = {};
+          r4.U = e4;
         }
-      },
-      {
-        id: "input",
-        accessorKey: "input",
-        header: "Input",
-        cell: (info) => /* @__PURE__ */ jsx13("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "output",
-        accessorKey: "output",
-        header: "Output",
-        cell: (info) => /* @__PURE__ */ jsx13("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "cost",
-        accessorKey: "cost",
-        header: "Est. Cost",
-        cell: (info) => {
-          const row = info.row.original;
-          return row.is_billable ? /* @__PURE__ */ jsx13("span", { class: "cost", children: fmtCost(info.getValue()) }) : /* @__PURE__ */ jsx13("span", { class: "cost-na", children: "n/a" });
+        for (var a4 in t4) {
+          var c4 = e4[a4], v4 = t4[a4];
+          if (void 0 === c4) {
+            c4 = w4(r4, a4, v4);
+            e4[a4] = c4;
+          } else c4.o(v4, o4);
         }
-      },
-      {
-        id: "cache_hit_ratio",
-        accessorKey: "cache_hit_ratio",
-        header: "Cache %",
-        cell: (info) => {
-          const v2 = info.getValue();
-          return /* @__PURE__ */ jsxs7("span", { class: "num", children: [
-            (v2 * 100).toFixed(0),
-            "%"
-          ] });
-        }
-      },
-      {
-        id: "tokens_per_min",
-        accessorKey: "tokens_per_min",
-        header: "Tok/min",
-        cell: (info) => {
-          const v2 = info.getValue();
-          return /* @__PURE__ */ jsx13("span", { class: "num", children: v2 > 0 ? fmt(Math.round(v2)) : "--" });
-        }
+        for (var s4 in t4) o4[s4] = t4[s4];
       }
-    ],
-    []
-  );
-}
-function SessionsTable({ onExportCSV }) {
-  const columns7 = useSessionColumns();
-  const data = lastFilteredSessions.value;
-  return /* @__PURE__ */ jsx13(
-    DataTable,
-    {
-      columns: columns7,
-      data,
-      title: "Recent Sessions",
-      exportFn: onExportCSV,
-      pageSize: SESSIONS_PAGE_SIZE,
-      defaultSort,
-      enableColumnVisibility: true
     }
-  );
-}
-
-// src/ui/components/ModelCostTable.tsx
-import { useMemo as useMemo2 } from "preact/hooks";
-import { jsx as jsx14 } from "preact/jsx-runtime";
-var defaultSort2 = [{ id: "cost", desc: true }];
-function useModelColumns() {
-  return useMemo2(
-    () => [
-      {
-        id: "model",
-        accessorKey: "model",
-        header: "Model",
-        enableSorting: false,
-        cell: (info) => /* @__PURE__ */ jsx14("span", { class: "model-tag", children: info.getValue() })
-      },
-      {
-        id: "turns",
-        accessorKey: "turns",
-        header: "Turns",
-        cell: (info) => /* @__PURE__ */ jsx14("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "input",
-        accessorKey: "input",
-        header: "Input",
-        cell: (info) => /* @__PURE__ */ jsx14("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "output",
-        accessorKey: "output",
-        header: "Output",
-        cell: (info) => /* @__PURE__ */ jsx14("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "cache_read",
-        accessorKey: "cache_read",
-        header: "Cache Read",
-        cell: (info) => /* @__PURE__ */ jsx14("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "cache_creation",
-        accessorKey: "cache_creation",
-        header: "Cache Creation",
-        cell: (info) => /* @__PURE__ */ jsx14("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "cost",
-        accessorKey: "cost",
-        header: "Est. Cost",
-        cell: (info) => {
-          const row = info.row.original;
-          return row.is_billable ? /* @__PURE__ */ jsx14("span", { class: "cost", children: fmtCost(info.getValue()) }) : /* @__PURE__ */ jsx14("span", { class: "cost-na", children: "n/a" });
-        }
-      }
-    ],
-    []
-  );
-}
-function ModelCostTable({ byModel }) {
-  const columns7 = useModelColumns();
-  return /* @__PURE__ */ jsx14(
-    DataTable,
-    {
-      columns: columns7,
-      data: byModel,
-      title: "Cost by Model",
-      defaultSort: defaultSort2
-    }
-  );
-}
-
-// src/ui/components/ProjectCostTable.tsx
-import { useMemo as useMemo3 } from "preact/hooks";
-import { jsx as jsx15 } from "preact/jsx-runtime";
-var defaultSort3 = [{ id: "cost", desc: true }];
-function useProjectColumns() {
-  return useMemo3(
-    () => [
-      {
-        id: "project",
-        accessorKey: "project",
-        header: "Project",
-        enableSorting: false
-      },
-      {
-        id: "sessions",
-        accessorKey: "sessions",
-        header: "Sessions",
-        cell: (info) => /* @__PURE__ */ jsx15("span", { class: "num", children: info.getValue() })
-      },
-      {
-        id: "turns",
-        accessorKey: "turns",
-        header: "Turns",
-        cell: (info) => /* @__PURE__ */ jsx15("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "input",
-        accessorKey: "input",
-        header: "Input",
-        cell: (info) => /* @__PURE__ */ jsx15("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "output",
-        accessorKey: "output",
-        header: "Output",
-        cell: (info) => /* @__PURE__ */ jsx15("span", { class: "num", children: fmt(info.getValue()) })
-      },
-      {
-        id: "cost",
-        accessorKey: "cost",
-        header: "Est. Cost",
-        cell: (info) => /* @__PURE__ */ jsx15("span", { class: "cost", children: fmtCost(info.getValue()) })
-      }
-    ],
-    []
-  );
-}
-function ProjectCostTable({
-  byProject,
-  onExportCSV
-}) {
-  const columns7 = useProjectColumns();
-  return /* @__PURE__ */ jsx15(
-    DataTable,
-    {
-      columns: columns7,
-      data: byProject,
-      title: "Cost by Project",
-      exportFn: onExportCSV,
-      defaultSort: defaultSort3
-    }
-  );
-}
-
-// src/ui/components/ApexChart.tsx
-import { useRef as useRef2, useEffect as useEffect2, useMemo as useMemo4 } from "preact/hooks";
-import { jsx as jsx16 } from "preact/jsx-runtime";
-function ApexChart({ options, id }) {
-  const ref = useRef2(null);
-  const chartRef = useRef2(null);
-  const optionsKey = useMemo4(
-    () => JSON.stringify(options, (_key, val) => typeof val === "function" ? void 0 : val),
-    [options]
-  );
-  useEffect2(() => {
-    if (chartRef.current) chartRef.current.destroy();
-    if (ref.current && options) {
-      chartRef.current = new ApexCharts(ref.current, options);
-      chartRef.current.render();
-    }
-    return () => {
-      chartRef.current?.destroy();
-      chartRef.current = null;
-    };
-  }, [optionsKey]);
-  return /* @__PURE__ */ jsx16("div", { ref, id, style: { width: "100%", height: "100%" } });
-}
-
-// src/ui/components/DailyChart.tsx
-import { jsx as jsx17 } from "preact/jsx-runtime";
-function DailyChart({ daily }) {
-  const options = {
-    chart: {
-      type: "area",
-      height: "100%",
-      stacked: true,
-      background: "transparent",
-      toolbar: { show: false },
-      fontFamily: "inherit"
-    },
-    theme: { mode: apexThemeMode() },
-    series: [
-      { name: "Input", data: daily.map((d3) => d3.input) },
-      { name: "Output", data: daily.map((d3) => d3.output) },
-      { name: "Cache Read", data: daily.map((d3) => d3.cache_read) },
-      { name: "Cache Creation", data: daily.map((d3) => d3.cache_creation) }
-    ],
-    colors: [TOKEN_COLORS.input, TOKEN_COLORS.output, TOKEN_COLORS.cache_read, TOKEN_COLORS.cache_creation],
-    fill: {
-      type: "gradient",
-      gradient: {
-        shadeIntensity: 1,
-        opacityFrom: 0.4,
-        opacityTo: 0.05,
-        stops: [0, 95, 100]
-      }
-    },
-    stroke: { curve: "smooth", width: 2 },
-    xaxis: {
-      categories: daily.map((d3) => d3.day),
-      labels: { rotate: -45, maxHeight: 60 },
-      tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange.value])
-    },
-    yaxis: { labels: { formatter: (v2) => fmt(v2) } },
-    legend: { position: "top", fontSize: "11px" },
-    dataLabels: { enabled: false },
-    tooltip: { y: { formatter: (v2) => fmt(v2) + " tokens" } },
-    grid: { borderColor: cssVar("--chart-grid"), strokeDashArray: 3 }
-  };
-  return /* @__PURE__ */ jsx17(ApexChart, { options, id: "chart-daily" });
-}
-
-// src/ui/components/ModelChart.tsx
-import { jsx as jsx18 } from "preact/jsx-runtime";
-function ModelChart({ byModel }) {
-  if (!byModel.length) return null;
-  const options = {
-    chart: { type: "donut", height: "100%", background: "transparent", fontFamily: "inherit" },
-    theme: { mode: apexThemeMode() },
-    series: byModel.map((m2) => m2.input + m2.output),
-    labels: byModel.map((m2) => m2.model),
-    colors: MODEL_COLORS.slice(0, byModel.length),
-    legend: { position: "bottom", fontSize: "11px" },
-    dataLabels: { enabled: false },
-    tooltip: { y: { formatter: (v2) => fmt(v2) + " tokens" } },
-    stroke: { width: 2, colors: [cssVar("--card")] },
-    plotOptions: { pie: { donut: { size: "60%" } } }
-  };
-  return /* @__PURE__ */ jsx18(ApexChart, { options, id: "chart-model" });
-}
-
-// src/ui/components/ProjectChart.tsx
-import { jsx as jsx19 } from "preact/jsx-runtime";
-function ProjectChart({ byProject }) {
-  const top = byProject.slice(0, 10);
-  if (!top.length) return null;
-  const options = {
-    chart: {
-      type: "bar",
-      height: "100%",
-      background: "transparent",
-      toolbar: { show: false },
-      fontFamily: "inherit"
-    },
-    theme: { mode: apexThemeMode() },
-    series: [
-      { name: "Input", data: top.map((p3) => p3.input) },
-      { name: "Output", data: top.map((p3) => p3.output) }
-    ],
-    colors: [TOKEN_COLORS.input, TOKEN_COLORS.output],
-    plotOptions: { bar: { horizontal: true, barHeight: "60%" } },
-    xaxis: {
-      categories: top.map((p3) => p3.project.length > 22 ? "\u2026" + p3.project.slice(-20) : p3.project),
-      labels: { formatter: (v2) => fmt(v2) }
-    },
-    yaxis: { labels: { maxWidth: 160 } },
-    legend: { position: "top", fontSize: "11px" },
-    dataLabels: { enabled: false },
-    tooltip: { y: { formatter: (v2) => fmt(v2) + " tokens" } },
-    grid: { borderColor: cssVar("--chart-grid") }
-  };
-  return /* @__PURE__ */ jsx19(ApexChart, { options, id: "chart-project" });
-}
-
-// src/ui/components/Sparkline.tsx
-import { jsx as jsx20, jsxs as jsxs8 } from "preact/jsx-runtime";
-function Sparkline({ daily }) {
-  const last7 = daily.slice(-7);
-  if (last7.length < 2) return null;
-  const options = {
-    chart: {
-      type: "line",
-      height: 30,
-      width: 120,
-      sparkline: { enabled: true },
-      background: "transparent",
-      fontFamily: "inherit"
-    },
-    series: [{ data: last7.map((d3) => d3.input + d3.output) }],
-    stroke: { width: 1.5, curve: "smooth" },
-    colors: [cssVar("--accent")],
-    tooltip: { enabled: false }
-  };
-  return /* @__PURE__ */ jsxs8("div", { children: [
-    /* @__PURE__ */ jsx20("div", { class: "sub", style: { marginBottom: "4px" }, children: "7-day trend" }),
-    /* @__PURE__ */ jsx20(ApexChart, { options })
-  ] });
-}
-
-// src/ui/lib/csv.ts
-function csvField(val) {
-  const s2 = String(val);
-  const needsPrefix = /^[=+\-@\t\r]/.test(s2);
-  const escaped = needsPrefix ? "'" + s2 : s2;
-  if (escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")) {
-    return '"' + escaped.replace(/"/g, '""') + '"';
+    i4(n3);
+  });
+  function w4(i4, n3, r4, t4) {
+    var o4 = n3 in i4 && void 0 === i4.ownerSVGElement, e4 = y3(r4), f5 = r4.peek();
+    return { o: function(i5, n4) {
+      e4.value = i5;
+      f5 = i5.peek();
+    }, d: j3(function() {
+      this.N = F;
+      var r5 = e4.value.value;
+      if (f5 !== r5) {
+        f5 = void 0;
+        if (o4) i4[n3] = r5;
+        else if (null != r5 && (false !== r5 || "-" === n3[4])) i4.setAttribute(n3, r5);
+        else i4.removeAttribute(n3);
+      } else f5 = void 0;
+    }) };
   }
-  return escaped;
-}
-function csvTimestamp() {
-  const d3 = /* @__PURE__ */ new Date();
-  return d3.getFullYear() + "-" + String(d3.getMonth() + 1).padStart(2, "0") + "-" + String(d3.getDate()).padStart(2, "0") + "_" + String(d3.getHours()).padStart(2, "0") + String(d3.getMinutes()).padStart(2, "0");
-}
-function downloadCSV(reportType, header, rows) {
-  const lines = [header.map(csvField).join(",")];
-  for (const row of rows) lines.push(row.map(csvField).join(","));
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-  const a2 = document.createElement("a");
-  a2.href = URL.createObjectURL(blob);
-  a2.download = reportType + "_" + csvTimestamp() + ".csv";
-  a2.click();
-  setTimeout(() => URL.revokeObjectURL(a2.href), 1e3);
-}
+  g3("unmount", function(i4, n3) {
+    if ("string" == typeof n3.type) {
+      var r4 = n3.__e;
+      if (r4) {
+        var t4 = r4.U;
+        if (t4) {
+          r4.U = void 0;
+          for (var o4 in t4) {
+            var e4 = t4[o4];
+            if (e4) e4.d();
+          }
+        }
+      }
+      n3.__np = void 0;
+    } else {
+      var f5 = n3.__c;
+      if (f5) {
+        var u5 = f5.__$u;
+        if (u5) {
+          f5.__$u = void 0;
+          u5.d();
+        }
+      }
+    }
+    i4(n3);
+  });
+  g3("__h", function(i4, n3, r4, t4) {
+    if (t4 < 3 || 9 === t4) n3.__$f |= 2;
+    i4(n3, r4, t4);
+  });
+  C.prototype.shouldComponentUpdate = function(i4, n3) {
+    if (this.__R) return true;
+    var r4 = this.__$u, t4 = r4 && void 0 !== r4.s;
+    for (var o4 in n3) return true;
+    if (this.__f || "boolean" == typeof this.u && true === this.u) {
+      var e4 = 2 & this.__$f;
+      if (!(t4 || e4 || 4 & this.__$f)) return true;
+      if (1 & this.__$f) return true;
+    } else {
+      if (!(t4 || 4 & this.__$f)) return true;
+      if (3 & this.__$f) return true;
+    }
+    for (var f5 in i4) if ("__source" !== f5 && i4[f5] !== this.props[f5]) return true;
+    for (var u5 in this.props) if (!(u5 in i4)) return true;
+    return false;
+  };
+  function useSignal(i4, n3) {
+    return T2(function() {
+      return y3(i4, n3);
+    }, []);
+  }
+  var q2 = function(i4) {
+    queueMicrotask(function() {
+      queueMicrotask(i4);
+    });
+  };
+  function x3() {
+    n2(function() {
+      var i4;
+      while (i4 = _3.shift()) l4.call(i4);
+    });
+  }
+  function F() {
+    if (1 === _3.push(this)) (l.requestAnimationFrame || q2)(x3);
+  }
 
-// src/ui/lib/rescan.ts
-function createTriggerRescan({
-  button,
-  fetchImpl,
-  loadData: loadData2,
-  showError: showError2,
-  setTimer,
-  logError = () => void 0
-}) {
-  return async function triggerRescan2() {
-    button.disabled = true;
-    button.textContent = "\u21BB Scanning...";
+  // src/ui/state/store.ts
+  var rawData = y3(null);
+  var selectedModels = y3(/* @__PURE__ */ new Set());
+  var selectedRange = y3("30d");
+  var projectSearchQuery = y3("");
+  var SESSIONS_PAGE_SIZE = 25;
+  var lastFilteredSessions = y3([]);
+  var lastByProject = y3([]);
+
+  // src/ui/components/ApexChart.tsx
+  function ApexChart({ options, id }) {
+    const ref = A2(null);
+    const chartRef = A2(null);
+    const prevThemeRef = A2(void 0);
+    const themeMode = options.theme?.mode ?? "";
+    const optionsKey = T2(() => {
+      const s4 = options.series;
+      const type = options.chart?.type ?? "";
+      if (Array.isArray(s4)) {
+        const parts = s4.map((ss) => {
+          const d5 = ss.data;
+          if (!d5 || !d5.length) return "0";
+          return `${d5.length}:${d5[0]}:${d5[d5.length - 1]}`;
+        });
+        return `${type}-${parts.join(",")}`;
+      }
+      return `${type}-${s4?.length ?? 0}`;
+    }, [options]);
+    y2(() => {
+      if (chartRef.current) chartRef.current.destroy();
+      prevThemeRef.current = themeMode;
+      if (ref.current && options) {
+        chartRef.current = new ApexCharts(ref.current, options);
+        chartRef.current.render();
+      }
+      return () => {
+        chartRef.current?.destroy();
+        chartRef.current = null;
+      };
+    }, [optionsKey]);
+    y2(() => {
+      if (!chartRef.current) return;
+      if (themeMode === prevThemeRef.current) return;
+      prevThemeRef.current = themeMode;
+      chartRef.current.updateOptions({
+        theme: { mode: themeMode },
+        chart: { background: "transparent" },
+        grid: { borderColor: cssVar("--chart-grid") },
+        xaxis: { labels: { style: { colors: cssVar("--muted-foreground") } } },
+        yaxis: { labels: { style: { colors: cssVar("--muted-foreground") } } }
+      });
+    }, [themeMode]);
+    return /* @__PURE__ */ u2("div", { ref, id, style: { width: "100%", height: "100%" } });
+  }
+
+  // src/ui/components/Sparkline.tsx
+  function Sparkline({ daily }) {
+    const last7 = daily.slice(-7);
+    if (last7.length < 2) return null;
+    const options = {
+      chart: {
+        type: "line",
+        height: 30,
+        width: 120,
+        sparkline: { enabled: true },
+        background: "transparent",
+        fontFamily: "inherit"
+      },
+      series: [{ data: last7.map((d5) => d5.input + d5.output) }],
+      stroke: { width: 1.5, curve: "smooth" },
+      colors: [cssVar("--accent")],
+      tooltip: { enabled: false }
+    };
+    return /* @__PURE__ */ u2("div", { children: [
+      /* @__PURE__ */ u2("div", { class: "sub", style: { marginBottom: "4px" }, children: "7-day trend" }),
+      /* @__PURE__ */ u2(ApexChart, { options })
+    ] });
+  }
+
+  // src/ui/components/StatsCards.tsx
+  function StatsCards({ totals, daily }) {
+    const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
+    const stats = [
+      { label: "Sessions", value: totals.sessions.toLocaleString(), sub: rangeLabel },
+      { label: "Turns", value: fmt(totals.turns), sub: rangeLabel },
+      { label: "Input Tokens", value: fmt(totals.input), sub: rangeLabel },
+      { label: "Output Tokens", value: fmt(totals.output), sub: rangeLabel },
+      { label: "Cache Read", value: fmt(totals.cache_read), sub: "prompt cache" },
+      { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "cache writes" },
+      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing", isCost: true }
+    ];
+    return /* @__PURE__ */ u2(S, { children: stats.map((s4) => /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
+      /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-label", children: s4.label }),
+        /* @__PURE__ */ u2("div", { class: `stat-value ${s4.isCost ? "cost-value" : ""}`, children: s4.value }),
+        s4.sub ? /* @__PURE__ */ u2("div", { class: "stat-sub", children: s4.sub }) : null
+      ] }),
+      s4.isCost && daily && daily.length >= 2 ? /* @__PURE__ */ u2("div", { class: "stat-sparkline", children: /* @__PURE__ */ u2(Sparkline, { daily }) }) : null
+    ] }, s4.label)) });
+  }
+
+  // src/ui/components/Toast.tsx
+  var toasts = y3([]);
+  var toastId = 0;
+  function showError(msg) {
+    const id = ++toastId;
+    toasts.value = [...toasts.value, { text: msg, type: "error", id }];
+    setTimeout(() => {
+      toasts.value = toasts.value.filter((t4) => t4.id !== id);
+    }, 6e3);
+  }
+  function showSuccess(msg) {
+    const id = ++toastId;
+    toasts.value = [...toasts.value, { text: msg, type: "success", id }];
+    setTimeout(() => {
+      toasts.value = toasts.value.filter((t4) => t4.id !== id);
+    }, 6e3);
+  }
+  function ToastContainer() {
+    return /* @__PURE__ */ u2("div", { style: {
+      position: "fixed",
+      top: 56,
+      right: 16,
+      zIndex: 999,
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px"
+    }, children: toasts.value.map((t4) => /* @__PURE__ */ u2("div", { role: t4.type === "error" ? "alert" : "status", style: {
+      background: `var(--toast-${t4.type === "error" ? "error" : "success"}-bg)`,
+      color: `var(--toast-${t4.type === "error" ? "error" : "success"}-text)`,
+      padding: "10px 16px",
+      borderRadius: "8px",
+      fontSize: "12px",
+      fontWeight: 500,
+      maxWidth: "360px",
+      border: "1px solid var(--border)",
+      animation: "slideIn 0.2s ease-out",
+      backdropFilter: "blur(12px) saturate(150%)",
+      WebkitBackdropFilter: "blur(12px) saturate(150%)",
+      boxShadow: "0 4px 16px rgba(99,102,241,0.08)"
+    }, children: t4.text }, t4.id)) });
+  }
+
+  // src/ui/components/SubagentSummary.tsx
+  function SubagentSummary({ summary }) {
+    if (summary.subagent_turns === 0) return null;
+    const totalInput = summary.parent_input + summary.subagent_input;
+    const totalOutput = summary.parent_output + summary.subagent_output;
+    const subPctInput = totalInput > 0 ? summary.subagent_input / totalInput * 100 : 0;
+    const subPctOutput = totalOutput > 0 ? summary.subagent_output / totalOutput * 100 : 0;
+    return /* @__PURE__ */ u2("div", { class: "table-card", children: [
+      /* @__PURE__ */ u2("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: /* @__PURE__ */ u2("div", { class: "section-title", style: { padding: "0" }, children: "Subagent Breakdown" }) }),
+      /* @__PURE__ */ u2("div", { style: "display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px", children: [
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Turns" }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.parent_turns) })
+          ] }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.subagent_turns) })
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "sub", children: [
+            summary.unique_agents,
+            " unique agents"
+          ] })
+        ] }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Input Tokens" }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.parent_input) })
+          ] }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.subagent_input) }),
+            " (",
+            subPctInput.toFixed(1),
+            "%)"
+          ] })
+        ] }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Output Tokens" }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.parent_output) })
+          ] }),
+          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.subagent_output) }),
+            " (",
+            subPctOutput.toFixed(1),
+            "%)"
+          ] })
+        ] })
+      ] })
+    ] });
+  }
+
+  // node_modules/@tanstack/table-core/build/lib/index.mjs
+  function functionalUpdate(updater, input) {
+    return typeof updater === "function" ? updater(input) : updater;
+  }
+  function makeStateUpdater(key, instance) {
+    return (updater) => {
+      instance.setState((old) => {
+        return {
+          ...old,
+          [key]: functionalUpdate(updater, old[key])
+        };
+      });
+    };
+  }
+  function isFunction(d5) {
+    return d5 instanceof Function;
+  }
+  function isNumberArray(d5) {
+    return Array.isArray(d5) && d5.every((val) => typeof val === "number");
+  }
+  function flattenBy(arr, getChildren) {
+    const flat = [];
+    const recurse = (subArr) => {
+      subArr.forEach((item) => {
+        flat.push(item);
+        const children = getChildren(item);
+        if (children != null && children.length) {
+          recurse(children);
+        }
+      });
+    };
+    recurse(arr);
+    return flat;
+  }
+  function memo(getDeps, fn, opts) {
+    let deps = [];
+    let result;
+    return (depArgs) => {
+      let depTime;
+      if (opts.key && opts.debug) depTime = Date.now();
+      const newDeps = getDeps(depArgs);
+      const depsChanged = newDeps.length !== deps.length || newDeps.some((dep, index) => deps[index] !== dep);
+      if (!depsChanged) {
+        return result;
+      }
+      deps = newDeps;
+      let resultTime;
+      if (opts.key && opts.debug) resultTime = Date.now();
+      result = fn(...newDeps);
+      opts == null || opts.onChange == null || opts.onChange(result);
+      if (opts.key && opts.debug) {
+        if (opts != null && opts.debug()) {
+          const depEndTime = Math.round((Date.now() - depTime) * 100) / 100;
+          const resultEndTime = Math.round((Date.now() - resultTime) * 100) / 100;
+          const resultFpsPercentage = resultEndTime / 16;
+          const pad = (str, num) => {
+            str = String(str);
+            while (str.length < num) {
+              str = " " + str;
+            }
+            return str;
+          };
+          console.info(`%c\u23F1 ${pad(resultEndTime, 5)} /${pad(depEndTime, 5)} ms`, `
+            font-size: .6rem;
+            font-weight: bold;
+            color: hsl(${Math.max(0, Math.min(120 - 120 * resultFpsPercentage, 120))}deg 100% 31%);`, opts == null ? void 0 : opts.key);
+        }
+      }
+      return result;
+    };
+  }
+  function getMemoOptions(tableOptions, debugLevel, key, onChange) {
+    return {
+      debug: () => {
+        var _tableOptions$debugAl;
+        return (_tableOptions$debugAl = tableOptions == null ? void 0 : tableOptions.debugAll) != null ? _tableOptions$debugAl : tableOptions[debugLevel];
+      },
+      key,
+      onChange
+    };
+  }
+  function createCell(table, row, column, columnId) {
+    const getRenderValue = () => {
+      var _cell$getValue;
+      return (_cell$getValue = cell.getValue()) != null ? _cell$getValue : table.options.renderFallbackValue;
+    };
+    const cell = {
+      id: `${row.id}_${column.id}`,
+      row,
+      column,
+      getValue: () => row.getValue(columnId),
+      renderValue: getRenderValue,
+      getContext: memo(() => [table, column, row, cell], (table2, column2, row2, cell2) => ({
+        table: table2,
+        column: column2,
+        row: row2,
+        cell: cell2,
+        getValue: cell2.getValue,
+        renderValue: cell2.renderValue
+      }), getMemoOptions(table.options, "debugCells", "cell.getContext"))
+    };
+    table._features.forEach((feature) => {
+      feature.createCell == null || feature.createCell(cell, column, row, table);
+    }, {});
+    return cell;
+  }
+  function createColumn(table, columnDef, depth, parent) {
+    var _ref, _resolvedColumnDef$id;
+    const defaultColumn = table._getDefaultColumnDef();
+    const resolvedColumnDef = {
+      ...defaultColumn,
+      ...columnDef
+    };
+    const accessorKey = resolvedColumnDef.accessorKey;
+    let id = (_ref = (_resolvedColumnDef$id = resolvedColumnDef.id) != null ? _resolvedColumnDef$id : accessorKey ? typeof String.prototype.replaceAll === "function" ? accessorKey.replaceAll(".", "_") : accessorKey.replace(/\./g, "_") : void 0) != null ? _ref : typeof resolvedColumnDef.header === "string" ? resolvedColumnDef.header : void 0;
+    let accessorFn;
+    if (resolvedColumnDef.accessorFn) {
+      accessorFn = resolvedColumnDef.accessorFn;
+    } else if (accessorKey) {
+      if (accessorKey.includes(".")) {
+        accessorFn = (originalRow) => {
+          let result = originalRow;
+          for (const key of accessorKey.split(".")) {
+            var _result;
+            result = (_result = result) == null ? void 0 : _result[key];
+            if (result === void 0) {
+              console.warn(`"${key}" in deeply nested key "${accessorKey}" returned undefined.`);
+            }
+          }
+          return result;
+        };
+      } else {
+        accessorFn = (originalRow) => originalRow[resolvedColumnDef.accessorKey];
+      }
+    }
+    if (!id) {
+      if (true) {
+        throw new Error(resolvedColumnDef.accessorFn ? `Columns require an id when using an accessorFn` : `Columns require an id when using a non-string header`);
+      }
+      throw new Error();
+    }
+    let column = {
+      id: `${String(id)}`,
+      accessorFn,
+      parent,
+      depth,
+      columnDef: resolvedColumnDef,
+      columns: [],
+      getFlatColumns: memo(() => [true], () => {
+        var _column$columns;
+        return [column, ...(_column$columns = column.columns) == null ? void 0 : _column$columns.flatMap((d5) => d5.getFlatColumns())];
+      }, getMemoOptions(table.options, "debugColumns", "column.getFlatColumns")),
+      getLeafColumns: memo(() => [table._getOrderColumnsFn()], (orderColumns2) => {
+        var _column$columns2;
+        if ((_column$columns2 = column.columns) != null && _column$columns2.length) {
+          let leafColumns = column.columns.flatMap((column2) => column2.getLeafColumns());
+          return orderColumns2(leafColumns);
+        }
+        return [column];
+      }, getMemoOptions(table.options, "debugColumns", "column.getLeafColumns"))
+    };
+    for (const feature of table._features) {
+      feature.createColumn == null || feature.createColumn(column, table);
+    }
+    return column;
+  }
+  var debug = "debugHeaders";
+  function createHeader(table, column, options) {
+    var _options$id;
+    const id = (_options$id = options.id) != null ? _options$id : column.id;
+    let header = {
+      id,
+      column,
+      index: options.index,
+      isPlaceholder: !!options.isPlaceholder,
+      placeholderId: options.placeholderId,
+      depth: options.depth,
+      subHeaders: [],
+      colSpan: 0,
+      rowSpan: 0,
+      headerGroup: null,
+      getLeafHeaders: () => {
+        const leafHeaders = [];
+        const recurseHeader = (h5) => {
+          if (h5.subHeaders && h5.subHeaders.length) {
+            h5.subHeaders.map(recurseHeader);
+          }
+          leafHeaders.push(h5);
+        };
+        recurseHeader(header);
+        return leafHeaders;
+      },
+      getContext: () => ({
+        table,
+        header,
+        column
+      })
+    };
+    table._features.forEach((feature) => {
+      feature.createHeader == null || feature.createHeader(header, table);
+    });
+    return header;
+  }
+  var Headers = {
+    createTable: (table) => {
+      table.getHeaderGroups = memo(() => [table.getAllColumns(), table.getVisibleLeafColumns(), table.getState().columnPinning.left, table.getState().columnPinning.right], (allColumns, leafColumns, left, right) => {
+        var _left$map$filter, _right$map$filter;
+        const leftColumns = (_left$map$filter = left == null ? void 0 : left.map((columnId) => leafColumns.find((d5) => d5.id === columnId)).filter(Boolean)) != null ? _left$map$filter : [];
+        const rightColumns = (_right$map$filter = right == null ? void 0 : right.map((columnId) => leafColumns.find((d5) => d5.id === columnId)).filter(Boolean)) != null ? _right$map$filter : [];
+        const centerColumns = leafColumns.filter((column) => !(left != null && left.includes(column.id)) && !(right != null && right.includes(column.id)));
+        const headerGroups = buildHeaderGroups(allColumns, [...leftColumns, ...centerColumns, ...rightColumns], table);
+        return headerGroups;
+      }, getMemoOptions(table.options, debug, "getHeaderGroups"));
+      table.getCenterHeaderGroups = memo(() => [table.getAllColumns(), table.getVisibleLeafColumns(), table.getState().columnPinning.left, table.getState().columnPinning.right], (allColumns, leafColumns, left, right) => {
+        leafColumns = leafColumns.filter((column) => !(left != null && left.includes(column.id)) && !(right != null && right.includes(column.id)));
+        return buildHeaderGroups(allColumns, leafColumns, table, "center");
+      }, getMemoOptions(table.options, debug, "getCenterHeaderGroups"));
+      table.getLeftHeaderGroups = memo(() => [table.getAllColumns(), table.getVisibleLeafColumns(), table.getState().columnPinning.left], (allColumns, leafColumns, left) => {
+        var _left$map$filter2;
+        const orderedLeafColumns = (_left$map$filter2 = left == null ? void 0 : left.map((columnId) => leafColumns.find((d5) => d5.id === columnId)).filter(Boolean)) != null ? _left$map$filter2 : [];
+        return buildHeaderGroups(allColumns, orderedLeafColumns, table, "left");
+      }, getMemoOptions(table.options, debug, "getLeftHeaderGroups"));
+      table.getRightHeaderGroups = memo(() => [table.getAllColumns(), table.getVisibleLeafColumns(), table.getState().columnPinning.right], (allColumns, leafColumns, right) => {
+        var _right$map$filter2;
+        const orderedLeafColumns = (_right$map$filter2 = right == null ? void 0 : right.map((columnId) => leafColumns.find((d5) => d5.id === columnId)).filter(Boolean)) != null ? _right$map$filter2 : [];
+        return buildHeaderGroups(allColumns, orderedLeafColumns, table, "right");
+      }, getMemoOptions(table.options, debug, "getRightHeaderGroups"));
+      table.getFooterGroups = memo(() => [table.getHeaderGroups()], (headerGroups) => {
+        return [...headerGroups].reverse();
+      }, getMemoOptions(table.options, debug, "getFooterGroups"));
+      table.getLeftFooterGroups = memo(() => [table.getLeftHeaderGroups()], (headerGroups) => {
+        return [...headerGroups].reverse();
+      }, getMemoOptions(table.options, debug, "getLeftFooterGroups"));
+      table.getCenterFooterGroups = memo(() => [table.getCenterHeaderGroups()], (headerGroups) => {
+        return [...headerGroups].reverse();
+      }, getMemoOptions(table.options, debug, "getCenterFooterGroups"));
+      table.getRightFooterGroups = memo(() => [table.getRightHeaderGroups()], (headerGroups) => {
+        return [...headerGroups].reverse();
+      }, getMemoOptions(table.options, debug, "getRightFooterGroups"));
+      table.getFlatHeaders = memo(() => [table.getHeaderGroups()], (headerGroups) => {
+        return headerGroups.map((headerGroup) => {
+          return headerGroup.headers;
+        }).flat();
+      }, getMemoOptions(table.options, debug, "getFlatHeaders"));
+      table.getLeftFlatHeaders = memo(() => [table.getLeftHeaderGroups()], (left) => {
+        return left.map((headerGroup) => {
+          return headerGroup.headers;
+        }).flat();
+      }, getMemoOptions(table.options, debug, "getLeftFlatHeaders"));
+      table.getCenterFlatHeaders = memo(() => [table.getCenterHeaderGroups()], (left) => {
+        return left.map((headerGroup) => {
+          return headerGroup.headers;
+        }).flat();
+      }, getMemoOptions(table.options, debug, "getCenterFlatHeaders"));
+      table.getRightFlatHeaders = memo(() => [table.getRightHeaderGroups()], (left) => {
+        return left.map((headerGroup) => {
+          return headerGroup.headers;
+        }).flat();
+      }, getMemoOptions(table.options, debug, "getRightFlatHeaders"));
+      table.getCenterLeafHeaders = memo(() => [table.getCenterFlatHeaders()], (flatHeaders) => {
+        return flatHeaders.filter((header) => {
+          var _header$subHeaders;
+          return !((_header$subHeaders = header.subHeaders) != null && _header$subHeaders.length);
+        });
+      }, getMemoOptions(table.options, debug, "getCenterLeafHeaders"));
+      table.getLeftLeafHeaders = memo(() => [table.getLeftFlatHeaders()], (flatHeaders) => {
+        return flatHeaders.filter((header) => {
+          var _header$subHeaders2;
+          return !((_header$subHeaders2 = header.subHeaders) != null && _header$subHeaders2.length);
+        });
+      }, getMemoOptions(table.options, debug, "getLeftLeafHeaders"));
+      table.getRightLeafHeaders = memo(() => [table.getRightFlatHeaders()], (flatHeaders) => {
+        return flatHeaders.filter((header) => {
+          var _header$subHeaders3;
+          return !((_header$subHeaders3 = header.subHeaders) != null && _header$subHeaders3.length);
+        });
+      }, getMemoOptions(table.options, debug, "getRightLeafHeaders"));
+      table.getLeafHeaders = memo(() => [table.getLeftHeaderGroups(), table.getCenterHeaderGroups(), table.getRightHeaderGroups()], (left, center, right) => {
+        var _left$0$headers, _left$, _center$0$headers, _center$, _right$0$headers, _right$;
+        return [...(_left$0$headers = (_left$ = left[0]) == null ? void 0 : _left$.headers) != null ? _left$0$headers : [], ...(_center$0$headers = (_center$ = center[0]) == null ? void 0 : _center$.headers) != null ? _center$0$headers : [], ...(_right$0$headers = (_right$ = right[0]) == null ? void 0 : _right$.headers) != null ? _right$0$headers : []].map((header) => {
+          return header.getLeafHeaders();
+        }).flat();
+      }, getMemoOptions(table.options, debug, "getLeafHeaders"));
+    }
+  };
+  function buildHeaderGroups(allColumns, columnsToGroup, table, headerFamily) {
+    var _headerGroups$0$heade, _headerGroups$;
+    let maxDepth = 0;
+    const findMaxDepth = function(columns7, depth) {
+      if (depth === void 0) {
+        depth = 1;
+      }
+      maxDepth = Math.max(maxDepth, depth);
+      columns7.filter((column) => column.getIsVisible()).forEach((column) => {
+        var _column$columns;
+        if ((_column$columns = column.columns) != null && _column$columns.length) {
+          findMaxDepth(column.columns, depth + 1);
+        }
+      }, 0);
+    };
+    findMaxDepth(allColumns);
+    let headerGroups = [];
+    const createHeaderGroup = (headersToGroup, depth) => {
+      const headerGroup = {
+        depth,
+        id: [headerFamily, `${depth}`].filter(Boolean).join("_"),
+        headers: []
+      };
+      const pendingParentHeaders = [];
+      headersToGroup.forEach((headerToGroup) => {
+        const latestPendingParentHeader = [...pendingParentHeaders].reverse()[0];
+        const isLeafHeader = headerToGroup.column.depth === headerGroup.depth;
+        let column;
+        let isPlaceholder = false;
+        if (isLeafHeader && headerToGroup.column.parent) {
+          column = headerToGroup.column.parent;
+        } else {
+          column = headerToGroup.column;
+          isPlaceholder = true;
+        }
+        if (latestPendingParentHeader && (latestPendingParentHeader == null ? void 0 : latestPendingParentHeader.column) === column) {
+          latestPendingParentHeader.subHeaders.push(headerToGroup);
+        } else {
+          const header = createHeader(table, column, {
+            id: [headerFamily, depth, column.id, headerToGroup == null ? void 0 : headerToGroup.id].filter(Boolean).join("_"),
+            isPlaceholder,
+            placeholderId: isPlaceholder ? `${pendingParentHeaders.filter((d5) => d5.column === column).length}` : void 0,
+            depth,
+            index: pendingParentHeaders.length
+          });
+          header.subHeaders.push(headerToGroup);
+          pendingParentHeaders.push(header);
+        }
+        headerGroup.headers.push(headerToGroup);
+        headerToGroup.headerGroup = headerGroup;
+      });
+      headerGroups.push(headerGroup);
+      if (depth > 0) {
+        createHeaderGroup(pendingParentHeaders, depth - 1);
+      }
+    };
+    const bottomHeaders = columnsToGroup.map((column, index) => createHeader(table, column, {
+      depth: maxDepth,
+      index
+    }));
+    createHeaderGroup(bottomHeaders, maxDepth - 1);
+    headerGroups.reverse();
+    const recurseHeadersForSpans = (headers) => {
+      const filteredHeaders = headers.filter((header) => header.column.getIsVisible());
+      return filteredHeaders.map((header) => {
+        let colSpan = 0;
+        let rowSpan = 0;
+        let childRowSpans = [0];
+        if (header.subHeaders && header.subHeaders.length) {
+          childRowSpans = [];
+          recurseHeadersForSpans(header.subHeaders).forEach((_ref) => {
+            let {
+              colSpan: childColSpan,
+              rowSpan: childRowSpan
+            } = _ref;
+            colSpan += childColSpan;
+            childRowSpans.push(childRowSpan);
+          });
+        } else {
+          colSpan = 1;
+        }
+        const minChildRowSpan = Math.min(...childRowSpans);
+        rowSpan = rowSpan + minChildRowSpan;
+        header.colSpan = colSpan;
+        header.rowSpan = rowSpan;
+        return {
+          colSpan,
+          rowSpan
+        };
+      });
+    };
+    recurseHeadersForSpans((_headerGroups$0$heade = (_headerGroups$ = headerGroups[0]) == null ? void 0 : _headerGroups$.headers) != null ? _headerGroups$0$heade : []);
+    return headerGroups;
+  }
+  var createRow = (table, id, original, rowIndex, depth, subRows, parentId) => {
+    let row = {
+      id,
+      index: rowIndex,
+      original,
+      depth,
+      parentId,
+      _valuesCache: {},
+      _uniqueValuesCache: {},
+      getValue: (columnId) => {
+        if (row._valuesCache.hasOwnProperty(columnId)) {
+          return row._valuesCache[columnId];
+        }
+        const column = table.getColumn(columnId);
+        if (!(column != null && column.accessorFn)) {
+          return void 0;
+        }
+        row._valuesCache[columnId] = column.accessorFn(row.original, rowIndex);
+        return row._valuesCache[columnId];
+      },
+      getUniqueValues: (columnId) => {
+        if (row._uniqueValuesCache.hasOwnProperty(columnId)) {
+          return row._uniqueValuesCache[columnId];
+        }
+        const column = table.getColumn(columnId);
+        if (!(column != null && column.accessorFn)) {
+          return void 0;
+        }
+        if (!column.columnDef.getUniqueValues) {
+          row._uniqueValuesCache[columnId] = [row.getValue(columnId)];
+          return row._uniqueValuesCache[columnId];
+        }
+        row._uniqueValuesCache[columnId] = column.columnDef.getUniqueValues(row.original, rowIndex);
+        return row._uniqueValuesCache[columnId];
+      },
+      renderValue: (columnId) => {
+        var _row$getValue;
+        return (_row$getValue = row.getValue(columnId)) != null ? _row$getValue : table.options.renderFallbackValue;
+      },
+      subRows: subRows != null ? subRows : [],
+      getLeafRows: () => flattenBy(row.subRows, (d5) => d5.subRows),
+      getParentRow: () => row.parentId ? table.getRow(row.parentId, true) : void 0,
+      getParentRows: () => {
+        let parentRows = [];
+        let currentRow = row;
+        while (true) {
+          const parentRow = currentRow.getParentRow();
+          if (!parentRow) break;
+          parentRows.push(parentRow);
+          currentRow = parentRow;
+        }
+        return parentRows.reverse();
+      },
+      getAllCells: memo(() => [table.getAllLeafColumns()], (leafColumns) => {
+        return leafColumns.map((column) => {
+          return createCell(table, row, column, column.id);
+        });
+      }, getMemoOptions(table.options, "debugRows", "getAllCells")),
+      _getAllCellsByColumnId: memo(() => [row.getAllCells()], (allCells) => {
+        return allCells.reduce((acc, cell) => {
+          acc[cell.column.id] = cell;
+          return acc;
+        }, {});
+      }, getMemoOptions(table.options, "debugRows", "getAllCellsByColumnId"))
+    };
+    for (let i4 = 0; i4 < table._features.length; i4++) {
+      const feature = table._features[i4];
+      feature == null || feature.createRow == null || feature.createRow(row, table);
+    }
+    return row;
+  };
+  var ColumnFaceting = {
+    createColumn: (column, table) => {
+      column._getFacetedRowModel = table.options.getFacetedRowModel && table.options.getFacetedRowModel(table, column.id);
+      column.getFacetedRowModel = () => {
+        if (!column._getFacetedRowModel) {
+          return table.getPreFilteredRowModel();
+        }
+        return column._getFacetedRowModel();
+      };
+      column._getFacetedUniqueValues = table.options.getFacetedUniqueValues && table.options.getFacetedUniqueValues(table, column.id);
+      column.getFacetedUniqueValues = () => {
+        if (!column._getFacetedUniqueValues) {
+          return /* @__PURE__ */ new Map();
+        }
+        return column._getFacetedUniqueValues();
+      };
+      column._getFacetedMinMaxValues = table.options.getFacetedMinMaxValues && table.options.getFacetedMinMaxValues(table, column.id);
+      column.getFacetedMinMaxValues = () => {
+        if (!column._getFacetedMinMaxValues) {
+          return void 0;
+        }
+        return column._getFacetedMinMaxValues();
+      };
+    }
+  };
+  var includesString = (row, columnId, filterValue) => {
+    var _filterValue$toString, _row$getValue;
+    const search = filterValue == null || (_filterValue$toString = filterValue.toString()) == null ? void 0 : _filterValue$toString.toLowerCase();
+    return Boolean((_row$getValue = row.getValue(columnId)) == null || (_row$getValue = _row$getValue.toString()) == null || (_row$getValue = _row$getValue.toLowerCase()) == null ? void 0 : _row$getValue.includes(search));
+  };
+  includesString.autoRemove = (val) => testFalsey(val);
+  var includesStringSensitive = (row, columnId, filterValue) => {
+    var _row$getValue2;
+    return Boolean((_row$getValue2 = row.getValue(columnId)) == null || (_row$getValue2 = _row$getValue2.toString()) == null ? void 0 : _row$getValue2.includes(filterValue));
+  };
+  includesStringSensitive.autoRemove = (val) => testFalsey(val);
+  var equalsString = (row, columnId, filterValue) => {
+    var _row$getValue3;
+    return ((_row$getValue3 = row.getValue(columnId)) == null || (_row$getValue3 = _row$getValue3.toString()) == null ? void 0 : _row$getValue3.toLowerCase()) === (filterValue == null ? void 0 : filterValue.toLowerCase());
+  };
+  equalsString.autoRemove = (val) => testFalsey(val);
+  var arrIncludes = (row, columnId, filterValue) => {
+    var _row$getValue4;
+    return (_row$getValue4 = row.getValue(columnId)) == null ? void 0 : _row$getValue4.includes(filterValue);
+  };
+  arrIncludes.autoRemove = (val) => testFalsey(val);
+  var arrIncludesAll = (row, columnId, filterValue) => {
+    return !filterValue.some((val) => {
+      var _row$getValue5;
+      return !((_row$getValue5 = row.getValue(columnId)) != null && _row$getValue5.includes(val));
+    });
+  };
+  arrIncludesAll.autoRemove = (val) => testFalsey(val) || !(val != null && val.length);
+  var arrIncludesSome = (row, columnId, filterValue) => {
+    return filterValue.some((val) => {
+      var _row$getValue6;
+      return (_row$getValue6 = row.getValue(columnId)) == null ? void 0 : _row$getValue6.includes(val);
+    });
+  };
+  arrIncludesSome.autoRemove = (val) => testFalsey(val) || !(val != null && val.length);
+  var equals = (row, columnId, filterValue) => {
+    return row.getValue(columnId) === filterValue;
+  };
+  equals.autoRemove = (val) => testFalsey(val);
+  var weakEquals = (row, columnId, filterValue) => {
+    return row.getValue(columnId) == filterValue;
+  };
+  weakEquals.autoRemove = (val) => testFalsey(val);
+  var inNumberRange = (row, columnId, filterValue) => {
+    let [min2, max2] = filterValue;
+    const rowValue = row.getValue(columnId);
+    return rowValue >= min2 && rowValue <= max2;
+  };
+  inNumberRange.resolveFilterValue = (val) => {
+    let [unsafeMin, unsafeMax] = val;
+    let parsedMin = typeof unsafeMin !== "number" ? parseFloat(unsafeMin) : unsafeMin;
+    let parsedMax = typeof unsafeMax !== "number" ? parseFloat(unsafeMax) : unsafeMax;
+    let min2 = unsafeMin === null || Number.isNaN(parsedMin) ? -Infinity : parsedMin;
+    let max2 = unsafeMax === null || Number.isNaN(parsedMax) ? Infinity : parsedMax;
+    if (min2 > max2) {
+      const temp = min2;
+      min2 = max2;
+      max2 = temp;
+    }
+    return [min2, max2];
+  };
+  inNumberRange.autoRemove = (val) => testFalsey(val) || testFalsey(val[0]) && testFalsey(val[1]);
+  var filterFns = {
+    includesString,
+    includesStringSensitive,
+    equalsString,
+    arrIncludes,
+    arrIncludesAll,
+    arrIncludesSome,
+    equals,
+    weakEquals,
+    inNumberRange
+  };
+  function testFalsey(val) {
+    return val === void 0 || val === null || val === "";
+  }
+  var ColumnFiltering = {
+    getDefaultColumnDef: () => {
+      return {
+        filterFn: "auto"
+      };
+    },
+    getInitialState: (state) => {
+      return {
+        columnFilters: [],
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onColumnFiltersChange: makeStateUpdater("columnFilters", table),
+        filterFromLeafRows: false,
+        maxLeafRowFilterDepth: 100
+      };
+    },
+    createColumn: (column, table) => {
+      column.getAutoFilterFn = () => {
+        const firstRow = table.getCoreRowModel().flatRows[0];
+        const value = firstRow == null ? void 0 : firstRow.getValue(column.id);
+        if (typeof value === "string") {
+          return filterFns.includesString;
+        }
+        if (typeof value === "number") {
+          return filterFns.inNumberRange;
+        }
+        if (typeof value === "boolean") {
+          return filterFns.equals;
+        }
+        if (value !== null && typeof value === "object") {
+          return filterFns.equals;
+        }
+        if (Array.isArray(value)) {
+          return filterFns.arrIncludes;
+        }
+        return filterFns.weakEquals;
+      };
+      column.getFilterFn = () => {
+        var _table$options$filter, _table$options$filter2;
+        return isFunction(column.columnDef.filterFn) ? column.columnDef.filterFn : column.columnDef.filterFn === "auto" ? column.getAutoFilterFn() : (
+          // @ts-ignore
+          (_table$options$filter = (_table$options$filter2 = table.options.filterFns) == null ? void 0 : _table$options$filter2[column.columnDef.filterFn]) != null ? _table$options$filter : filterFns[column.columnDef.filterFn]
+        );
+      };
+      column.getCanFilter = () => {
+        var _column$columnDef$ena, _table$options$enable, _table$options$enable2;
+        return ((_column$columnDef$ena = column.columnDef.enableColumnFilter) != null ? _column$columnDef$ena : true) && ((_table$options$enable = table.options.enableColumnFilters) != null ? _table$options$enable : true) && ((_table$options$enable2 = table.options.enableFilters) != null ? _table$options$enable2 : true) && !!column.accessorFn;
+      };
+      column.getIsFiltered = () => column.getFilterIndex() > -1;
+      column.getFilterValue = () => {
+        var _table$getState$colum;
+        return (_table$getState$colum = table.getState().columnFilters) == null || (_table$getState$colum = _table$getState$colum.find((d5) => d5.id === column.id)) == null ? void 0 : _table$getState$colum.value;
+      };
+      column.getFilterIndex = () => {
+        var _table$getState$colum2, _table$getState$colum3;
+        return (_table$getState$colum2 = (_table$getState$colum3 = table.getState().columnFilters) == null ? void 0 : _table$getState$colum3.findIndex((d5) => d5.id === column.id)) != null ? _table$getState$colum2 : -1;
+      };
+      column.setFilterValue = (value) => {
+        table.setColumnFilters((old) => {
+          const filterFn = column.getFilterFn();
+          const previousFilter = old == null ? void 0 : old.find((d5) => d5.id === column.id);
+          const newFilter = functionalUpdate(value, previousFilter ? previousFilter.value : void 0);
+          if (shouldAutoRemoveFilter(filterFn, newFilter, column)) {
+            var _old$filter;
+            return (_old$filter = old == null ? void 0 : old.filter((d5) => d5.id !== column.id)) != null ? _old$filter : [];
+          }
+          const newFilterObj = {
+            id: column.id,
+            value: newFilter
+          };
+          if (previousFilter) {
+            var _old$map;
+            return (_old$map = old == null ? void 0 : old.map((d5) => {
+              if (d5.id === column.id) {
+                return newFilterObj;
+              }
+              return d5;
+            })) != null ? _old$map : [];
+          }
+          if (old != null && old.length) {
+            return [...old, newFilterObj];
+          }
+          return [newFilterObj];
+        });
+      };
+    },
+    createRow: (row, _table) => {
+      row.columnFilters = {};
+      row.columnFiltersMeta = {};
+    },
+    createTable: (table) => {
+      table.setColumnFilters = (updater) => {
+        const leafColumns = table.getAllLeafColumns();
+        const updateFn = (old) => {
+          var _functionalUpdate;
+          return (_functionalUpdate = functionalUpdate(updater, old)) == null ? void 0 : _functionalUpdate.filter((filter) => {
+            const column = leafColumns.find((d5) => d5.id === filter.id);
+            if (column) {
+              const filterFn = column.getFilterFn();
+              if (shouldAutoRemoveFilter(filterFn, filter.value, column)) {
+                return false;
+              }
+            }
+            return true;
+          });
+        };
+        table.options.onColumnFiltersChange == null || table.options.onColumnFiltersChange(updateFn);
+      };
+      table.resetColumnFilters = (defaultState) => {
+        var _table$initialState$c, _table$initialState;
+        table.setColumnFilters(defaultState ? [] : (_table$initialState$c = (_table$initialState = table.initialState) == null ? void 0 : _table$initialState.columnFilters) != null ? _table$initialState$c : []);
+      };
+      table.getPreFilteredRowModel = () => table.getCoreRowModel();
+      table.getFilteredRowModel = () => {
+        if (!table._getFilteredRowModel && table.options.getFilteredRowModel) {
+          table._getFilteredRowModel = table.options.getFilteredRowModel(table);
+        }
+        if (table.options.manualFiltering || !table._getFilteredRowModel) {
+          return table.getPreFilteredRowModel();
+        }
+        return table._getFilteredRowModel();
+      };
+    }
+  };
+  function shouldAutoRemoveFilter(filterFn, value, column) {
+    return (filterFn && filterFn.autoRemove ? filterFn.autoRemove(value, column) : false) || typeof value === "undefined" || typeof value === "string" && !value;
+  }
+  var sum = (columnId, _leafRows, childRows) => {
+    return childRows.reduce((sum2, next) => {
+      const nextValue = next.getValue(columnId);
+      return sum2 + (typeof nextValue === "number" ? nextValue : 0);
+    }, 0);
+  };
+  var min = (columnId, _leafRows, childRows) => {
+    let min2;
+    childRows.forEach((row) => {
+      const value = row.getValue(columnId);
+      if (value != null && (min2 > value || min2 === void 0 && value >= value)) {
+        min2 = value;
+      }
+    });
+    return min2;
+  };
+  var max = (columnId, _leafRows, childRows) => {
+    let max2;
+    childRows.forEach((row) => {
+      const value = row.getValue(columnId);
+      if (value != null && (max2 < value || max2 === void 0 && value >= value)) {
+        max2 = value;
+      }
+    });
+    return max2;
+  };
+  var extent = (columnId, _leafRows, childRows) => {
+    let min2;
+    let max2;
+    childRows.forEach((row) => {
+      const value = row.getValue(columnId);
+      if (value != null) {
+        if (min2 === void 0) {
+          if (value >= value) min2 = max2 = value;
+        } else {
+          if (min2 > value) min2 = value;
+          if (max2 < value) max2 = value;
+        }
+      }
+    });
+    return [min2, max2];
+  };
+  var mean = (columnId, leafRows) => {
+    let count2 = 0;
+    let sum2 = 0;
+    leafRows.forEach((row) => {
+      let value = row.getValue(columnId);
+      if (value != null && (value = +value) >= value) {
+        ++count2, sum2 += value;
+      }
+    });
+    if (count2) return sum2 / count2;
+    return;
+  };
+  var median = (columnId, leafRows) => {
+    if (!leafRows.length) {
+      return;
+    }
+    const values = leafRows.map((row) => row.getValue(columnId));
+    if (!isNumberArray(values)) {
+      return;
+    }
+    if (values.length === 1) {
+      return values[0];
+    }
+    const mid = Math.floor(values.length / 2);
+    const nums = values.sort((a4, b4) => a4 - b4);
+    return values.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+  };
+  var unique = (columnId, leafRows) => {
+    return Array.from(new Set(leafRows.map((d5) => d5.getValue(columnId))).values());
+  };
+  var uniqueCount = (columnId, leafRows) => {
+    return new Set(leafRows.map((d5) => d5.getValue(columnId))).size;
+  };
+  var count = (_columnId, leafRows) => {
+    return leafRows.length;
+  };
+  var aggregationFns = {
+    sum,
+    min,
+    max,
+    extent,
+    mean,
+    median,
+    unique,
+    uniqueCount,
+    count
+  };
+  var ColumnGrouping = {
+    getDefaultColumnDef: () => {
+      return {
+        aggregatedCell: (props) => {
+          var _toString, _props$getValue;
+          return (_toString = (_props$getValue = props.getValue()) == null || _props$getValue.toString == null ? void 0 : _props$getValue.toString()) != null ? _toString : null;
+        },
+        aggregationFn: "auto"
+      };
+    },
+    getInitialState: (state) => {
+      return {
+        grouping: [],
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onGroupingChange: makeStateUpdater("grouping", table),
+        groupedColumnMode: "reorder"
+      };
+    },
+    createColumn: (column, table) => {
+      column.toggleGrouping = () => {
+        table.setGrouping((old) => {
+          if (old != null && old.includes(column.id)) {
+            return old.filter((d5) => d5 !== column.id);
+          }
+          return [...old != null ? old : [], column.id];
+        });
+      };
+      column.getCanGroup = () => {
+        var _column$columnDef$ena, _table$options$enable;
+        return ((_column$columnDef$ena = column.columnDef.enableGrouping) != null ? _column$columnDef$ena : true) && ((_table$options$enable = table.options.enableGrouping) != null ? _table$options$enable : true) && (!!column.accessorFn || !!column.columnDef.getGroupingValue);
+      };
+      column.getIsGrouped = () => {
+        var _table$getState$group;
+        return (_table$getState$group = table.getState().grouping) == null ? void 0 : _table$getState$group.includes(column.id);
+      };
+      column.getGroupedIndex = () => {
+        var _table$getState$group2;
+        return (_table$getState$group2 = table.getState().grouping) == null ? void 0 : _table$getState$group2.indexOf(column.id);
+      };
+      column.getToggleGroupingHandler = () => {
+        const canGroup = column.getCanGroup();
+        return () => {
+          if (!canGroup) return;
+          column.toggleGrouping();
+        };
+      };
+      column.getAutoAggregationFn = () => {
+        const firstRow = table.getCoreRowModel().flatRows[0];
+        const value = firstRow == null ? void 0 : firstRow.getValue(column.id);
+        if (typeof value === "number") {
+          return aggregationFns.sum;
+        }
+        if (Object.prototype.toString.call(value) === "[object Date]") {
+          return aggregationFns.extent;
+        }
+      };
+      column.getAggregationFn = () => {
+        var _table$options$aggreg, _table$options$aggreg2;
+        if (!column) {
+          throw new Error();
+        }
+        return isFunction(column.columnDef.aggregationFn) ? column.columnDef.aggregationFn : column.columnDef.aggregationFn === "auto" ? column.getAutoAggregationFn() : (_table$options$aggreg = (_table$options$aggreg2 = table.options.aggregationFns) == null ? void 0 : _table$options$aggreg2[column.columnDef.aggregationFn]) != null ? _table$options$aggreg : aggregationFns[column.columnDef.aggregationFn];
+      };
+    },
+    createTable: (table) => {
+      table.setGrouping = (updater) => table.options.onGroupingChange == null ? void 0 : table.options.onGroupingChange(updater);
+      table.resetGrouping = (defaultState) => {
+        var _table$initialState$g, _table$initialState;
+        table.setGrouping(defaultState ? [] : (_table$initialState$g = (_table$initialState = table.initialState) == null ? void 0 : _table$initialState.grouping) != null ? _table$initialState$g : []);
+      };
+      table.getPreGroupedRowModel = () => table.getFilteredRowModel();
+      table.getGroupedRowModel = () => {
+        if (!table._getGroupedRowModel && table.options.getGroupedRowModel) {
+          table._getGroupedRowModel = table.options.getGroupedRowModel(table);
+        }
+        if (table.options.manualGrouping || !table._getGroupedRowModel) {
+          return table.getPreGroupedRowModel();
+        }
+        return table._getGroupedRowModel();
+      };
+    },
+    createRow: (row, table) => {
+      row.getIsGrouped = () => !!row.groupingColumnId;
+      row.getGroupingValue = (columnId) => {
+        if (row._groupingValuesCache.hasOwnProperty(columnId)) {
+          return row._groupingValuesCache[columnId];
+        }
+        const column = table.getColumn(columnId);
+        if (!(column != null && column.columnDef.getGroupingValue)) {
+          return row.getValue(columnId);
+        }
+        row._groupingValuesCache[columnId] = column.columnDef.getGroupingValue(row.original);
+        return row._groupingValuesCache[columnId];
+      };
+      row._groupingValuesCache = {};
+    },
+    createCell: (cell, column, row, table) => {
+      cell.getIsGrouped = () => column.getIsGrouped() && column.id === row.groupingColumnId;
+      cell.getIsPlaceholder = () => !cell.getIsGrouped() && column.getIsGrouped();
+      cell.getIsAggregated = () => {
+        var _row$subRows;
+        return !cell.getIsGrouped() && !cell.getIsPlaceholder() && !!((_row$subRows = row.subRows) != null && _row$subRows.length);
+      };
+    }
+  };
+  function orderColumns(leafColumns, grouping, groupedColumnMode) {
+    if (!(grouping != null && grouping.length) || !groupedColumnMode) {
+      return leafColumns;
+    }
+    const nonGroupingColumns = leafColumns.filter((col) => !grouping.includes(col.id));
+    if (groupedColumnMode === "remove") {
+      return nonGroupingColumns;
+    }
+    const groupingColumns = grouping.map((g4) => leafColumns.find((col) => col.id === g4)).filter(Boolean);
+    return [...groupingColumns, ...nonGroupingColumns];
+  }
+  var ColumnOrdering = {
+    getInitialState: (state) => {
+      return {
+        columnOrder: [],
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onColumnOrderChange: makeStateUpdater("columnOrder", table)
+      };
+    },
+    createColumn: (column, table) => {
+      column.getIndex = memo((position) => [_getVisibleLeafColumns(table, position)], (columns7) => columns7.findIndex((d5) => d5.id === column.id), getMemoOptions(table.options, "debugColumns", "getIndex"));
+      column.getIsFirstColumn = (position) => {
+        var _columns$;
+        const columns7 = _getVisibleLeafColumns(table, position);
+        return ((_columns$ = columns7[0]) == null ? void 0 : _columns$.id) === column.id;
+      };
+      column.getIsLastColumn = (position) => {
+        var _columns;
+        const columns7 = _getVisibleLeafColumns(table, position);
+        return ((_columns = columns7[columns7.length - 1]) == null ? void 0 : _columns.id) === column.id;
+      };
+    },
+    createTable: (table) => {
+      table.setColumnOrder = (updater) => table.options.onColumnOrderChange == null ? void 0 : table.options.onColumnOrderChange(updater);
+      table.resetColumnOrder = (defaultState) => {
+        var _table$initialState$c;
+        table.setColumnOrder(defaultState ? [] : (_table$initialState$c = table.initialState.columnOrder) != null ? _table$initialState$c : []);
+      };
+      table._getOrderColumnsFn = memo(() => [table.getState().columnOrder, table.getState().grouping, table.options.groupedColumnMode], (columnOrder, grouping, groupedColumnMode) => (columns7) => {
+        let orderedColumns = [];
+        if (!(columnOrder != null && columnOrder.length)) {
+          orderedColumns = columns7;
+        } else {
+          const columnOrderCopy = [...columnOrder];
+          const columnsCopy = [...columns7];
+          while (columnsCopy.length && columnOrderCopy.length) {
+            const targetColumnId = columnOrderCopy.shift();
+            const foundIndex = columnsCopy.findIndex((d5) => d5.id === targetColumnId);
+            if (foundIndex > -1) {
+              orderedColumns.push(columnsCopy.splice(foundIndex, 1)[0]);
+            }
+          }
+          orderedColumns = [...orderedColumns, ...columnsCopy];
+        }
+        return orderColumns(orderedColumns, grouping, groupedColumnMode);
+      }, getMemoOptions(table.options, "debugTable", "_getOrderColumnsFn"));
+    }
+  };
+  var getDefaultColumnPinningState = () => ({
+    left: [],
+    right: []
+  });
+  var ColumnPinning = {
+    getInitialState: (state) => {
+      return {
+        columnPinning: getDefaultColumnPinningState(),
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onColumnPinningChange: makeStateUpdater("columnPinning", table)
+      };
+    },
+    createColumn: (column, table) => {
+      column.pin = (position) => {
+        const columnIds = column.getLeafColumns().map((d5) => d5.id).filter(Boolean);
+        table.setColumnPinning((old) => {
+          var _old$left3, _old$right3;
+          if (position === "right") {
+            var _old$left, _old$right;
+            return {
+              left: ((_old$left = old == null ? void 0 : old.left) != null ? _old$left : []).filter((d5) => !(columnIds != null && columnIds.includes(d5))),
+              right: [...((_old$right = old == null ? void 0 : old.right) != null ? _old$right : []).filter((d5) => !(columnIds != null && columnIds.includes(d5))), ...columnIds]
+            };
+          }
+          if (position === "left") {
+            var _old$left2, _old$right2;
+            return {
+              left: [...((_old$left2 = old == null ? void 0 : old.left) != null ? _old$left2 : []).filter((d5) => !(columnIds != null && columnIds.includes(d5))), ...columnIds],
+              right: ((_old$right2 = old == null ? void 0 : old.right) != null ? _old$right2 : []).filter((d5) => !(columnIds != null && columnIds.includes(d5)))
+            };
+          }
+          return {
+            left: ((_old$left3 = old == null ? void 0 : old.left) != null ? _old$left3 : []).filter((d5) => !(columnIds != null && columnIds.includes(d5))),
+            right: ((_old$right3 = old == null ? void 0 : old.right) != null ? _old$right3 : []).filter((d5) => !(columnIds != null && columnIds.includes(d5)))
+          };
+        });
+      };
+      column.getCanPin = () => {
+        const leafColumns = column.getLeafColumns();
+        return leafColumns.some((d5) => {
+          var _d$columnDef$enablePi, _ref, _table$options$enable;
+          return ((_d$columnDef$enablePi = d5.columnDef.enablePinning) != null ? _d$columnDef$enablePi : true) && ((_ref = (_table$options$enable = table.options.enableColumnPinning) != null ? _table$options$enable : table.options.enablePinning) != null ? _ref : true);
+        });
+      };
+      column.getIsPinned = () => {
+        const leafColumnIds = column.getLeafColumns().map((d5) => d5.id);
+        const {
+          left,
+          right
+        } = table.getState().columnPinning;
+        const isLeft = leafColumnIds.some((d5) => left == null ? void 0 : left.includes(d5));
+        const isRight = leafColumnIds.some((d5) => right == null ? void 0 : right.includes(d5));
+        return isLeft ? "left" : isRight ? "right" : false;
+      };
+      column.getPinnedIndex = () => {
+        var _table$getState$colum, _table$getState$colum2;
+        const position = column.getIsPinned();
+        return position ? (_table$getState$colum = (_table$getState$colum2 = table.getState().columnPinning) == null || (_table$getState$colum2 = _table$getState$colum2[position]) == null ? void 0 : _table$getState$colum2.indexOf(column.id)) != null ? _table$getState$colum : -1 : 0;
+      };
+    },
+    createRow: (row, table) => {
+      row.getCenterVisibleCells = memo(() => [row._getAllVisibleCells(), table.getState().columnPinning.left, table.getState().columnPinning.right], (allCells, left, right) => {
+        const leftAndRight = [...left != null ? left : [], ...right != null ? right : []];
+        return allCells.filter((d5) => !leftAndRight.includes(d5.column.id));
+      }, getMemoOptions(table.options, "debugRows", "getCenterVisibleCells"));
+      row.getLeftVisibleCells = memo(() => [row._getAllVisibleCells(), table.getState().columnPinning.left], (allCells, left) => {
+        const cells = (left != null ? left : []).map((columnId) => allCells.find((cell) => cell.column.id === columnId)).filter(Boolean).map((d5) => ({
+          ...d5,
+          position: "left"
+        }));
+        return cells;
+      }, getMemoOptions(table.options, "debugRows", "getLeftVisibleCells"));
+      row.getRightVisibleCells = memo(() => [row._getAllVisibleCells(), table.getState().columnPinning.right], (allCells, right) => {
+        const cells = (right != null ? right : []).map((columnId) => allCells.find((cell) => cell.column.id === columnId)).filter(Boolean).map((d5) => ({
+          ...d5,
+          position: "right"
+        }));
+        return cells;
+      }, getMemoOptions(table.options, "debugRows", "getRightVisibleCells"));
+    },
+    createTable: (table) => {
+      table.setColumnPinning = (updater) => table.options.onColumnPinningChange == null ? void 0 : table.options.onColumnPinningChange(updater);
+      table.resetColumnPinning = (defaultState) => {
+        var _table$initialState$c, _table$initialState;
+        return table.setColumnPinning(defaultState ? getDefaultColumnPinningState() : (_table$initialState$c = (_table$initialState = table.initialState) == null ? void 0 : _table$initialState.columnPinning) != null ? _table$initialState$c : getDefaultColumnPinningState());
+      };
+      table.getIsSomeColumnsPinned = (position) => {
+        var _pinningState$positio;
+        const pinningState = table.getState().columnPinning;
+        if (!position) {
+          var _pinningState$left, _pinningState$right;
+          return Boolean(((_pinningState$left = pinningState.left) == null ? void 0 : _pinningState$left.length) || ((_pinningState$right = pinningState.right) == null ? void 0 : _pinningState$right.length));
+        }
+        return Boolean((_pinningState$positio = pinningState[position]) == null ? void 0 : _pinningState$positio.length);
+      };
+      table.getLeftLeafColumns = memo(() => [table.getAllLeafColumns(), table.getState().columnPinning.left], (allColumns, left) => {
+        return (left != null ? left : []).map((columnId) => allColumns.find((column) => column.id === columnId)).filter(Boolean);
+      }, getMemoOptions(table.options, "debugColumns", "getLeftLeafColumns"));
+      table.getRightLeafColumns = memo(() => [table.getAllLeafColumns(), table.getState().columnPinning.right], (allColumns, right) => {
+        return (right != null ? right : []).map((columnId) => allColumns.find((column) => column.id === columnId)).filter(Boolean);
+      }, getMemoOptions(table.options, "debugColumns", "getRightLeafColumns"));
+      table.getCenterLeafColumns = memo(() => [table.getAllLeafColumns(), table.getState().columnPinning.left, table.getState().columnPinning.right], (allColumns, left, right) => {
+        const leftAndRight = [...left != null ? left : [], ...right != null ? right : []];
+        return allColumns.filter((d5) => !leftAndRight.includes(d5.id));
+      }, getMemoOptions(table.options, "debugColumns", "getCenterLeafColumns"));
+    }
+  };
+  function safelyAccessDocument(_document) {
+    return _document || (typeof document !== "undefined" ? document : null);
+  }
+  var defaultColumnSizing = {
+    size: 150,
+    minSize: 20,
+    maxSize: Number.MAX_SAFE_INTEGER
+  };
+  var getDefaultColumnSizingInfoState = () => ({
+    startOffset: null,
+    startSize: null,
+    deltaOffset: null,
+    deltaPercentage: null,
+    isResizingColumn: false,
+    columnSizingStart: []
+  });
+  var ColumnSizing = {
+    getDefaultColumnDef: () => {
+      return defaultColumnSizing;
+    },
+    getInitialState: (state) => {
+      return {
+        columnSizing: {},
+        columnSizingInfo: getDefaultColumnSizingInfoState(),
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        columnResizeMode: "onEnd",
+        columnResizeDirection: "ltr",
+        onColumnSizingChange: makeStateUpdater("columnSizing", table),
+        onColumnSizingInfoChange: makeStateUpdater("columnSizingInfo", table)
+      };
+    },
+    createColumn: (column, table) => {
+      column.getSize = () => {
+        var _column$columnDef$min, _ref, _column$columnDef$max;
+        const columnSize = table.getState().columnSizing[column.id];
+        return Math.min(Math.max((_column$columnDef$min = column.columnDef.minSize) != null ? _column$columnDef$min : defaultColumnSizing.minSize, (_ref = columnSize != null ? columnSize : column.columnDef.size) != null ? _ref : defaultColumnSizing.size), (_column$columnDef$max = column.columnDef.maxSize) != null ? _column$columnDef$max : defaultColumnSizing.maxSize);
+      };
+      column.getStart = memo((position) => [position, _getVisibleLeafColumns(table, position), table.getState().columnSizing], (position, columns7) => columns7.slice(0, column.getIndex(position)).reduce((sum2, column2) => sum2 + column2.getSize(), 0), getMemoOptions(table.options, "debugColumns", "getStart"));
+      column.getAfter = memo((position) => [position, _getVisibleLeafColumns(table, position), table.getState().columnSizing], (position, columns7) => columns7.slice(column.getIndex(position) + 1).reduce((sum2, column2) => sum2 + column2.getSize(), 0), getMemoOptions(table.options, "debugColumns", "getAfter"));
+      column.resetSize = () => {
+        table.setColumnSizing((_ref2) => {
+          let {
+            [column.id]: _4,
+            ...rest
+          } = _ref2;
+          return rest;
+        });
+      };
+      column.getCanResize = () => {
+        var _column$columnDef$ena, _table$options$enable;
+        return ((_column$columnDef$ena = column.columnDef.enableResizing) != null ? _column$columnDef$ena : true) && ((_table$options$enable = table.options.enableColumnResizing) != null ? _table$options$enable : true);
+      };
+      column.getIsResizing = () => {
+        return table.getState().columnSizingInfo.isResizingColumn === column.id;
+      };
+    },
+    createHeader: (header, table) => {
+      header.getSize = () => {
+        let sum2 = 0;
+        const recurse = (header2) => {
+          if (header2.subHeaders.length) {
+            header2.subHeaders.forEach(recurse);
+          } else {
+            var _header$column$getSiz;
+            sum2 += (_header$column$getSiz = header2.column.getSize()) != null ? _header$column$getSiz : 0;
+          }
+        };
+        recurse(header);
+        return sum2;
+      };
+      header.getStart = () => {
+        if (header.index > 0) {
+          const prevSiblingHeader = header.headerGroup.headers[header.index - 1];
+          return prevSiblingHeader.getStart() + prevSiblingHeader.getSize();
+        }
+        return 0;
+      };
+      header.getResizeHandler = (_contextDocument) => {
+        const column = table.getColumn(header.column.id);
+        const canResize = column == null ? void 0 : column.getCanResize();
+        return (e4) => {
+          if (!column || !canResize) {
+            return;
+          }
+          e4.persist == null || e4.persist();
+          if (isTouchStartEvent(e4)) {
+            if (e4.touches && e4.touches.length > 1) {
+              return;
+            }
+          }
+          const startSize = header.getSize();
+          const columnSizingStart = header ? header.getLeafHeaders().map((d5) => [d5.column.id, d5.column.getSize()]) : [[column.id, column.getSize()]];
+          const clientX = isTouchStartEvent(e4) ? Math.round(e4.touches[0].clientX) : e4.clientX;
+          const newColumnSizing = {};
+          const updateOffset = (eventType, clientXPos) => {
+            if (typeof clientXPos !== "number") {
+              return;
+            }
+            table.setColumnSizingInfo((old) => {
+              var _old$startOffset, _old$startSize;
+              const deltaDirection = table.options.columnResizeDirection === "rtl" ? -1 : 1;
+              const deltaOffset = (clientXPos - ((_old$startOffset = old == null ? void 0 : old.startOffset) != null ? _old$startOffset : 0)) * deltaDirection;
+              const deltaPercentage = Math.max(deltaOffset / ((_old$startSize = old == null ? void 0 : old.startSize) != null ? _old$startSize : 0), -0.999999);
+              old.columnSizingStart.forEach((_ref3) => {
+                let [columnId, headerSize] = _ref3;
+                newColumnSizing[columnId] = Math.round(Math.max(headerSize + headerSize * deltaPercentage, 0) * 100) / 100;
+              });
+              return {
+                ...old,
+                deltaOffset,
+                deltaPercentage
+              };
+            });
+            if (table.options.columnResizeMode === "onChange" || eventType === "end") {
+              table.setColumnSizing((old) => ({
+                ...old,
+                ...newColumnSizing
+              }));
+            }
+          };
+          const onMove = (clientXPos) => updateOffset("move", clientXPos);
+          const onEnd = (clientXPos) => {
+            updateOffset("end", clientXPos);
+            table.setColumnSizingInfo((old) => ({
+              ...old,
+              isResizingColumn: false,
+              startOffset: null,
+              startSize: null,
+              deltaOffset: null,
+              deltaPercentage: null,
+              columnSizingStart: []
+            }));
+          };
+          const contextDocument = safelyAccessDocument(_contextDocument);
+          const mouseEvents = {
+            moveHandler: (e5) => onMove(e5.clientX),
+            upHandler: (e5) => {
+              contextDocument == null || contextDocument.removeEventListener("mousemove", mouseEvents.moveHandler);
+              contextDocument == null || contextDocument.removeEventListener("mouseup", mouseEvents.upHandler);
+              onEnd(e5.clientX);
+            }
+          };
+          const touchEvents = {
+            moveHandler: (e5) => {
+              if (e5.cancelable) {
+                e5.preventDefault();
+                e5.stopPropagation();
+              }
+              onMove(e5.touches[0].clientX);
+              return false;
+            },
+            upHandler: (e5) => {
+              var _e$touches$;
+              contextDocument == null || contextDocument.removeEventListener("touchmove", touchEvents.moveHandler);
+              contextDocument == null || contextDocument.removeEventListener("touchend", touchEvents.upHandler);
+              if (e5.cancelable) {
+                e5.preventDefault();
+                e5.stopPropagation();
+              }
+              onEnd((_e$touches$ = e5.touches[0]) == null ? void 0 : _e$touches$.clientX);
+            }
+          };
+          const passiveIfSupported = passiveEventSupported() ? {
+            passive: false
+          } : false;
+          if (isTouchStartEvent(e4)) {
+            contextDocument == null || contextDocument.addEventListener("touchmove", touchEvents.moveHandler, passiveIfSupported);
+            contextDocument == null || contextDocument.addEventListener("touchend", touchEvents.upHandler, passiveIfSupported);
+          } else {
+            contextDocument == null || contextDocument.addEventListener("mousemove", mouseEvents.moveHandler, passiveIfSupported);
+            contextDocument == null || contextDocument.addEventListener("mouseup", mouseEvents.upHandler, passiveIfSupported);
+          }
+          table.setColumnSizingInfo((old) => ({
+            ...old,
+            startOffset: clientX,
+            startSize,
+            deltaOffset: 0,
+            deltaPercentage: 0,
+            columnSizingStart,
+            isResizingColumn: column.id
+          }));
+        };
+      };
+    },
+    createTable: (table) => {
+      table.setColumnSizing = (updater) => table.options.onColumnSizingChange == null ? void 0 : table.options.onColumnSizingChange(updater);
+      table.setColumnSizingInfo = (updater) => table.options.onColumnSizingInfoChange == null ? void 0 : table.options.onColumnSizingInfoChange(updater);
+      table.resetColumnSizing = (defaultState) => {
+        var _table$initialState$c;
+        table.setColumnSizing(defaultState ? {} : (_table$initialState$c = table.initialState.columnSizing) != null ? _table$initialState$c : {});
+      };
+      table.resetHeaderSizeInfo = (defaultState) => {
+        var _table$initialState$c2;
+        table.setColumnSizingInfo(defaultState ? getDefaultColumnSizingInfoState() : (_table$initialState$c2 = table.initialState.columnSizingInfo) != null ? _table$initialState$c2 : getDefaultColumnSizingInfoState());
+      };
+      table.getTotalSize = () => {
+        var _table$getHeaderGroup, _table$getHeaderGroup2;
+        return (_table$getHeaderGroup = (_table$getHeaderGroup2 = table.getHeaderGroups()[0]) == null ? void 0 : _table$getHeaderGroup2.headers.reduce((sum2, header) => {
+          return sum2 + header.getSize();
+        }, 0)) != null ? _table$getHeaderGroup : 0;
+      };
+      table.getLeftTotalSize = () => {
+        var _table$getLeftHeaderG, _table$getLeftHeaderG2;
+        return (_table$getLeftHeaderG = (_table$getLeftHeaderG2 = table.getLeftHeaderGroups()[0]) == null ? void 0 : _table$getLeftHeaderG2.headers.reduce((sum2, header) => {
+          return sum2 + header.getSize();
+        }, 0)) != null ? _table$getLeftHeaderG : 0;
+      };
+      table.getCenterTotalSize = () => {
+        var _table$getCenterHeade, _table$getCenterHeade2;
+        return (_table$getCenterHeade = (_table$getCenterHeade2 = table.getCenterHeaderGroups()[0]) == null ? void 0 : _table$getCenterHeade2.headers.reduce((sum2, header) => {
+          return sum2 + header.getSize();
+        }, 0)) != null ? _table$getCenterHeade : 0;
+      };
+      table.getRightTotalSize = () => {
+        var _table$getRightHeader, _table$getRightHeader2;
+        return (_table$getRightHeader = (_table$getRightHeader2 = table.getRightHeaderGroups()[0]) == null ? void 0 : _table$getRightHeader2.headers.reduce((sum2, header) => {
+          return sum2 + header.getSize();
+        }, 0)) != null ? _table$getRightHeader : 0;
+      };
+    }
+  };
+  var passiveSupported = null;
+  function passiveEventSupported() {
+    if (typeof passiveSupported === "boolean") return passiveSupported;
+    let supported = false;
     try {
-      const resp = await fetchImpl("/api/rescan", { method: "POST" });
-      if (!resp.ok) {
-        showError2(`Rescan failed: HTTP ${resp.status} ${resp.statusText}`);
-        button.textContent = "\u21BB Rescan (failed)";
+      const options = {
+        get passive() {
+          supported = true;
+          return false;
+        }
+      };
+      const noop = () => {
+      };
+      window.addEventListener("test", noop, options);
+      window.removeEventListener("test", noop);
+    } catch (err) {
+      supported = false;
+    }
+    passiveSupported = supported;
+    return passiveSupported;
+  }
+  function isTouchStartEvent(e4) {
+    return e4.type === "touchstart";
+  }
+  var ColumnVisibility = {
+    getInitialState: (state) => {
+      return {
+        columnVisibility: {},
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onColumnVisibilityChange: makeStateUpdater("columnVisibility", table)
+      };
+    },
+    createColumn: (column, table) => {
+      column.toggleVisibility = (value) => {
+        if (column.getCanHide()) {
+          table.setColumnVisibility((old) => ({
+            ...old,
+            [column.id]: value != null ? value : !column.getIsVisible()
+          }));
+        }
+      };
+      column.getIsVisible = () => {
+        var _ref, _table$getState$colum;
+        const childColumns = column.columns;
+        return (_ref = childColumns.length ? childColumns.some((c4) => c4.getIsVisible()) : (_table$getState$colum = table.getState().columnVisibility) == null ? void 0 : _table$getState$colum[column.id]) != null ? _ref : true;
+      };
+      column.getCanHide = () => {
+        var _column$columnDef$ena, _table$options$enable;
+        return ((_column$columnDef$ena = column.columnDef.enableHiding) != null ? _column$columnDef$ena : true) && ((_table$options$enable = table.options.enableHiding) != null ? _table$options$enable : true);
+      };
+      column.getToggleVisibilityHandler = () => {
+        return (e4) => {
+          column.toggleVisibility == null || column.toggleVisibility(e4.target.checked);
+        };
+      };
+    },
+    createRow: (row, table) => {
+      row._getAllVisibleCells = memo(() => [row.getAllCells(), table.getState().columnVisibility], (cells) => {
+        return cells.filter((cell) => cell.column.getIsVisible());
+      }, getMemoOptions(table.options, "debugRows", "_getAllVisibleCells"));
+      row.getVisibleCells = memo(() => [row.getLeftVisibleCells(), row.getCenterVisibleCells(), row.getRightVisibleCells()], (left, center, right) => [...left, ...center, ...right], getMemoOptions(table.options, "debugRows", "getVisibleCells"));
+    },
+    createTable: (table) => {
+      const makeVisibleColumnsMethod = (key, getColumns) => {
+        return memo(() => [getColumns(), getColumns().filter((d5) => d5.getIsVisible()).map((d5) => d5.id).join("_")], (columns7) => {
+          return columns7.filter((d5) => d5.getIsVisible == null ? void 0 : d5.getIsVisible());
+        }, getMemoOptions(table.options, "debugColumns", key));
+      };
+      table.getVisibleFlatColumns = makeVisibleColumnsMethod("getVisibleFlatColumns", () => table.getAllFlatColumns());
+      table.getVisibleLeafColumns = makeVisibleColumnsMethod("getVisibleLeafColumns", () => table.getAllLeafColumns());
+      table.getLeftVisibleLeafColumns = makeVisibleColumnsMethod("getLeftVisibleLeafColumns", () => table.getLeftLeafColumns());
+      table.getRightVisibleLeafColumns = makeVisibleColumnsMethod("getRightVisibleLeafColumns", () => table.getRightLeafColumns());
+      table.getCenterVisibleLeafColumns = makeVisibleColumnsMethod("getCenterVisibleLeafColumns", () => table.getCenterLeafColumns());
+      table.setColumnVisibility = (updater) => table.options.onColumnVisibilityChange == null ? void 0 : table.options.onColumnVisibilityChange(updater);
+      table.resetColumnVisibility = (defaultState) => {
+        var _table$initialState$c;
+        table.setColumnVisibility(defaultState ? {} : (_table$initialState$c = table.initialState.columnVisibility) != null ? _table$initialState$c : {});
+      };
+      table.toggleAllColumnsVisible = (value) => {
+        var _value;
+        value = (_value = value) != null ? _value : !table.getIsAllColumnsVisible();
+        table.setColumnVisibility(table.getAllLeafColumns().reduce((obj, column) => ({
+          ...obj,
+          [column.id]: !value ? !(column.getCanHide != null && column.getCanHide()) : value
+        }), {}));
+      };
+      table.getIsAllColumnsVisible = () => !table.getAllLeafColumns().some((column) => !(column.getIsVisible != null && column.getIsVisible()));
+      table.getIsSomeColumnsVisible = () => table.getAllLeafColumns().some((column) => column.getIsVisible == null ? void 0 : column.getIsVisible());
+      table.getToggleAllColumnsVisibilityHandler = () => {
+        return (e4) => {
+          var _target;
+          table.toggleAllColumnsVisible((_target = e4.target) == null ? void 0 : _target.checked);
+        };
+      };
+    }
+  };
+  function _getVisibleLeafColumns(table, position) {
+    return !position ? table.getVisibleLeafColumns() : position === "center" ? table.getCenterVisibleLeafColumns() : position === "left" ? table.getLeftVisibleLeafColumns() : table.getRightVisibleLeafColumns();
+  }
+  var GlobalFaceting = {
+    createTable: (table) => {
+      table._getGlobalFacetedRowModel = table.options.getFacetedRowModel && table.options.getFacetedRowModel(table, "__global__");
+      table.getGlobalFacetedRowModel = () => {
+        if (table.options.manualFiltering || !table._getGlobalFacetedRowModel) {
+          return table.getPreFilteredRowModel();
+        }
+        return table._getGlobalFacetedRowModel();
+      };
+      table._getGlobalFacetedUniqueValues = table.options.getFacetedUniqueValues && table.options.getFacetedUniqueValues(table, "__global__");
+      table.getGlobalFacetedUniqueValues = () => {
+        if (!table._getGlobalFacetedUniqueValues) {
+          return /* @__PURE__ */ new Map();
+        }
+        return table._getGlobalFacetedUniqueValues();
+      };
+      table._getGlobalFacetedMinMaxValues = table.options.getFacetedMinMaxValues && table.options.getFacetedMinMaxValues(table, "__global__");
+      table.getGlobalFacetedMinMaxValues = () => {
+        if (!table._getGlobalFacetedMinMaxValues) {
+          return;
+        }
+        return table._getGlobalFacetedMinMaxValues();
+      };
+    }
+  };
+  var GlobalFiltering = {
+    getInitialState: (state) => {
+      return {
+        globalFilter: void 0,
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onGlobalFilterChange: makeStateUpdater("globalFilter", table),
+        globalFilterFn: "auto",
+        getColumnCanGlobalFilter: (column) => {
+          var _table$getCoreRowMode;
+          const value = (_table$getCoreRowMode = table.getCoreRowModel().flatRows[0]) == null || (_table$getCoreRowMode = _table$getCoreRowMode._getAllCellsByColumnId()[column.id]) == null ? void 0 : _table$getCoreRowMode.getValue();
+          return typeof value === "string" || typeof value === "number";
+        }
+      };
+    },
+    createColumn: (column, table) => {
+      column.getCanGlobalFilter = () => {
+        var _column$columnDef$ena, _table$options$enable, _table$options$enable2, _table$options$getCol;
+        return ((_column$columnDef$ena = column.columnDef.enableGlobalFilter) != null ? _column$columnDef$ena : true) && ((_table$options$enable = table.options.enableGlobalFilter) != null ? _table$options$enable : true) && ((_table$options$enable2 = table.options.enableFilters) != null ? _table$options$enable2 : true) && ((_table$options$getCol = table.options.getColumnCanGlobalFilter == null ? void 0 : table.options.getColumnCanGlobalFilter(column)) != null ? _table$options$getCol : true) && !!column.accessorFn;
+      };
+    },
+    createTable: (table) => {
+      table.getGlobalAutoFilterFn = () => {
+        return filterFns.includesString;
+      };
+      table.getGlobalFilterFn = () => {
+        var _table$options$filter, _table$options$filter2;
+        const {
+          globalFilterFn
+        } = table.options;
+        return isFunction(globalFilterFn) ? globalFilterFn : globalFilterFn === "auto" ? table.getGlobalAutoFilterFn() : (_table$options$filter = (_table$options$filter2 = table.options.filterFns) == null ? void 0 : _table$options$filter2[globalFilterFn]) != null ? _table$options$filter : filterFns[globalFilterFn];
+      };
+      table.setGlobalFilter = (updater) => {
+        table.options.onGlobalFilterChange == null || table.options.onGlobalFilterChange(updater);
+      };
+      table.resetGlobalFilter = (defaultState) => {
+        table.setGlobalFilter(defaultState ? void 0 : table.initialState.globalFilter);
+      };
+    }
+  };
+  var RowExpanding = {
+    getInitialState: (state) => {
+      return {
+        expanded: {},
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onExpandedChange: makeStateUpdater("expanded", table),
+        paginateExpandedRows: true
+      };
+    },
+    createTable: (table) => {
+      let registered = false;
+      let queued = false;
+      table._autoResetExpanded = () => {
+        var _ref, _table$options$autoRe;
+        if (!registered) {
+          table._queue(() => {
+            registered = true;
+          });
+          return;
+        }
+        if ((_ref = (_table$options$autoRe = table.options.autoResetAll) != null ? _table$options$autoRe : table.options.autoResetExpanded) != null ? _ref : !table.options.manualExpanding) {
+          if (queued) return;
+          queued = true;
+          table._queue(() => {
+            table.resetExpanded();
+            queued = false;
+          });
+        }
+      };
+      table.setExpanded = (updater) => table.options.onExpandedChange == null ? void 0 : table.options.onExpandedChange(updater);
+      table.toggleAllRowsExpanded = (expanded) => {
+        if (expanded != null ? expanded : !table.getIsAllRowsExpanded()) {
+          table.setExpanded(true);
+        } else {
+          table.setExpanded({});
+        }
+      };
+      table.resetExpanded = (defaultState) => {
+        var _table$initialState$e, _table$initialState;
+        table.setExpanded(defaultState ? {} : (_table$initialState$e = (_table$initialState = table.initialState) == null ? void 0 : _table$initialState.expanded) != null ? _table$initialState$e : {});
+      };
+      table.getCanSomeRowsExpand = () => {
+        return table.getPrePaginationRowModel().flatRows.some((row) => row.getCanExpand());
+      };
+      table.getToggleAllRowsExpandedHandler = () => {
+        return (e4) => {
+          e4.persist == null || e4.persist();
+          table.toggleAllRowsExpanded();
+        };
+      };
+      table.getIsSomeRowsExpanded = () => {
+        const expanded = table.getState().expanded;
+        return expanded === true || Object.values(expanded).some(Boolean);
+      };
+      table.getIsAllRowsExpanded = () => {
+        const expanded = table.getState().expanded;
+        if (typeof expanded === "boolean") {
+          return expanded === true;
+        }
+        if (!Object.keys(expanded).length) {
+          return false;
+        }
+        if (table.getRowModel().flatRows.some((row) => !row.getIsExpanded())) {
+          return false;
+        }
+        return true;
+      };
+      table.getExpandedDepth = () => {
+        let maxDepth = 0;
+        const rowIds = table.getState().expanded === true ? Object.keys(table.getRowModel().rowsById) : Object.keys(table.getState().expanded);
+        rowIds.forEach((id) => {
+          const splitId = id.split(".");
+          maxDepth = Math.max(maxDepth, splitId.length);
+        });
+        return maxDepth;
+      };
+      table.getPreExpandedRowModel = () => table.getSortedRowModel();
+      table.getExpandedRowModel = () => {
+        if (!table._getExpandedRowModel && table.options.getExpandedRowModel) {
+          table._getExpandedRowModel = table.options.getExpandedRowModel(table);
+        }
+        if (table.options.manualExpanding || !table._getExpandedRowModel) {
+          return table.getPreExpandedRowModel();
+        }
+        return table._getExpandedRowModel();
+      };
+    },
+    createRow: (row, table) => {
+      row.toggleExpanded = (expanded) => {
+        table.setExpanded((old) => {
+          var _expanded;
+          const exists = old === true ? true : !!(old != null && old[row.id]);
+          let oldExpanded = {};
+          if (old === true) {
+            Object.keys(table.getRowModel().rowsById).forEach((rowId) => {
+              oldExpanded[rowId] = true;
+            });
+          } else {
+            oldExpanded = old;
+          }
+          expanded = (_expanded = expanded) != null ? _expanded : !exists;
+          if (!exists && expanded) {
+            return {
+              ...oldExpanded,
+              [row.id]: true
+            };
+          }
+          if (exists && !expanded) {
+            const {
+              [row.id]: _4,
+              ...rest
+            } = oldExpanded;
+            return rest;
+          }
+          return old;
+        });
+      };
+      row.getIsExpanded = () => {
+        var _table$options$getIsR;
+        const expanded = table.getState().expanded;
+        return !!((_table$options$getIsR = table.options.getIsRowExpanded == null ? void 0 : table.options.getIsRowExpanded(row)) != null ? _table$options$getIsR : expanded === true || (expanded == null ? void 0 : expanded[row.id]));
+      };
+      row.getCanExpand = () => {
+        var _table$options$getRow, _table$options$enable, _row$subRows;
+        return (_table$options$getRow = table.options.getRowCanExpand == null ? void 0 : table.options.getRowCanExpand(row)) != null ? _table$options$getRow : ((_table$options$enable = table.options.enableExpanding) != null ? _table$options$enable : true) && !!((_row$subRows = row.subRows) != null && _row$subRows.length);
+      };
+      row.getIsAllParentsExpanded = () => {
+        let isFullyExpanded = true;
+        let currentRow = row;
+        while (isFullyExpanded && currentRow.parentId) {
+          currentRow = table.getRow(currentRow.parentId, true);
+          isFullyExpanded = currentRow.getIsExpanded();
+        }
+        return isFullyExpanded;
+      };
+      row.getToggleExpandedHandler = () => {
+        const canExpand = row.getCanExpand();
+        return () => {
+          if (!canExpand) return;
+          row.toggleExpanded();
+        };
+      };
+    }
+  };
+  var defaultPageIndex = 0;
+  var defaultPageSize = 10;
+  var getDefaultPaginationState = () => ({
+    pageIndex: defaultPageIndex,
+    pageSize: defaultPageSize
+  });
+  var RowPagination = {
+    getInitialState: (state) => {
+      return {
+        ...state,
+        pagination: {
+          ...getDefaultPaginationState(),
+          ...state == null ? void 0 : state.pagination
+        }
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onPaginationChange: makeStateUpdater("pagination", table)
+      };
+    },
+    createTable: (table) => {
+      let registered = false;
+      let queued = false;
+      table._autoResetPageIndex = () => {
+        var _ref, _table$options$autoRe;
+        if (!registered) {
+          table._queue(() => {
+            registered = true;
+          });
+          return;
+        }
+        if ((_ref = (_table$options$autoRe = table.options.autoResetAll) != null ? _table$options$autoRe : table.options.autoResetPageIndex) != null ? _ref : !table.options.manualPagination) {
+          if (queued) return;
+          queued = true;
+          table._queue(() => {
+            table.resetPageIndex();
+            queued = false;
+          });
+        }
+      };
+      table.setPagination = (updater) => {
+        const safeUpdater = (old) => {
+          let newState = functionalUpdate(updater, old);
+          return newState;
+        };
+        return table.options.onPaginationChange == null ? void 0 : table.options.onPaginationChange(safeUpdater);
+      };
+      table.resetPagination = (defaultState) => {
+        var _table$initialState$p;
+        table.setPagination(defaultState ? getDefaultPaginationState() : (_table$initialState$p = table.initialState.pagination) != null ? _table$initialState$p : getDefaultPaginationState());
+      };
+      table.setPageIndex = (updater) => {
+        table.setPagination((old) => {
+          let pageIndex = functionalUpdate(updater, old.pageIndex);
+          const maxPageIndex = typeof table.options.pageCount === "undefined" || table.options.pageCount === -1 ? Number.MAX_SAFE_INTEGER : table.options.pageCount - 1;
+          pageIndex = Math.max(0, Math.min(pageIndex, maxPageIndex));
+          return {
+            ...old,
+            pageIndex
+          };
+        });
+      };
+      table.resetPageIndex = (defaultState) => {
+        var _table$initialState$p2, _table$initialState;
+        table.setPageIndex(defaultState ? defaultPageIndex : (_table$initialState$p2 = (_table$initialState = table.initialState) == null || (_table$initialState = _table$initialState.pagination) == null ? void 0 : _table$initialState.pageIndex) != null ? _table$initialState$p2 : defaultPageIndex);
+      };
+      table.resetPageSize = (defaultState) => {
+        var _table$initialState$p3, _table$initialState2;
+        table.setPageSize(defaultState ? defaultPageSize : (_table$initialState$p3 = (_table$initialState2 = table.initialState) == null || (_table$initialState2 = _table$initialState2.pagination) == null ? void 0 : _table$initialState2.pageSize) != null ? _table$initialState$p3 : defaultPageSize);
+      };
+      table.setPageSize = (updater) => {
+        table.setPagination((old) => {
+          const pageSize = Math.max(1, functionalUpdate(updater, old.pageSize));
+          const topRowIndex = old.pageSize * old.pageIndex;
+          const pageIndex = Math.floor(topRowIndex / pageSize);
+          return {
+            ...old,
+            pageIndex,
+            pageSize
+          };
+        });
+      };
+      table.setPageCount = (updater) => table.setPagination((old) => {
+        var _table$options$pageCo;
+        let newPageCount = functionalUpdate(updater, (_table$options$pageCo = table.options.pageCount) != null ? _table$options$pageCo : -1);
+        if (typeof newPageCount === "number") {
+          newPageCount = Math.max(-1, newPageCount);
+        }
+        return {
+          ...old,
+          pageCount: newPageCount
+        };
+      });
+      table.getPageOptions = memo(() => [table.getPageCount()], (pageCount) => {
+        let pageOptions = [];
+        if (pageCount && pageCount > 0) {
+          pageOptions = [...new Array(pageCount)].fill(null).map((_4, i4) => i4);
+        }
+        return pageOptions;
+      }, getMemoOptions(table.options, "debugTable", "getPageOptions"));
+      table.getCanPreviousPage = () => table.getState().pagination.pageIndex > 0;
+      table.getCanNextPage = () => {
+        const {
+          pageIndex
+        } = table.getState().pagination;
+        const pageCount = table.getPageCount();
+        if (pageCount === -1) {
+          return true;
+        }
+        if (pageCount === 0) {
+          return false;
+        }
+        return pageIndex < pageCount - 1;
+      };
+      table.previousPage = () => {
+        return table.setPageIndex((old) => old - 1);
+      };
+      table.nextPage = () => {
+        return table.setPageIndex((old) => {
+          return old + 1;
+        });
+      };
+      table.firstPage = () => {
+        return table.setPageIndex(0);
+      };
+      table.lastPage = () => {
+        return table.setPageIndex(table.getPageCount() - 1);
+      };
+      table.getPrePaginationRowModel = () => table.getExpandedRowModel();
+      table.getPaginationRowModel = () => {
+        if (!table._getPaginationRowModel && table.options.getPaginationRowModel) {
+          table._getPaginationRowModel = table.options.getPaginationRowModel(table);
+        }
+        if (table.options.manualPagination || !table._getPaginationRowModel) {
+          return table.getPrePaginationRowModel();
+        }
+        return table._getPaginationRowModel();
+      };
+      table.getPageCount = () => {
+        var _table$options$pageCo2;
+        return (_table$options$pageCo2 = table.options.pageCount) != null ? _table$options$pageCo2 : Math.ceil(table.getRowCount() / table.getState().pagination.pageSize);
+      };
+      table.getRowCount = () => {
+        var _table$options$rowCou;
+        return (_table$options$rowCou = table.options.rowCount) != null ? _table$options$rowCou : table.getPrePaginationRowModel().rows.length;
+      };
+    }
+  };
+  var getDefaultRowPinningState = () => ({
+    top: [],
+    bottom: []
+  });
+  var RowPinning = {
+    getInitialState: (state) => {
+      return {
+        rowPinning: getDefaultRowPinningState(),
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onRowPinningChange: makeStateUpdater("rowPinning", table)
+      };
+    },
+    createRow: (row, table) => {
+      row.pin = (position, includeLeafRows, includeParentRows) => {
+        const leafRowIds = includeLeafRows ? row.getLeafRows().map((_ref) => {
+          let {
+            id
+          } = _ref;
+          return id;
+        }) : [];
+        const parentRowIds = includeParentRows ? row.getParentRows().map((_ref2) => {
+          let {
+            id
+          } = _ref2;
+          return id;
+        }) : [];
+        const rowIds = /* @__PURE__ */ new Set([...parentRowIds, row.id, ...leafRowIds]);
+        table.setRowPinning((old) => {
+          var _old$top3, _old$bottom3;
+          if (position === "bottom") {
+            var _old$top, _old$bottom;
+            return {
+              top: ((_old$top = old == null ? void 0 : old.top) != null ? _old$top : []).filter((d5) => !(rowIds != null && rowIds.has(d5))),
+              bottom: [...((_old$bottom = old == null ? void 0 : old.bottom) != null ? _old$bottom : []).filter((d5) => !(rowIds != null && rowIds.has(d5))), ...Array.from(rowIds)]
+            };
+          }
+          if (position === "top") {
+            var _old$top2, _old$bottom2;
+            return {
+              top: [...((_old$top2 = old == null ? void 0 : old.top) != null ? _old$top2 : []).filter((d5) => !(rowIds != null && rowIds.has(d5))), ...Array.from(rowIds)],
+              bottom: ((_old$bottom2 = old == null ? void 0 : old.bottom) != null ? _old$bottom2 : []).filter((d5) => !(rowIds != null && rowIds.has(d5)))
+            };
+          }
+          return {
+            top: ((_old$top3 = old == null ? void 0 : old.top) != null ? _old$top3 : []).filter((d5) => !(rowIds != null && rowIds.has(d5))),
+            bottom: ((_old$bottom3 = old == null ? void 0 : old.bottom) != null ? _old$bottom3 : []).filter((d5) => !(rowIds != null && rowIds.has(d5)))
+          };
+        });
+      };
+      row.getCanPin = () => {
+        var _ref3;
+        const {
+          enableRowPinning,
+          enablePinning
+        } = table.options;
+        if (typeof enableRowPinning === "function") {
+          return enableRowPinning(row);
+        }
+        return (_ref3 = enableRowPinning != null ? enableRowPinning : enablePinning) != null ? _ref3 : true;
+      };
+      row.getIsPinned = () => {
+        const rowIds = [row.id];
+        const {
+          top,
+          bottom
+        } = table.getState().rowPinning;
+        const isTop = rowIds.some((d5) => top == null ? void 0 : top.includes(d5));
+        const isBottom = rowIds.some((d5) => bottom == null ? void 0 : bottom.includes(d5));
+        return isTop ? "top" : isBottom ? "bottom" : false;
+      };
+      row.getPinnedIndex = () => {
+        var _ref4, _visiblePinnedRowIds$;
+        const position = row.getIsPinned();
+        if (!position) return -1;
+        const visiblePinnedRowIds = (_ref4 = position === "top" ? table.getTopRows() : table.getBottomRows()) == null ? void 0 : _ref4.map((_ref5) => {
+          let {
+            id
+          } = _ref5;
+          return id;
+        });
+        return (_visiblePinnedRowIds$ = visiblePinnedRowIds == null ? void 0 : visiblePinnedRowIds.indexOf(row.id)) != null ? _visiblePinnedRowIds$ : -1;
+      };
+    },
+    createTable: (table) => {
+      table.setRowPinning = (updater) => table.options.onRowPinningChange == null ? void 0 : table.options.onRowPinningChange(updater);
+      table.resetRowPinning = (defaultState) => {
+        var _table$initialState$r, _table$initialState;
+        return table.setRowPinning(defaultState ? getDefaultRowPinningState() : (_table$initialState$r = (_table$initialState = table.initialState) == null ? void 0 : _table$initialState.rowPinning) != null ? _table$initialState$r : getDefaultRowPinningState());
+      };
+      table.getIsSomeRowsPinned = (position) => {
+        var _pinningState$positio;
+        const pinningState = table.getState().rowPinning;
+        if (!position) {
+          var _pinningState$top, _pinningState$bottom;
+          return Boolean(((_pinningState$top = pinningState.top) == null ? void 0 : _pinningState$top.length) || ((_pinningState$bottom = pinningState.bottom) == null ? void 0 : _pinningState$bottom.length));
+        }
+        return Boolean((_pinningState$positio = pinningState[position]) == null ? void 0 : _pinningState$positio.length);
+      };
+      table._getPinnedRows = (visibleRows, pinnedRowIds, position) => {
+        var _table$options$keepPi;
+        const rows = ((_table$options$keepPi = table.options.keepPinnedRows) != null ? _table$options$keepPi : true) ? (
+          //get all rows that are pinned even if they would not be otherwise visible
+          //account for expanded parent rows, but not pagination or filtering
+          (pinnedRowIds != null ? pinnedRowIds : []).map((rowId) => {
+            const row = table.getRow(rowId, true);
+            return row.getIsAllParentsExpanded() ? row : null;
+          })
+        ) : (
+          //else get only visible rows that are pinned
+          (pinnedRowIds != null ? pinnedRowIds : []).map((rowId) => visibleRows.find((row) => row.id === rowId))
+        );
+        return rows.filter(Boolean).map((d5) => ({
+          ...d5,
+          position
+        }));
+      };
+      table.getTopRows = memo(() => [table.getRowModel().rows, table.getState().rowPinning.top], (allRows, topPinnedRowIds) => table._getPinnedRows(allRows, topPinnedRowIds, "top"), getMemoOptions(table.options, "debugRows", "getTopRows"));
+      table.getBottomRows = memo(() => [table.getRowModel().rows, table.getState().rowPinning.bottom], (allRows, bottomPinnedRowIds) => table._getPinnedRows(allRows, bottomPinnedRowIds, "bottom"), getMemoOptions(table.options, "debugRows", "getBottomRows"));
+      table.getCenterRows = memo(() => [table.getRowModel().rows, table.getState().rowPinning.top, table.getState().rowPinning.bottom], (allRows, top, bottom) => {
+        const topAndBottom = /* @__PURE__ */ new Set([...top != null ? top : [], ...bottom != null ? bottom : []]);
+        return allRows.filter((d5) => !topAndBottom.has(d5.id));
+      }, getMemoOptions(table.options, "debugRows", "getCenterRows"));
+    }
+  };
+  var RowSelection = {
+    getInitialState: (state) => {
+      return {
+        rowSelection: {},
+        ...state
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onRowSelectionChange: makeStateUpdater("rowSelection", table),
+        enableRowSelection: true,
+        enableMultiRowSelection: true,
+        enableSubRowSelection: true
+        // enableGroupingRowSelection: false,
+        // isAdditiveSelectEvent: (e: unknown) => !!e.metaKey,
+        // isInclusiveSelectEvent: (e: unknown) => !!e.shiftKey,
+      };
+    },
+    createTable: (table) => {
+      table.setRowSelection = (updater) => table.options.onRowSelectionChange == null ? void 0 : table.options.onRowSelectionChange(updater);
+      table.resetRowSelection = (defaultState) => {
+        var _table$initialState$r;
+        return table.setRowSelection(defaultState ? {} : (_table$initialState$r = table.initialState.rowSelection) != null ? _table$initialState$r : {});
+      };
+      table.toggleAllRowsSelected = (value) => {
+        table.setRowSelection((old) => {
+          value = typeof value !== "undefined" ? value : !table.getIsAllRowsSelected();
+          const rowSelection = {
+            ...old
+          };
+          const preGroupedFlatRows = table.getPreGroupedRowModel().flatRows;
+          if (value) {
+            preGroupedFlatRows.forEach((row) => {
+              if (!row.getCanSelect()) {
+                return;
+              }
+              rowSelection[row.id] = true;
+            });
+          } else {
+            preGroupedFlatRows.forEach((row) => {
+              delete rowSelection[row.id];
+            });
+          }
+          return rowSelection;
+        });
+      };
+      table.toggleAllPageRowsSelected = (value) => table.setRowSelection((old) => {
+        const resolvedValue = typeof value !== "undefined" ? value : !table.getIsAllPageRowsSelected();
+        const rowSelection = {
+          ...old
+        };
+        table.getRowModel().rows.forEach((row) => {
+          mutateRowIsSelected(rowSelection, row.id, resolvedValue, true, table);
+        });
+        return rowSelection;
+      });
+      table.getPreSelectedRowModel = () => table.getCoreRowModel();
+      table.getSelectedRowModel = memo(() => [table.getState().rowSelection, table.getCoreRowModel()], (rowSelection, rowModel) => {
+        if (!Object.keys(rowSelection).length) {
+          return {
+            rows: [],
+            flatRows: [],
+            rowsById: {}
+          };
+        }
+        return selectRowsFn(table, rowModel);
+      }, getMemoOptions(table.options, "debugTable", "getSelectedRowModel"));
+      table.getFilteredSelectedRowModel = memo(() => [table.getState().rowSelection, table.getFilteredRowModel()], (rowSelection, rowModel) => {
+        if (!Object.keys(rowSelection).length) {
+          return {
+            rows: [],
+            flatRows: [],
+            rowsById: {}
+          };
+        }
+        return selectRowsFn(table, rowModel);
+      }, getMemoOptions(table.options, "debugTable", "getFilteredSelectedRowModel"));
+      table.getGroupedSelectedRowModel = memo(() => [table.getState().rowSelection, table.getSortedRowModel()], (rowSelection, rowModel) => {
+        if (!Object.keys(rowSelection).length) {
+          return {
+            rows: [],
+            flatRows: [],
+            rowsById: {}
+          };
+        }
+        return selectRowsFn(table, rowModel);
+      }, getMemoOptions(table.options, "debugTable", "getGroupedSelectedRowModel"));
+      table.getIsAllRowsSelected = () => {
+        const preGroupedFlatRows = table.getFilteredRowModel().flatRows;
+        const {
+          rowSelection
+        } = table.getState();
+        let isAllRowsSelected = Boolean(preGroupedFlatRows.length && Object.keys(rowSelection).length);
+        if (isAllRowsSelected) {
+          if (preGroupedFlatRows.some((row) => row.getCanSelect() && !rowSelection[row.id])) {
+            isAllRowsSelected = false;
+          }
+        }
+        return isAllRowsSelected;
+      };
+      table.getIsAllPageRowsSelected = () => {
+        const paginationFlatRows = table.getPaginationRowModel().flatRows.filter((row) => row.getCanSelect());
+        const {
+          rowSelection
+        } = table.getState();
+        let isAllPageRowsSelected = !!paginationFlatRows.length;
+        if (isAllPageRowsSelected && paginationFlatRows.some((row) => !rowSelection[row.id])) {
+          isAllPageRowsSelected = false;
+        }
+        return isAllPageRowsSelected;
+      };
+      table.getIsSomeRowsSelected = () => {
+        var _table$getState$rowSe;
+        const totalSelected = Object.keys((_table$getState$rowSe = table.getState().rowSelection) != null ? _table$getState$rowSe : {}).length;
+        return totalSelected > 0 && totalSelected < table.getFilteredRowModel().flatRows.length;
+      };
+      table.getIsSomePageRowsSelected = () => {
+        const paginationFlatRows = table.getPaginationRowModel().flatRows;
+        return table.getIsAllPageRowsSelected() ? false : paginationFlatRows.filter((row) => row.getCanSelect()).some((d5) => d5.getIsSelected() || d5.getIsSomeSelected());
+      };
+      table.getToggleAllRowsSelectedHandler = () => {
+        return (e4) => {
+          table.toggleAllRowsSelected(e4.target.checked);
+        };
+      };
+      table.getToggleAllPageRowsSelectedHandler = () => {
+        return (e4) => {
+          table.toggleAllPageRowsSelected(e4.target.checked);
+        };
+      };
+    },
+    createRow: (row, table) => {
+      row.toggleSelected = (value, opts) => {
+        const isSelected = row.getIsSelected();
+        table.setRowSelection((old) => {
+          var _opts$selectChildren;
+          value = typeof value !== "undefined" ? value : !isSelected;
+          if (row.getCanSelect() && isSelected === value) {
+            return old;
+          }
+          const selectedRowIds = {
+            ...old
+          };
+          mutateRowIsSelected(selectedRowIds, row.id, value, (_opts$selectChildren = opts == null ? void 0 : opts.selectChildren) != null ? _opts$selectChildren : true, table);
+          return selectedRowIds;
+        });
+      };
+      row.getIsSelected = () => {
+        const {
+          rowSelection
+        } = table.getState();
+        return isRowSelected(row, rowSelection);
+      };
+      row.getIsSomeSelected = () => {
+        const {
+          rowSelection
+        } = table.getState();
+        return isSubRowSelected(row, rowSelection) === "some";
+      };
+      row.getIsAllSubRowsSelected = () => {
+        const {
+          rowSelection
+        } = table.getState();
+        return isSubRowSelected(row, rowSelection) === "all";
+      };
+      row.getCanSelect = () => {
+        var _table$options$enable;
+        if (typeof table.options.enableRowSelection === "function") {
+          return table.options.enableRowSelection(row);
+        }
+        return (_table$options$enable = table.options.enableRowSelection) != null ? _table$options$enable : true;
+      };
+      row.getCanSelectSubRows = () => {
+        var _table$options$enable2;
+        if (typeof table.options.enableSubRowSelection === "function") {
+          return table.options.enableSubRowSelection(row);
+        }
+        return (_table$options$enable2 = table.options.enableSubRowSelection) != null ? _table$options$enable2 : true;
+      };
+      row.getCanMultiSelect = () => {
+        var _table$options$enable3;
+        if (typeof table.options.enableMultiRowSelection === "function") {
+          return table.options.enableMultiRowSelection(row);
+        }
+        return (_table$options$enable3 = table.options.enableMultiRowSelection) != null ? _table$options$enable3 : true;
+      };
+      row.getToggleSelectedHandler = () => {
+        const canSelect = row.getCanSelect();
+        return (e4) => {
+          var _target;
+          if (!canSelect) return;
+          row.toggleSelected((_target = e4.target) == null ? void 0 : _target.checked);
+        };
+      };
+    }
+  };
+  var mutateRowIsSelected = (selectedRowIds, id, value, includeChildren, table) => {
+    var _row$subRows;
+    const row = table.getRow(id, true);
+    if (value) {
+      if (!row.getCanMultiSelect()) {
+        Object.keys(selectedRowIds).forEach((key) => delete selectedRowIds[key]);
+      }
+      if (row.getCanSelect()) {
+        selectedRowIds[id] = true;
+      }
+    } else {
+      delete selectedRowIds[id];
+    }
+    if (includeChildren && (_row$subRows = row.subRows) != null && _row$subRows.length && row.getCanSelectSubRows()) {
+      row.subRows.forEach((row2) => mutateRowIsSelected(selectedRowIds, row2.id, value, includeChildren, table));
+    }
+  };
+  function selectRowsFn(table, rowModel) {
+    const rowSelection = table.getState().rowSelection;
+    const newSelectedFlatRows = [];
+    const newSelectedRowsById = {};
+    const recurseRows = function(rows, depth) {
+      return rows.map((row) => {
+        var _row$subRows2;
+        const isSelected = isRowSelected(row, rowSelection);
+        if (isSelected) {
+          newSelectedFlatRows.push(row);
+          newSelectedRowsById[row.id] = row;
+        }
+        if ((_row$subRows2 = row.subRows) != null && _row$subRows2.length) {
+          row = {
+            ...row,
+            subRows: recurseRows(row.subRows)
+          };
+        }
+        if (isSelected) {
+          return row;
+        }
+      }).filter(Boolean);
+    };
+    return {
+      rows: recurseRows(rowModel.rows),
+      flatRows: newSelectedFlatRows,
+      rowsById: newSelectedRowsById
+    };
+  }
+  function isRowSelected(row, selection) {
+    var _selection$row$id;
+    return (_selection$row$id = selection[row.id]) != null ? _selection$row$id : false;
+  }
+  function isSubRowSelected(row, selection, table) {
+    var _row$subRows3;
+    if (!((_row$subRows3 = row.subRows) != null && _row$subRows3.length)) return false;
+    let allChildrenSelected = true;
+    let someSelected = false;
+    row.subRows.forEach((subRow) => {
+      if (someSelected && !allChildrenSelected) {
         return;
       }
-      const data = await resp.json();
-      button.textContent = "\u21BB Rescan (" + data.new + " new, " + data.updated + " updated)";
-      await loadData2(true);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      showError2("Rescan failed: " + msg);
-      button.textContent = "\u21BB Rescan (error)";
-      logError(error);
-    } finally {
-      setTimer(() => {
-        button.textContent = "\u21BB Rescan";
-        button.disabled = false;
-      }, 3e3);
+      if (subRow.getCanSelect()) {
+        if (isRowSelected(subRow, selection)) {
+          someSelected = true;
+        } else {
+          allChildrenSelected = false;
+        }
+      }
+      if (subRow.subRows && subRow.subRows.length) {
+        const subRowChildrenSelected = isSubRowSelected(subRow, selection);
+        if (subRowChildrenSelected === "all") {
+          someSelected = true;
+        } else if (subRowChildrenSelected === "some") {
+          someSelected = true;
+          allChildrenSelected = false;
+        } else {
+          allChildrenSelected = false;
+        }
+      }
+    });
+    return allChildrenSelected ? "all" : someSelected ? "some" : false;
+  }
+  var reSplitAlphaNumeric = /([0-9]+)/gm;
+  var alphanumeric = (rowA, rowB, columnId) => {
+    return compareAlphanumeric(toString(rowA.getValue(columnId)).toLowerCase(), toString(rowB.getValue(columnId)).toLowerCase());
+  };
+  var alphanumericCaseSensitive = (rowA, rowB, columnId) => {
+    return compareAlphanumeric(toString(rowA.getValue(columnId)), toString(rowB.getValue(columnId)));
+  };
+  var text = (rowA, rowB, columnId) => {
+    return compareBasic(toString(rowA.getValue(columnId)).toLowerCase(), toString(rowB.getValue(columnId)).toLowerCase());
+  };
+  var textCaseSensitive = (rowA, rowB, columnId) => {
+    return compareBasic(toString(rowA.getValue(columnId)), toString(rowB.getValue(columnId)));
+  };
+  var datetime = (rowA, rowB, columnId) => {
+    const a4 = rowA.getValue(columnId);
+    const b4 = rowB.getValue(columnId);
+    return a4 > b4 ? 1 : a4 < b4 ? -1 : 0;
+  };
+  var basic = (rowA, rowB, columnId) => {
+    return compareBasic(rowA.getValue(columnId), rowB.getValue(columnId));
+  };
+  function compareBasic(a4, b4) {
+    return a4 === b4 ? 0 : a4 > b4 ? 1 : -1;
+  }
+  function toString(a4) {
+    if (typeof a4 === "number") {
+      if (isNaN(a4) || a4 === Infinity || a4 === -Infinity) {
+        return "";
+      }
+      return String(a4);
+    }
+    if (typeof a4 === "string") {
+      return a4;
+    }
+    return "";
+  }
+  function compareAlphanumeric(aStr, bStr) {
+    const a4 = aStr.split(reSplitAlphaNumeric).filter(Boolean);
+    const b4 = bStr.split(reSplitAlphaNumeric).filter(Boolean);
+    while (a4.length && b4.length) {
+      const aa = a4.shift();
+      const bb = b4.shift();
+      const an = parseInt(aa, 10);
+      const bn = parseInt(bb, 10);
+      const combo = [an, bn].sort();
+      if (isNaN(combo[0])) {
+        if (aa > bb) {
+          return 1;
+        }
+        if (bb > aa) {
+          return -1;
+        }
+        continue;
+      }
+      if (isNaN(combo[1])) {
+        return isNaN(an) ? -1 : 1;
+      }
+      if (an > bn) {
+        return 1;
+      }
+      if (bn > an) {
+        return -1;
+      }
+    }
+    return a4.length - b4.length;
+  }
+  var sortingFns = {
+    alphanumeric,
+    alphanumericCaseSensitive,
+    text,
+    textCaseSensitive,
+    datetime,
+    basic
+  };
+  var RowSorting = {
+    getInitialState: (state) => {
+      return {
+        sorting: [],
+        ...state
+      };
+    },
+    getDefaultColumnDef: () => {
+      return {
+        sortingFn: "auto",
+        sortUndefined: 1
+      };
+    },
+    getDefaultOptions: (table) => {
+      return {
+        onSortingChange: makeStateUpdater("sorting", table),
+        isMultiSortEvent: (e4) => {
+          return e4.shiftKey;
+        }
+      };
+    },
+    createColumn: (column, table) => {
+      column.getAutoSortingFn = () => {
+        const firstRows = table.getFilteredRowModel().flatRows.slice(10);
+        let isString = false;
+        for (const row of firstRows) {
+          const value = row == null ? void 0 : row.getValue(column.id);
+          if (Object.prototype.toString.call(value) === "[object Date]") {
+            return sortingFns.datetime;
+          }
+          if (typeof value === "string") {
+            isString = true;
+            if (value.split(reSplitAlphaNumeric).length > 1) {
+              return sortingFns.alphanumeric;
+            }
+          }
+        }
+        if (isString) {
+          return sortingFns.text;
+        }
+        return sortingFns.basic;
+      };
+      column.getAutoSortDir = () => {
+        const firstRow = table.getFilteredRowModel().flatRows[0];
+        const value = firstRow == null ? void 0 : firstRow.getValue(column.id);
+        if (typeof value === "string") {
+          return "asc";
+        }
+        return "desc";
+      };
+      column.getSortingFn = () => {
+        var _table$options$sortin, _table$options$sortin2;
+        if (!column) {
+          throw new Error();
+        }
+        return isFunction(column.columnDef.sortingFn) ? column.columnDef.sortingFn : column.columnDef.sortingFn === "auto" ? column.getAutoSortingFn() : (_table$options$sortin = (_table$options$sortin2 = table.options.sortingFns) == null ? void 0 : _table$options$sortin2[column.columnDef.sortingFn]) != null ? _table$options$sortin : sortingFns[column.columnDef.sortingFn];
+      };
+      column.toggleSorting = (desc, multi) => {
+        const nextSortingOrder = column.getNextSortingOrder();
+        const hasManualValue = typeof desc !== "undefined" && desc !== null;
+        table.setSorting((old) => {
+          const existingSorting = old == null ? void 0 : old.find((d5) => d5.id === column.id);
+          const existingIndex = old == null ? void 0 : old.findIndex((d5) => d5.id === column.id);
+          let newSorting = [];
+          let sortAction;
+          let nextDesc = hasManualValue ? desc : nextSortingOrder === "desc";
+          if (old != null && old.length && column.getCanMultiSort() && multi) {
+            if (existingSorting) {
+              sortAction = "toggle";
+            } else {
+              sortAction = "add";
+            }
+          } else {
+            if (old != null && old.length && existingIndex !== old.length - 1) {
+              sortAction = "replace";
+            } else if (existingSorting) {
+              sortAction = "toggle";
+            } else {
+              sortAction = "replace";
+            }
+          }
+          if (sortAction === "toggle") {
+            if (!hasManualValue) {
+              if (!nextSortingOrder) {
+                sortAction = "remove";
+              }
+            }
+          }
+          if (sortAction === "add") {
+            var _table$options$maxMul;
+            newSorting = [...old, {
+              id: column.id,
+              desc: nextDesc
+            }];
+            newSorting.splice(0, newSorting.length - ((_table$options$maxMul = table.options.maxMultiSortColCount) != null ? _table$options$maxMul : Number.MAX_SAFE_INTEGER));
+          } else if (sortAction === "toggle") {
+            newSorting = old.map((d5) => {
+              if (d5.id === column.id) {
+                return {
+                  ...d5,
+                  desc: nextDesc
+                };
+              }
+              return d5;
+            });
+          } else if (sortAction === "remove") {
+            newSorting = old.filter((d5) => d5.id !== column.id);
+          } else {
+            newSorting = [{
+              id: column.id,
+              desc: nextDesc
+            }];
+          }
+          return newSorting;
+        });
+      };
+      column.getFirstSortDir = () => {
+        var _ref, _column$columnDef$sor;
+        const sortDescFirst = (_ref = (_column$columnDef$sor = column.columnDef.sortDescFirst) != null ? _column$columnDef$sor : table.options.sortDescFirst) != null ? _ref : column.getAutoSortDir() === "desc";
+        return sortDescFirst ? "desc" : "asc";
+      };
+      column.getNextSortingOrder = (multi) => {
+        var _table$options$enable, _table$options$enable2;
+        const firstSortDirection = column.getFirstSortDir();
+        const isSorted = column.getIsSorted();
+        if (!isSorted) {
+          return firstSortDirection;
+        }
+        if (isSorted !== firstSortDirection && ((_table$options$enable = table.options.enableSortingRemoval) != null ? _table$options$enable : true) && // If enableSortRemove, enable in general
+        (multi ? (_table$options$enable2 = table.options.enableMultiRemove) != null ? _table$options$enable2 : true : true)) {
+          return false;
+        }
+        return isSorted === "desc" ? "asc" : "desc";
+      };
+      column.getCanSort = () => {
+        var _column$columnDef$ena, _table$options$enable3;
+        return ((_column$columnDef$ena = column.columnDef.enableSorting) != null ? _column$columnDef$ena : true) && ((_table$options$enable3 = table.options.enableSorting) != null ? _table$options$enable3 : true) && !!column.accessorFn;
+      };
+      column.getCanMultiSort = () => {
+        var _ref2, _column$columnDef$ena2;
+        return (_ref2 = (_column$columnDef$ena2 = column.columnDef.enableMultiSort) != null ? _column$columnDef$ena2 : table.options.enableMultiSort) != null ? _ref2 : !!column.accessorFn;
+      };
+      column.getIsSorted = () => {
+        var _table$getState$sorti;
+        const columnSort = (_table$getState$sorti = table.getState().sorting) == null ? void 0 : _table$getState$sorti.find((d5) => d5.id === column.id);
+        return !columnSort ? false : columnSort.desc ? "desc" : "asc";
+      };
+      column.getSortIndex = () => {
+        var _table$getState$sorti2, _table$getState$sorti3;
+        return (_table$getState$sorti2 = (_table$getState$sorti3 = table.getState().sorting) == null ? void 0 : _table$getState$sorti3.findIndex((d5) => d5.id === column.id)) != null ? _table$getState$sorti2 : -1;
+      };
+      column.clearSorting = () => {
+        table.setSorting((old) => old != null && old.length ? old.filter((d5) => d5.id !== column.id) : []);
+      };
+      column.getToggleSortingHandler = () => {
+        const canSort = column.getCanSort();
+        return (e4) => {
+          if (!canSort) return;
+          e4.persist == null || e4.persist();
+          column.toggleSorting == null || column.toggleSorting(void 0, column.getCanMultiSort() ? table.options.isMultiSortEvent == null ? void 0 : table.options.isMultiSortEvent(e4) : false);
+        };
+      };
+    },
+    createTable: (table) => {
+      table.setSorting = (updater) => table.options.onSortingChange == null ? void 0 : table.options.onSortingChange(updater);
+      table.resetSorting = (defaultState) => {
+        var _table$initialState$s, _table$initialState;
+        table.setSorting(defaultState ? [] : (_table$initialState$s = (_table$initialState = table.initialState) == null ? void 0 : _table$initialState.sorting) != null ? _table$initialState$s : []);
+      };
+      table.getPreSortedRowModel = () => table.getGroupedRowModel();
+      table.getSortedRowModel = () => {
+        if (!table._getSortedRowModel && table.options.getSortedRowModel) {
+          table._getSortedRowModel = table.options.getSortedRowModel(table);
+        }
+        if (table.options.manualSorting || !table._getSortedRowModel) {
+          return table.getPreSortedRowModel();
+        }
+        return table._getSortedRowModel();
+      };
     }
   };
-}
+  var builtInFeatures = [
+    Headers,
+    ColumnVisibility,
+    ColumnOrdering,
+    ColumnPinning,
+    ColumnFaceting,
+    ColumnFiltering,
+    GlobalFaceting,
+    //depends on ColumnFaceting
+    GlobalFiltering,
+    //depends on ColumnFiltering
+    RowSorting,
+    ColumnGrouping,
+    //depends on RowSorting
+    RowExpanding,
+    RowPagination,
+    RowPinning,
+    RowSelection,
+    ColumnSizing
+  ];
+  function createTable(options) {
+    var _options$_features, _options$initialState;
+    if (options.debugAll || options.debugTable) {
+      console.info("Creating Table Instance...");
+    }
+    const _features = [...builtInFeatures, ...(_options$_features = options._features) != null ? _options$_features : []];
+    let table = {
+      _features
+    };
+    const defaultOptions = table._features.reduce((obj, feature) => {
+      return Object.assign(obj, feature.getDefaultOptions == null ? void 0 : feature.getDefaultOptions(table));
+    }, {});
+    const mergeOptions = (options2) => {
+      if (table.options.mergeOptions) {
+        return table.options.mergeOptions(defaultOptions, options2);
+      }
+      return {
+        ...defaultOptions,
+        ...options2
+      };
+    };
+    const coreInitialState = {};
+    let initialState = {
+      ...coreInitialState,
+      ...(_options$initialState = options.initialState) != null ? _options$initialState : {}
+    };
+    table._features.forEach((feature) => {
+      var _feature$getInitialSt;
+      initialState = (_feature$getInitialSt = feature.getInitialState == null ? void 0 : feature.getInitialState(initialState)) != null ? _feature$getInitialSt : initialState;
+    });
+    const queued = [];
+    let queuedTimeout = false;
+    const coreInstance = {
+      _features,
+      options: {
+        ...defaultOptions,
+        ...options
+      },
+      initialState,
+      _queue: (cb) => {
+        queued.push(cb);
+        if (!queuedTimeout) {
+          queuedTimeout = true;
+          Promise.resolve().then(() => {
+            while (queued.length) {
+              queued.shift()();
+            }
+            queuedTimeout = false;
+          }).catch((error) => setTimeout(() => {
+            throw error;
+          }));
+        }
+      },
+      reset: () => {
+        table.setState(table.initialState);
+      },
+      setOptions: (updater) => {
+        const newOptions = functionalUpdate(updater, table.options);
+        table.options = mergeOptions(newOptions);
+      },
+      getState: () => {
+        return table.options.state;
+      },
+      setState: (updater) => {
+        table.options.onStateChange == null || table.options.onStateChange(updater);
+      },
+      _getRowId: (row, index, parent) => {
+        var _table$options$getRow;
+        return (_table$options$getRow = table.options.getRowId == null ? void 0 : table.options.getRowId(row, index, parent)) != null ? _table$options$getRow : `${parent ? [parent.id, index].join(".") : index}`;
+      },
+      getCoreRowModel: () => {
+        if (!table._getCoreRowModel) {
+          table._getCoreRowModel = table.options.getCoreRowModel(table);
+        }
+        return table._getCoreRowModel();
+      },
+      // The final calls start at the bottom of the model,
+      // expanded rows, which then work their way up
+      getRowModel: () => {
+        return table.getPaginationRowModel();
+      },
+      //in next version, we should just pass in the row model as the optional 2nd arg
+      getRow: (id, searchAll) => {
+        let row = (searchAll ? table.getPrePaginationRowModel() : table.getRowModel()).rowsById[id];
+        if (!row) {
+          row = table.getCoreRowModel().rowsById[id];
+          if (!row) {
+            if (true) {
+              throw new Error(`getRow could not find row with ID: ${id}`);
+            }
+            throw new Error();
+          }
+        }
+        return row;
+      },
+      _getDefaultColumnDef: memo(() => [table.options.defaultColumn], (defaultColumn) => {
+        var _defaultColumn;
+        defaultColumn = (_defaultColumn = defaultColumn) != null ? _defaultColumn : {};
+        return {
+          header: (props) => {
+            const resolvedColumnDef = props.header.column.columnDef;
+            if (resolvedColumnDef.accessorKey) {
+              return resolvedColumnDef.accessorKey;
+            }
+            if (resolvedColumnDef.accessorFn) {
+              return resolvedColumnDef.id;
+            }
+            return null;
+          },
+          // footer: props => props.header.column.id,
+          cell: (props) => {
+            var _props$renderValue$to, _props$renderValue;
+            return (_props$renderValue$to = (_props$renderValue = props.renderValue()) == null || _props$renderValue.toString == null ? void 0 : _props$renderValue.toString()) != null ? _props$renderValue$to : null;
+          },
+          ...table._features.reduce((obj, feature) => {
+            return Object.assign(obj, feature.getDefaultColumnDef == null ? void 0 : feature.getDefaultColumnDef());
+          }, {}),
+          ...defaultColumn
+        };
+      }, getMemoOptions(options, "debugColumns", "_getDefaultColumnDef")),
+      _getColumnDefs: () => table.options.columns,
+      getAllColumns: memo(() => [table._getColumnDefs()], (columnDefs) => {
+        const recurseColumns = function(columnDefs2, parent, depth) {
+          if (depth === void 0) {
+            depth = 0;
+          }
+          return columnDefs2.map((columnDef) => {
+            const column = createColumn(table, columnDef, depth, parent);
+            const groupingColumnDef = columnDef;
+            column.columns = groupingColumnDef.columns ? recurseColumns(groupingColumnDef.columns, column, depth + 1) : [];
+            return column;
+          });
+        };
+        return recurseColumns(columnDefs);
+      }, getMemoOptions(options, "debugColumns", "getAllColumns")),
+      getAllFlatColumns: memo(() => [table.getAllColumns()], (allColumns) => {
+        return allColumns.flatMap((column) => {
+          return column.getFlatColumns();
+        });
+      }, getMemoOptions(options, "debugColumns", "getAllFlatColumns")),
+      _getAllFlatColumnsById: memo(() => [table.getAllFlatColumns()], (flatColumns) => {
+        return flatColumns.reduce((acc, column) => {
+          acc[column.id] = column;
+          return acc;
+        }, {});
+      }, getMemoOptions(options, "debugColumns", "getAllFlatColumnsById")),
+      getAllLeafColumns: memo(() => [table.getAllColumns(), table._getOrderColumnsFn()], (allColumns, orderColumns2) => {
+        let leafColumns = allColumns.flatMap((column) => column.getLeafColumns());
+        return orderColumns2(leafColumns);
+      }, getMemoOptions(options, "debugColumns", "getAllLeafColumns")),
+      getColumn: (columnId) => {
+        const column = table._getAllFlatColumnsById()[columnId];
+        if (!column) {
+          console.error(`[Table] Column with id '${columnId}' does not exist.`);
+        }
+        return column;
+      }
+    };
+    Object.assign(table, coreInstance);
+    for (let index = 0; index < table._features.length; index++) {
+      const feature = table._features[index];
+      feature == null || feature.createTable == null || feature.createTable(table);
+    }
+    return table;
+  }
+  function getCoreRowModel() {
+    return (table) => memo(() => [table.options.data], (data) => {
+      const rowModel = {
+        rows: [],
+        flatRows: [],
+        rowsById: {}
+      };
+      const accessRows = function(originalRows, depth, parentRow) {
+        if (depth === void 0) {
+          depth = 0;
+        }
+        const rows = [];
+        for (let i4 = 0; i4 < originalRows.length; i4++) {
+          const row = createRow(table, table._getRowId(originalRows[i4], i4, parentRow), originalRows[i4], i4, depth, void 0, parentRow == null ? void 0 : parentRow.id);
+          rowModel.flatRows.push(row);
+          rowModel.rowsById[row.id] = row;
+          rows.push(row);
+          if (table.options.getSubRows) {
+            var _row$originalSubRows;
+            row.originalSubRows = table.options.getSubRows(originalRows[i4], i4);
+            if ((_row$originalSubRows = row.originalSubRows) != null && _row$originalSubRows.length) {
+              row.subRows = accessRows(row.originalSubRows, depth + 1, row);
+            }
+          }
+        }
+        return rows;
+      };
+      rowModel.rows = accessRows(data);
+      return rowModel;
+    }, getMemoOptions(table.options, "debugTable", "getRowModel", () => table._autoResetPageIndex()));
+  }
+  function expandRows(rowModel) {
+    const expandedRows = [];
+    const handleRow = (row) => {
+      var _row$subRows;
+      expandedRows.push(row);
+      if ((_row$subRows = row.subRows) != null && _row$subRows.length && row.getIsExpanded()) {
+        row.subRows.forEach(handleRow);
+      }
+    };
+    rowModel.rows.forEach(handleRow);
+    return {
+      rows: expandedRows,
+      flatRows: rowModel.flatRows,
+      rowsById: rowModel.rowsById
+    };
+  }
+  function getPaginationRowModel(opts) {
+    return (table) => memo(() => [table.getState().pagination, table.getPrePaginationRowModel(), table.options.paginateExpandedRows ? void 0 : table.getState().expanded], (pagination, rowModel) => {
+      if (!rowModel.rows.length) {
+        return rowModel;
+      }
+      const {
+        pageSize,
+        pageIndex
+      } = pagination;
+      let {
+        rows,
+        flatRows,
+        rowsById
+      } = rowModel;
+      const pageStart = pageSize * pageIndex;
+      const pageEnd = pageStart + pageSize;
+      rows = rows.slice(pageStart, pageEnd);
+      let paginatedRowModel;
+      if (!table.options.paginateExpandedRows) {
+        paginatedRowModel = expandRows({
+          rows,
+          flatRows,
+          rowsById
+        });
+      } else {
+        paginatedRowModel = {
+          rows,
+          flatRows,
+          rowsById
+        };
+      }
+      paginatedRowModel.flatRows = [];
+      const handleRow = (row) => {
+        paginatedRowModel.flatRows.push(row);
+        if (row.subRows.length) {
+          row.subRows.forEach(handleRow);
+        }
+      };
+      paginatedRowModel.rows.forEach(handleRow);
+      return paginatedRowModel;
+    }, getMemoOptions(table.options, "debugTable", "getPaginationRowModel"));
+  }
+  function getSortedRowModel() {
+    return (table) => memo(() => [table.getState().sorting, table.getPreSortedRowModel()], (sorting, rowModel) => {
+      if (!rowModel.rows.length || !(sorting != null && sorting.length)) {
+        return rowModel;
+      }
+      const sortingState = table.getState().sorting;
+      const sortedFlatRows = [];
+      const availableSorting = sortingState.filter((sort) => {
+        var _table$getColumn;
+        return (_table$getColumn = table.getColumn(sort.id)) == null ? void 0 : _table$getColumn.getCanSort();
+      });
+      const columnInfoById = {};
+      availableSorting.forEach((sortEntry) => {
+        const column = table.getColumn(sortEntry.id);
+        if (!column) return;
+        columnInfoById[sortEntry.id] = {
+          sortUndefined: column.columnDef.sortUndefined,
+          invertSorting: column.columnDef.invertSorting,
+          sortingFn: column.getSortingFn()
+        };
+      });
+      const sortData = (rows) => {
+        const sortedData = rows.map((row) => ({
+          ...row
+        }));
+        sortedData.sort((rowA, rowB) => {
+          for (let i4 = 0; i4 < availableSorting.length; i4 += 1) {
+            var _sortEntry$desc;
+            const sortEntry = availableSorting[i4];
+            const columnInfo = columnInfoById[sortEntry.id];
+            const sortUndefined = columnInfo.sortUndefined;
+            const isDesc = (_sortEntry$desc = sortEntry == null ? void 0 : sortEntry.desc) != null ? _sortEntry$desc : false;
+            let sortInt = 0;
+            if (sortUndefined) {
+              const aValue = rowA.getValue(sortEntry.id);
+              const bValue = rowB.getValue(sortEntry.id);
+              const aUndefined = aValue === void 0;
+              const bUndefined = bValue === void 0;
+              if (aUndefined || bUndefined) {
+                if (sortUndefined === "first") return aUndefined ? -1 : 1;
+                if (sortUndefined === "last") return aUndefined ? 1 : -1;
+                sortInt = aUndefined && bUndefined ? 0 : aUndefined ? sortUndefined : -sortUndefined;
+              }
+            }
+            if (sortInt === 0) {
+              sortInt = columnInfo.sortingFn(rowA, rowB, sortEntry.id);
+            }
+            if (sortInt !== 0) {
+              if (isDesc) {
+                sortInt *= -1;
+              }
+              if (columnInfo.invertSorting) {
+                sortInt *= -1;
+              }
+              return sortInt;
+            }
+          }
+          return rowA.index - rowB.index;
+        });
+        sortedData.forEach((row) => {
+          var _row$subRows;
+          sortedFlatRows.push(row);
+          if ((_row$subRows = row.subRows) != null && _row$subRows.length) {
+            row.subRows = sortData(row.subRows);
+          }
+        });
+        return sortedData;
+      };
+      return {
+        rows: sortData(rowModel.rows),
+        flatRows: sortedFlatRows,
+        rowsById: rowModel.rowsById
+      };
+    }, getMemoOptions(table.options, "debugTable", "getSortedRowModel", () => table._autoResetPageIndex()));
+  }
 
-// src/ui/lib/theme.ts
-function getTheme() {
-  const stored = localStorage.getItem("theme");
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
+  // src/ui/components/DataTable.tsx
+  function renderCell(cell) {
+    const def = cell.column.columnDef.cell;
+    if (typeof def === "function") {
+      return def(cell.getContext());
+    }
+    return cell.getValue();
+  }
+  function renderHeader(header) {
+    const def = header.column.columnDef.header;
+    if (typeof def === "function") {
+      return def(header.getContext());
+    }
+    return def;
+  }
+  function resolveUpdater(updater, prev) {
+    return typeof updater === "function" ? updater(prev) : updater;
+  }
+  function DataTable({
+    columns: columns7,
+    data,
+    title,
+    exportFn,
+    pageSize,
+    defaultSort: defaultSort4,
+    enableColumnVisibility,
+    costRows
+  }) {
+    const [sorting, setSorting] = d2(defaultSort4 || []);
+    const [pagination, setPagination] = d2({
+      pageIndex: 0,
+      pageSize: pageSize || data.length || 100
+    });
+    const [columnVisibility, setColumnVisibility] = d2({});
+    const [, rerender] = d2(0);
+    y2(() => {
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+    }, [data]);
+    const tableRef = A2(null);
+    const stateRef = A2({ sorting, pagination, columnVisibility });
+    stateRef.current = { sorting, pagination, columnVisibility };
+    if (!tableRef.current) {
+      tableRef.current = createTable({
+        columns: columns7,
+        data,
+        state: { sorting, pagination, columnVisibility, columnPinning: { left: [], right: [] } },
+        onStateChange: (updater) => {
+          const newState = resolveUpdater(updater, tableRef.current.getState());
+          if (newState.sorting !== stateRef.current.sorting) setSorting(newState.sorting);
+          if (newState.pagination !== stateRef.current.pagination) setPagination(newState.pagination);
+          if (newState.columnVisibility !== stateRef.current.columnVisibility) setColumnVisibility(newState.columnVisibility);
+          rerender((n3) => n3 + 1);
+        },
+        onSortingChange: (updater) => setSorting((prev) => resolveUpdater(updater, prev)),
+        onPaginationChange: (updater) => setPagination((prev) => resolveUpdater(updater, prev)),
+        onColumnVisibilityChange: (updater) => setColumnVisibility((prev) => resolveUpdater(updater, prev)),
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        ...pageSize ? { getPaginationRowModel: getPaginationRowModel() } : {},
+        renderFallbackValue: ""
+      });
+    }
+    tableRef.current.setOptions((prev) => ({
+      ...prev,
+      columns: columns7,
+      data,
+      state: { ...tableRef.current.getState(), sorting, pagination, columnVisibility }
+    }));
+    const table = tableRef.current;
+    const headerGroups = table.getHeaderGroups();
+    const rows = table.getRowModel().rows;
+    return /* @__PURE__ */ u2("div", { class: "table-card", children: [
+      (title || exportFn) && /* @__PURE__ */ u2("div", { class: "section-header", children: [
+        title && /* @__PURE__ */ u2("div", { class: "section-title", children: title }),
+        exportFn && /* @__PURE__ */ u2("button", { class: "export-btn", onClick: exportFn, title: "Export to CSV", children: "\u2913 CSV" })
+      ] }),
+      enableColumnVisibility && /* @__PURE__ */ u2("div", { class: "column-toggle", children: table.getAllLeafColumns().map((column) => /* @__PURE__ */ u2("label", { children: [
+        /* @__PURE__ */ u2(
+          "input",
+          {
+            type: "checkbox",
+            checked: column.getIsVisible(),
+            onChange: column.getToggleVisibilityHandler()
+          }
+        ),
+        typeof column.columnDef.header === "string" ? column.columnDef.header : column.id
+      ] }, column.id)) }),
+      /* @__PURE__ */ u2("table", { children: [
+        /* @__PURE__ */ u2("thead", { children: headerGroups.map((headerGroup) => /* @__PURE__ */ u2("tr", { children: headerGroup.headers.map((header) => {
+          const canSort = header.column.getCanSort();
+          const sorted = header.column.getIsSorted();
+          return /* @__PURE__ */ u2(
+            "th",
+            {
+              scope: "col",
+              class: canSort ? "sortable" : void 0,
+              "aria-sort": sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : void 0,
+              style: sorted ? { borderBottom: "2px solid var(--border-accent)" } : void 0,
+              tabIndex: canSort ? 0 : void 0,
+              onClick: canSort ? header.column.getToggleSortingHandler() : void 0,
+              onKeyDown: canSort ? (e4) => {
+                if (e4.key === "Enter" || e4.key === " ") {
+                  e4.preventDefault();
+                  header.column.getToggleSortingHandler()?.(e4);
+                }
+              } : void 0,
+              children: [
+                renderHeader(header),
+                canSort && /* @__PURE__ */ u2("span", { class: "sort-icon", children: sorted === "desc" ? " \u25BC" : sorted === "asc" ? " \u25B2" : "" })
+              ]
+            },
+            header.id
+          );
+        }) }, headerGroup.id)) }),
+        /* @__PURE__ */ u2("tbody", { children: rows.map((row) => /* @__PURE__ */ u2("tr", { class: costRows ? "cost-row" : void 0, children: row.getVisibleCells().map((cell) => /* @__PURE__ */ u2("td", { children: renderCell(cell) }, cell.id)) }, row.id)) })
+      ] }),
+      pageSize && /* @__PURE__ */ u2("div", { class: "pagination", children: [
+        /* @__PURE__ */ u2("span", { children: table.getRowCount() > 0 ? `Showing ${pagination.pageIndex * pagination.pageSize + 1}\u2013${Math.min(
+          (pagination.pageIndex + 1) * pagination.pageSize,
+          table.getRowCount()
+        )} of ${table.getRowCount()}` : "No sessions" }),
+        /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "6px" }, children: [
+          /* @__PURE__ */ u2(
+            "button",
+            {
+              class: "filter-btn",
+              disabled: !table.getCanPreviousPage(),
+              onClick: () => table.previousPage(),
+              children: "\xAB Prev"
+            }
+          ),
+          /* @__PURE__ */ u2(
+            "button",
+            {
+              class: "filter-btn",
+              disabled: !table.getCanNextPage(),
+              onClick: () => table.nextPage(),
+              children: "Next \xBB"
+            }
+          )
+        ] })
+      ] })
+    ] });
+  }
 
-// src/ui/app.tsx
-import { jsx as jsx21 } from "preact/jsx-runtime";
-function applyTheme(theme) {
-  if (theme === "light") {
-    document.documentElement.setAttribute("data-theme", "light");
-  } else {
-    document.documentElement.removeAttribute("data-theme");
+  // src/ui/components/EntrypointTable.tsx
+  var columns = [
+    {
+      accessorKey: "entrypoint",
+      header: "Entrypoint",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()) })
+    },
+    {
+      accessorKey: "sessions",
+      header: "Sessions",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: getValue() })
+    },
+    {
+      accessorKey: "turns",
+      header: "Turns",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "input",
+      header: "Input",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "output",
+      header: "Output",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    }
+  ];
+  function EntrypointTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u2(DataTable, { columns, data, title: "Usage by Entrypoint" });
   }
-  const icon = document.getElementById("theme-icon");
-  if (icon) icon.innerHTML = theme === "dark" ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  if (rawData.value) applyFilter();
-}
-function toggleTheme() {
-  const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-  const next = current === "light" ? "dark" : "light";
-  localStorage.setItem("theme", next);
-  applyTheme(next);
-}
-applyTheme(getTheme());
-var previousSessionPercent = null;
-var loadDataInFlight = false;
-var loadUsageWindowsInFlight = false;
-function isAnthropicModel(model) {
-  if (!model) return false;
-  const m2 = model.toLowerCase();
-  return m2.includes("opus") || m2.includes("sonnet") || m2.includes("haiku");
-}
-function getRangeCutoff(range) {
-  if (range === "all") return null;
-  const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
-  const d3 = /* @__PURE__ */ new Date();
-  d3.setDate(d3.getDate() - days);
-  return d3.toISOString().slice(0, 10);
-}
-function readURLRange() {
-  const p3 = new URLSearchParams(window.location.search).get("range");
-  return ["7d", "30d", "90d", "all"].includes(p3) ? p3 : "30d";
-}
-function setRange(range) {
-  selectedRange.value = range;
-  document.querySelectorAll(".range-btn").forEach(
-    (btn) => btn.classList.toggle("active", btn.dataset.range === range)
-  );
-  updateURL();
-  applyFilter();
-}
-function modelPriority(m2) {
-  const ml = m2.toLowerCase();
-  if (ml.includes("opus")) return 0;
-  if (ml.includes("sonnet")) return 1;
-  if (ml.includes("haiku")) return 2;
-  return 3;
-}
-function readURLModels(allModels) {
-  const param = new URLSearchParams(window.location.search).get("models");
-  if (!param) return new Set(allModels.filter((m2) => isAnthropicModel(m2)));
-  const fromURL = new Set(param.split(",").map((s2) => s2.trim()).filter(Boolean));
-  return new Set(allModels.filter((m2) => fromURL.has(m2)));
-}
-function isDefaultModelSelection(allModels) {
-  const billable = allModels.filter((m2) => isAnthropicModel(m2));
-  if (selectedModels.value.size !== billable.length) return false;
-  return billable.every((m2) => selectedModels.value.has(m2));
-}
-function buildFilterUI(allModels) {
-  const sorted = [...allModels].sort((a2, b3) => {
-    const pa = modelPriority(a2), pb = modelPriority(b3);
-    return pa !== pb ? pa - pb : a2.localeCompare(b3);
-  });
-  selectedModels.value = readURLModels(allModels);
-  const container = $("model-checkboxes");
-  container.innerHTML = sorted.map((m2) => {
-    const checked = selectedModels.value.has(m2);
-    return `<label class="model-cb-label ${checked ? "checked" : ""}" data-model="${esc(m2)}">
-      <input type="checkbox" value="${esc(m2)}" ${checked ? "checked" : ""} onchange="onModelToggle(this)">
-      ${esc(m2)}
-    </label>`;
-  }).join("");
-}
-function onModelToggle(cb) {
-  const label = cb.closest("label");
-  const next = new Set(selectedModels.value);
-  if (cb.checked) {
-    next.add(cb.value);
-    label.classList.add("checked");
-  } else {
-    next.delete(cb.value);
-    label.classList.remove("checked");
+
+  // src/ui/components/ServiceTiers.tsx
+  var columns2 = [
+    { accessorKey: "service_tier", header: "Tier" },
+    { accessorKey: "inference_geo", header: "Region" },
+    {
+      accessorKey: "turns",
+      header: "Turns",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    }
+  ];
+  function ServiceTiersTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u2(DataTable, { columns: columns2, data, title: "Service Tiers" });
   }
-  selectedModels.value = next;
-  updateURL();
-  applyFilter();
-}
-function selectAllModels() {
-  const next = new Set(selectedModels.value);
-  document.querySelectorAll("#model-checkboxes input").forEach((cb) => {
-    cb.checked = true;
-    next.add(cb.value);
-    cb.closest("label").classList.add("checked");
-  });
-  selectedModels.value = next;
-  updateURL();
-  applyFilter();
-}
-function clearAllModels() {
-  document.querySelectorAll("#model-checkboxes input").forEach((cb) => {
-    cb.checked = false;
-    cb.closest("label").classList.remove("checked");
-  });
-  selectedModels.value = /* @__PURE__ */ new Set();
-  updateURL();
-  applyFilter();
-}
-function onProjectSearch(query) {
-  projectSearchQuery.value = query.toLowerCase().trim();
-  const clearBtn = document.getElementById("project-clear-btn");
-  if (clearBtn) clearBtn.style.display = projectSearchQuery.value ? "" : "none";
-  updateURL();
-  applyFilter();
-}
-function clearProjectSearch() {
-  projectSearchQuery.value = "";
-  const input = document.getElementById("project-search");
-  if (input) input.value = "";
-  const clearBtn = document.getElementById("project-clear-btn");
-  if (clearBtn) clearBtn.style.display = "none";
-  updateURL();
-  applyFilter();
-}
-function matchesProjectSearch(project) {
-  if (!projectSearchQuery.value) return true;
-  return project.toLowerCase().includes(projectSearchQuery.value);
-}
-function updateURL() {
-  const allModels = Array.from(document.querySelectorAll("#model-checkboxes input")).map((cb) => cb.value);
-  const params = new URLSearchParams();
-  if (selectedRange.value !== "30d") params.set("range", selectedRange.value);
-  if (!isDefaultModelSelection(allModels)) params.set("models", Array.from(selectedModels.value).join(","));
-  if (projectSearchQuery.value) params.set("project", projectSearchQuery.value);
-  const search = params.toString() ? "?" + params.toString() : "";
-  history.replaceState(null, "", window.location.pathname + search);
-}
-function applyFilter() {
-  if (!rawData.value) return;
-  const cutoff = getRangeCutoff(selectedRange.value);
-  const filteredDaily = rawData.value.daily_by_model.filter(
-    (r3) => selectedModels.value.has(r3.model) && (!cutoff || r3.day >= cutoff)
-  );
-  const dailyMap = {};
-  for (const r3 of filteredDaily) {
-    if (!dailyMap[r3.day]) dailyMap[r3.day] = { day: r3.day, input: 0, output: 0, cache_read: 0, cache_creation: 0 };
-    const d3 = dailyMap[r3.day];
-    d3.input += r3.input;
-    d3.output += r3.output;
-    d3.cache_read += r3.cache_read;
-    d3.cache_creation += r3.cache_creation;
+
+  // src/ui/components/ToolUsageTable.tsx
+  var columns3 = [
+    {
+      accessorKey: "tool_name",
+      header: "Tool",
+      cell: ({ row }) => {
+        const cat = row.original.category;
+        const badge = cat === "mcp" ? "mcp" : "builtin";
+        return /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("span", { class: `model-tag ${badge}`, children: cat }),
+          " ",
+          row.original.tool_name
+        ] });
+      }
+    },
+    {
+      accessorKey: "mcp_server",
+      header: "MCP Server",
+      cell: ({ getValue }) => {
+        const v4 = getValue();
+        return v4 ? /* @__PURE__ */ u2("span", { class: "muted", children: v4 }) : /* @__PURE__ */ u2("span", { class: "muted", children: "--" });
+      }
+    },
+    {
+      accessorKey: "invocations",
+      header: "Calls",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "turns_used",
+      header: "Turns",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "sessions_used",
+      header: "Sessions",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "errors",
+      header: "Errors",
+      cell: ({ row }) => {
+        const e4 = row.original.errors;
+        if (!e4) return /* @__PURE__ */ u2("span", { class: "dim", children: "0" });
+        const pct = row.original.invocations > 0 ? (e4 / row.original.invocations * 100).toFixed(1) : "0";
+        return /* @__PURE__ */ u2("span", { class: "num", style: { color: "var(--red)" }, children: [
+          e4,
+          " (",
+          pct,
+          "%)"
+        ] });
+      }
+    }
+  ];
+  function ToolUsageTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u2(DataTable, { columns: columns3, data, title: "Tool Usage" });
   }
-  const daily = Object.values(dailyMap).sort((a2, b3) => a2.day.localeCompare(b3.day));
-  const modelMap = {};
-  for (const r3 of filteredDaily) {
-    if (!modelMap[r3.model]) modelMap[r3.model] = { model: r3.model, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, sessions: 0, cost: 0, is_billable: r3.cost > 0 || isAnthropicModel(r3.model) };
-    const m2 = modelMap[r3.model];
-    m2.input += r3.input;
-    m2.output += r3.output;
-    m2.cache_read += r3.cache_read;
-    m2.cache_creation += r3.cache_creation;
-    m2.turns += r3.turns;
-    m2.cost += r3.cost;
+
+  // src/ui/components/McpSummaryTable.tsx
+  var columns4 = [
+    {
+      accessorKey: "server",
+      header: "MCP Server",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag mcp", children: String(getValue()) })
+    },
+    {
+      accessorKey: "tools_used",
+      header: "Tools",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: getValue() })
+    },
+    {
+      accessorKey: "invocations",
+      header: "Calls",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "sessions_used",
+      header: "Sessions",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    }
+  ];
+  function McpSummaryTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u2(DataTable, { columns: columns4, data, title: "MCP Server Usage" });
   }
-  const filteredSessions = rawData.value.sessions_all.filter(
-    (s2) => selectedModels.value.has(s2.model) && (!cutoff || s2.last_date >= cutoff) && matchesProjectSearch(s2.project)
-  );
-  for (const s2 of filteredSessions) {
-    if (modelMap[s2.model]) modelMap[s2.model].sessions++;
+
+  // src/ui/components/BranchTable.tsx
+  var columns5 = [
+    {
+      accessorKey: "branch",
+      header: "Branch",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()) })
+    },
+    {
+      accessorKey: "sessions",
+      header: "Sessions",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: getValue() })
+    },
+    {
+      accessorKey: "turns",
+      header: "Turns",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "input",
+      header: "Input",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "output",
+      header: "Output",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "cost",
+      header: "Est. Cost",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(getValue()) })
+    }
+  ];
+  function BranchTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u2(DataTable, { columns: columns5, data, title: "Usage by Git Branch" });
   }
-  const byModel = Object.values(modelMap).sort((a2, b3) => b3.input + b3.output - (a2.input + a2.output));
-  const projMap = {};
-  for (const s2 of filteredSessions) {
-    if (!projMap[s2.project]) projMap[s2.project] = { project: s2.project, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, sessions: 0, cost: 0 };
-    const p3 = projMap[s2.project];
-    p3.input += s2.input;
-    p3.output += s2.output;
-    p3.cache_read += s2.cache_read;
-    p3.cache_creation += s2.cache_creation;
-    p3.turns += s2.turns;
-    p3.sessions++;
-    p3.cost += s2.cost;
+
+  // src/ui/components/VersionTable.tsx
+  var columns6 = [
+    {
+      accessorKey: "version",
+      header: "Version",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()) })
+    },
+    {
+      accessorKey: "turns",
+      header: "Turns",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "sessions",
+      header: "Sessions",
+      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: getValue() })
+    }
+  ];
+  function VersionTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u2(DataTable, { columns: columns6, data, title: "Claude Code Versions" });
   }
-  const byProject = Object.values(projMap).sort((a2, b3) => b3.input + b3.output - (a2.input + a2.output));
-  const totals = {
-    sessions: filteredSessions.length,
-    turns: byModel.reduce((s2, m2) => s2 + m2.turns, 0),
-    input: byModel.reduce((s2, m2) => s2 + m2.input, 0),
-    output: byModel.reduce((s2, m2) => s2 + m2.output, 0),
-    cache_read: byModel.reduce((s2, m2) => s2 + m2.cache_read, 0),
-    cache_creation: byModel.reduce((s2, m2) => s2 + m2.cache_creation, 0),
-    cost: filteredSessions.reduce((s2, sess) => s2 + sess.cost, 0)
-  };
-  $("daily-chart-title").textContent = "Daily Token Usage \u2014 " + RANGE_LABELS[selectedRange.value];
-  renderStats(totals);
-  renderCostSparkline(daily);
-  renderDailyChart(daily);
-  renderModelChart(byModel);
-  renderProjectChart(byProject);
-  lastFilteredSessions.value = filteredSessions;
-  lastByProject.value = byProject;
-  render(/* @__PURE__ */ jsx21(ModelCostTable, { byModel }), $("model-cost-mount"));
-  render(/* @__PURE__ */ jsx21(SessionsTable, { onExportCSV: exportSessionsCSV }), $("sessions-mount"));
-  render(/* @__PURE__ */ jsx21(ProjectCostTable, { byProject: lastByProject.value.slice(0, 30), onExportCSV: exportProjectsCSV }), $("project-cost-mount"));
-}
-function renderStats(t3) {
-  render(/* @__PURE__ */ jsx21(StatsCards, { totals: t3 }), $("stats-row"));
-}
-function renderDailyChart(daily) {
-  const container = document.getElementById("chart-daily");
-  render(/* @__PURE__ */ jsx21(DailyChart, { daily }), container);
-}
-function renderModelChart(byModel) {
-  const container = document.getElementById("chart-model");
-  render(/* @__PURE__ */ jsx21(ModelChart, { byModel }), container);
-}
-function renderProjectChart(byProject) {
-  const container = document.getElementById("chart-project");
-  render(/* @__PURE__ */ jsx21(ProjectChart, { byProject }), container);
-}
-function exportSessionsCSV() {
-  const header = ["Session", "Project", "Last Active", "Duration (min)", "Model", "Turns", "Input", "Output", "Cache Read", "Cache Creation", "Est. Cost"];
-  const rows = lastFilteredSessions.value.map((s2) => {
-    const cost = s2.cost;
-    return [s2.session_id, s2.project, s2.last, s2.duration_min, s2.model, s2.turns, s2.input, s2.output, s2.cache_read, s2.cache_creation, cost.toFixed(4)];
-  });
-  downloadCSV("sessions", header, rows);
-}
-function exportProjectsCSV() {
-  const header = ["Project", "Sessions", "Turns", "Input", "Output", "Cache Read", "Cache Creation", "Est. Cost"];
-  const rows = lastByProject.value.map(
-    (p3) => [p3.project, p3.sessions, p3.turns, p3.input, p3.output, p3.cache_read, p3.cache_creation, p3.cost.toFixed(4)]
-  );
-  downloadCSV("projects", header, rows);
-}
-function renderWindowCard(label, w3) {
-  const pct = Math.min(100, w3.used_percent);
-  const color = progressColor(pct);
-  const resetText = w3.resets_in_minutes != null ? `Resets in ${fmtResetTime(w3.resets_in_minutes)}` : "";
-  return `<div class="stat-card">
-    <div class="label">${esc(label)}</div>
-    <div class="value" style="font-size:18px;color:${color}">${pct.toFixed(1)}%</div>
-    <div style="background:var(--border);border-radius:4px;height:6px;margin:6px 0">
-      <div style="background:${color};height:100%;border-radius:4px;width:${pct}%;transition:width 0.3s"></div>
-    </div>
-    <div class="sub">${esc(resetText)}</div>
-  </div>`;
-}
-function renderUsageWindows(data) {
-  const container = $("usage-windows");
-  if (!container) return;
-  if (!data.available) {
-    const badge2 = $("plan-badge");
-    if (badge2) badge2.style.display = "none";
-    if (data.error) {
-      container.style.display = "";
-      container.innerHTML = `<div class="stat-card">
-        <div class="label">Rate Windows</div>
-        <div class="value" style="font-size:16px">Unavailable</div>
-        <div class="sub">${esc(data.error)}</div>
-      </div>`;
+
+  // src/ui/components/HourlyChart.tsx
+  function HourlyChart({ data }) {
+    if (!data.length) return null;
+    const maxTurns = Math.max(...data.map((d5) => d5.turns), 1);
+    return /* @__PURE__ */ u2("div", { children: [
+      /* @__PURE__ */ u2("div", { class: "section-title", style: { padding: "0", marginBottom: "12px" }, children: "Activity by Hour of Day" }),
+      /* @__PURE__ */ u2("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", height: "80px" }, children: Array.from({ length: 24 }, (_4, h5) => {
+        const row = data.find((d5) => d5.hour === h5);
+        const turns = row?.turns ?? 0;
+        const pct = turns / maxTurns * 100;
+        return /* @__PURE__ */ u2(
+          "div",
+          {
+            title: `${h5}:00 -- ${fmt(turns)} turns`,
+            style: {
+              flex: 1,
+              height: `${Math.max(pct, 2)}%`,
+              background: turns > 0 ? "var(--accent)" : "var(--border)",
+              borderRadius: "2px 2px 0 0",
+              opacity: turns > 0 ? 0.6 + pct / 100 * 0.4 : 0.3
+            }
+          },
+          h5
+        );
+      }) }),
+      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "2px", marginTop: "4px" }, children: [0, 6, 12, 18, 23].map((h5) => /* @__PURE__ */ u2("span", { class: "muted", style: { flex: 1, fontSize: "9px", textAlign: h5 === 0 ? "left" : h5 === 23 ? "right" : "center" }, children: [
+        h5,
+        ":00"
+      ] }, h5)) })
+    ] });
+  }
+
+  // src/ui/components/SessionsTable.tsx
+  var defaultSort = [{ id: "last", desc: true }];
+  function useSessionColumns() {
+    return T2(
+      () => [
+        {
+          id: "session",
+          accessorKey: "session_id",
+          header: "Session",
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            const title = row.title;
+            return /* @__PURE__ */ u2("span", { class: "muted", style: { fontFamily: "monospace" }, title: title || void 0, children: title || /* @__PURE__ */ u2(S, { children: [
+              info.getValue(),
+              "\u2026"
+            ] }) });
+          }
+        },
+        {
+          id: "project",
+          accessorKey: "project",
+          header: "Project",
+          enableSorting: false
+        },
+        {
+          id: "last",
+          accessorKey: "last",
+          header: "Last Active",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "muted", children: info.getValue() })
+        },
+        {
+          id: "duration_min",
+          accessorKey: "duration_min",
+          header: "Duration",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "muted", children: [
+            info.getValue(),
+            "m"
+          ] })
+        },
+        {
+          id: "model",
+          accessorKey: "model",
+          header: "Model",
+          enableSorting: false,
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "model-tag", children: info.getValue() })
+        },
+        {
+          id: "turns",
+          accessorKey: "turns",
+          header: "Turns",
+          cell: (info) => {
+            const row = info.row.original;
+            return /* @__PURE__ */ u2("span", { class: "num", children: [
+              fmt(info.getValue()),
+              row.subagent_count > 0 && /* @__PURE__ */ u2("span", { class: "muted", style: { fontSize: "10px" }, children: [
+                " ",
+                "(",
+                row.subagent_count,
+                " agents)"
+              ] })
+            ] });
+          }
+        },
+        {
+          id: "input",
+          accessorKey: "input",
+          header: "Input",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "output",
+          accessorKey: "output",
+          header: "Output",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "cost",
+          accessorKey: "cost",
+          header: "Est. Cost",
+          cell: (info) => {
+            const row = info.row.original;
+            return row.is_billable ? /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(info.getValue()) }) : /* @__PURE__ */ u2("span", { class: "cost-na", children: "n/a" });
+          }
+        },
+        {
+          id: "cache_hit_ratio",
+          accessorKey: "cache_hit_ratio",
+          header: "Cache %",
+          cell: (info) => {
+            const v4 = info.getValue();
+            return /* @__PURE__ */ u2("span", { class: "num", children: [
+              (v4 * 100).toFixed(0),
+              "%"
+            ] });
+          }
+        },
+        {
+          id: "tokens_per_min",
+          accessorKey: "tokens_per_min",
+          header: "Tok/min",
+          cell: (info) => {
+            const v4 = info.getValue();
+            return /* @__PURE__ */ u2("span", { class: "num", children: v4 > 0 ? fmt(Math.round(v4)) : "--" });
+          }
+        }
+      ],
+      []
+    );
+  }
+  function SessionsTable({ onExportCSV }) {
+    const columns7 = useSessionColumns();
+    const data = lastFilteredSessions.value;
+    return /* @__PURE__ */ u2(
+      DataTable,
+      {
+        columns: columns7,
+        data,
+        title: "Recent Sessions",
+        exportFn: onExportCSV,
+        pageSize: SESSIONS_PAGE_SIZE,
+        defaultSort,
+        enableColumnVisibility: true
+      }
+    );
+  }
+
+  // src/ui/components/ModelCostTable.tsx
+  var defaultSort2 = [{ id: "cost", desc: true }];
+  function useModelColumns() {
+    return T2(
+      () => [
+        {
+          id: "model",
+          accessorKey: "model",
+          header: "Model",
+          enableSorting: false,
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "model-tag", children: info.getValue() })
+        },
+        {
+          id: "turns",
+          accessorKey: "turns",
+          header: "Turns",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "input",
+          accessorKey: "input",
+          header: "Input",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "output",
+          accessorKey: "output",
+          header: "Output",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "cache_read",
+          accessorKey: "cache_read",
+          header: "Cache Read",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "cache_creation",
+          accessorKey: "cache_creation",
+          header: "Cache Creation",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "cost",
+          accessorKey: "cost",
+          header: "Est. Cost",
+          cell: (info) => {
+            const row = info.row.original;
+            return row.is_billable ? /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(info.getValue()) }) : /* @__PURE__ */ u2("span", { class: "cost-na", children: "n/a" });
+          }
+        }
+      ],
+      []
+    );
+  }
+  function ModelCostTable({ byModel }) {
+    const columns7 = useModelColumns();
+    return /* @__PURE__ */ u2(
+      DataTable,
+      {
+        columns: columns7,
+        data: byModel,
+        title: "Cost by Model",
+        defaultSort: defaultSort2,
+        costRows: true
+      }
+    );
+  }
+
+  // src/ui/components/ProjectCostTable.tsx
+  var defaultSort3 = [{ id: "cost", desc: true }];
+  function useProjectColumns() {
+    return T2(
+      () => [
+        {
+          id: "project",
+          accessorKey: "project",
+          header: "Project",
+          enableSorting: false
+        },
+        {
+          id: "sessions",
+          accessorKey: "sessions",
+          header: "Sessions",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: info.getValue() })
+        },
+        {
+          id: "turns",
+          accessorKey: "turns",
+          header: "Turns",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "input",
+          accessorKey: "input",
+          header: "Input",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "output",
+          accessorKey: "output",
+          header: "Output",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
+        },
+        {
+          id: "cost",
+          accessorKey: "cost",
+          header: "Est. Cost",
+          cell: (info) => /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(info.getValue()) })
+        }
+      ],
+      []
+    );
+  }
+  function ProjectCostTable({
+    byProject,
+    onExportCSV
+  }) {
+    const columns7 = useProjectColumns();
+    return /* @__PURE__ */ u2(
+      DataTable,
+      {
+        columns: columns7,
+        data: byProject,
+        title: "Cost by Project",
+        exportFn: onExportCSV,
+        defaultSort: defaultSort3,
+        costRows: true
+      }
+    );
+  }
+
+  // src/ui/components/DailyChart.tsx
+  function DailyChart({ daily }) {
+    const options = {
+      chart: {
+        type: "bar",
+        height: "100%",
+        stacked: true,
+        background: "transparent",
+        toolbar: { show: false },
+        fontFamily: "inherit"
+      },
+      theme: { mode: apexThemeMode() },
+      series: [
+        { name: "Input", data: daily.map((d5) => d5.input) },
+        { name: "Output", data: daily.map((d5) => d5.output) },
+        { name: "Cache Read", data: daily.map((d5) => d5.cache_read) },
+        { name: "Cache Creation", data: daily.map((d5) => d5.cache_creation) }
+      ],
+      colors: [TOKEN_COLORS.input, TOKEN_COLORS.output, TOKEN_COLORS.cache_read, TOKEN_COLORS.cache_creation],
+      fill: { type: "solid" },
+      xaxis: {
+        categories: daily.map((d5) => d5.day),
+        labels: { rotate: -45, maxHeight: 60 },
+        tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange.value])
+      },
+      yaxis: { labels: { formatter: (v4) => fmt(v4) } },
+      legend: { position: "top", fontSize: "11px" },
+      dataLabels: { enabled: false },
+      tooltip: { y: { formatter: (v4) => fmt(v4) + " tokens" } },
+      grid: { borderColor: cssVar("--chart-grid"), strokeDashArray: 3 }
+    };
+    return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-daily" });
+  }
+
+  // src/ui/components/ModelChart.tsx
+  function ModelChart({ byModel }) {
+    if (!byModel.length) return null;
+    const options = {
+      chart: { type: "donut", height: "100%", background: "transparent", fontFamily: "inherit" },
+      theme: { mode: apexThemeMode() },
+      series: byModel.map((m4) => m4.input + m4.output),
+      labels: byModel.map((m4) => m4.model),
+      colors: MODEL_COLORS.slice(0, byModel.length),
+      legend: { position: "bottom", fontSize: "11px" },
+      dataLabels: { enabled: false },
+      tooltip: { y: { formatter: (v4) => fmt(v4) + " tokens" } },
+      stroke: { width: 2, colors: [cssVar("--card")] },
+      plotOptions: { pie: { donut: { size: "60%" } } }
+    };
+    return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-model" });
+  }
+
+  // src/ui/components/ProjectChart.tsx
+  function ProjectChart({ byProject }) {
+    const top = byProject.slice(0, 10);
+    if (!top.length) return null;
+    const options = {
+      chart: {
+        type: "bar",
+        height: "100%",
+        background: "transparent",
+        toolbar: { show: false },
+        fontFamily: "inherit"
+      },
+      theme: { mode: apexThemeMode() },
+      series: [
+        { name: "Input", data: top.map((p5) => p5.input) },
+        { name: "Output", data: top.map((p5) => p5.output) }
+      ],
+      colors: [TOKEN_COLORS.input, TOKEN_COLORS.output],
+      plotOptions: { bar: { horizontal: true, barHeight: "60%" } },
+      xaxis: {
+        categories: top.map((p5) => p5.project.length > 22 ? "\u2026" + p5.project.slice(-20) : p5.project),
+        labels: { formatter: (v4) => fmt(v4) }
+      },
+      yaxis: { labels: { maxWidth: 160 } },
+      legend: { position: "top", fontSize: "11px" },
+      dataLabels: { enabled: false },
+      tooltip: { y: { formatter: (v4) => fmt(v4) + " tokens" } },
+      grid: { borderColor: cssVar("--chart-grid") }
+    };
+    return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-project" });
+  }
+
+  // src/ui/lib/csv.ts
+  function csvField(val) {
+    const s4 = String(val);
+    const needsPrefix = /^[=+\-@\t\r]/.test(s4);
+    const escaped = needsPrefix ? "'" + s4 : s4;
+    if (escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")) {
+      return '"' + escaped.replace(/"/g, '""') + '"';
+    }
+    return escaped;
+  }
+  function csvTimestamp() {
+    const d5 = /* @__PURE__ */ new Date();
+    return d5.getFullYear() + "-" + String(d5.getMonth() + 1).padStart(2, "0") + "-" + String(d5.getDate()).padStart(2, "0") + "_" + String(d5.getHours()).padStart(2, "0") + String(d5.getMinutes()).padStart(2, "0");
+  }
+  function downloadCSV(reportType, header, rows) {
+    const lines = [header.map(csvField).join(",")];
+    for (const row of rows) lines.push(row.map(csvField).join(","));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const a4 = document.createElement("a");
+    a4.href = URL.createObjectURL(blob);
+    a4.download = reportType + "_" + csvTimestamp() + ".csv";
+    a4.click();
+    setTimeout(() => URL.revokeObjectURL(a4.href), 1e3);
+  }
+
+  // src/ui/lib/rescan.ts
+  function createTriggerRescan({
+    button,
+    fetchImpl,
+    loadData: loadData2,
+    showError: showError2,
+    setTimer,
+    logError = () => void 0
+  }) {
+    return async function triggerRescan2() {
+      button.disabled = true;
+      button.textContent = "\u21BB Scanning...";
+      try {
+        const resp = await fetchImpl("/api/rescan", { method: "POST" });
+        if (!resp.ok) {
+          showError2(`Rescan failed: HTTP ${resp.status} ${resp.statusText}`);
+          button.textContent = "\u21BB Rescan (failed)";
+          return;
+        }
+        const data = await resp.json();
+        button.textContent = "\u21BB Rescan (" + data.new + " new, " + data.updated + " updated)";
+        await loadData2(true);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        showError2("Rescan failed: " + msg);
+        button.textContent = "\u21BB Rescan (error)";
+        logError(error);
+      } finally {
+        setTimer(() => {
+          button.textContent = "\u21BB Rescan";
+          button.disabled = false;
+        }, 3e3);
+      }
+    };
+  }
+
+  // src/ui/lib/theme.ts
+  function getTheme() {
+    const stored = localStorage.getItem("theme");
+    if (stored === "light" || stored === "dark") return stored;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
+  // src/ui/app.tsx
+  function applyTheme(theme) {
+    if (theme === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
     } else {
-      container.innerHTML = "";
-      container.style.display = "none";
+      document.documentElement.removeAttribute("data-theme");
     }
-    return;
+    const icon = document.getElementById("theme-icon");
+    if (icon) icon.innerHTML = theme === "dark" ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    if (rawData.value) applyFilter();
   }
-  container.style.display = "";
-  let cards = "";
-  if (data.session) cards += renderWindowCard("Session (5h)", data.session);
-  if (data.weekly) cards += renderWindowCard("Weekly", data.weekly);
-  if (data.weekly_opus) cards += renderWindowCard("Weekly Opus", data.weekly_opus);
-  if (data.weekly_sonnet) cards += renderWindowCard("Weekly Sonnet", data.weekly_sonnet);
-  if (data.budget) {
-    const b3 = data.budget;
-    const pct = Math.min(100, b3.utilization);
-    const color = progressColor(pct);
-    cards += `<div class="stat-card">
-      <div class="label">Monthly Budget</div>
-      <div class="value" style="font-size:18px;color:${color}">$${b3.used.toFixed(2)} / $${b3.limit.toFixed(2)}</div>
-      <div style="background:var(--border);border-radius:4px;height:6px;margin:6px 0">
-        <div style="background:${color};height:100%;border-radius:4px;width:${pct}%;transition:width 0.3s"></div>
-      </div>
-      <div class="sub">${esc(b3.currency)}</div>
-    </div>`;
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    const next = current === "light" ? "dark" : "light";
+    localStorage.setItem("theme", next);
+    applyTheme(next);
   }
-  container.innerHTML = cards;
-  if (data.session) {
-    const currentPercent = 100 - data.session.used_percent;
-    if (previousSessionPercent !== null) {
-      if (previousSessionPercent > 0.01 && currentPercent <= 0.01) {
-        showError("Session depleted \u2014 resets in " + fmtResetTime(data.session.resets_in_minutes));
-      } else if (previousSessionPercent <= 0.01 && currentPercent > 0.01) {
-        showSuccess("Session restored");
-      }
-    }
-    previousSessionPercent = currentPercent;
+  applyTheme(getTheme());
+  var previousSessionPercent = null;
+  var loadDataInFlight = false;
+  var loadUsageWindowsInFlight = false;
+  function isAnthropicModel(model) {
+    if (!model) return false;
+    const m4 = model.toLowerCase();
+    return m4.includes("opus") || m4.includes("sonnet") || m4.includes("haiku");
   }
-  const badge = $("plan-badge");
-  if (badge && data.identity?.plan) {
-    badge.textContent = data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1);
-    badge.style.display = "";
-  } else if (badge) {
-    badge.style.display = "none";
+  function getRangeCutoff(range) {
+    if (range === "all") return null;
+    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
+    const d5 = /* @__PURE__ */ new Date();
+    d5.setDate(d5.getDate() - days);
+    return d5.toISOString().slice(0, 10);
   }
-}
-function renderSubagentSummary(summary) {
-  const container = $("subagent-summary");
-  if (!container) return;
-  if (summary.subagent_turns === 0) {
-    container.style.display = "none";
-    render(null, container);
-    return;
+  function readURLRange() {
+    const p5 = new URLSearchParams(window.location.search).get("range");
+    return ["7d", "30d", "90d", "all"].includes(p5) ? p5 : "30d";
   }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(SubagentSummary, { summary }), container);
-}
-function renderEntrypointBreakdown(data) {
-  const container = $("entrypoint-breakdown");
-  if (!container) return;
-  if (!data.length) {
-    container.style.display = "none";
-    render(null, container);
-    return;
-  }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(EntrypointTable, { data }), container);
-}
-function renderServiceTiers(data) {
-  const container = $("service-tiers");
-  if (!container) return;
-  if (!data.length) {
-    container.style.display = "none";
-    render(null, container);
-    return;
-  }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(ServiceTiersTable, { data }), container);
-}
-function renderToolSummary(data) {
-  const container = $("tool-summary");
-  if (!container) return;
-  if (!data.length) {
-    container.style.display = "none";
-    render(null, container);
-    return;
-  }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(ToolUsageTable, { data }), container);
-}
-function renderMcpSummary(data) {
-  const container = $("mcp-summary");
-  if (!container) return;
-  if (!data.length) {
-    container.style.display = "none";
-    render(null, container);
-    return;
-  }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(McpSummaryTable, { data }), container);
-}
-function renderBranchSummary(data) {
-  const container = $("branch-summary");
-  if (!container) return;
-  if (!data.length) {
-    container.style.display = "none";
-    render(null, container);
-    return;
-  }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(BranchTable, { data }), container);
-}
-function renderVersionSummary(data) {
-  const container = $("version-summary");
-  if (!container) return;
-  if (!data.length) {
-    container.style.display = "none";
-    render(null, container);
-    return;
-  }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(VersionTable, { data }), container);
-}
-function renderHourlyChart(data) {
-  const container = $("hourly-chart");
-  if (!container) return;
-  if (!data.length) {
-    container.style.display = "none";
-    render(null, container);
-    return;
-  }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(HourlyChart, { data }), container);
-}
-function renderCostSparkline(daily) {
-  const container = $("cost-sparkline");
-  if (!container) return;
-  const last7 = daily.slice(-7);
-  if (last7.length < 2) {
-    container.style.display = "none";
-    render(null, container);
-    return;
-  }
-  container.style.display = "";
-  render(/* @__PURE__ */ jsx21(Sparkline, { daily }), container);
-}
-async function loadUsageWindows() {
-  if (loadUsageWindowsInFlight) return;
-  loadUsageWindowsInFlight = true;
-  try {
-    const resp = await fetch("/api/usage-windows");
-    if (!resp.ok) return;
-    const data = await resp.json();
-    renderUsageWindows(data);
-  } catch {
-  } finally {
-    loadUsageWindowsInFlight = false;
-  }
-}
-var triggerRescan = createTriggerRescan({
-  button: $("rescan-btn"),
-  fetchImpl: (input, init) => fetch(input, init),
-  loadData,
-  showError,
-  setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
-  logError: (error) => console.error(error)
-});
-function renderLoadingSkeleton() {
-  const statsRow = document.getElementById("stats-row");
-  if (statsRow && !rawData.value) {
-    statsRow.innerHTML = Array.from(
-      { length: 7 },
-      () => '<div class="skeleton" style="height:80px"></div>'
-    ).join("");
-  }
-}
-renderLoadingSkeleton();
-async function loadData(force = false) {
-  if (loadDataInFlight && !force) return;
-  loadDataInFlight = true;
-  try {
-    const resp = await fetch("/api/data");
-    if (!resp.ok) {
-      showError(`Failed to load data: HTTP ${resp.status}`);
-      return;
-    }
-    const d3 = await resp.json();
-    if (d3.error) {
-      document.body.innerHTML = '<div style="padding:40px;color:#f87171;font-family:monospace">' + esc(d3.error) + "</div>";
-      return;
-    }
-    $("meta").textContent = "Updated: " + d3.generated_at + " \xB7 Auto-refresh 30s";
-    const isFirstLoad = rawData.value === null;
-    rawData.value = d3;
-    if (isFirstLoad) {
-      selectedRange.value = readURLRange();
-      document.querySelectorAll(".range-btn").forEach(
-        (btn) => btn.classList.toggle("active", btn.dataset.range === selectedRange.value)
-      );
-      buildFilterUI(d3.all_models);
-      const urlProject = new URLSearchParams(window.location.search).get("project");
-      if (urlProject) {
-        projectSearchQuery.value = urlProject;
-        const input = document.getElementById("project-search");
-        if (input) input.value = urlProject;
-        const clearBtn = document.getElementById("project-clear-btn");
-        if (clearBtn) clearBtn.style.display = "";
-      }
-    }
+  function setRange(range) {
+    selectedRange.value = range;
+    document.querySelectorAll(".range-btn").forEach(
+      (btn) => btn.classList.toggle("active", btn.dataset.range === range)
+    );
+    updateURL();
     applyFilter();
-    if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
-    if (rawData.value.entrypoint_breakdown) renderEntrypointBreakdown(rawData.value.entrypoint_breakdown);
-    if (rawData.value.service_tiers) renderServiceTiers(rawData.value.service_tiers);
-    if (rawData.value.tool_summary) renderToolSummary(rawData.value.tool_summary);
-    if (rawData.value.mcp_summary) renderMcpSummary(rawData.value.mcp_summary);
-    if (rawData.value.git_branch_summary) renderBranchSummary(rawData.value.git_branch_summary);
-    if (rawData.value.version_summary) renderVersionSummary(rawData.value.version_summary);
-    if (rawData.value.hourly_distribution) renderHourlyChart(rawData.value.hourly_distribution);
-  } catch (e3) {
-    console.error(e3);
-  } finally {
-    loadDataInFlight = false;
   }
-}
-Object.assign(window, {
-  setRange,
-  onModelToggle,
-  selectAllModels,
-  clearAllModels,
-  exportSessionsCSV,
-  exportProjectsCSV,
-  triggerRescan,
-  onProjectSearch,
-  clearProjectSearch,
-  toggleTheme
-});
-loadData();
-setInterval(loadData, 3e4);
-loadUsageWindows();
-setInterval(loadUsageWindows, 6e4);
-var footerEl = document.querySelector("footer");
-if (footerEl && footerEl.parentElement) {
-  render(/* @__PURE__ */ jsx21(Footer, {}), footerEl.parentElement, footerEl);
-}
-var toastRoot = document.createElement("div");
-document.body.appendChild(toastRoot);
-render(/* @__PURE__ */ jsx21(ToastContainer, {}), toastRoot);
+  function modelPriority(m4) {
+    const ml = m4.toLowerCase();
+    if (ml.includes("opus")) return 0;
+    if (ml.includes("sonnet")) return 1;
+    if (ml.includes("haiku")) return 2;
+    return 3;
+  }
+  function readURLModels(allModels) {
+    const param = new URLSearchParams(window.location.search).get("models");
+    if (!param) return new Set(allModels.filter((m4) => isAnthropicModel(m4)));
+    const fromURL = new Set(param.split(",").map((s4) => s4.trim()).filter(Boolean));
+    return new Set(allModels.filter((m4) => fromURL.has(m4)));
+  }
+  function isDefaultModelSelection(allModels) {
+    const billable = allModels.filter((m4) => isAnthropicModel(m4));
+    if (selectedModels.value.size !== billable.length) return false;
+    return billable.every((m4) => selectedModels.value.has(m4));
+  }
+  function buildFilterUI(allModels) {
+    const sorted = [...allModels].sort((a4, b4) => {
+      const pa = modelPriority(a4), pb = modelPriority(b4);
+      return pa !== pb ? pa - pb : a4.localeCompare(b4);
+    });
+    selectedModels.value = readURLModels(allModels);
+    const container = $2("model-checkboxes");
+    container.innerHTML = sorted.map((m4) => {
+      const checked = selectedModels.value.has(m4);
+      return `<label class="model-cb-label ${checked ? "checked" : ""}" data-model="${esc(m4)}">
+      <input type="checkbox" value="${esc(m4)}" ${checked ? "checked" : ""} onchange="onModelToggle(this)" aria-label="${esc(m4)}">
+      ${esc(m4)}
+    </label>`;
+    }).join("");
+  }
+  function onModelToggle(cb) {
+    const label = cb.closest("label");
+    const next = new Set(selectedModels.value);
+    if (cb.checked) {
+      next.add(cb.value);
+      label.classList.add("checked");
+    } else {
+      next.delete(cb.value);
+      label.classList.remove("checked");
+    }
+    selectedModels.value = next;
+    updateURL();
+    applyFilter();
+  }
+  function selectAllModels() {
+    const next = new Set(selectedModels.value);
+    document.querySelectorAll("#model-checkboxes input").forEach((cb) => {
+      cb.checked = true;
+      next.add(cb.value);
+      cb.closest("label").classList.add("checked");
+    });
+    selectedModels.value = next;
+    updateURL();
+    applyFilter();
+  }
+  function clearAllModels() {
+    document.querySelectorAll("#model-checkboxes input").forEach((cb) => {
+      cb.checked = false;
+      cb.closest("label").classList.remove("checked");
+    });
+    selectedModels.value = /* @__PURE__ */ new Set();
+    updateURL();
+    applyFilter();
+  }
+  function onProjectSearch(query) {
+    projectSearchQuery.value = query.toLowerCase().trim();
+    const clearBtn = document.getElementById("project-clear-btn");
+    if (clearBtn) clearBtn.style.display = projectSearchQuery.value ? "" : "none";
+    updateURL();
+    applyFilter();
+  }
+  function clearProjectSearch() {
+    projectSearchQuery.value = "";
+    const input = document.getElementById("project-search");
+    if (input) input.value = "";
+    const clearBtn = document.getElementById("project-clear-btn");
+    if (clearBtn) clearBtn.style.display = "none";
+    updateURL();
+    applyFilter();
+  }
+  function matchesProjectSearch(project) {
+    if (!projectSearchQuery.value) return true;
+    return project.toLowerCase().includes(projectSearchQuery.value);
+  }
+  function updateURL() {
+    const allModels = Array.from(document.querySelectorAll("#model-checkboxes input")).map((cb) => cb.value);
+    const params = new URLSearchParams();
+    if (selectedRange.value !== "30d") params.set("range", selectedRange.value);
+    if (!isDefaultModelSelection(allModels)) params.set("models", Array.from(selectedModels.value).join(","));
+    if (projectSearchQuery.value) params.set("project", projectSearchQuery.value);
+    const search = params.toString() ? "?" + params.toString() : "";
+    history.replaceState(null, "", window.location.pathname + search);
+  }
+  function applyFilter() {
+    if (!rawData.value) return;
+    const cutoff = getRangeCutoff(selectedRange.value);
+    const filteredDaily = rawData.value.daily_by_model.filter(
+      (r4) => selectedModels.value.has(r4.model) && (!cutoff || r4.day >= cutoff)
+    );
+    const dailyMap = {};
+    for (const r4 of filteredDaily) {
+      if (!dailyMap[r4.day]) dailyMap[r4.day] = { day: r4.day, input: 0, output: 0, cache_read: 0, cache_creation: 0 };
+      const d5 = dailyMap[r4.day];
+      d5.input += r4.input;
+      d5.output += r4.output;
+      d5.cache_read += r4.cache_read;
+      d5.cache_creation += r4.cache_creation;
+    }
+    const daily = Object.values(dailyMap).sort((a4, b4) => a4.day.localeCompare(b4.day));
+    const modelMap = {};
+    for (const r4 of filteredDaily) {
+      if (!modelMap[r4.model]) modelMap[r4.model] = { model: r4.model, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, sessions: 0, cost: 0, is_billable: r4.cost > 0 || isAnthropicModel(r4.model) };
+      const m4 = modelMap[r4.model];
+      m4.input += r4.input;
+      m4.output += r4.output;
+      m4.cache_read += r4.cache_read;
+      m4.cache_creation += r4.cache_creation;
+      m4.turns += r4.turns;
+      m4.cost += r4.cost;
+    }
+    const filteredSessions = rawData.value.sessions_all.filter(
+      (s4) => selectedModels.value.has(s4.model) && (!cutoff || s4.last_date >= cutoff) && matchesProjectSearch(s4.project)
+    );
+    for (const s4 of filteredSessions) {
+      if (modelMap[s4.model]) modelMap[s4.model].sessions++;
+    }
+    const byModel = Object.values(modelMap).sort((a4, b4) => b4.input + b4.output - (a4.input + a4.output));
+    const projMap = {};
+    for (const s4 of filteredSessions) {
+      if (!projMap[s4.project]) projMap[s4.project] = { project: s4.project, input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0, sessions: 0, cost: 0 };
+      const p5 = projMap[s4.project];
+      p5.input += s4.input;
+      p5.output += s4.output;
+      p5.cache_read += s4.cache_read;
+      p5.cache_creation += s4.cache_creation;
+      p5.turns += s4.turns;
+      p5.sessions++;
+      p5.cost += s4.cost;
+    }
+    const byProject = Object.values(projMap).sort((a4, b4) => b4.input + b4.output - (a4.input + a4.output));
+    const totals = {
+      sessions: filteredSessions.length,
+      turns: byModel.reduce((s4, m4) => s4 + m4.turns, 0),
+      input: byModel.reduce((s4, m4) => s4 + m4.input, 0),
+      output: byModel.reduce((s4, m4) => s4 + m4.output, 0),
+      cache_read: byModel.reduce((s4, m4) => s4 + m4.cache_read, 0),
+      cache_creation: byModel.reduce((s4, m4) => s4 + m4.cache_creation, 0),
+      cost: filteredSessions.reduce((s4, sess) => s4 + sess.cost, 0)
+    };
+    $2("daily-chart-title").textContent = "Daily Token Usage \u2014 " + RANGE_LABELS[selectedRange.value];
+    renderStats(totals, daily);
+    renderDailyChart(daily);
+    renderModelChart(byModel);
+    renderProjectChart(byProject);
+    lastFilteredSessions.value = filteredSessions;
+    lastByProject.value = byProject;
+    R(/* @__PURE__ */ u2(ModelCostTable, { byModel }), $2("model-cost-mount"));
+    R(/* @__PURE__ */ u2(SessionsTable, { onExportCSV: exportSessionsCSV }), $2("sessions-mount"));
+    R(/* @__PURE__ */ u2(ProjectCostTable, { byProject: lastByProject.value.slice(0, 30), onExportCSV: exportProjectsCSV }), $2("project-cost-mount"));
+  }
+  function renderStats(t4, daily) {
+    R(/* @__PURE__ */ u2(StatsCards, { totals: t4, daily }), $2("stats-row"));
+  }
+  function renderDailyChart(daily) {
+    const container = document.getElementById("chart-daily");
+    R(/* @__PURE__ */ u2(DailyChart, { daily }), container);
+  }
+  function renderModelChart(byModel) {
+    const container = document.getElementById("chart-model");
+    R(/* @__PURE__ */ u2(ModelChart, { byModel }), container);
+  }
+  function renderProjectChart(byProject) {
+    const container = document.getElementById("chart-project");
+    R(/* @__PURE__ */ u2(ProjectChart, { byProject }), container);
+  }
+  function exportSessionsCSV() {
+    const header = ["Session", "Project", "Last Active", "Duration (min)", "Model", "Turns", "Input", "Output", "Cache Read", "Cache Creation", "Est. Cost"];
+    const rows = lastFilteredSessions.value.map((s4) => {
+      const cost = s4.cost;
+      return [s4.session_id, s4.project, s4.last, s4.duration_min, s4.model, s4.turns, s4.input, s4.output, s4.cache_read, s4.cache_creation, cost.toFixed(4)];
+    });
+    downloadCSV("sessions", header, rows);
+  }
+  function exportProjectsCSV() {
+    const header = ["Project", "Sessions", "Turns", "Input", "Output", "Cache Read", "Cache Creation", "Est. Cost"];
+    const rows = lastByProject.value.map(
+      (p5) => [p5.project, p5.sessions, p5.turns, p5.input, p5.output, p5.cache_read, p5.cache_creation, p5.cost.toFixed(4)]
+    );
+    downloadCSV("projects", header, rows);
+  }
+  function renderWindowCard(label, w5) {
+    const pct = Math.min(100, w5.used_percent);
+    const color = progressColor(pct);
+    const resetText = w5.resets_in_minutes != null ? `Resets in ${fmtResetTime(w5.resets_in_minutes)}` : "";
+    return `<div class="stat-card">
+    <div class="stat-label">${esc(label)}</div>
+    <div class="stat-value" style="font-size:18px;color:${color}">${esc(pct.toFixed(1))}%</div>
+    <div class="progress-track">
+      <div class="progress-fill" style="background:${color};width:${pct}%"></div>
+    </div>
+    <div class="stat-sub">${esc(resetText)}</div>
+  </div>`;
+  }
+  function renderUsageWindows(data) {
+    const container = $2("usage-windows");
+    if (!container) return;
+    if (!data.available) {
+      const badge2 = $2("plan-badge");
+      if (badge2) badge2.style.display = "none";
+      if (data.error) {
+        container.style.display = "grid";
+        container.innerHTML = `<div class="stat-card">
+        <div class="stat-label">Rate Windows</div>
+        <div class="stat-value" style="font-size:16px">Unavailable</div>
+        <div class="stat-sub">${esc(data.error)}</div>
+      </div>`;
+      } else {
+        container.innerHTML = "";
+        container.style.display = "none";
+      }
+      return;
+    }
+    container.style.display = "grid";
+    let cards = "";
+    if (data.session) cards += renderWindowCard("Session (5h)", data.session);
+    if (data.weekly) cards += renderWindowCard("Weekly", data.weekly);
+    if (data.weekly_opus) cards += renderWindowCard("Weekly Opus", data.weekly_opus);
+    if (data.weekly_sonnet) cards += renderWindowCard("Weekly Sonnet", data.weekly_sonnet);
+    if (data.budget) {
+      const b4 = data.budget;
+      const pct = Math.min(100, b4.utilization);
+      const color = progressColor(pct);
+      cards += `<div class="stat-card">
+      <div class="stat-label">Monthly Budget</div>
+      <div class="stat-value" style="font-size:18px;color:${color}">${esc("$" + b4.used.toFixed(2) + " / $" + b4.limit.toFixed(2))}</div>
+      <div class="progress-track">
+        <div class="progress-fill" style="background:${color};width:${pct}%"></div>
+      </div>
+      <div class="stat-sub">${esc(b4.currency)}</div>
+    </div>`;
+    }
+    container.innerHTML = cards;
+    if (data.session) {
+      const currentPercent = 100 - data.session.used_percent;
+      if (previousSessionPercent !== null) {
+        if (previousSessionPercent > 0.01 && currentPercent <= 0.01) {
+          showError("Session depleted \u2014 resets in " + fmtResetTime(data.session.resets_in_minutes));
+        } else if (previousSessionPercent <= 0.01 && currentPercent > 0.01) {
+          showSuccess("Session restored");
+        }
+      }
+      previousSessionPercent = currentPercent;
+    }
+    const badge = $2("plan-badge");
+    if (badge && data.identity?.plan) {
+      badge.textContent = data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1);
+      badge.style.display = "";
+    } else if (badge) {
+      badge.style.display = "none";
+    }
+  }
+  function renderSubagentSummary(summary) {
+    const container = $2("subagent-summary");
+    if (!container) return;
+    if (summary.subagent_turns === 0) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(SubagentSummary, { summary }), container);
+  }
+  function renderEntrypointBreakdown(data) {
+    const container = $2("entrypoint-breakdown");
+    if (!container) return;
+    if (!data.length) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(EntrypointTable, { data }), container);
+  }
+  function renderServiceTiers(data) {
+    const container = $2("service-tiers");
+    if (!container) return;
+    if (!data.length) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(ServiceTiersTable, { data }), container);
+  }
+  function renderToolSummary(data) {
+    const container = $2("tool-summary");
+    if (!container) return;
+    if (!data.length) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(ToolUsageTable, { data }), container);
+  }
+  function renderMcpSummary(data) {
+    const container = $2("mcp-summary");
+    if (!container) return;
+    if (!data.length) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(McpSummaryTable, { data }), container);
+  }
+  function renderBranchSummary(data) {
+    const container = $2("branch-summary");
+    if (!container) return;
+    if (!data.length) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(BranchTable, { data }), container);
+  }
+  function renderVersionSummary(data) {
+    const container = $2("version-summary");
+    if (!container) return;
+    if (!data.length) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(VersionTable, { data }), container);
+  }
+  function renderHourlyChart(data) {
+    const container = $2("hourly-chart");
+    if (!container) return;
+    if (!data.length) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(HourlyChart, { data }), container);
+  }
+  async function loadUsageWindows() {
+    if (loadUsageWindowsInFlight) return;
+    loadUsageWindowsInFlight = true;
+    try {
+      const resp = await fetch("/api/usage-windows");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderUsageWindows(data);
+    } catch {
+    } finally {
+      loadUsageWindowsInFlight = false;
+    }
+  }
+  var triggerRescan = createTriggerRescan({
+    button: $2("rescan-btn"),
+    fetchImpl: (input, init) => fetch(input, init),
+    loadData,
+    showError,
+    setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
+    logError: (error) => console.error(error)
+  });
+  function renderLoadingSkeleton() {
+    const statsRow = document.getElementById("stats-row");
+    if (statsRow && !rawData.value) {
+      statsRow.innerHTML = Array.from(
+        { length: 7 },
+        () => '<div class="skeleton" style="height:80px"></div>'
+      ).join("");
+    }
+  }
+  renderLoadingSkeleton();
+  async function loadData(force = false) {
+    if (loadDataInFlight && !force) return;
+    loadDataInFlight = true;
+    try {
+      const resp = await fetch("/api/data");
+      if (!resp.ok) {
+        showError(`Failed to load data: HTTP ${resp.status}`);
+        return;
+      }
+      const d5 = await resp.json();
+      if (d5.error) {
+        document.body.innerHTML = '<div style="padding:40px;color:#f87171;font-family:monospace">' + esc(d5.error) + "</div>";
+        return;
+      }
+      $2("meta").textContent = "Updated: " + d5.generated_at + " \xB7 Auto-refresh 30s";
+      const isFirstLoad = rawData.value === null;
+      rawData.value = d5;
+      if (isFirstLoad) {
+        selectedRange.value = readURLRange();
+        document.querySelectorAll(".range-btn").forEach(
+          (btn) => btn.classList.toggle("active", btn.dataset.range === selectedRange.value)
+        );
+        buildFilterUI(d5.all_models);
+        const urlProject = new URLSearchParams(window.location.search).get("project");
+        if (urlProject) {
+          projectSearchQuery.value = urlProject;
+          const input = document.getElementById("project-search");
+          if (input) input.value = urlProject;
+          const clearBtn = document.getElementById("project-clear-btn");
+          if (clearBtn) clearBtn.style.display = "";
+        }
+      }
+      applyFilter();
+      if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
+      if (rawData.value.entrypoint_breakdown) renderEntrypointBreakdown(rawData.value.entrypoint_breakdown);
+      if (rawData.value.service_tiers) renderServiceTiers(rawData.value.service_tiers);
+      if (rawData.value.tool_summary) renderToolSummary(rawData.value.tool_summary);
+      if (rawData.value.mcp_summary) renderMcpSummary(rawData.value.mcp_summary);
+      if (rawData.value.git_branch_summary) renderBranchSummary(rawData.value.git_branch_summary);
+      if (rawData.value.version_summary) renderVersionSummary(rawData.value.version_summary);
+      if (rawData.value.hourly_distribution) renderHourlyChart(rawData.value.hourly_distribution);
+    } catch (e4) {
+      console.error(e4);
+    } finally {
+      loadDataInFlight = false;
+    }
+  }
+  Object.assign(window, {
+    setRange,
+    onModelToggle,
+    selectAllModels,
+    clearAllModels,
+    exportSessionsCSV,
+    exportProjectsCSV,
+    triggerRescan,
+    onProjectSearch,
+    clearProjectSearch,
+    toggleTheme
+  });
+  loadData();
+  setInterval(loadData, 3e4);
+  loadUsageWindows();
+  setInterval(loadUsageWindows, 6e4);
+  var footerEl = document.querySelector("footer");
+  if (footerEl && footerEl.parentElement) {
+    R(/* @__PURE__ */ u2(Footer, {}), footerEl.parentElement, footerEl);
+  }
+  var toastRoot = document.createElement("div");
+  document.body.appendChild(toastRoot);
+  R(/* @__PURE__ */ u2(ToastContainer, {}), toastRoot);
+})();
+/*! Bundled license information:
+
+@tanstack/table-core/build/lib/index.mjs:
+  (**
+     * table-core
+     *
+     * Copyright (c) TanStack
+     *
+     * This source code is licensed under the MIT license found in the
+     * LICENSE.md file in the root directory of this source tree.
+     *
+     * @license MIT
+     *)
+*/

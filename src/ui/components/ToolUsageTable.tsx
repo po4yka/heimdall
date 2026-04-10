@@ -18,7 +18,7 @@ const columns: ColumnDef<ToolSummary, any>[] = [
   { accessorKey: 'mcp_server', header: 'MCP Server',
     cell: ({ getValue }) => {
       const v = getValue() as string | null;
-      return v ? <span class="dim">{v}</span> : <span class="dim">--</span>;
+      return v ? <span class="muted">{v}</span> : <span class="muted">--</span>;
     } },
   { accessorKey: 'invocations', header: 'Calls',
     cell: ({ getValue }) => <span class="num">{fmt(getValue() as number)}</span> },

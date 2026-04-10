@@ -33,7 +33,7 @@ export function ToastContainer() {
       gap: '8px',
     }}>
       {toasts.value.map(t => (
-        <div key={t.id} style={{
+        <div key={t.id} role={t.type === 'error' ? 'alert' : 'status'} style={{
           background: `var(--toast-${t.type === 'error' ? 'error' : 'success'}-bg)`,
           color: `var(--toast-${t.type === 'error' ? 'error' : 'success'}-text)`,
           padding: '10px 16px',
@@ -43,6 +43,9 @@ export function ToastContainer() {
           maxWidth: '360px',
           border: '1px solid var(--border)',
           animation: 'slideIn 0.2s ease-out',
+          backdropFilter: 'blur(12px) saturate(150%)',
+          WebkitBackdropFilter: 'blur(12px) saturate(150%)',
+          boxShadow: '0 4px 16px rgba(99,102,241,0.08)',
         }}>
           {t.text}
         </div>

@@ -73,6 +73,7 @@ export function ModelCostTable({ byModel }: { byModel: ModelAgg[] }) {
       data={byModel}
       title="Cost by Model"
       defaultSort={defaultSort}
+      costRows
     />
   );
 }

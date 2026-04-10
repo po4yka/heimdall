@@ -23,6 +23,7 @@ interface DataTableProps<T> {
   pageSize?: number;
   defaultSort?: SortingState;
   enableColumnVisibility?: boolean;
+  costRows?: boolean;
 }
 
 function renderCell<T>(cell: Cell<T, unknown>): any {
@@ -53,6 +54,7 @@ export function DataTable<T>({
   pageSize,
   defaultSort,
   enableColumnVisibility,
+  costRows,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>(defaultSort || []);
   const [pagination, setPagination] = useState<PaginationState>({
@@ -110,7 +112,7 @@ export function DataTable<T>({
   return (
     <div class="table-card">
       {(title || exportFn) && (
-        <div class={exportFn ? 'section-header' : ''}>
+        <div class="section-header">
           {title && <div class="section-title">{title}</div>}
           {exportFn && (
             <button class="export-btn" onClick={exportFn} title="Export to CSV">
@@ -150,7 +152,10 @@ export function DataTable<T>({
                     scope="col"
                     class={canSort ? 'sortable' : undefined}
                     aria-sort={sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : undefined}
+                    style={sorted ? { borderBottom: '2px solid var(--border-accent)' } : undefined}
+                    tabIndex={canSort ? 0 : undefined}
                     onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
+                    onKeyDown={canSort ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); header.column.getToggleSortingHandler()?.(e); } } : undefined}
                   >
                     {renderHeader(header)}
                     {canSort && (
@@ -166,7 +171,7 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {rows.map(row => (
-            <tr key={row.id}>
+            <tr key={row.id} class={costRows ? 'cost-row' : undefined}>
               {row.getVisibleCells().map(cell => (
                 <td key={cell.id}>{renderCell(cell)}</td>
               ))}
@@ -176,16 +181,7 @@ export function DataTable<T>({
       </table>
 
       {pageSize && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginTop: '12px',
-            fontSize: '12px',
-            color: 'var(--muted)',
-          }}
-        >
+        <div class="pagination">
           <span>
             {table.getRowCount() > 0
               ? `Showing ${pagination.pageIndex * pagination.pageSize + 1}\u2013${Math.min(
