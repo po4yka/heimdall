@@ -102,18 +102,12 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             tool_name TEXT NOT NULL,
             mcp_server TEXT,
             mcp_tool TEXT,
-            tool_category TEXT NOT NULL DEFAULT 'builtin'
+            tool_category TEXT NOT NULL DEFAULT 'builtin',
+            source_path TEXT NOT NULL DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_ti_session ON tool_invocations(session_id);
         CREATE INDEX IF NOT EXISTS idx_ti_tool ON tool_invocations(tool_name);
         CREATE INDEX IF NOT EXISTS idx_ti_mcp ON tool_invocations(mcp_server);",
-    )?;
-
-    // Dedup index for incremental rescans
-    conn.execute_batch(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ti_dedup
-         ON tool_invocations(session_id, message_id, tool_name)
-         WHERE message_id IS NOT NULL AND message_id != '';",
     )?;
 
     // Feature 1: Session titles
@@ -131,6 +125,19 @@ pub fn init_db(conn: &Connection) -> Result<()> {
              ALTER TABLE tool_invocations ADD COLUMN is_error INTEGER DEFAULT 0;",
         )?;
     }
+    if !has_column(conn, "tool_invocations", "source_path") {
+        conn.execute_batch(
+            "ALTER TABLE tool_invocations ADD COLUMN source_path TEXT NOT NULL DEFAULT '';",
+        )?;
+    }
+
+    // Dedup by tool_use_id so repeated use of the same tool in a single turn is preserved.
+    conn.execute_batch(
+        "DROP INDEX IF EXISTS idx_ti_dedup;
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_ti_tool_use_id
+         ON tool_invocations(tool_use_id)
+         WHERE tool_use_id IS NOT NULL AND tool_use_id != '';",
+    )?;
 
     Ok(())
 }
@@ -138,6 +145,19 @@ pub fn init_db(conn: &Connection) -> Result<()> {
 fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
     conn.prepare(&format!("SELECT {column} FROM {table} LIMIT 1"))
         .is_ok()
+}
+
+fn add_cost_by_model<K: std::cmp::Eq + std::hash::Hash>(
+    map: &mut HashMap<K, f64>,
+    key: K,
+    model: &str,
+    input: i64,
+    output: i64,
+    cache_read: i64,
+    cache_creation: i64,
+) {
+    let cost = pricing::calc_cost(model, input, output, cache_read, cache_creation);
+    *map.entry(key).or_default() += cost;
 }
 
 pub fn get_processed_file(conn: &Connection, path: &str) -> Result<Option<(f64, i64)>> {
@@ -185,6 +205,14 @@ pub fn delete_turns_by_source_path(conn: &Connection, path: &str) -> Result<()> 
     Ok(())
 }
 
+pub fn delete_tool_invocations_by_source_path(conn: &Connection, path: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM tool_invocations WHERE source_path = ?1",
+        [path],
+    )?;
+    Ok(())
+}
+
 pub fn insert_turns(conn: &Connection, turns: &[Turn]) -> Result<()> {
     let mut stmt = conn.prepare(
         "INSERT OR IGNORE INTO turns
@@ -229,8 +257,8 @@ pub fn insert_tool_invocations(
 ) -> Result<()> {
     let mut stmt = conn.prepare(
         "INSERT OR IGNORE INTO tool_invocations
-            (session_id, message_id, tool_name, mcp_server, mcp_tool, tool_category, tool_use_id, is_error)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            (session_id, message_id, tool_name, mcp_server, mcp_tool, tool_category, tool_use_id, is_error, source_path)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
     )?;
     for t in turns {
         let msg_id: Option<&str> = if t.message_id.is_empty() {
@@ -250,6 +278,7 @@ pub fn insert_tool_invocations(
                 category,
                 tool_use_id,
                 is_error as i32,
+                t.source_path,
             ])?;
         }
     }
@@ -259,10 +288,23 @@ pub fn insert_tool_invocations(
 #[allow(dead_code)]
 pub fn delete_tool_invocations_by_session(conn: &Connection, session_ids: &[String]) -> Result<()> {
     for sid in session_ids {
-        conn.execute(
-            "DELETE FROM tool_invocations WHERE session_id = ?1",
-            [sid],
-        )?;
+        conn.execute("DELETE FROM tool_invocations WHERE session_id = ?1", [sid])?;
+    }
+    Ok(())
+}
+
+pub fn sync_session_titles(
+    conn: &Connection,
+    session_ids: &[String],
+    session_titles: &HashMap<String, String>,
+) -> Result<()> {
+    let mut stmt = conn.prepare("UPDATE sessions SET title = ?1 WHERE session_id = ?2")?;
+    for session_id in session_ids {
+        let title = session_titles
+            .get(session_id)
+            .map(|title| title.trim())
+            .filter(|title| !title.is_empty());
+        stmt.execute(rusqlite::params![title, session_id])?;
     }
     Ok(())
 }
@@ -332,6 +374,77 @@ pub fn recompute_session_totals(conn: &Connection) -> Result<()> {
 }
 
 pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
+    let mut branch_costs: HashMap<String, f64> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT s.git_branch, COALESCE(t.model, '') as model,
+                    SUM(t.input_tokens) as input, SUM(t.output_tokens) as output,
+                    SUM(t.cache_read_tokens) as cache_read, SUM(t.cache_creation_tokens) as cache_creation
+             FROM sessions s
+             JOIN turns t ON s.session_id = t.session_id
+             WHERE s.git_branch IS NOT NULL AND s.git_branch != ''
+             GROUP BY s.git_branch, COALESCE(t.model, '')",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })?;
+        for row in rows {
+            let (branch, model, input, output, cache_read, cache_creation) = row?;
+            add_cost_by_model(
+                &mut branch_costs,
+                branch,
+                &model,
+                input,
+                output,
+                cache_read,
+                cache_creation,
+            );
+        }
+    }
+
+    let mut daily_project_costs: HashMap<(String, String), f64> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT substr(t.timestamp, 1, 10) as day, s.project_name,
+                    COALESCE(t.model, '') as model,
+                    SUM(t.input_tokens) as input, SUM(t.output_tokens) as output,
+                    SUM(t.cache_read_tokens) as cache_read, SUM(t.cache_creation_tokens) as cache_creation
+             FROM turns t
+             JOIN sessions s ON t.session_id = s.session_id
+             GROUP BY substr(t.timestamp, 1, 10), s.project_name, COALESCE(t.model, '')",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })?;
+        for row in rows {
+            let (day, project, model, input, output, cache_read, cache_creation) = row?;
+            add_cost_by_model(
+                &mut daily_project_costs,
+                (day, project),
+                &model,
+                input,
+                output,
+                cache_read,
+                cache_creation,
+            );
+        }
+    }
+
     // All models
     let mut stmt = conn.prepare(
         "SELECT COALESCE(model, 'unknown') as model
@@ -342,7 +455,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         .query_map([], |row| row.get(0))?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read row: {}", e);
+                None
+            }
         })
         .collect();
 
@@ -375,7 +491,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read row: {}", e);
+                None
+            }
         })
         .collect();
 
@@ -445,7 +564,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read row: {}", e);
+                None
+            }
         })
         .collect();
 
@@ -503,7 +625,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read row: {}", e);
+                None
+            }
         })
         .collect();
 
@@ -527,7 +652,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read row: {}", e);
+                None
+            }
         })
         .collect();
 
@@ -556,7 +684,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read tool summary row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read tool summary row: {}", e);
+                None
+            }
         })
         .collect()
     };
@@ -583,7 +714,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read MCP summary row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read MCP summary row: {}", e);
+                None
+            }
         })
         .collect()
     };
@@ -606,7 +740,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read hourly row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read hourly row: {}", e);
+                None
+            }
         })
         .collect()
     };
@@ -631,14 +768,22 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
             let turns: i64 = row.get(2)?;
             let input: i64 = row.get(3)?;
             let output: i64 = row.get(4)?;
-            let cache_read: i64 = row.get(5)?;
-            let cache_creation: i64 = row.get(6)?;
-            let cost = pricing::calc_cost("claude-sonnet-4-20250514", input, output, cache_read, cache_creation);
-            Ok(BranchSummary { branch, sessions, turns, input, output, cost })
+            let cost = *branch_costs.get(&branch).unwrap_or(&0.0);
+            Ok(BranchSummary {
+                branch,
+                sessions,
+                turns,
+                input,
+                output,
+                cost,
+            })
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read branch summary row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read branch summary row: {}", e);
+                None
+            }
         })
         .collect()
     };
@@ -661,7 +806,10 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read version summary row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read version summary row: {}", e);
+                None
+            }
         })
         .collect()
     };
@@ -680,14 +828,23 @@ pub fn get_dashboard_data(conn: &Connection) -> Result<DashboardData> {
             let project: String = row.get(1)?;
             let input: i64 = row.get(2)?;
             let output: i64 = row.get(3)?;
-            let cache_read: i64 = row.get(4)?;
-            let cache_creation: i64 = row.get(5)?;
-            let cost = pricing::calc_cost("claude-sonnet-4-20250514", input, output, cache_read, cache_creation);
-            Ok(DailyProjectRow { day, project, input, output, cost })
+            let cost = *daily_project_costs
+                .get(&(day.clone(), project.clone()))
+                .unwrap_or(&0.0);
+            Ok(DailyProjectRow {
+                day,
+                project,
+                input,
+                output,
+                cost,
+            })
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read daily project row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read daily project row: {}", e);
+                None
+            }
         })
         .collect()
     };
@@ -745,7 +902,10 @@ pub fn get_rate_window_history(
         })?
         .filter_map(|r| match r {
             Ok(val) => Some(val),
-            Err(e) => { warn!("Failed to read row: {}", e); None }
+            Err(e) => {
+                warn!("Failed to read row: {}", e);
+                None
+            }
         })
         .collect();
     Ok(rows)
@@ -1115,7 +1275,9 @@ mod tests {
         }];
         insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tool_invocations", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM tool_invocations", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(count, 3);
 
@@ -1155,9 +1317,107 @@ mod tests {
         insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
         insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tool_invocations", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM tool_invocations", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_tool_invocation_preserves_duplicate_tool_names_with_distinct_tool_use_ids() {
+        let conn = test_conn();
+        let turns = vec![Turn {
+            session_id: "s1".into(),
+            message_id: "msg-1".into(),
+            source_path: "/tmp/s1.jsonl".into(),
+            tool_use_ids: vec![
+                ("tool-1".into(), "Read".into()),
+                ("tool-2".into(), "Read".into()),
+            ],
+            ..Default::default()
+        }];
+        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tool_invocations", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn test_delete_tool_invocations_by_source_path() {
+        let conn = test_conn();
+        let turns = vec![
+            Turn {
+                session_id: "s1".into(),
+                message_id: "msg-1".into(),
+                source_path: "/tmp/a.jsonl".into(),
+                tool_use_ids: vec![("tool-1".into(), "Read".into())],
+                ..Default::default()
+            },
+            Turn {
+                session_id: "s2".into(),
+                message_id: "msg-2".into(),
+                source_path: "/tmp/b.jsonl".into(),
+                tool_use_ids: vec![("tool-2".into(), "Bash".into())],
+                ..Default::default()
+            },
+        ];
+        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
+
+        delete_tool_invocations_by_source_path(&conn, "/tmp/a.jsonl").unwrap();
+
+        let remaining: Vec<String> = conn
+            .prepare("SELECT source_path FROM tool_invocations ORDER BY source_path")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|row| row.ok())
+            .collect();
+        assert_eq!(remaining, vec!["/tmp/b.jsonl".to_string()]);
+    }
+
+    #[test]
+    fn test_sync_session_titles_updates_and_clears_titles() {
+        let conn = test_conn();
+        upsert_sessions(
+            &conn,
+            &[crate::models::Session {
+                session_id: "s1".into(),
+                project_name: "test".into(),
+                title: Some("Old title".into()),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+
+        sync_session_titles(
+            &conn,
+            &["s1".into()],
+            &HashMap::from([("s1".into(), "New title".into())]),
+        )
+        .unwrap();
+        let title: Option<String> = conn
+            .query_row(
+                "SELECT title FROM sessions WHERE session_id = 's1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(title.as_deref(), Some("New title"));
+
+        sync_session_titles(&conn, &["s1".into()], &HashMap::new()).unwrap();
+        let title: Option<String> = conn
+            .query_row(
+                "SELECT title FROM sessions WHERE session_id = 's1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(title.is_none());
     }
 
     #[test]
@@ -1215,5 +1475,75 @@ mod tests {
         assert_eq!(data.mcp_summary.len(), 1);
         assert_eq!(data.mcp_summary[0].server, "codex");
         assert_eq!(data.mcp_summary[0].invocations, 1);
+    }
+
+    #[test]
+    fn test_dashboard_cost_summaries_use_actual_model_mix() {
+        let conn = test_conn();
+        upsert_sessions(
+            &conn,
+            &[
+                crate::models::Session {
+                    session_id: "s1".into(),
+                    project_name: "proj".into(),
+                    git_branch: "main".into(),
+                    first_timestamp: "2026-04-08T09:00:00Z".into(),
+                    last_timestamp: "2026-04-08T09:10:00Z".into(),
+                    model: Some("claude-sonnet-4-6".into()),
+                    ..Default::default()
+                },
+                crate::models::Session {
+                    session_id: "s2".into(),
+                    project_name: "proj".into(),
+                    git_branch: "main".into(),
+                    first_timestamp: "2026-04-08T09:20:00Z".into(),
+                    last_timestamp: "2026-04-08T09:30:00Z".into(),
+                    model: Some("claude-opus-4-6".into()),
+                    ..Default::default()
+                },
+            ],
+        )
+        .unwrap();
+
+        let turns = vec![
+            Turn {
+                session_id: "s1".into(),
+                timestamp: "2026-04-08T09:05:00Z".into(),
+                message_id: "m1".into(),
+                model: "claude-sonnet-4-6".into(),
+                input_tokens: 100_000,
+                output_tokens: 20_000,
+                ..Default::default()
+            },
+            Turn {
+                session_id: "s2".into(),
+                timestamp: "2026-04-08T09:25:00Z".into(),
+                message_id: "m2".into(),
+                model: "claude-opus-4-6".into(),
+                input_tokens: 50_000,
+                output_tokens: 10_000,
+                ..Default::default()
+            },
+        ];
+        insert_turns(&conn, &turns).unwrap();
+        recompute_session_totals(&conn).unwrap();
+
+        let data = get_dashboard_data(&conn).unwrap();
+        let expected_cost = pricing::calc_cost("claude-sonnet-4-6", 100_000, 20_000, 0, 0)
+            + pricing::calc_cost("claude-opus-4-6", 50_000, 10_000, 0, 0);
+
+        let branch = data
+            .git_branch_summary
+            .iter()
+            .find(|row| row.branch == "main")
+            .unwrap();
+        assert!((branch.cost - expected_cost).abs() < 1e-9);
+
+        let daily_project = data
+            .daily_by_project
+            .iter()
+            .find(|row| row.day == "2026-04-08" && row.project == "proj")
+            .unwrap();
+        assert!((daily_project.cost - expected_cost).abs() < 1e-9);
     }
 }

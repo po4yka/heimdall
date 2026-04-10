@@ -42,6 +42,53 @@ mod tests {
         .to_string()
     }
 
+    fn make_custom_title(session_id: &str, title: &str) -> String {
+        serde_json::json!({
+            "type": "custom-title",
+            "sessionId": session_id,
+            "customTitle": title,
+        })
+        .to_string()
+    }
+
+    fn make_assistant_with_tools(
+        session_id: &str,
+        ts: &str,
+        msg_id: &str,
+        tools: &[(&str, &str)],
+    ) -> String {
+        let content: Vec<serde_json::Value> = tools
+            .iter()
+            .map(|(tool_use_id, tool_name)| {
+                serde_json::json!({
+                    "type": "tool_use",
+                    "id": tool_use_id,
+                    "name": tool_name,
+                    "input": {},
+                })
+            })
+            .collect();
+
+        serde_json::json!({
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": ts,
+            "cwd": "/home/user/project",
+            "message": {
+                "id": msg_id,
+                "model": "claude-sonnet-4-6",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                },
+                "content": content,
+            }
+        })
+        .to_string()
+    }
+
     fn write_project_jsonl(
         projects_dir: &std::path::Path,
         project: &str,
@@ -308,6 +355,132 @@ mod tests {
             )
             .unwrap();
         assert_eq!(session_model.as_deref(), Some("claude-opus-4-6"));
+    }
+
+    #[test]
+    fn test_scan_rewritten_file_updates_and_clears_session_title() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects");
+        let db_path = tmp.path().join("usage.db");
+
+        let filepath = write_project_jsonl(
+            &projects,
+            "user/proj",
+            "sess-1.jsonl",
+            &[
+                make_custom_title("s1", "Initial title"),
+                make_user("s1", "2026-04-08T09:00:00Z"),
+                make_assistant("s1", "2026-04-08T09:01:00Z", 100, 50, "msg-1"),
+            ],
+        );
+
+        scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+
+        let conn = db::open_db(&db_path).unwrap();
+        let title: Option<String> = conn
+            .query_row(
+                "SELECT title FROM sessions WHERE session_id = 's1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(title.as_deref(), Some("Initial title"));
+        drop(conn);
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let mut f = std::fs::File::create(&filepath).unwrap();
+        writeln!(f, "{}", make_custom_title("s1", "Renamed title")).unwrap();
+        writeln!(f, "{}", make_user("s1", "2026-04-08T09:00:00Z")).unwrap();
+        writeln!(
+            f,
+            "{}",
+            make_assistant("s1", "2026-04-08T09:01:00Z", 100, 50, "msg-1")
+        )
+        .unwrap();
+
+        scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+
+        let conn = db::open_db(&db_path).unwrap();
+        let title: Option<String> = conn
+            .query_row(
+                "SELECT title FROM sessions WHERE session_id = 's1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(title.as_deref(), Some("Renamed title"));
+        drop(conn);
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let mut f = std::fs::File::create(&filepath).unwrap();
+        writeln!(f, "{}", make_user("s1", "2026-04-08T09:00:00Z")).unwrap();
+        writeln!(
+            f,
+            "{}",
+            make_assistant("s1", "2026-04-08T09:01:00Z", 100, 50, "msg-1")
+        )
+        .unwrap();
+
+        scanner::scan(Some(vec![projects]), &db_path, false).unwrap();
+
+        let conn = db::open_db(&db_path).unwrap();
+        let title: Option<String> = conn
+            .query_row(
+                "SELECT title FROM sessions WHERE session_id = 's1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(title.is_none());
+    }
+
+    #[test]
+    fn test_scan_rewritten_file_replaces_tool_invocations() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects");
+        let db_path = tmp.path().join("usage.db");
+
+        let filepath = write_project_jsonl(
+            &projects,
+            "user/proj",
+            "sess-1.jsonl",
+            &[
+                make_user("s1", "2026-04-08T09:00:00Z"),
+                make_assistant_with_tools(
+                    "s1",
+                    "2026-04-08T09:01:00Z",
+                    "msg-1",
+                    &[("tool-1", "Read"), ("tool-2", "Read")],
+                ),
+            ],
+        );
+
+        scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+
+        let conn = db::open_db(&db_path).unwrap();
+        let tool_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tool_invocations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(tool_count, 2);
+        drop(conn);
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let mut f = std::fs::File::create(&filepath).unwrap();
+        writeln!(f, "{}", make_user("s1", "2026-04-08T09:00:00Z")).unwrap();
+        writeln!(
+            f,
+            "{}",
+            make_assistant("s1", "2026-04-08T09:05:00Z", 200, 100, "msg-2")
+        )
+        .unwrap();
+
+        scanner::scan(Some(vec![projects]), &db_path, false).unwrap();
+
+        let conn = db::open_db(&db_path).unwrap();
+        let tool_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tool_invocations", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(tool_count, 0);
     }
 
     #[test]

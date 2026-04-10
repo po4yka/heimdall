@@ -3,8 +3,8 @@ pub mod parser;
 #[cfg(test)]
 mod tests;
 
-use std::path::{Path, PathBuf};
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use tracing::{debug, info};
@@ -12,9 +12,9 @@ use walkdir::WalkDir;
 
 use crate::models::ScanResult;
 use db::{
-    delete_processed_file, delete_turns_by_source_path, get_processed_file, init_db,
-    insert_tool_invocations, insert_turns, list_processed_files, open_db,
-    recompute_session_totals, upsert_processed_file, upsert_sessions,
+    delete_processed_file, delete_tool_invocations_by_source_path, delete_turns_by_source_path,
+    get_processed_file, init_db, insert_tool_invocations, insert_turns, list_processed_files,
+    open_db, recompute_session_totals, sync_session_titles, upsert_processed_file, upsert_sessions,
 };
 use parser::{aggregate_sessions, parse_jsonl_file};
 
@@ -73,6 +73,7 @@ pub fn scan(
     {
         debug!("[DEL] {}", stale_path);
         delete_turns_by_source_path(&conn, &stale_path)?;
+        delete_tool_invocations_by_source_path(&conn, &stale_path)?;
         delete_processed_file(&conn, &stale_path)?;
         any_changes = true;
     }
@@ -104,6 +105,7 @@ pub fn scan(
 
         if !is_new {
             delete_turns_by_source_path(&conn, &filepath_str)?;
+            delete_tool_invocations_by_source_path(&conn, &filepath_str)?;
             any_changes = true;
         }
 
@@ -111,17 +113,14 @@ pub fn scan(
 
         if !parsed.turns.is_empty() || !parsed.session_metas.is_empty() {
             let sessions = aggregate_sessions(&parsed.session_metas, &parsed.turns);
+            let session_ids: Vec<String> = sessions
+                .iter()
+                .map(|session| session.session_id.clone())
+                .collect();
             upsert_sessions(&conn, &sessions)?;
             insert_turns(&conn, &parsed.turns)?;
             insert_tool_invocations(&conn, &parsed.turns, &parsed.tool_results)?;
-
-            // Apply session titles from custom-title records
-            for (sid, title) in &parsed.session_titles {
-                conn.execute(
-                    "UPDATE sessions SET title = ?1 WHERE session_id = ?2 AND (title IS NULL OR title = '')",
-                    rusqlite::params![title, sid],
-                )?;
-            }
+            sync_session_titles(&conn, &session_ids, &parsed.session_titles)?;
 
             result.sessions += sessions.len();
             result.turns += parsed.turns.len();
