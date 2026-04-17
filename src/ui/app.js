@@ -1619,17 +1619,6 @@
   }
 
   // src/ui/lib/charts.ts
-  var TOKEN_COLORS = {
-    input: "rgba(59,130,246,0.8)",
-    // blue
-    output: "rgba(167,139,250,0.8)",
-    // purple
-    cache_read: "rgba(34,197,94,0.5)",
-    // green
-    cache_creation: "rgba(234,179,8,0.5)"
-    // yellow
-  };
-  var MODEL_COLORS = ["#6366f1", "#3b82f6", "#22c55e", "#a78bfa", "#eab308", "#f472b6", "#14b8a6", "#60a5fa"];
   var RANGE_LABELS = {
     "7d": "Last 7 Days",
     "30d": "Last 30 Days",
@@ -1642,6 +1631,91 @@
   }
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  function hexToRgba(hex, alpha) {
+    let h5 = hex.trim();
+    if (h5.startsWith("#")) h5 = h5.slice(1);
+    if (h5.length === 3) h5 = h5.split("").map((c4) => c4 + c4).join("");
+    if (h5.length !== 6) return hex;
+    const r4 = parseInt(h5.slice(0, 2), 16);
+    const g4 = parseInt(h5.slice(2, 4), 16);
+    const b4 = parseInt(h5.slice(4, 6), 16);
+    return `rgba(${r4}, ${g4}, ${b4}, ${alpha})`;
+  }
+  function withAlpha(varName, alpha) {
+    return hexToRgba(cssVar(varName), alpha);
+  }
+  function tokenSeriesColors() {
+    return [
+      withAlpha("--text-display", 1),
+      withAlpha("--text-display", 0.6),
+      withAlpha("--text-display", 0.3),
+      withAlpha("--text-display", 0.15)
+    ];
+  }
+  function modelSeriesColors(n3) {
+    const baseVars = ["--text-display", "--success", "--warning", "--interactive"];
+    const out = [];
+    for (let i4 = 0; i4 < n3; i4++) {
+      const slot = i4 % baseVars.length;
+      const cycle = Math.floor(i4 / baseVars.length);
+      const alpha = Math.max(0.25, 1 - cycle * 0.25);
+      out.push(cycle === 0 ? cssVar(baseVars[slot]) : withAlpha(baseVars[slot], alpha));
+    }
+    return out;
+  }
+  function industrialChartOptions(type) {
+    const axisLabelStyle = {
+      colors: cssVar("--text-secondary"),
+      fontFamily: 'var(--font-mono), "Space Mono", monospace',
+      fontSize: "11px",
+      letterSpacing: "0.04em"
+    };
+    const base = {
+      chart: {
+        type,
+        height: "100%",
+        background: "transparent",
+        toolbar: { show: false },
+        fontFamily: 'var(--font-mono), "Space Mono", monospace',
+        animations: { enabled: false }
+      },
+      theme: { mode: apexThemeMode() },
+      legend: {
+        show: true,
+        position: type === "donut" ? "bottom" : "top",
+        fontFamily: 'var(--font-mono), "Space Mono", monospace',
+        fontSize: "11px",
+        labels: { colors: cssVar("--text-secondary") },
+        markers: { width: 8, height: 8, radius: 0 },
+        itemMargin: { horizontal: 12, vertical: 4 }
+      },
+      grid: {
+        borderColor: cssVar("--border"),
+        strokeDashArray: 0,
+        xaxis: { lines: { show: false } },
+        yaxis: { lines: { show: type !== "donut" } }
+      },
+      xaxis: {
+        labels: { style: axisLabelStyle },
+        axisBorder: { color: cssVar("--border-visible") },
+        axisTicks: { color: cssVar("--border-visible") }
+      },
+      yaxis: {
+        labels: { style: axisLabelStyle }
+      },
+      stroke: { width: type === "line" ? 1.5 : 0, curve: "straight" },
+      tooltip: {
+        theme: apexThemeMode(),
+        style: { fontFamily: 'var(--font-mono), "Space Mono", monospace', fontSize: "11px" }
+      },
+      dataLabels: { enabled: false }
+    };
+    if (type === "line") {
+      base.legend.show = false;
+      base.fill = { type: "solid", opacity: 0 };
+    }
+    return base;
   }
 
   // src/ui/components/ApexChart.tsx
@@ -1682,9 +1756,9 @@
       chartRef.current.updateOptions({
         theme: { mode: themeMode2 },
         chart: { background: "transparent" },
-        grid: { borderColor: cssVar("--chart-grid") },
-        xaxis: { labels: { style: { colors: cssVar("--muted-foreground") } } },
-        yaxis: { labels: { style: { colors: cssVar("--muted-foreground") } } }
+        grid: { borderColor: cssVar("--border") },
+        xaxis: { labels: { style: { colors: cssVar("--text-secondary") } } },
+        yaxis: { labels: { style: { colors: cssVar("--text-secondary") } } }
       });
     }, [themeMode2]);
     return /* @__PURE__ */ u2("div", { ref, id, style: { width: "100%", height: "100%" } });
@@ -4923,12 +4997,15 @@
   function HourlyChart({ data }) {
     if (!data.length) return null;
     const maxTurns = Math.max(...data.map((d5) => d5.turns), 1);
+    const fillColor = cssVar("--text-display");
+    const emptyColor = cssVar("--border");
     return /* @__PURE__ */ u2("div", { children: [
       /* @__PURE__ */ u2("div", { class: "section-title", style: { padding: "0", marginBottom: "12px" }, children: "Activity by Hour of Day" }),
       /* @__PURE__ */ u2("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", height: "80px" }, children: Array.from({ length: 24 }, (_4, h5) => {
         const row = data.find((d5) => d5.hour === h5);
         const turns = row?.turns ?? 0;
         const pct = turns / maxTurns * 100;
+        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct / 100 * 0.6) : emptyColor;
         return /* @__PURE__ */ u2(
           "div",
           {
@@ -4936,18 +5013,31 @@
             style: {
               flex: 1,
               height: `${Math.max(pct, 2)}%`,
-              background: turns > 0 ? "var(--accent)" : "var(--border)",
-              borderRadius: "2px 2px 0 0",
-              opacity: turns > 0 ? 0.6 + pct / 100 * 0.4 : 0.3
+              background,
+              borderRadius: 0
             }
           },
           h5
         );
       }) }),
-      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "2px", marginTop: "4px" }, children: [0, 6, 12, 18, 23].map((h5) => /* @__PURE__ */ u2("span", { class: "muted", style: { flex: 1, fontSize: "9px", textAlign: h5 === 0 ? "left" : h5 === 23 ? "right" : "center" }, children: [
-        h5,
-        ":00"
-      ] }, h5)) })
+      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "2px", marginTop: "6px" }, children: Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u2(
+        "span",
+        {
+          class: "muted",
+          style: {
+            flex: 1,
+            fontFamily: "var(--font-mono)",
+            fontSize: "9px",
+            textAlign: "center",
+            letterSpacing: "0.04em",
+            color: cssVar("--text-secondary"),
+            visibility: [0, 6, 12, 18].includes(h5) ? "visible" : "hidden"
+          },
+          children: String(h5).padStart(2, "0")
+        },
+        h5
+      )) }),
+      /* @__PURE__ */ u2("div", { style: { display: "none" }, "data-fill": fillColor })
     ] });
   }
 
@@ -5270,34 +5360,30 @@
 
   // src/ui/components/DailyChart.tsx
   function DailyChart({ daily }) {
+    const base = industrialChartOptions("bar");
     const options = {
-      chart: {
-        type: "bar",
-        height: "100%",
-        stacked: true,
-        background: "transparent",
-        toolbar: { show: false },
-        fontFamily: "inherit"
-      },
-      theme: { mode: apexThemeMode() },
+      ...base,
+      chart: { ...base.chart, type: "bar", stacked: true },
       series: [
         { name: "Input", data: daily.map((d5) => d5.input) },
         { name: "Output", data: daily.map((d5) => d5.output) },
         { name: "Cached Input", data: daily.map((d5) => d5.cache_read) },
         { name: "Cache Creation", data: daily.map((d5) => d5.cache_creation) }
       ],
-      colors: [TOKEN_COLORS.input, TOKEN_COLORS.output, TOKEN_COLORS.cache_read, TOKEN_COLORS.cache_creation],
+      colors: tokenSeriesColors(),
       fill: { type: "solid" },
+      plotOptions: { bar: { columnWidth: "70%", borderRadius: 0 } },
       xaxis: {
+        ...base.xaxis,
         categories: daily.map((d5) => d5.day),
-        labels: { rotate: -45, maxHeight: 60 },
+        labels: { ...base.xaxis.labels, rotate: -45, maxHeight: 60 },
         tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange.value])
       },
-      yaxis: { labels: { formatter: (v4) => fmt(v4) } },
-      legend: { position: "top", fontSize: "11px" },
-      dataLabels: { enabled: false },
-      tooltip: { y: { formatter: (v4) => fmt(v4) + " tokens" } },
-      grid: { borderColor: cssVar("--chart-grid"), strokeDashArray: 3 }
+      yaxis: {
+        ...base.yaxis,
+        labels: { ...base.yaxis.labels, formatter: (v4) => fmt(v4) }
+      },
+      tooltip: { ...base.tooltip, y: { formatter: (v4) => fmt(v4) + " tokens" } }
     };
     return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-daily" });
   }
@@ -5305,17 +5391,44 @@
   // src/ui/components/ModelChart.tsx
   function ModelChart({ byModel }) {
     if (!byModel.length) return null;
+    const base = industrialChartOptions("donut");
     const options = {
-      chart: { type: "donut", height: "100%", background: "transparent", fontFamily: "inherit" },
-      theme: { mode: apexThemeMode() },
+      ...base,
+      chart: { ...base.chart, type: "donut" },
       series: byModel.map((m4) => m4.input + m4.output),
       labels: byModel.map((m4) => m4.model),
-      colors: MODEL_COLORS.slice(0, byModel.length),
-      legend: { position: "bottom", fontSize: "11px" },
-      dataLabels: { enabled: false },
-      tooltip: { y: { formatter: (v4) => fmt(v4) + " tokens" } },
-      stroke: { width: 2, colors: [cssVar("--card")] },
-      plotOptions: { pie: { donut: { size: "60%" } } }
+      colors: modelSeriesColors(byModel.length),
+      stroke: { width: 2, colors: [cssVar("--surface")] },
+      plotOptions: {
+        pie: {
+          donut: {
+            size: "64%",
+            labels: {
+              show: true,
+              total: {
+                show: true,
+                label: "TOTAL",
+                fontFamily: 'var(--font-mono), "Space Mono", monospace',
+                fontSize: "11px",
+                color: cssVar("--text-secondary"),
+                formatter: (w5) => fmt(w5.globals.seriesTotals.reduce((a4, b4) => a4 + b4, 0))
+              },
+              value: {
+                fontFamily: 'var(--font-mono), "Space Mono", monospace',
+                fontSize: "20px",
+                color: cssVar("--text-display"),
+                formatter: (val) => fmt(Number(val))
+              },
+              name: {
+                fontFamily: 'var(--font-mono), "Space Mono", monospace',
+                fontSize: "11px",
+                color: cssVar("--text-secondary")
+              }
+            }
+          }
+        }
+      },
+      tooltip: { ...base.tooltip, y: { formatter: (v4) => fmt(v4) + " tokens" } }
     };
     return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-model" });
   }
@@ -5324,30 +5437,28 @@
   function ProjectChart({ byProject }) {
     const top = byProject.slice(0, 10);
     if (!top.length) return null;
+    const base = industrialChartOptions("bar");
+    const colors = tokenSeriesColors();
     const options = {
-      chart: {
-        type: "bar",
-        height: "100%",
-        background: "transparent",
-        toolbar: { show: false },
-        fontFamily: "inherit"
-      },
-      theme: { mode: apexThemeMode() },
+      ...base,
+      chart: { ...base.chart, type: "bar" },
       series: [
         { name: "Input", data: top.map((p5) => p5.input) },
         { name: "Output", data: top.map((p5) => p5.output) }
       ],
-      colors: [TOKEN_COLORS.input, TOKEN_COLORS.output],
-      plotOptions: { bar: { horizontal: true, barHeight: "60%" } },
+      colors: [colors[0], colors[1]],
+      fill: { type: "solid" },
+      plotOptions: { bar: { horizontal: true, barHeight: "60%", borderRadius: 0 } },
       xaxis: {
+        ...base.xaxis,
         categories: top.map((p5) => p5.project.length > 22 ? "\u2026" + p5.project.slice(-20) : p5.project),
-        labels: { formatter: (v4) => fmt(v4) }
+        labels: { ...base.xaxis.labels, formatter: (v4) => fmt(v4) }
       },
-      yaxis: { labels: { maxWidth: 160 } },
-      legend: { position: "top", fontSize: "11px" },
-      dataLabels: { enabled: false },
-      tooltip: { y: { formatter: (v4) => fmt(v4) + " tokens" } },
-      grid: { borderColor: cssVar("--chart-grid") }
+      yaxis: {
+        ...base.yaxis,
+        labels: { ...base.yaxis.labels, maxWidth: 160 }
+      },
+      tooltip: { ...base.tooltip, y: { formatter: (v4) => fmt(v4) + " tokens" } }
     };
     return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-project" });
   }

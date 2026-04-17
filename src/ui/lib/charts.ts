@@ -1,25 +1,128 @@
 import type { RangeKey } from '../state/types';
 
-// ── Chart colors ───────────────────────────────────────────────────────
-export const TOKEN_COLORS: Record<string, string> = {
-  input:          'rgba(59,130,246,0.8)',   // blue
-  output:         'rgba(167,139,250,0.8)',  // purple
-  cache_read:     'rgba(34,197,94,0.5)',    // green
-  cache_creation: 'rgba(234,179,8,0.5)',    // yellow
-};
-export const MODEL_COLORS = ['#6366f1', '#3b82f6', '#22c55e', '#a78bfa', '#eab308', '#f472b6', '#14b8a6', '#60a5fa'];
-
 // ── Time range ─────────────────────────────────────────────────────────
 export const RANGE_LABELS: Record<RangeKey, string> = {
   '7d': 'Last 7 Days', '30d': 'Last 30 Days', '90d': 'Last 90 Days', 'all': 'All Time',
 };
 export const RANGE_TICKS: Record<RangeKey, number> = { '7d': 7, '30d': 15, '90d': 13, 'all': 12 };
 
-// ── ApexCharts theme helper ───────────────────────────────────────────
+// ── Runtime CSS variable readers ───────────────────────────────────────
 export function apexThemeMode(): 'light' | 'dark' {
   return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
 }
 
 export function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  let h = hex.trim();
+  if (h.startsWith('#')) h = h.slice(1);
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  if (h.length !== 6) return hex; // unparseable — return as-is
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function withAlpha(varName: string, alpha: number): string {
+  return hexToRgba(cssVar(varName), alpha);
+}
+
+// ── Monochrome series palettes ─────────────────────────────────────────
+// Token palette: opacity ladder off --text-display.
+// input -> 100%, output -> 60%, cache_read -> 30%, cache_creation -> 15%.
+export function tokenSeriesColors(): string[] {
+  return [
+    withAlpha('--text-display', 1.0),
+    withAlpha('--text-display', 0.6),
+    withAlpha('--text-display', 0.3),
+    withAlpha('--text-display', 0.15),
+  ];
+}
+
+// Back-compat shim so components that still import TOKEN_COLORS keep compiling
+// while we migrate call sites.
+export const TOKEN_COLORS = {
+  get input() { return withAlpha('--text-display', 1.0); },
+  get output() { return withAlpha('--text-display', 0.6); },
+  get cache_read() { return withAlpha('--text-display', 0.3); },
+  get cache_creation() { return withAlpha('--text-display', 0.15); },
+} as const;
+
+// Categorical palette for donuts / model distribution.
+// Base four: --text-display, --success, --warning, --interactive.
+// Overflow cycles the base with decreasing opacity.
+export function modelSeriesColors(n: number): string[] {
+  const baseVars = ['--text-display', '--success', '--warning', '--interactive'];
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const slot = i % baseVars.length;
+    const cycle = Math.floor(i / baseVars.length);
+    const alpha = Math.max(0.25, 1 - cycle * 0.25);
+    out.push(cycle === 0 ? cssVar(baseVars[slot]) : withAlpha(baseVars[slot], alpha));
+  }
+  return out;
+}
+
+// Back-compat placeholder (unused internally; kept for older imports)
+export const MODEL_COLORS = [] as const;
+
+// ── Industrial base ApexCharts options ────────────────────────────────
+export function industrialChartOptions(type: 'bar' | 'donut' | 'line'): any {
+  const axisLabelStyle = {
+    colors: cssVar('--text-secondary'),
+    fontFamily: 'var(--font-mono), "Space Mono", monospace',
+    fontSize: '11px',
+    letterSpacing: '0.04em',
+  };
+
+  const base: any = {
+    chart: {
+      type,
+      height: '100%',
+      background: 'transparent',
+      toolbar: { show: false },
+      fontFamily: 'var(--font-mono), "Space Mono", monospace',
+      animations: { enabled: false },
+    },
+    theme: { mode: apexThemeMode() },
+    legend: {
+      show: true,
+      position: type === 'donut' ? 'bottom' : 'top',
+      fontFamily: 'var(--font-mono), "Space Mono", monospace',
+      fontSize: '11px',
+      labels: { colors: cssVar('--text-secondary') },
+      markers: { width: 8, height: 8, radius: 0 },
+      itemMargin: { horizontal: 12, vertical: 4 },
+    },
+    grid: {
+      borderColor: cssVar('--border'),
+      strokeDashArray: 0,
+      xaxis: { lines: { show: false } },
+      yaxis: { lines: { show: type !== 'donut' } },
+    },
+    xaxis: {
+      labels: { style: axisLabelStyle },
+      axisBorder: { color: cssVar('--border-visible') },
+      axisTicks: { color: cssVar('--border-visible') },
+    },
+    yaxis: {
+      labels: { style: axisLabelStyle },
+    },
+    stroke: { width: type === 'line' ? 1.5 : 0, curve: 'straight' },
+    tooltip: {
+      theme: apexThemeMode(),
+      style: { fontFamily: 'var(--font-mono), "Space Mono", monospace', fontSize: '11px' },
+    },
+    dataLabels: { enabled: false },
+  };
+
+  if (type === 'line') {
+    base.legend.show = false;
+    base.fill = { type: 'solid', opacity: 0 };
+  }
+
+  return base;
 }

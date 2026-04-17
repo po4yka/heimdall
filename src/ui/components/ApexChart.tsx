@@ -43,9 +43,9 @@ export function ApexChart({ options, id }: { options: any; id?: string }) {
     chartRef.current.updateOptions({
       theme: { mode: themeMode as 'light' | 'dark' },
       chart: { background: 'transparent' },
-      grid: { borderColor: cssVar('--chart-grid') },
-      xaxis: { labels: { style: { colors: cssVar('--muted-foreground') } } },
-      yaxis: { labels: { style: { colors: cssVar('--muted-foreground') } } },
+      grid: { borderColor: cssVar('--border') },
+      xaxis: { labels: { style: { colors: cssVar('--text-secondary') } } },
+      yaxis: { labels: { style: { colors: cssVar('--text-secondary') } } },
     });
   }, [themeMode]);
 
