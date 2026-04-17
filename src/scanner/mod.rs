@@ -1,4 +1,5 @@
 pub mod classifier;
+pub mod cowork;
 pub mod db;
 pub mod oneshot;
 pub mod parser;

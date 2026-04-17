@@ -6,6 +6,7 @@ use tracing::warn;
 
 use crate::models::{Session, SessionMeta, Turn};
 use crate::pricing;
+use crate::scanner::cowork::{is_cowork_session_path, resolve_cowork_label};
 
 pub const PROVIDER_CLAUDE: &str = "claude";
 pub const PROVIDER_CODEX: &str = "codex";
@@ -395,8 +396,21 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
             .then_with(|| a.model.cmp(&b.model))
     });
 
+    // Cowork label resolution: if this session JSONL lives under
+    // `local-agent-mode-sessions/<slug>/`, extract the first user message from
+    // `audit.jsonl` in the slug directory and override `project_name`.
+    let cowork_label: Option<String> =
+        is_cowork_session_path(filepath).and_then(|slug_dir| resolve_cowork_label(&slug_dir));
+
+    let mut metas: Vec<SessionMeta> = session_meta.into_values().collect();
+    if let Some(ref label) = cowork_label {
+        for meta in &mut metas {
+            meta.project_name.clone_from(label);
+        }
+    }
+
     ParseResult {
-        session_metas: session_meta.into_values().collect(),
+        session_metas: metas,
         turns,
         line_count,
         session_titles,

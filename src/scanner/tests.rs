@@ -905,4 +905,65 @@ mod tests {
             "expected one_shot_rate=0.5, got {rate}"
         );
     }
+
+    // ── Cowork label resolution integration test ───────────────────────────
+
+    #[test]
+    fn test_cowork_label_overrides_project_name_in_parse_result() {
+        // Build a Cowork-shaped directory tree:
+        //   <tmp>/local-agent-mode-sessions/wizardly-charming-thompson/
+        //       audit.jsonl          -- first user record has the prompt
+        //       session-abc.jsonl    -- normal Claude JSONL session file
+        //
+        // When parse_claude_jsonl_file is called with the session JSONL path,
+        // the Cowork detection must fire and override project_name with the
+        // extracted label rather than the cwd-derived default.
+
+        let tmp = TempDir::new().unwrap();
+        let slug_dir = tmp
+            .path()
+            .join("local-agent-mode-sessions")
+            .join("wizardly-charming-thompson");
+        std::fs::create_dir_all(&slug_dir).unwrap();
+
+        // Write audit.jsonl with a non-user record first, then the user prompt.
+        let audit_path = slug_dir.join("audit.jsonl");
+        {
+            let mut f = std::fs::File::create(&audit_path).unwrap();
+            writeln!(
+                f,
+                "{}",
+                serde_json::json!({"type": "system", "content": "ignored"})
+            )
+            .unwrap();
+            writeln!(
+                f,
+                "{}",
+                serde_json::json!({"type": "user", "content": "Implement the Cowork label resolver"})
+            )
+            .unwrap();
+        }
+
+        // Write a minimal Claude JSONL session file inside the same slug dir.
+        let session_path = slug_dir.join("session-abc.jsonl");
+        {
+            let mut f = std::fs::File::create(&session_path).unwrap();
+            writeln!(f, "{}", make_user("cowork-s1", "2026-04-17T10:00:00Z")).unwrap();
+            writeln!(
+                f,
+                "{}",
+                make_assistant("cowork-s1", "2026-04-17T10:01:00Z", 100, 50, "msg-c1")
+            )
+            .unwrap();
+        }
+
+        let result = crate::scanner::parser::parse_claude_jsonl_file(&session_path, 0);
+
+        assert_eq!(result.session_metas.len(), 1);
+        assert_eq!(
+            result.session_metas[0].project_name, "Implement the Cowork label resolver",
+            "project_name must be overridden by the Cowork label"
+        );
+        assert_eq!(result.turns.len(), 1);
+    }
 }
