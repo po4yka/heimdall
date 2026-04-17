@@ -1,6 +1,8 @@
 # DESIGN.md -- Claude Usage Tracker
 
-A data-dense analytics dashboard for Claude Code usage tracking. Dark-first, utility-focused, zero decoration. Every pixel earns its place by showing data.
+A data-dense analytics dashboard for Claude Code usage tracking. Monochromatic industrial design: OLED dark + warm-off-white light, type-driven hierarchy, one surgical red accent reserved for urgent/destructive states. Every pixel earns its place by showing data.
+
+> **Current state.** The target design documented below is the **industrial** system defined by `.claude/skills/industrial-design/SKILL.md`. The live `src/ui/` implementation still carries the previous indigo + Inter palette (`--accent: #6366f1`, Inter + JetBrains Mono, `--bg: #0c0c0c`). A migration pass is planned as a separate effort — this file is the target spec, not a snapshot of current code. The `industrial-design` skill is the canonical source of truth.
 
 ---
 
@@ -8,110 +10,94 @@ A data-dense analytics dashboard for Claude Code usage tracking. Dark-first, uti
 
 | Attribute | Value |
 |-----------|-------|
-| Mood | Quiet, technical, no-nonsense |
+| Mood | Instrument panel in a dark room / printed technical manual in light mode |
 | Density | 7/10 -- data dashboard, not marketing page |
-| Motion | 2/10 -- hover transitions only (150ms ease), no scroll or entrance animations |
-| Variance | 3/10 -- uniform card grid, left-aligned tables, predictable layout |
-| Philosophy | Minimal elevation. No gradients on surfaces, no glow effects. Borders and background steps define structure. Brand-tinted shadows permitted for interactive feedback and overlays. Content density over whitespace. |
+| Motion | 2/10 -- hover transitions only (150-250ms `cubic-bezier(0.25,0.1,0.25,1)`), no scroll or entrance animations, no spring/bounce |
+| Variance | 3/10 -- uniform card grid, left-aligned tables, predictable layout; break pattern in exactly one place per screen |
+| Philosophy | Subtract, don't add. Structure is ornament. Monochrome is the canvas; color is an event. Type does the heavy lifting. Both dark and light modes are first-class. |
 
 **Anti-patterns (never use):**
 - Emojis anywhere in rendered output
-- Neon glows, 3D effects, glassmorphism, neutral-black shadows (tint with brand color instead)
-- Gradient backgrounds on cards or sections
+- Gradients on surfaces or UI chrome
+- Shadows for elevation (flat surfaces, border separation only)
+- Toast popups (use inline `[SAVED]` / `[ERROR: ...]` status text)
+- Skeleton loading screens (use `[LOADING...]` bracket text or segmented spinner)
+- Zebra striping in tables
+- Filled icons, multi-color icons, or emoji as UI
 - Centered hero sections or marketing-style layouts
 - AI copywriting cliches ("Elevate", "Seamless", "Next-Gen")
-- `border-radius` > 12px on containers (no pill-shaped cards)
-- Pure black `#000000` or pure white `#FFFFFF` as text colors
-- Heavy drop shadows (`shadow-lg` or equivalent)
+- `border-radius` > 16px on cards; buttons are pill (999px) or technical (4-8px)
+- Pure-black text on light backgrounds when the card is `#FFFFFF` (use `--text-primary` `#1A1A1A`)
+- Parallax, scroll-jacking, spring/bounce easing
+- More than one "break the pattern" moment per screen
 
 ---
 
 ## 2. Color Palette & Roles
 
+All colors must be declared as CSS variables. Never hardcode hex. The full table lives in `.claude/skills/industrial-design/references/tokens.md`; the rows below are the binding set for this project.
+
 ### Dark Theme (default)
 
 | Token | Hex | Role |
 |-------|-----|------|
-| `--bg` | `#0c0c0c` | Page canvas |
-| `--bg-secondary` | `#111111` | Filter bar, recessed surfaces |
-| `--card` | `#141414` | Card surface |
-| `--card-hover` | `#1a1a1a` | Card hover state |
-| `--border-subtle` | `rgba(255,255,255,0.03)` | Bento grid gaps, recessed dividers |
-| `--border` | `rgba(255,255,255,0.06)` | Card edges, structural dividers (default) |
-| `--border-strong` | `rgba(255,255,255,0.12)` | Active filter states, emphasized separators |
-| `--border-hover` | `rgba(255,255,255,0.12)` | Interactive border highlight on hover |
-| `--border-accent` | `rgba(99,102,241,0.30)` | Active sort column header, focused inputs |
-| `--text` | `#ededed` | Primary text (off-white, never pure white) |
-| `--text-secondary` | `#888888` | Secondary body text |
-| `--muted` | `#666666` | Labels, timestamps, tertiary text |
-| `--accent` | `#6366f1` | Brand highlight, interactive elements (indigo) |
-| `--accent-muted` | `rgba(99,102,241,0.15)` | Accent backgrounds (active filters, tags) |
-| `--blue` | `#3b82f6` | Informational, model distribution charts |
-| `--purple` | `#a78bfa` | Output tokens in charts |
-| `--green` | `#22c55e` | Cost values, success states (exclusive) |
-| `--green-muted` | `rgba(34,197,94,0.15)` | Positive trend badge background |
-| `--red` | `#ef4444` | Error states, high-usage warnings |
-| `--red-muted` | `rgba(239,68,68,0.15)` | Negative trend badge background |
-| `--yellow` | `#eab308` | Cache creation tokens, medium-usage warnings |
-| `--hover-bg` | `rgba(255,255,255,0.03)` | Table row hover |
-| `--chart-grid` | `rgba(255,255,255,0.04)` | Chart gridlines |
-| `--chart-text` | `#666666` | Chart axis labels |
-| `--toast-error-bg` | `rgba(239,68,68,0.12)` | Error toast background |
-| `--toast-error-text` | `#fca5a5` | Error toast text |
-| `--toast-success-bg` | `rgba(34,197,94,0.12)` | Success toast background |
-| `--toast-success-text` | `#86efac` | Success toast text |
+| `--black` | `#000000` | Page canvas (OLED background) |
+| `--surface` | `#111111` | Elevated surfaces, cards |
+| `--surface-raised` | `#1A1A1A` | Secondary elevation, hover, active-row highlight |
+| `--border` | `#222222` | Subtle dividers (decorative only) |
+| `--border-visible` | `#333333` | Intentional borders, wireframe lines, filter outlines |
+| `--text-disabled` | `#666666` | Disabled text, timestamps, decorative meta |
+| `--text-secondary` | `#999999` | Labels, captions, metadata, chart axis labels |
+| `--text-primary` | `#E8E8E8` | Body text, table cells |
+| `--text-display` | `#FFFFFF` | Hero numbers, headlines, primary chart series |
+| `--accent` | `#D71921` | Signal red: active destructive, over-limit, urgent state. One per screen. |
+| `--accent-subtle` | `rgba(215,25,33,0.15)` | Accent tint backgrounds (sparingly) |
+| `--success` | `#4A9E5C` | Confirmed, completed, cost/usage within healthy range |
+| `--warning` | `#D4A843` | Caution, moderate-usage, cache-creation tokens |
+| `--error` | `#D71921` | Shares accent red -- errors ARE the accent moment |
+| `--interactive` | `#5B9BF6` | Tappable text: links, picker values. Not for buttons. |
 
 ### Light Theme
 
 | Token | Hex | Role |
 |-------|-----|------|
-| `--bg` | `#fafafa` | Page canvas |
-| `--bg-secondary` | `#f5f5f5` | Filter bar, recessed surfaces |
-| `--card` | `#ffffff` | Card surface |
-| `--card-hover` | `#f9f9f9` | Card hover state |
-| `--border-subtle` | `rgba(0,0,0,0.04)` | Bento grid gaps, recessed dividers |
-| `--border` | `rgba(0,0,0,0.07)` | Card edges, structural dividers (default) |
-| `--border-strong` | `rgba(0,0,0,0.14)` | Active filter states, emphasized separators |
-| `--border-hover` | `rgba(0,0,0,0.14)` | Interactive border highlight on hover |
-| `--border-accent` | `rgba(79,70,229,0.25)` | Active sort column header, focused inputs |
-| `--text` | `#171717` | Primary text (off-black, never pure black) |
-| `--text-secondary` | `#737373` | Secondary body text |
-| `--muted` | `#a3a3a3` | Labels, timestamps, tertiary text |
-| `--accent` | `#4f46e5` | Brand highlight (deeper indigo) |
-| `--accent-muted` | `rgba(79,70,229,0.08)` | Accent backgrounds |
-| `--green` | `#16a34a` | Costs, success |
-| `--red` | `#dc2626` | Errors, high-usage |
-| `--yellow` | `#ca8a04` | Warnings, medium-usage |
+| `--black` | `#F5F5F5` | Page canvas (warm off-white) |
+| `--surface` | `#FFFFFF` | Cards |
+| `--surface-raised` | `#F0F0F0` | Secondary elevation |
+| `--border` | `#E8E8E8` | Subtle dividers |
+| `--border-visible` | `#CCCCCC` | Intentional borders |
+| `--text-disabled` | `#999999` | Disabled / meta |
+| `--text-secondary` | `#666666` | Labels, captions |
+| `--text-primary` | `#1A1A1A` | Body text |
+| `--text-display` | `#000000` | Headlines, hero numbers |
+| `--interactive` | `#007AFF` | Links |
+
+**Identical across modes:** accent red, status colors (`--success`, `--warning`, `--accent`/`--error`), ALL-CAPS labels, fonts, type scale, spacing, component shapes.
 
 ### Color Rules
-- Never hardcode hex -- always use `var(--token-name)`.
-- `--accent` is for brand title, active filters, and interactive highlights only.
-- `--green` is exclusively for cost values and success states.
-- `--blue`/`--purple` are for chart series and model tags.
-- `--muted` is for labels, timestamps, and secondary text.
-- Progress bars use semantic thresholds: green (<70%), yellow (70-90%), red (>90%).
+- Never hardcode hex -- always `var(--token-name)`.
+- `--accent` is a signal, not decoration. Max **one** `--accent` element per screen as UI (the "break the pattern" moment), unless encoding data status on a value.
+- `--success` / `--warning` / `--accent` as status colors are exempt from the one-accent rule when encoding data values. Apply the color to the **value itself**, not labels or row backgrounds. Labels stay `--text-secondary`.
+- Trend arrows inherit value color.
+- Progress bars use semantic thresholds: `--success` (<70%), `--warning` (70-90%), `--accent` (>=90%).
+- Data-viz differentiation priority: opacity (100/60/30) → pattern (solid/striped/dotted) → line style → color (last resort).
 
-### Border Hierarchy (4 tiers)
-Use `--border-subtle` for background-level dividers (grid gaps), `--border` for card edges (default), `--border-strong` for active/emphasized states, `--border-accent` for the currently active sort column or focused input. This communicates depth without shadows in dark mode.
+### Border Hierarchy
+Use `--border` for decorative dividers and card edges (default). Use `--border-visible` for intentional borders, wireframe outlines, filter outlines, and focus rings. Depth comes from background steps + borders, not shadows.
 
 ### Shadow Policy
-- **No neutral shadows.** Never use `rgba(0,0,0,x)` for box-shadow.
-- **Brand-tinted shadows only**, for elevation on interactive overlays:
-  - Dark: `0 4px 16px rgba(99,102,241,0.08)` (indigo-tinted)
-  - Light: `0 4px 16px rgba(79,70,229,0.06)` (indigo-tinted)
-- Apply to: toast notifications, future modals/popovers, dropdown menus.
-- Cards at rest: no shadow. Depth from border + background color steps only.
+- **No shadows, period.** Flat surfaces. Depth comes from `--surface` → `--surface-raised` background steps and from border contrast (`--border` → `--border-visible`).
+- No neutral shadows, no brand-tinted shadows, no inset shadows. Overlays rely on a dark backdrop (`rgba(0,0,0,0.8)` for modals) plus a 1px `--border-visible` outline.
 
 ### Chart Series Colors
 
-| Series | Value | Use |
-|--------|-------|-----|
-| Input tokens | `rgba(59,130,246,0.8)` | Blue |
-| Output tokens | `rgba(167,139,250,0.8)` | Purple |
-| Cache read | `rgba(34,197,94,0.5)` | Green (50% opacity) |
-| Cache creation | `rgba(234,179,8,0.5)` | Yellow (50% opacity) |
+Primary palette for multi-series charts, in application order:
+1. `--text-display` (white / black by mode) — the primary series
+2. `--text-display` at 60% opacity — secondary series
+3. `--text-display` at 30% opacity — tertiary series
+4. `--accent` — only if one series is semantically "over limit", "urgent", or the one highlighted moment
 
-Model distribution palette: `#6366f1`, `#3b82f6`, `#22c55e`, `#a78bfa`, `#eab308`, `#f472b6`, `#14b8a6`, `#60a5fa`
+For model-distribution donuts or categorical series that genuinely need distinct colors, fall back to the status palette (`--success`, `--warning`, `--interactive`, `--accent`) in that order — never more than four colors on a single chart.
 
 ---
 
@@ -119,124 +105,124 @@ Model distribution palette: `#6366f1`, `#3b82f6`, `#22c55e`, `#a78bfa`, `#eab308
 
 | Element | Font | Size | Weight | Color | Extras |
 |---------|------|------|--------|-------|--------|
-| Page title | Inter, system sans | 14px | 600 | `--text` (with `--accent` on brand word) | `letter-spacing: -0.01em` |
-| Section title | Inter, system sans | 11px | 600 | `--muted` | Uppercase, `letter-spacing: 0.08em` |
-| Stat card value | JetBrains Mono | 28px | 600 | `--text` or `--green` for costs | `letter-spacing: -0.02em`, `line-height: 1` |
-| Stat card label | JetBrains Mono | 10px | 500 | `--muted` | Uppercase, `letter-spacing: 0.08em` (console readout style) |
-| Table header | JetBrains Mono | 10px | 500 | `--muted` | Uppercase, `letter-spacing: 0.08em` (console readout style) |
-| Table cell | Inter, system sans | 13px | 400 | `--text` | |
-| Numbers / costs | JetBrains Mono | 13px | 500 | `--green` or `--text` | `.num` / `.cost` class |
-| Model tags | Inter, system sans | 11px | 500 | `--accent` | On `rgba(99,102,241,0.1)` bg, 4px radius |
-| Filter labels | JetBrains Mono | 10px | 600 | `--muted` | Uppercase, `letter-spacing: 0.08em` (console readout style) |
-| Footer | Inter, system sans | 11px | 400 | `--muted` | Links in `--accent` |
-| Chart title | JetBrains Mono | 10px | 600 | `--muted` | Uppercase, `letter-spacing: 0.08em` (console readout style) |
-| Toast text | Inter, system sans | 12px | 500 | Semantic toast color | |
+| Page title | Space Grotesk | 24-36px (`--heading` / `--display-md`) | 500 | `--text-display` | letter-spacing -0.01em |
+| Section title | Space Mono | 11px (`--label`) | 400 | `--text-secondary` | ALL CAPS, letter-spacing 0.08em (instrument label) |
+| Hero / stat card value | Space Mono (Doto for single hero) | 36-48px (`--display-md` / `--display-lg`) | 400 | `--text-display`; status color when encoding data | letter-spacing -0.02em, line-height 1.05 |
+| Stat card label | Space Mono | 11px (`--label`) | 400 | `--text-secondary` | ALL CAPS, letter-spacing 0.08em |
+| Table header | Space Mono | 11px (`--label`) | 400 | `--text-secondary` | ALL CAPS, letter-spacing 0.08em, `--border-visible` bottom border |
+| Table cell (text) | Space Grotesk | 14px (`--body-sm`) | 400 | `--text-primary` | left-aligned |
+| Table cell (numbers) | Space Mono | 14px (`--body-sm`) | 400 | `--text-primary`; `--success` / `--warning` / `--accent` when status-encoded | right-aligned, `font-feature-settings: "tnum"` |
+| Body text | Space Grotesk | 16px (`--body`) | 400 | `--text-primary` | line-height 1.5 |
+| Caption | Space Mono | 12px (`--caption`) | 400 | `--text-secondary` | timestamps, footnotes |
+| Filter labels | Space Mono | 11px (`--label`) | 400 | `--text-secondary` | ALL CAPS, letter-spacing 0.08em |
+| Footer | Space Grotesk | 12px (`--caption`) | 400 | `--text-secondary` | |
+| Chart title | Space Mono | 11px (`--label`) | 400 | `--text-secondary` | ALL CAPS |
+| Inline status | Space Mono | 12px (`--caption`) | 400 | status color | `[SAVED]`, `[ERROR: ...]`, `[LOADING...]` |
 
-**Font stacks:**
-- Body: `'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`
-- Mono: `'JetBrains Mono', 'SF Mono', monospace`
+**Font stacks** (declare in `src/ui/input.css` under `@theme`):
+- Body / UI: `'Space Grotesk', 'DM Sans', system-ui, sans-serif`
+- Data / Labels: `'Space Mono', 'JetBrains Mono', 'SF Mono', monospace`
+- Display (hero only): `'Doto', 'Space Mono', monospace`
 
 **Rules:**
-- All numbers, token counts, and cost values use monospace.
+- Max 2 font families on a screen (Space Grotesk + Space Mono). Doto reserved for hero moments only, at 36px+.
+- Max 3 font sizes per screen; max 2 weights.
+- All numbers, token counts, cost values, and progress percentages use Space Mono with `font-feature-settings: "tnum"` for tabular alignment during the auto-refresh cycle.
+- Labels (stat cards, table headers, filter labels, chart titles, section titles) are always Space Mono, ALL CAPS, 11px, `--text-secondary`, letter-spacing 0.08em. This creates the unified instrument-readout aesthetic.
 - Body text uses `-webkit-font-smoothing: antialiased`.
-- No font sizes larger than 28px anywhere in the dashboard.
-- **Tabular numerals:** Apply `font-feature-settings: "tnum"` to all numeric displays (stat values, table cells, chart labels, progress percentages). This forces equal-width digits so columns align and live-updating values don't cause layout jitter. Essential for the 30-second auto-refresh cycle.
-- **Console readout pattern:** All system labels (stat card labels, table headers, filter labels, chart titles, section titles) use JetBrains Mono at 10px, uppercase, with 0.08em letter-spacing. This creates a unified "terminal readout" aesthetic that reinforces the developer-tool identity. Only body text, page title, model tags, and footer use Inter.
+- Before adding a new font size or weight, first try spacing or color to make the distinction.
 
 ---
 
 ## 4. Component Stylings
 
 ### Stat Cards
-- Background: `var(--card)`, shadow-as-border: `box-shadow: 0 0 0 1px var(--border)`, radius: `12px`
-- Padding: `20px`, layout: flexbox with space-between
-- Label above value (monospace, console readout style), sub-text below in `--muted` at 11px
-- **Interaction-only accent:** At rest, card is neutral. On hover, a faint accent wash appears -- `var(--accent)` at 2-3% opacity as background tint, plus border lightens and subtle `translateY(-1px)`
-- Optional sparkline slot: 80x32px, right-aligned, 70% opacity
-- Cost values: `.cost-value` class turns text `--green`
-- Trend badges: inline pill with `--green-muted`/`--red-muted` bg, 4px radius
-- All numeric values: `font-feature-settings: "tnum"` for stable column alignment during auto-refresh
+- Background: `var(--surface)`, 1px solid `var(--border)` (or none), radius: `12-16px`
+- Padding: `16-24px`
+- Layout: label above (Space Mono, ALL CAPS, `--label` size, `--text-secondary`), hero value below (Space Mono, `--display-md` or `--display-lg`, left-aligned), optional sub-text (`--caption`, `--text-disabled`)
+- Cost / status values: the value text takes the status color (`--success`, `--warning`, `--accent`) — label and background stay neutral
+- Optional sparkline slot: right-aligned, 80x32px, `--text-secondary` stroke
+- All numeric values: `font-feature-settings: "tnum"`
+- Hover: border brightens to `--border-visible`. No translate, no shadow, no accent wash.
 
 ### Cards (generic)
-- **Shadow-as-border:** Use `box-shadow: 0 0 0 1px var(--border)` instead of CSS `border`. This avoids box-model side effects (no layout shift on hover, smoother rounded-corner rendering at fractional zoom).
-- Radius: `12px`, padding: `20px`
-- Background: `var(--card)`, no elevation shadow at rest
-- Hover: `box-shadow: 0 0 0 1px var(--border-hover)`, `transform: translateY(-1px)`, 150ms transition
-- Flat variant (`.card-flat`): no hover effect, no transform
+- Background: `var(--surface)`, 1px solid `var(--border)`, radius: `12-16px`
+- Padding: `16-24px`
+- No shadows at rest, no shadows on hover. Depth = border + background step only.
+- Never box the most important element on a screen -- let it float on `--black`.
 
 ### Data Tables
-- Full width, collapsed borders
-- Header: sticky, bottom border only, uppercase monospace labels in `--muted` (console readout style)
-- Rows: bottom border `var(--border)`, hover `var(--hover-bg)`
-- **Interaction-only accent:** Row hover reveals a warm highlight -- `var(--green)` at 3-5% opacity for cost rows, `var(--accent)` at 3% for others. Color appears only on engagement, never at rest. Adds a subtle "this is interactive" signal.
-- Last row: no bottom border
-- Sortable columns: `cursor: pointer`, sort arrow indicator (9px, 60% opacity)
-- **Active sort column:** Header cell gets `border-bottom: 2px solid var(--border-accent)` to indicate current sort
-- Cell padding: `10px 16px`
-- Table cards use shadow-as-border (`box-shadow: 0 0 0 1px var(--border)`), zero padding (table fills edge-to-edge), section header gets `20px` padding
+- Full-width, collapsed borders
+- Header: `--label` style, bottom border `--border-visible`, sticky on scroll, `--surface` background
+- Rows: `1px solid --border` bottom divider, 12-16px vertical padding
+- No zebra striping, no cell backgrounds.
+- Hover: row background → `--surface-raised`. No accent tint at rest.
+- Active sort column: header gets `border-bottom: 2px solid --text-display`. Sort indicator inline, Space Mono arrow.
+- Active row: `--surface-raised` background + left `2px solid --accent` bar (use sparingly — e.g., current selection only)
+- Cell padding: `12px 16px`. Numbers right, text left.
 
 ### Filter Bar
-- Background: `var(--bg-secondary)`, bottom border
-- Horizontal flex with `10px` gap, wraps on small screens
-- Model checkboxes: pill labels, `4px` radius, `1px` border, 11px text
-- Active state: `--accent-muted` bg, `--accent` border, `box-shadow: inset 0 1px 2px rgba(0,0,0,0.15)` (tactile pressed feel)
-- Range buttons: connected group with shared `6px` outer radius, `11px` text
-- Active range: `--accent-muted` bg, `--accent` text, `600` weight, `box-shadow: inset 0 1px 2px rgba(0,0,0,0.15)`
-- Separators: `1px` wide, `20px` tall, `--border` color
-- **Inset shadow pattern:** Active/checked controls use a subtle inset shadow to feel physically "pressed into" the surface, making it immediately scannable which filters are engaged vs. idle
+- Background: `var(--surface)`, `1px solid --border-visible` bottom
+- Horizontal flex with `16px` gap, wraps on small screens
+- Model checkboxes: pill chips, `1px solid --border-visible`, Space Mono `--caption` ALL CAPS, `4px 12px` padding
+- Active chip: `--text-display` border + text (inverted). No background fill at rest.
+- Range buttons: segmented control (§2.8 in components.md). Container `1px solid --border-visible`, active segment `--text-display` background + `--black` text, transition 200ms ease-out.
+- Separators: 1px wide, 20px tall, `--border` color.
+- No inset shadows. Active state = inverted fill, nothing else.
 
 ### Buttons
-- Ghost style: transparent bg, `1px solid var(--border)`, `--text-secondary` color
-- Hover: `--border-hover` border, `--text` color
-- Disabled: `opacity: 0.4`, `cursor: not-allowed`
-- Sizes: filter buttons `2px 8px` padding, action buttons `4px 10px`
+Per components.md §2. Four variants: Primary (white fill, black text, pill), Secondary (transparent, border, pill), Ghost (transparent, no border), Destructive (transparent, red border, red text, pill). All Space Mono 13px ALL CAPS, `0.06em` letter-spacing, `12px 24px` padding, min-height `44px`.
 
 ### Progress Bars (Rate Windows)
-- Track: `var(--border)`, `6px` height, `4px` radius
-- Fill: color by threshold -- green (<70%), yellow (70-90%), red (>90%)
-- Width transition: `300ms ease`
+- Prefer **segmented progress bars** (§11 in components.md) -- signature visualization. Discrete square-ended blocks with 2px gaps.
+- Label + value above in Space Mono. Bar below.
+- Empty segments: `--border`. Filled segments: `--text-display` (neutral), `--success` (<70%), `--warning` (70-90%), `--accent` (>=90% or overflow).
+- Heights: hero 16-20px, standard 8-12px, compact 4-6px.
+- Always pair with numeric readout -- bar = proportion, number = precision.
 
-### Toast Notifications
-- Position: fixed, top `56px`, right `16px`, z-index `999`
-- **Frosted glass:** `backdrop-filter: blur(12px) saturate(150%)` with semi-transparent semantic background. Underlying dashboard content stays visible-but-blurred, maintaining spatial context.
-- Background: semantic `--toast-{type}-bg` (keep existing rgba values -- they're already semi-transparent)
-- Text: `--toast-{type}-text`
-- Elevation: `box-shadow: 0 4px 16px rgba(99,102,241,0.08)` (brand-tinted)
-- Padding: `10px 16px`, radius: `8px`, `1px solid var(--border)`
-- Max width: `360px`, auto-dismiss after 6 seconds
-- Entry animation: `slideIn 0.2s ease-out` (translateX 20px to 0)
+### Inline Status (replaces toasts)
+- No toast popups. Status appears inline near the trigger.
+- Format: `[SAVED]`, `[ERROR: description]`, `[LOADING...]` in Space Mono `--caption` ALL CAPS.
+- Error: `--accent` text color. Success: `--success`. Loading: `--text-secondary`.
+- Persist until next action or 4s, whichever is earlier. No animations beyond a 150ms opacity fade in/out.
 
 ### Pagination
-- Flex between page info and prev/next buttons
-- `12px` text, `--muted` color
-- Top border separator
-- Disabled buttons: `opacity: 0.3`
+- Flex between page info (left) and prev/next buttons (right)
+- `--caption` size, `--text-secondary` color, Space Mono
+- Top border: `1px solid --border`
+- Disabled buttons: opacity 0.4, `cursor: not-allowed`
 
 ---
 
 ## 5. Layout Principles
 
-### Spacing Scale
-- `4px` -- inline gaps (icon to text, checkbox to label)
-- `8px` -- tight groups (filter pills, toast stack, small-screen grid gap)
-- `10px` -- filter bar item gap, table cell padding
-- `12px` -- card grid gap, section internal spacing
-- `16px` -- section title margin-bottom, toast padding
-- `20px` -- card padding, bento grid outer padding
-- `24px` -- header/footer horizontal padding, footer top padding
+### Spacing Scale (tokens in `--space-*`)
+
+| Token | Value | Use |
+|-------|-------|-----|
+| `--space-xs` | 4px | Icon-to-label gaps, tight padding ("these belong together") |
+| `--space-sm` | 8px | Component internal spacing |
+| `--space-md` | 16px | Standard padding, element gaps ("same group, different items") |
+| `--space-lg` | 24px | Group separation, card padding |
+| `--space-xl` | 32px | Section margins |
+| `--space-2xl` | 48px | Major section breaks ("new group starts here") |
+| `--space-3xl` | 64px | Page-level vertical rhythm |
+| `--space-4xl` | 96px | Hero breathing room ("new context") |
+
+Spacing communicates relationship. If reaching for a divider, try more spacing first.
 
 ### Grid System
 - Bento grid: `max-width: 1400px`, centered, 4 columns
-- Column spans: `.bento-2` (2 cols), `.bento-3` (3 cols), `.bento-full` (all)
-- Gap: `12px` uniform
-- Stats row: `auto-fit` with `minmax(180px, 1fr)` -- fluid column count
+- Column spans: `.bento-2`, `.bento-3`, `.bento-full`
+- Gap: `16px` uniform (was 12px -- loosened to align with `--space-md` rhythm)
+- Stats row: `auto-fit` with `minmax(200px, 1fr)` -- fluid column count
 
 ### Page Structure
 ```
-Header (sticky, 48px, frosted glass blur)
-  Filter Bar (sticky below header)
+Header (sticky, 48px, flat -- no frosted glass, no shadow)
+  Filter Bar (sticky below header, 1px bottom border)
     Bento Grid (main content)
-      Rate Windows (conditional, full width)
+      Rate Windows (conditional, full width, segmented progress bars)
       Stats Cards (fluid row, 7 cards)
       Charts Row (2-col daily + 1-col model + 1-col projects)
       Data Sections (full width, conditional)
@@ -245,9 +231,10 @@ Header (sticky, 48px, frosted glass blur)
 ```
 
 ### Whitespace Philosophy
-- Let data breathe but don't waste space. 12px grid gap is intentionally tight.
+- Confidence through emptiness. Resist filling space.
 - Cards are the primary spatial unit -- no free-floating text outside cards.
 - Header is compact (48px) because it's always visible (sticky).
+- Asymmetry > symmetry. Prefer large-left/small-right; top-heavy; edge-anchored.
 
 ---
 
@@ -255,35 +242,19 @@ Header (sticky, 48px, frosted glass blur)
 
 | Surface | Treatment |
 |---------|-----------|
-| Page canvas | `var(--bg)` -- deepest layer |
-| Filter bar | `var(--bg-secondary)` -- slightly elevated. Apply `backdrop-filter: blur(12px) saturate(150%)` if sticky. |
-| Header | `var(--bg)` at 80% opacity + `backdrop-filter: blur(12px)` -- floats above content |
-| Cards | `var(--card)` + `box-shadow: 0 0 0 1px var(--border)` -- shadow-as-border, no elevation shadow |
-| Card hover | Shadow-border lightens to `--border-hover`, 1px upward translate |
+| Page canvas | `var(--black)` -- deepest layer |
+| Filter bar | `var(--surface)` -- one step up, no blur |
+| Header | `var(--surface)` -- flat, 1px `--border-visible` bottom. No frosted glass. |
+| Cards | `var(--surface)` + `1px solid var(--border)`. No elevation shadow. |
+| Card hover | Border brightens to `--border-visible`. No translate, no shadow. |
 | Tables | Inside cards, no additional elevation |
-| Toasts | Frosted glass (`backdrop-filter: blur(12px) saturate(150%)`), brand-tinted shadow `0 4px 16px rgba(99,102,241,0.08)` |
-| Active controls | `box-shadow: inset 0 1px 2px rgba(0,0,0,0.15)` -- tactile pressed depth |
-| Sticky thead | `z-index: 1`, card background |
+| Inline status | Same layer as content, no elevation |
+| Modals | Backdrop `rgba(0,0,0,0.8)`, dialog = `--surface` + `1px solid --border-visible`, 16px radius, max 480px |
+| Sticky thead | `z-index: 1`, `--surface` background |
 
-### Shadow-as-Border Pattern
-Use `box-shadow: 0 0 0 1px var(--border)` instead of CSS `border: 1px solid`. Benefits:
-- No layout shift when animating border color on hover
-- Smoother rounded-corner rendering at fractional zoom levels
-- Border lives in the shadow layer, independent of the box model
-- Apply to: all cards, table wrappers, and interactive containers
+No shadow-as-border tricks. A card is a card: `background: var(--surface); border: 1px solid var(--border);`. Layout shift on hover is prevented by using `--border-visible` at the same 1px width, not by swapping from shadow to shadow.
 
-### Brand-Tinted Elevation
-When elements need to float above the surface (toasts, modals, popovers), use indigo-tinted shadows:
-- Dark: `0 4px 16px rgba(99,102,241,0.08)`
-- Light: `0 4px 16px rgba(79,70,229,0.06)`
-Never use neutral `rgba(0,0,0,x)` for elevation shadows -- always tint with the brand color.
-
-### Frosted Glass
-Apply `backdrop-filter: blur(12px) saturate(150%)` with semi-transparent backgrounds to overlays that sit above dashboard content. This keeps underlying data visible-but-blurred for spatial context. Use on:
-- Header (already implemented)
-- Toast notifications
-- Filter bar (if sticky-scrolling)
-- Future: modals, dropdown menus, tooltips
+No frosted glass. No backdrop-filter. The palette already does the work; blur would add visual weight that contradicts "subtract, don't add."
 
 ---
 
@@ -291,32 +262,34 @@ Apply `backdrop-filter: blur(12px) saturate(150%)` with semi-transparent backgro
 
 ### Do
 - Use CSS variables for every color value
-- Put numbers and costs in monospace font with `font-feature-settings: "tnum"` for tabular alignment
-- Use monospace (JetBrains Mono) for all system labels -- stat labels, table headers, filter labels, chart titles
-- Use `box-shadow: 0 0 0 1px` instead of CSS `border` on cards and containers
-- Use `box-shadow: inset 0 1px 2px` on active/checked filter controls for tactile depth
-- Tint all elevation shadows with brand indigo -- never use neutral black shadows
-- Apply `backdrop-filter: blur(12px) saturate(150%)` on overlays (toasts, sticky bars)
-- Make tables sortable with clear sort indicators and `--border-accent` on active sort column
+- Put numbers, costs, labels, and table cells in Space Mono with `font-feature-settings: "tnum"`
+- Use Space Mono ALL CAPS for all system labels (stat labels, table headers, filter labels, chart titles, section titles)
+- Use a plain `border: 1px solid var(--border)` on cards -- clean and stable
+- Make tables sortable with `--text-display` border-bottom on the active sort column
 - Support both light and dark themes (toggle via `data-theme` attribute)
-- Keep chart heights consistent: 240px standard, 300px for daily chart
-- Run all dynamic text through XSS escaping before rendering
+- Keep chart heights consistent: 240px standard, 300px for the daily chart
+- Run all dynamic text through `esc()` before rendering
 - Use `auto-fit` / `minmax` for fluid grid layouts
 - Format large numbers with abbreviations (1.5M, 2.3K)
-- Reserve color for interaction -- let resting UI stay neutral, reveal accent/green on hover
+- Reserve `--accent` for the one urgent moment per screen
+- Apply opacity (100/60/30) or pattern before reaching for a new chart color
 
 ### Don't
 - Add decorative elements that don't display data
-- Use more than 2 font families (Inter + JetBrains Mono)
-- Use neutral `rgba(0,0,0,x)` for box-shadow elevation (tint with brand color)
-- Use CSS `border` on cards when `box-shadow: 0 0 0 1px` achieves the same visual
+- Use more than 2 font families (Space Grotesk + Space Mono; Doto hero-only)
+- Add any shadow (neutral, tinted, or inset). Period.
+- Add `backdrop-filter: blur(...)` on any surface
+- Use toast popups (use inline `[STATUS]` text)
+- Use skeleton loaders (use `[LOADING...]` bracket text)
+- Zebra-stripe tables
 - Create custom scrollbars or override native scroll behavior
 - Add entrance animations or scroll-triggered effects
-- Use icon libraries -- inline SVG only where needed (theme toggle)
+- Use filled or multi-color icons
 - Make the header taller than 48px
 - Add tooltips unless showing precise values on chart hover
 - Use `z-index` values above 999
-- Apply the same border token to all hierarchy levels -- use the 4-tier border scale
+- Introduce a second "break the pattern" moment on a single screen
+- Use spring/bounce easing
 
 ---
 
@@ -327,14 +300,14 @@ Apply `backdrop-filter: blur(12px) saturate(150%)` with semi-transparent backgro
 | > 1024px | 4 columns | Full layout, all features visible |
 | 768-1024px | 2 columns | `.bento-3` collapses to 2-col span |
 | < 768px | 1 column | Single column stack, padding shrinks to 12px, gap to 8px |
-| < 480px | 1 column | Stat values shrink to 22px, sparklines hidden |
+| < 480px | 1 column | Stat values shrink to 28px, sparklines hidden |
 
 ### Responsive Rules
 - Filter bar wraps naturally via `flex-wrap: wrap`
 - Tables scroll horizontally via `overflow-x: auto` on the card wrapper
 - Charts resize within their card containers (ApexCharts handles responsively)
 - Header padding shrinks from 24px to 12px below 768px
-- Grid gap tightens from 12px to 8px below 768px
+- Grid gap tightens from 16px to 8px below 768px
 - No content is hidden on mobile except sparklines at 480px
 
 ---
@@ -343,29 +316,42 @@ Apply `backdrop-filter: blur(12px) saturate(150%)` with semi-transparent backgro
 
 ### Quick Reference
 ```
-Background:    #0c0c0c (dark) / #fafafa (light)
-Cards:         #141414 (dark) / #ffffff (light)
-Borders:       rgba(255,255,255,0.06) (dark) / rgba(0,0,0,0.07) (light)
-Primary text:  #ededed (dark) / #171717 (light)
-Accent:        #6366f1 (dark) / #4f46e5 (light) -- indigo
-Costs:         #22c55e (dark) / #16a34a (light) -- green, monospace only
-Errors:        #ef4444 (dark) / #dc2626 (light)
-Fonts:         Inter (body), JetBrains Mono (numbers)
-Card radius:   12px
-Grid gap:      12px
+Background:    #000000 (dark) / #F5F5F5 (light)
+Cards:         #111111 (dark) / #FFFFFF (light)
+Borders:       #222222 (dark) / #E8E8E8 (light) -- default
+               #333333 (dark) / #CCCCCC (light) -- visible
+Primary text:  #E8E8E8 (dark) / #1A1A1A (light)
+Display text:  #FFFFFF (dark) / #000000 (light)
+Accent:        #D71921 -- signal red, one per screen
+Success:       #4A9E5C  |  Warning: #D4A843
+Fonts:         Space Grotesk (body), Space Mono (data/labels), Doto (hero display only)
+Card radius:   12-16px
+Grid gap:      16px
 Max width:     1400px
 ```
 
 ### Ready-to-Use Prompts
 
 **"Add a new stat card"**
-> Create a stat card matching the existing pattern: `.card.stat-card` container, `.stat-label` (11px uppercase muted), `.stat-value` (28px JetBrains Mono), `.stat-sub` (11px muted). Use `--green` color and `.cost-value` class if showing a cost. Place it inside the `#stats-row` grid.
+> Create a stat card matching the industrial pattern: card container with `background: var(--surface)` + `border: 1px solid var(--border)` + 16px radius + 20px padding. Label above (Space Mono 11px ALL CAPS `--text-secondary` letter-spacing 0.08em), hero value below (Space Mono 36-48px `--text-display`, or status color when encoding data), optional sub-text (`--caption` `--text-disabled`). Apply `font-feature-settings: "tnum"` to the value. Hover: border brightens to `--border-visible`.
 
 **"Add a new data table"**
-> Create a full-width table section: `.card.card-flat.bento-full.table-card` wrapper, `.section-header` with `.section-title` (11px uppercase muted) and optional `.export-btn`. Table uses sticky headers, `--muted` uppercase th labels, `10px 16px` cell padding, row hover `var(--hover-bg)`. Numbers get `.num` class, costs get `.cost` class.
+> Create a full-width table inside a card. Header: sticky, Space Mono 11px ALL CAPS `--text-secondary` labels, `1px solid --border-visible` bottom border. Rows: `1px solid --border` divider, 12-16px vertical padding. No zebra striping, no cell backgrounds. Hover: row bg → `--surface-raised`. Sortable columns: `cursor: pointer`, inline Space Mono arrow indicator, active sort column gets `border-bottom: 2px solid --text-display`. Numbers right-aligned Space Mono with `tnum`; text left-aligned Space Grotesk. Run all dynamic text through `esc()`.
 
 **"Add a new chart"**
-> Wrap in `.card.chart-card` with `h2` title (11px uppercase muted). Chart container: `.chart-wrap` (240px height) or `.chart-wrap.tall` (300px). Use ApexCharts with `background: 'transparent'`, `toolbar: false`, `fontFamily: 'inherit'`, grid color `cssVar('--chart-grid')`. Destroy and recreate on theme toggle.
+> Wrap in a card with Space Mono 11px ALL CAPS `--text-secondary` title. Chart container: 240px height (standard) or 300px (hero/daily). ApexCharts options: `background: 'transparent'`, `toolbar: { show: false }`, `fontFamily: 'var(--font-mono)'`, `animations: { enabled: false }`, `legend: { show: false }`. Colors: `--text-display` primary, `--text-display` at 60/30% opacity for secondary series. Use `--accent` for a single over-limit / urgent series only. Grid: horizontal lines in `--border` color. Destroy and recreate (or `updateOptions`) on theme toggle.
 
 **"Add a new filter control"**
-> Place inside `#filter-bar`. Use `.filter-label` for the group label. Buttons use `.filter-btn` (10px, ghost style) or `.range-btn` inside `.range-group` for connected toggles. Active state: `--accent-muted` bg, `--accent` color.
+> Place inside the filter bar. Group label: Space Mono 11px ALL CAPS `--text-secondary`. Chips: `1px solid --border-visible`, transparent bg, Space Mono 12px ALL CAPS, `4px 12px` padding, pill radius. Active chip: invert -- `--text-display` border + text (no fill change). Range buttons: segmented control with `1px solid --border-visible` container; active segment = `--text-display` background + `--black` text; transition 200ms ease-out. No inset shadows.
+
+**"Add an inline status message"**
+> Replace any toast with inline status text near the trigger: Space Mono `--caption` ALL CAPS, format `[SAVED]` (`--success`), `[ERROR: message]` (`--accent`), `[LOADING...]` (`--text-secondary`). 150ms opacity fade in/out. Auto-dismiss after 4 seconds or on next action.
+
+---
+
+## 10. Source of truth
+
+- Skill: `.claude/skills/industrial-design/SKILL.md`
+- Tokens: `.claude/skills/industrial-design/references/tokens.md`
+- Components: `.claude/skills/industrial-design/references/components.md`
+- Platform mapping (Preact + Tailwind v4): `.claude/skills/industrial-design/references/platform-mapping.md`

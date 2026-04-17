@@ -159,9 +159,11 @@ Always use additive migrations (ALTER TABLE ADD COLUMN). Check for column existe
 
 ## Dashboard UI
 
-When editing dashboard files (`src/ui/`), follow the design skill at `.claude/skills/dashboard-design/SKILL.md`. Key rules:
-- All colors via CSS variables (light + dark theme support)
-- Numbers in monospace, costs in green
-- No emojis, no gradients, no heavy shadows
-- XSS protection: all dynamic text through `esc()` function
+When editing dashboard files (`src/ui/`), follow the design skill at `.claude/skills/industrial-design/SKILL.md`. Key rules:
+- Monochrome canvas; single red accent (`#D71921`) per screen for urgent/destructive only
+- Numbers in Space Mono (tabular numerals); body in Space Grotesk; Doto for hero display
+- No gradients, no shadows, no toast popups — use inline `[SAVED]` / `[ERROR: ...]` status
+- Dark (OLED `#000`) and light (warm off-white `#F5F5F5`) both first-class via CSS variables
+- XSS protection: all dynamic text through `esc()` in `src/ui/lib/format.ts`
 - Recompile after changes: `npm run build:ui`
+- Note: existing `src/ui/` still uses the legacy indigo/Inter palette; align during the next UI refactor
