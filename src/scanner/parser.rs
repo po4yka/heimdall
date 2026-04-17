@@ -84,7 +84,7 @@ pub fn parse_jsonl_file(provider: &str, filepath: &Path, skip_lines: i64) -> Par
     }
 }
 
-fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseResult {
+pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseResult {
     let mut seen_messages: HashMap<String, Turn> = HashMap::new();
     let mut turns_no_id: Vec<Turn> = Vec::new();
     let mut session_meta: HashMap<String, SessionMeta> = HashMap::new();

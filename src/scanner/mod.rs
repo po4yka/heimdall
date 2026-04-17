@@ -1,6 +1,7 @@
 pub mod db;
 pub mod parser;
 pub mod provider;
+pub mod providers;
 #[cfg(test)]
 mod tests;
 
