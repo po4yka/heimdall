@@ -183,6 +183,8 @@ Steps:
 
 The explicit `--projects-dir` CLI override routes through `provider_for_dir()` in `src/scanner/mod.rs` — update that helper if the new provider needs path-based detection from that override surface.
 
+`src/scanner/providers/cursor.rs` is an example of a SQLite-backed provider (opens `state.vscdb` read-only via `rusqlite`) as opposed to the JSONL-backed providers (Claude, Codex, Xcode); see also `cursor_cache.rs` for the companion mtime+size cache-invalidation helper.
+
 ### Changing the database schema
 
 Always use additive migrations (ALTER TABLE ADD COLUMN). Check for column existence before adding. Never drop columns or tables in migrations -- only in full rescan.
