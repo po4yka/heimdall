@@ -246,8 +246,9 @@ Options:
 
 ### Charting
 
-Use Chart.js 4.x loaded from CDN (with graceful degradation note for offline).
-Alternative: consider lightweight options like uPlot or Apache ECharts for better performance with large datasets.
+Use ApexCharts 4.x loaded from CDN (with graceful degradation note for offline).
+Charts are themed through CSS custom properties in `src/ui/lib/charts.ts` so they
+follow the industrial-design palette and respond to the `data-theme` toggle.
 
 ## Rust Crate Dependencies
 

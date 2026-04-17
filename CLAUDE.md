@@ -79,28 +79,42 @@ src/
     app.tsx            -- Entry point, data loading, filter logic
     app.js             -- Compiled JS (committed, do not edit directly)
     components/
-      Footer.tsx       -- Static footer
-      StatsCards.tsx    -- Summary stat cards
-      Toast.tsx        -- Signal-driven toast notifications
-      SubagentSummary.tsx  -- Subagent breakdown
-      EntrypointTable.tsx  -- Entrypoint usage table
-      ServiceTiers.tsx     -- Service tiers table
-      ApexChart.tsx        -- Generic ApexCharts wrapper
-      DailyChart.tsx       -- Daily token usage bar chart
-      ModelChart.tsx       -- Model distribution donut
-      ProjectChart.tsx     -- Top projects horizontal bar
-      Sparkline.tsx        -- 7-day trend sparkline
-      SessionsTable.tsx    -- Sessions table with sort/pagination
-      ModelCostTable.tsx   -- Cost by model table
-      ProjectCostTable.tsx -- Cost by project table
+      Header.tsx            -- Sticky header, theme toggle, rescan button
+      FilterBar.tsx         -- Models, range, provider, project search
+      RateWindowCard.tsx    -- Rate window / budget / unavailable cards
+      EstimationMeta.tsx    -- Confidence / billing / pricing cards
+      ReconciliationBlock.tsx -- OpenAI org usage reconciliation
+      InlineStatus.tsx      -- Bracketed [OK] / [ERROR: ...] status
+      SegmentedProgressBar.tsx -- Signature segmented progress viz
+      StatsCards.tsx        -- Summary stat cards (Doto hero on total cost)
+      SubagentSummary.tsx   -- Subagent breakdown
+      EntrypointTable.tsx   -- Entrypoint usage table
+      ServiceTiers.tsx      -- Service tiers table
+      ToolUsageTable.tsx    -- Tool invocations
+      McpSummaryTable.tsx   -- MCP server usage
+      BranchTable.tsx       -- Git branch summary
+      VersionTable.tsx      -- CLI version summary
+      ApexChart.tsx         -- Generic ApexCharts wrapper
+      DailyChart.tsx        -- Daily token usage bar chart
+      ModelChart.tsx        -- Model distribution donut
+      ProjectChart.tsx      -- Top projects horizontal bar
+      HourlyChart.tsx       -- Activity by hour of day
+      Sparkline.tsx         -- 7-day trend sparkline
+      SessionsTable.tsx     -- Sessions table with sort/pagination
+      ModelCostTable.tsx    -- Cost by model table (with share bar)
+      ProjectCostTable.tsx  -- Cost by project table
+      DataTable.tsx         -- Generic tanstack/table-core wrapper
+      Footer.tsx            -- Static footer
     state/
       types.ts         -- TypeScript interfaces
-      store.ts         -- Preact signals state
+      store.ts         -- Preact signals state (filters, chrome, status)
     lib/
       format.ts        -- Number/cost formatting utilities
       csv.ts           -- CSV export utilities
-      charts.ts        -- Chart constants and theme helpers
-      theme.ts         -- Theme detection
+      charts.ts        -- Industrial chart options factory, color ladders
+      status.ts        -- Inline [STATUS] helper (setStatus / clearStatus)
+      theme.ts         -- Theme detection + apply
+      rescan.ts        -- Rescan trigger factory
 ```
 
 ## Key Design Decisions

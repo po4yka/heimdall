@@ -10,7 +10,7 @@ Reads local transcripts written by Claude Code and Codex, then presents an inter
 - **Incremental scanning** -- only processes new/changed JSONL files
 - **Multi-provider analytics** -- Claude and Codex share one SQLite database and dashboard
 - **Streaming deduplication** -- handles Claude Code and Codex incremental session records
-- **Interactive dashboard** -- dark-themed UI with Chart.js charts, sortable tables, CSV export
+- **Interactive dashboard** -- industrial monochrome UI (dark + light themes) with ApexCharts, sortable tables, CSV export
 - **Cost estimation** -- single source of truth in Rust, with volume discount support and integer-nanos precision
 - **Turn-level cost snapshots** -- each turn stores estimated cost, pricing snapshot, billing mode, and confidence tier
 - **CLI reporting** -- quick terminal summaries with `--json` flag for scripting
@@ -21,7 +21,7 @@ Reads local transcripts written by Claude Code and Codex, then presents an inter
 - **Rate window tracking** -- 5-hour session, 7-day weekly, and per-model (Opus/Sonnet) quotas with progress bars and reset countdowns
 - **Plan detection** -- automatically identifies Max/Pro/Team/Enterprise from Claude credentials
 - **Monthly budget tracking** -- spend vs limit progress bar from OAuth API
-- **Session depletion alerts** -- toast notifications when quota runs out or restores
+- **Session depletion alerts** -- inline `[ERROR: ...]` status next to the rate-window cards when quota runs out or restores
 - **Auto token refresh** -- refreshes expired OAuth tokens automatically
 
 ### Analytics
@@ -175,10 +175,14 @@ src/
     api.rs             -- JSON API endpoints (data, rescan, usage-windows, health)
     assets.rs          -- embedded static assets
   ui/
-    app.ts             -- Dashboard TypeScript source
+    app.tsx            -- Dashboard entry (data loading, filters, render)
     app.js             -- Compiled JS (committed)
-    index.html         -- Dashboard HTML
-    style.css          -- Dashboard CSS
+    index.html         -- Dashboard HTML shell (embeds compiled CSS + JS)
+    input.css          -- Tailwind v4 entry with industrial tokens
+    style.css          -- Generated CSS (committed)
+    components/        -- Preact components (header, filter bar, charts, tables, status)
+    lib/               -- format / csv / charts / theme / status / rescan
+    state/             -- Signals store and TypeScript types
 ```
 
 ## Development
@@ -187,8 +191,8 @@ See [CLAUDE.md](CLAUDE.md) for build instructions, conventions, and development 
 
 ```bash
 cargo build              # build
-cargo test               # 118 tests
-cargo clippy -D warnings # lint
+cargo test               # 128 tests
+cargo clippy -- -D warnings # lint
 ```
 
 ## Prior Art

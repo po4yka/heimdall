@@ -42,15 +42,6 @@ export function tokenSeriesColors(): string[] {
   ];
 }
 
-// Back-compat shim so components that still import TOKEN_COLORS keep compiling
-// while we migrate call sites.
-export const TOKEN_COLORS = {
-  get input() { return withAlpha('--text-display', 1.0); },
-  get output() { return withAlpha('--text-display', 0.6); },
-  get cache_read() { return withAlpha('--text-display', 0.3); },
-  get cache_creation() { return withAlpha('--text-display', 0.15); },
-} as const;
-
 // Categorical palette for donuts / model distribution.
 // Base four: --text-display, --success, --warning, --interactive.
 // Overflow cycles the base with decreasing opacity.
@@ -65,9 +56,6 @@ export function modelSeriesColors(n: number): string[] {
   }
   return out;
 }
-
-// Back-compat placeholder (unused internally; kept for older imports)
-export const MODEL_COLORS = [] as const;
 
 // ── Industrial base ApexCharts options ────────────────────────────────
 export function industrialChartOptions(type: 'bar' | 'donut' | 'line'): any {
