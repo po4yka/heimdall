@@ -313,6 +313,10 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 meta.model = Some(model.clone());
             }
 
+            let category =
+                crate::scanner::classifier::classify(tool_name.as_deref(), &all_tools, None)
+                    .as_str()
+                    .to_string();
             let turn = Turn {
                 estimated_cost_nanos: 0,
                 session_id: session_id.clone(),
@@ -337,6 +341,7 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 pricing_model: String::new(),
                 billing_mode: "estimated_local".into(),
                 cost_confidence: String::new(),
+                category,
                 all_tools,
                 tool_use_ids,
             };

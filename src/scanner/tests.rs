@@ -700,4 +700,56 @@ mod tests {
             .unwrap();
         assert_eq!(bad, 0);
     }
+
+    #[test]
+    fn test_provider_backfill_does_not_clobber_non_claude_rows() {
+        // Reviewer concern: the backfill `UPDATE ... SET provider='claude'
+        // WHERE provider IS NULL OR provider=''` must only touch genuinely
+        // missing rows. Rows with an existing non-empty provider (codex,
+        // xcode, future providers) must be preserved across init_db calls.
+        let tmp = TempDir::new().unwrap();
+        let db_path = tmp.path().join("usage.db");
+        let conn = db::open_db(&db_path).unwrap();
+        db::init_db(&conn).unwrap();
+
+        // Seed a codex session and a codex turn directly.
+        conn.execute(
+            "INSERT INTO sessions (session_id, provider, project_name, project_slug,
+                                   first_timestamp, last_timestamp)
+             VALUES ('codex:s1', 'codex', 'user/proj', 'proj',
+                     '2026-04-17', '2026-04-17')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, timestamp, model,
+                                input_tokens, output_tokens, message_id,
+                                source_path)
+             VALUES ('codex:s1', 'codex', '2026-04-17T10:00:00Z', 'gpt-5',
+                     100, 50, 'm1', '/p')",
+            [],
+        )
+        .unwrap();
+
+        // Running init_db again must leave both provider tags untouched.
+        db::init_db(&conn).unwrap();
+
+        let session_provider: String = conn
+            .query_row(
+                "SELECT provider FROM sessions WHERE session_id = 'codex:s1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(session_provider, "codex");
+
+        let turn_provider: String = conn
+            .query_row(
+                "SELECT provider FROM turns WHERE session_id = 'codex:s1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(turn_provider, "codex");
+    }
 }

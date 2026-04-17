@@ -1,3 +1,4 @@
+pub mod classifier;
 pub mod db;
 pub mod parser;
 pub mod provider;
@@ -9,7 +10,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
 use crate::models::ScanResult;
@@ -49,48 +50,45 @@ pub fn scan(
     let conn = open_db(db_path)?;
     init_db(&conn)?;
 
-    let sources: Vec<(String, Vec<PathBuf>)> = if let Some(dirs) = projects_dirs {
-        let mut grouped: std::collections::BTreeMap<String, Vec<PathBuf>> =
-            std::collections::BTreeMap::new();
-        for dir in dirs {
-            grouped
-                .entry(provider_for_dir(&dir).to_string())
-                .or_default()
-                .push(dir);
-        }
-        grouped.into_iter().collect()
-    } else {
-        // Use the provider registry to get default directories.
-        providers::all()
-            .into_iter()
-            .map(|p| {
-                let name = p.name().to_string();
-                let dirs = p
-                    .discover_sessions()
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|s| s.path.parent().unwrap_or(Path::new(".")).to_path_buf())
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .into_iter()
-                    .collect::<Vec<_>>();
-                (name, dirs)
-            })
-            .collect()
-    };
-
+    // Collect `(provider_name, jsonl_file_path)` tuples. Two inputs:
+    //   - Explicit override via `--projects-dir`: walk each dir for .jsonl
+    //     files and tag by `provider_for_dir`.
+    //   - Registry default: consume `SessionSource`s directly from each
+    //     provider's `discover_sessions()`. The source already carries
+    //     both the file path and the provider slug, so no second walk
+    //     and no parent-directory round-trip is needed.
     let mut jsonl_files: Vec<(String, PathBuf)> = Vec::new();
-    for (provider, dirs) in &sources {
-        for d in dirs {
-            if !d.exists() {
+    if let Some(dirs) = projects_dirs {
+        for dir in dirs {
+            if !dir.exists() {
                 continue;
             }
+            let provider = provider_for_dir(&dir).to_string();
             if verbose {
-                info!("Scanning {} {} ...", provider, d.display());
+                info!("Scanning {} {} ...", provider, dir.display());
             }
-            for entry in WalkDir::new(d).into_iter().filter_map(|e| e.ok()) {
+            for entry in WalkDir::new(&dir).into_iter().filter_map(|e| e.ok()) {
                 if entry.path().extension().is_some_and(|ext| ext == "jsonl") {
-                    jsonl_files.push(((*provider).to_string(), entry.path().to_path_buf()));
+                    jsonl_files.push((provider.clone(), entry.path().to_path_buf()));
                 }
+            }
+        }
+    } else {
+        for p in providers::all() {
+            let provider = p.name().to_string();
+            let sources = match p.discover_sessions() {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("provider {}: discover_sessions failed: {}", provider, e);
+                    continue;
+                }
+            };
+            if verbose && !sources.is_empty() {
+                info!("Scanning {} ({} sessions) ...", provider, sources.len());
+            }
+            for src in sources {
+                debug_assert_eq!(src.provider_name, p.name());
+                jsonl_files.push((provider.clone(), src.path));
             }
         }
     }

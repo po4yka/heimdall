@@ -297,6 +297,15 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
                         let tool_use_ids = turn_tools.get(&turn_id).cloned().unwrap_or_default();
                         let tool_name = tool_use_ids.first().map(|(_, name)| name.clone());
                         let billing_mode = codex_billing_mode(usage.plan_type.as_deref());
+                        let all_tools: Vec<String> =
+                            tool_use_ids.iter().map(|(_, name)| name.clone()).collect();
+                        let category = crate::scanner::classifier::classify(
+                            tool_name.as_deref(),
+                            &all_tools,
+                            None,
+                        )
+                        .as_str()
+                        .to_string();
 
                         let turn = Turn {
                             estimated_cost_nanos: 0,
@@ -322,7 +331,8 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
                             pricing_model: String::new(),
                             billing_mode,
                             cost_confidence: String::new(),
-                            all_tools: tool_use_ids.iter().map(|(_, name)| name.clone()).collect(),
+                            category,
+                            all_tools,
                             tool_use_ids,
                         };
                         let estimate = pricing::estimate_cost(

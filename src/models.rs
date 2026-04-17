@@ -49,6 +49,9 @@ pub struct Turn {
     pub pricing_model: String,
     pub billing_mode: String,
     pub cost_confidence: String,
+    /// Task category slug from `scanner::classifier::TaskCategory::as_str()`.
+    /// Empty string means unclassified (legacy row or Default-constructed turn).
+    pub category: String,
     /// All tool names from content blocks (transient, not persisted to turns table).
     #[allow(dead_code)]
     pub all_tools: Vec<String>,

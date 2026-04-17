@@ -64,7 +64,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             pricing_version         TEXT NOT NULL DEFAULT '',
             pricing_model           TEXT NOT NULL DEFAULT '',
             billing_mode            TEXT NOT NULL DEFAULT 'estimated_local',
-            cost_confidence         TEXT NOT NULL DEFAULT 'low'
+            cost_confidence         TEXT NOT NULL DEFAULT 'low',
+            category                TEXT NOT NULL DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS processed_files (
@@ -149,6 +150,9 @@ pub fn init_db(conn: &Connection) -> Result<()> {
              ALTER TABLE turns ADD COLUMN billing_mode TEXT NOT NULL DEFAULT 'estimated_local';
              ALTER TABLE turns ADD COLUMN cost_confidence TEXT NOT NULL DEFAULT 'low';",
         )?;
+    }
+    if !has_column(conn, "turns", "category") {
+        conn.execute_batch("ALTER TABLE turns ADD COLUMN category TEXT NOT NULL DEFAULT '';")?;
     }
 
     // Tool invocations table for multi-tool and MCP tracking
@@ -378,8 +382,8 @@ pub fn insert_turns(conn: &Connection, turns: &[Turn]) -> Result<()> {
              cache_read_tokens, cache_creation_tokens, reasoning_output_tokens,
              estimated_cost_nanos, tool_name, cwd, message_id, service_tier, inference_geo,
              is_subagent, agent_id, source_path, version, pricing_version, pricing_model,
-             billing_mode, cost_confidence)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+             billing_mode, cost_confidence, category)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
     )?;
     for t in turns {
         let msg_id: Option<&str> = if t.message_id.is_empty() {
@@ -419,6 +423,13 @@ pub fn insert_turns(conn: &Connection, turns: &[Turn]) -> Result<()> {
         } else {
             t.billing_mode.clone()
         };
+        let category = if t.category.is_empty() {
+            crate::scanner::classifier::classify(t.tool_name.as_deref(), &t.all_tools, None)
+                .as_str()
+                .to_string()
+        } else {
+            t.category.clone()
+        };
         stmt.execute(rusqlite::params![
             t.session_id,
             t.provider,
@@ -443,6 +454,7 @@ pub fn insert_turns(conn: &Connection, turns: &[Turn]) -> Result<()> {
             pricing_model,
             billing_mode,
             cost_confidence,
+            category,
         ])?;
     }
     Ok(())

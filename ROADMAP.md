@@ -31,7 +31,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 0 -- Foundation: Formalize `Provider` Trait
+## Phase 0 -- Foundation: Formalize `Provider` Trait **[x]**
 
 **Motivation:** Scanner logic is currently spread across `src/scanner/` with Claude and Codex paths interleaved. A `Provider` trait makes new sources a one-file contribution and mirrors Codeburn's plugin pattern.
 
@@ -56,7 +56,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ### Acceptance
 
-- `cargo test` green (no behavior change; all 118 existing tests still pass).
+- `cargo test` green (no behavior change; the baseline 128 existing tests still pass, plus the new trait + backfill + xcode-retag coverage added in this phase).
 - `clippy -D warnings` clean.
 - Schema migration runs idempotently on an existing DB.
 - Dashboard "Provider" filter still works.
@@ -65,7 +65,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 1 -- CSV/JSON Multi-Period Export
+## Phase 1 -- CSV/JSON Multi-Period Export **[x]**
 
 **Motivation:** Users need spreadsheet-friendly output for expense reports and manager dashboards. Heimdall currently has `--json` on `today` and `stats` only.
 
@@ -95,7 +95,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 2 -- Task Classifier (13 Categories)
+## Phase 2 -- Task Classifier (13 Categories) **[x]**
 
 **Motivation:** Tokens alone don't explain behavior. Knowing "60% of spend was debugging" is the single most requested insight from Codeburn.
 
