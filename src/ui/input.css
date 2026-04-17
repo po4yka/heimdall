@@ -469,18 +469,19 @@
   }
   .pagination button:disabled { opacity: 0.3; cursor: not-allowed; }
 
-  /* ── Progress Bars (Rate Windows) ────────────────────────────────── */
-  /* Legacy thin progress bar — replaced by SegmentedProgressBar in C3 */
-  .progress-track {
-    background: var(--border);
-    border-radius: 0;
-    height: 6px;
-    overflow: hidden;
+  /* ── Segmented Progress Bar ──────────────────────────────────────── */
+  .segmented-bar {
+    display: flex;
+    gap: 2px;
+    width: 100%;
   }
-  .progress-fill {
-    height: 100%;
-    border-radius: 0;
-    transition: width 0.3s ease;
+  .segmented-bar--hero { height: 20px; }
+  .segmented-bar--standard { height: 10px; }
+  .segmented-bar--compact { height: 5px; }
+  .segmented-bar__segment {
+    flex: 1;
+    min-width: 2px;
+    transition: background 0.2s ease;
   }
 
   /* ── Footer ──────────────────────────────────────────────────────── */

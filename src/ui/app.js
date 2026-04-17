@@ -1384,46 +1384,100 @@
     if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
     return minutes + "m";
   }
-  function progressColor(percent) {
-    if (percent >= 90) return "var(--red)";
-    if (percent >= 70) return "var(--yellow)";
-    return "var(--green)";
+
+  // src/ui/components/SegmentedProgressBar.tsx
+  function resolveStatus(pct, status) {
+    if (status === "neutral") return "var(--text-display)";
+    if (status === "success") return "var(--success)";
+    if (status === "warning") return "var(--warning)";
+    if (status === "accent") return "var(--accent)";
+    if (pct >= 90) return "var(--accent)";
+    if (pct >= 70) return "var(--warning)";
+    return "var(--success)";
+  }
+  function SegmentedProgressBar({
+    value,
+    max: max2,
+    segments = 20,
+    size = "standard",
+    status = "auto",
+    "aria-label": ariaLabel
+  }) {
+    const safeMax = max2 > 0 ? max2 : 1;
+    const ratio = value / safeMax;
+    const pct = Math.min(100, Math.max(0, ratio * 100));
+    const overflow = ratio > 1;
+    const filled = Math.round(pct / 100 * segments);
+    const fillColor = overflow ? "var(--accent)" : resolveStatus(pct, status);
+    const emptyColor = "var(--border)";
+    return /* @__PURE__ */ u2(
+      "div",
+      {
+        class: `segmented-bar segmented-bar--${size}`,
+        role: "progressbar",
+        "aria-label": ariaLabel,
+        "aria-valuenow": Math.round(pct),
+        "aria-valuemin": 0,
+        "aria-valuemax": 100,
+        children: Array.from({ length: segments }).map((_4, i4) => /* @__PURE__ */ u2(
+          "div",
+          {
+            class: "segmented-bar__segment",
+            style: { background: i4 < filled ? fillColor : emptyColor }
+          },
+          i4
+        ))
+      }
+    );
   }
 
   // src/ui/components/RateWindowCard.tsx
   function RateWindowCard({ label, window: window2 }) {
     const pct = Math.min(100, window2.used_percent);
-    const color = progressColor(pct);
     const resetText = window2.resets_in_minutes != null ? `Resets in ${fmtResetTime(window2.resets_in_minutes)}` : "";
     return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
       /* @__PURE__ */ u2("div", { class: "stat-label", children: label }),
-      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "28px", color }, children: [
+      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "28px" }, children: [
         pct.toFixed(1),
         "%"
       ] }),
-      /* @__PURE__ */ u2("div", { class: "progress-track", style: { marginTop: "12px" }, children: /* @__PURE__ */ u2("div", { class: "progress-fill", style: { background: color, width: `${pct}%` } }) }),
+      /* @__PURE__ */ u2("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u2(
+        SegmentedProgressBar,
+        {
+          value: window2.used_percent,
+          max: 100,
+          size: "standard",
+          "aria-label": `${label} usage`
+        }
+      ) }),
       resetText && /* @__PURE__ */ u2("div", { class: "stat-sub", children: resetText })
     ] }) });
   }
   function BudgetCard({ used, limit, currency, utilization }) {
-    const pct = Math.min(100, utilization);
-    const color = progressColor(pct);
     return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
       /* @__PURE__ */ u2("div", { class: "stat-label", children: "Monthly Budget" }),
-      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "24px", color }, children: [
+      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "24px" }, children: [
         "$",
         used.toFixed(2),
         " / $",
         limit.toFixed(2)
       ] }),
-      /* @__PURE__ */ u2("div", { class: "progress-track", style: { marginTop: "12px" }, children: /* @__PURE__ */ u2("div", { class: "progress-fill", style: { background: color, width: `${pct}%` } }) }),
+      /* @__PURE__ */ u2("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u2(
+        SegmentedProgressBar,
+        {
+          value: utilization,
+          max: 100,
+          size: "standard",
+          "aria-label": "Monthly budget usage"
+        }
+      ) }),
       /* @__PURE__ */ u2("div", { class: "stat-sub", children: currency })
     ] }) });
   }
   function RateWindowUnavailable({ error }) {
     return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
       /* @__PURE__ */ u2("div", { class: "stat-label", children: "Rate Windows" }),
-      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "16px", color: "var(--text-secondary)" }, children: "Unavailable" }),
+      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px", color: "var(--text-secondary)" }, children: "Unavailable" }),
       /* @__PURE__ */ u2("div", { class: "stat-sub", children: error })
     ] }) });
   }
@@ -5006,7 +5060,7 @@
 
   // src/ui/components/ModelCostTable.tsx
   var defaultSort2 = [{ id: "cost", desc: true }];
-  function useModelColumns() {
+  function useModelColumns(totalCost) {
     return T2(
       () => [
         {
@@ -5054,13 +5108,47 @@
             const row = info.row.original;
             return row.is_billable ? /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(info.getValue()) }) : /* @__PURE__ */ u2("span", { class: "cost-na", children: "n/a" });
           }
+        },
+        {
+          id: "share",
+          accessorFn: (row) => row.cost,
+          header: "Share",
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            if (!row.is_billable || totalCost <= 0) {
+              return /* @__PURE__ */ u2("span", { class: "cost-na", children: "\u2014" });
+            }
+            const pct = row.cost / totalCost * 100;
+            return /* @__PURE__ */ u2("div", { style: { minWidth: "120px", display: "flex", alignItems: "center", gap: "8px" }, children: [
+              /* @__PURE__ */ u2("div", { style: { flex: 1 }, children: /* @__PURE__ */ u2(
+                SegmentedProgressBar,
+                {
+                  value: row.cost,
+                  max: totalCost,
+                  segments: 12,
+                  size: "compact",
+                  status: "neutral",
+                  "aria-label": `${row.model} cost share`
+                }
+              ) }),
+              /* @__PURE__ */ u2("span", { class: "num", style: { fontSize: "11px", color: "var(--text-secondary)", minWidth: "36px", textAlign: "right" }, children: [
+                pct.toFixed(0),
+                "%"
+              ] })
+            ] });
+          }
         }
       ],
-      []
+      [totalCost]
     );
   }
   function ModelCostTable({ byModel }) {
-    const columns7 = useModelColumns();
+    const totalCost = T2(
+      () => byModel.reduce((s4, m4) => m4.is_billable ? s4 + m4.cost : s4, 0),
+      [byModel]
+    );
+    const columns7 = useModelColumns(totalCost);
     return /* @__PURE__ */ u2(
       DataTable,
       {

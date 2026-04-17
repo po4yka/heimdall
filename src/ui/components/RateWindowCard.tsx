@@ -1,5 +1,6 @@
 import type { WindowInfo } from '../state/types';
-import { fmtResetTime, progressColor } from '../lib/format';
+import { fmtResetTime } from '../lib/format';
+import { SegmentedProgressBar } from './SegmentedProgressBar';
 
 interface RateWindowCardProps {
   label: string;
@@ -8,7 +9,6 @@ interface RateWindowCardProps {
 
 export function RateWindowCard({ label, window }: RateWindowCardProps) {
   const pct = Math.min(100, window.used_percent);
-  const color = progressColor(pct);
   const resetText = window.resets_in_minutes != null
     ? `Resets in ${fmtResetTime(window.resets_in_minutes)}`
     : '';
@@ -17,9 +17,14 @@ export function RateWindowCard({ label, window }: RateWindowCardProps) {
     <div class="card stat-card">
       <div class="stat-content">
         <div class="stat-label">{label}</div>
-        <div class="stat-value" style={{ fontSize: '28px', color }}>{pct.toFixed(1)}%</div>
-        <div class="progress-track" style={{ marginTop: '12px' }}>
-          <div class="progress-fill" style={{ background: color, width: `${pct}%` }} />
+        <div class="stat-value" style={{ fontSize: '28px' }}>{pct.toFixed(1)}%</div>
+        <div style={{ marginTop: '12px' }}>
+          <SegmentedProgressBar
+            value={window.used_percent}
+            max={100}
+            size="standard"
+            aria-label={`${label} usage`}
+          />
         </div>
         {resetText && <div class="stat-sub">{resetText}</div>}
       </div>
@@ -35,17 +40,20 @@ interface BudgetCardProps {
 }
 
 export function BudgetCard({ used, limit, currency, utilization }: BudgetCardProps) {
-  const pct = Math.min(100, utilization);
-  const color = progressColor(pct);
   return (
     <div class="card stat-card">
       <div class="stat-content">
         <div class="stat-label">Monthly Budget</div>
-        <div class="stat-value" style={{ fontSize: '24px', color }}>
+        <div class="stat-value" style={{ fontSize: '24px' }}>
           ${used.toFixed(2)} / ${limit.toFixed(2)}
         </div>
-        <div class="progress-track" style={{ marginTop: '12px' }}>
-          <div class="progress-fill" style={{ background: color, width: `${pct}%` }} />
+        <div style={{ marginTop: '12px' }}>
+          <SegmentedProgressBar
+            value={utilization}
+            max={100}
+            size="standard"
+            aria-label="Monthly budget usage"
+          />
         </div>
         <div class="stat-sub">{currency}</div>
       </div>
@@ -62,7 +70,7 @@ export function RateWindowUnavailable({ error }: UnavailableCardProps) {
     <div class="card stat-card">
       <div class="stat-content">
         <div class="stat-label">Rate Windows</div>
-        <div class="stat-value" style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>
+        <div class="stat-value" style={{ fontSize: '18px', color: 'var(--text-secondary)' }}>
           Unavailable
         </div>
         <div class="stat-sub">{error}</div>
