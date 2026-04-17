@@ -1,5 +1,10 @@
 import { render } from 'preact';
 import { Footer } from './components/Footer';
+import { Header } from './components/Header';
+import { FilterBar } from './components/FilterBar';
+import { RateWindowCard, BudgetCard, RateWindowUnavailable } from './components/RateWindowCard';
+import { EstimationMeta } from './components/EstimationMeta';
+import { ReconciliationBlock } from './components/ReconciliationBlock';
 import { StatsCards } from './components/StatsCards';
 import { showError, showSuccess, ToastContainer } from './components/Toast';
 import { SubagentSummary as SubagentSummaryComponent } from './components/SubagentSummary';
@@ -18,7 +23,6 @@ import { ModelChart } from './components/ModelChart';
 import { ProjectChart } from './components/ProjectChart';
 
 import type {
-  WindowInfo,
   UsageWindowsResponse,
   SubagentSummary,
   EntrypointSummary,
@@ -35,7 +39,6 @@ import type {
   ProjectAgg,
   Totals,
   RangeKey,
-  OpenAiReconciliation,
 } from './state/types';
 import {
   rawData,
@@ -44,42 +47,31 @@ import {
   projectSearchQuery,
   lastFilteredSessions,
   lastByProject,
+  metaText,
+  planBadge,
 } from './state/store';
-import { esc, $, fmtResetTime, progressColor } from './lib/format';
+import { $ } from './lib/format';
 import { downloadCSV } from './lib/csv';
 import { RANGE_LABELS } from './lib/charts';
-import { createTriggerRescan } from './lib/rescan';
-import { getTheme } from './lib/theme';
+import { applyTheme, getTheme } from './lib/theme';
 
-// ── Theme (app-level, depends on state) ───────────────────────────────
-function applyTheme(theme: 'light' | 'dark'): void {
-  if (theme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
-  const icon = document.getElementById('theme-icon');
-  if (icon) icon.innerHTML = theme === 'dark'
-    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
-    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-  if (rawData.value) applyFilter();
-}
+// ── Theme bootstrap ──────────────────────────────────────────────────
+applyTheme(getTheme());
 
 function toggleTheme(): void {
   const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-  const next = current === 'light' ? 'dark' : 'light';
+  const next: 'light' | 'dark' = current === 'light' ? 'dark' : 'light';
   localStorage.setItem('theme', next);
   applyTheme(next);
+  if (rawData.value) applyFilter();
 }
 
-// Apply theme immediately before render
-applyTheme(getTheme());
-
-// ── Local-only state (not reactive) ───────────────────────────────────
+// ── Local-only state ─────────────────────────────────────────────────
 let previousSessionPercent: number | null = null;
 let loadDataInFlight = false;
 let loadUsageWindowsInFlight = false;
 
+// ── URL persistence ──────────────────────────────────────────────────
 function getRangeCutoff(range: RangeKey): string | null {
   if (range === 'all') return null;
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
@@ -91,24 +83,6 @@ function getRangeCutoff(range: RangeKey): string | null {
 function readURLRange(): RangeKey {
   const p = new URLSearchParams(window.location.search).get('range');
   return (['7d', '30d', '90d', 'all'] as RangeKey[]).includes(p as RangeKey) ? (p as RangeKey) : '30d';
-}
-
-function setRange(range: RangeKey): void {
-  selectedRange.value = range;
-  document.querySelectorAll<HTMLButtonElement>('.range-btn').forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.range === range)
-  );
-  updateURL();
-  applyFilter();
-}
-
-// ── Model filter ───────────────────────────────────────────────────────
-function modelPriority(m: string): number {
-  const ml = m.toLowerCase();
-  if (ml.includes('opus'))   return 0;
-  if (ml.includes('sonnet')) return 1;
-  if (ml.includes('haiku'))  return 2;
-  return 3;
 }
 
 function readURLModels(allModels: string[]): Set<string> {
@@ -123,77 +97,8 @@ function isDefaultModelSelection(allModels: string[]): boolean {
   return allModels.every(m => selectedModels.value.has(m));
 }
 
-function buildFilterUI(allModels: string[]): void {
-  const sorted = [...allModels].sort((a, b) => {
-    const pa = modelPriority(a), pb = modelPriority(b);
-    return pa !== pb ? pa - pb : a.localeCompare(b);
-  });
-  selectedModels.value = readURLModels(allModels);
-  const container = $('model-checkboxes');
-  container.innerHTML = sorted.map(m => {
-    const checked = selectedModels.value.has(m);
-    return `<label class="model-cb-label ${checked ? 'checked' : ''}" data-model="${esc(m)}">
-      <input type="checkbox" value="${esc(m)}" ${checked ? 'checked' : ''} onchange="onModelToggle(this)" aria-label="${esc(m)}">
-      ${esc(m)}
-    </label>`;
-  }).join('');
-}
-
-function onModelToggle(cb: HTMLInputElement): void {
-  const label = cb.closest('label')!;
-  const next = new Set(selectedModels.value);
-  if (cb.checked) { next.add(cb.value); label.classList.add('checked'); }
-  else            { next.delete(cb.value); label.classList.remove('checked'); }
-  selectedModels.value = next;
-  updateURL();
-  applyFilter();
-}
-
-function selectAllModels(): void {
-  const next = new Set(selectedModels.value);
-  document.querySelectorAll<HTMLInputElement>('#model-checkboxes input').forEach(cb => {
-    cb.checked = true; next.add(cb.value); cb.closest('label')!.classList.add('checked');
-  });
-  selectedModels.value = next;
-  updateURL(); applyFilter();
-}
-
-function clearAllModels(): void {
-  document.querySelectorAll<HTMLInputElement>('#model-checkboxes input').forEach(cb => {
-    cb.checked = false; cb.closest('label')!.classList.remove('checked');
-  });
-  selectedModels.value = new Set();
-  updateURL(); applyFilter();
-}
-
-// ── Project search ─────────────────────────────────────────────────────
-function onProjectSearch(query: string): void {
-  projectSearchQuery.value = query.toLowerCase().trim();
-  const clearBtn = document.getElementById('project-clear-btn');
-  if (clearBtn) clearBtn.style.display = projectSearchQuery.value ? '' : 'none';
-  updateURL();
-  applyFilter();
-}
-
-
-function clearProjectSearch(): void {
-  projectSearchQuery.value = '';
-  const input = document.getElementById('project-search') as HTMLInputElement;
-  if (input) input.value = '';
-  const clearBtn = document.getElementById('project-clear-btn');
-  if (clearBtn) clearBtn.style.display = 'none';
-  updateURL();
-  applyFilter();
-}
-
-function matchesProjectSearch(project: string): boolean {
-  if (!projectSearchQuery.value) return true;
-  return project.toLowerCase().includes(projectSearchQuery.value);
-}
-
-// ── URL persistence ────────────────────────────────────────────────────
 function updateURL(): void {
-  const allModels = Array.from(document.querySelectorAll<HTMLInputElement>('#model-checkboxes input')).map(cb => cb.value);
+  const allModels = rawData.value?.all_models ?? [];
   const params = new URLSearchParams();
   if (selectedRange.value !== '30d') params.set('range', selectedRange.value);
   if (!isDefaultModelSelection(allModels)) params.set('models', Array.from(selectedModels.value).join(','));
@@ -202,8 +107,12 @@ function updateURL(): void {
   history.replaceState(null, '', window.location.pathname + search);
 }
 
-// ── Sort helpers (moved to Preact table components) ───────────────────
+function matchesProjectSearch(project: string): boolean {
+  if (!projectSearchQuery.value) return true;
+  return project.toLowerCase().includes(projectSearchQuery.value);
+}
 
+// ── Aggregations ─────────────────────────────────────────────────────
 function buildAggregations(filteredDaily: DailyModelRow[], filteredSessions: typeof lastFilteredSessions.value) {
   const dailyMap: Record<string, DailyAgg> = {};
   for (const r of filteredDaily) {
@@ -332,6 +241,7 @@ function confidenceRank(confidence: string): number {
   }
 }
 
+// ── Renderers (Preact into existing mount points) ────────────────────
 function renderEstimationMeta(
   confidenceBreakdown: Array<[string, { sessions: number; cost: number }]>,
   billingModeBreakdown: Array<[string, { sessions: number; cost: number }]>,
@@ -342,40 +252,22 @@ function renderEstimationMeta(
 
   if (!confidenceBreakdown.length && !billingModeBreakdown.length && !pricingVersions.length) {
     container.style.display = 'none';
-    container.innerHTML = '';
+    render(null, container);
     return;
   }
 
   container.style.display = 'grid';
   render(
-    <>
-      <div class="card stat-card">
-        <div class="stat-label">Cost Confidence</div>
-        <div class="stat-value" style={{ fontSize: '18px' }}>
-          {confidenceBreakdown.length ? confidenceBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(' / ') : 'n/a'}
-        </div>
-        <div class="stat-sub">Session mix in current filter</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-label">Billing Mode</div>
-        <div class="stat-value" style={{ fontSize: '18px' }}>
-          {billingModeBreakdown.length ? billingModeBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(' / ') : 'n/a'}
-        </div>
-        <div class="stat-sub">Local estimate vs subscriber-included sessions</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-label">Pricing Snapshot</div>
-        <div class="stat-value" style={{ fontSize: '18px' }}>
-          {pricingVersions.length === 0 ? 'n/a' : pricingVersions.length === 1 ? pricingVersions[0] : `mixed (${pricingVersions.length})`}
-        </div>
-        <div class="stat-sub">Stored per-session pricing metadata</div>
-      </div>
-    </>,
+    <EstimationMeta
+      confidenceBreakdown={confidenceBreakdown}
+      billingModeBreakdown={billingModeBreakdown}
+      pricingVersions={pricingVersions}
+    />,
     container
   );
 }
 
-function renderOpenAiReconciliation(reconciliation: OpenAiReconciliation | null): void {
+function renderOpenAiReconciliation(reconciliation: DashboardData['openai_reconciliation']): void {
   const container = $('openai-reconciliation');
   if (!container) return;
   if (!reconciliation) {
@@ -383,59 +275,8 @@ function renderOpenAiReconciliation(reconciliation: OpenAiReconciliation | null)
     render(null, container);
     return;
   }
-
   container.style.display = '';
-  render(
-    <div class="card card-flat bento-full">
-      <h2>OpenAI Org Usage Reconciliation</h2>
-      <div class="muted" style={{ marginBottom: '10px' }}>
-        Official OpenAI organization usage buckets for Codex-compatible models over the last {reconciliation.lookback_days} days.
-      </div>
-      {reconciliation.available ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '12px' }}>
-          <div class="stat-card">
-            <div class="stat-label">Period</div>
-            <div class="stat-value" style={{ fontSize: '18px' }}>{reconciliation.start_date} - {reconciliation.end_date}</div>
-            <div class="stat-sub">Rolling comparison window</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Local Estimated Cost</div>
-            <div class="stat-value cost-value" style={{ fontSize: '18px' }}>${reconciliation.estimated_local_cost.toFixed(4)}</div>
-            <div class="stat-sub">Codex local logs</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Org Usage Cost</div>
-            <div class="stat-value cost-value" style={{ fontSize: '18px' }}>${reconciliation.api_usage_cost.toFixed(4)}</div>
-            <div class="stat-sub">OpenAI organization usage API</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Delta</div>
-            <div class="stat-value" style={{ fontSize: '18px', color: Math.abs(reconciliation.delta_cost) < 0.01 ? 'var(--text)' : 'var(--accent)' }}>
-              {reconciliation.delta_cost >= 0 ? '+' : ''}${reconciliation.delta_cost.toFixed(4)}
-            </div>
-            <div class="stat-sub">Org usage cost minus local estimate</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">API Tokens</div>
-            <div class="stat-value" style={{ fontSize: '18px' }}>
-              {reconciliation.api_input_tokens.toLocaleString()} / {reconciliation.api_output_tokens.toLocaleString()}
-            </div>
-            <div class="stat-sub">Input / output tokens</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Cached Input + Requests</div>
-            <div class="stat-value" style={{ fontSize: '18px' }}>
-              {reconciliation.api_cached_input_tokens.toLocaleString()} / {reconciliation.api_requests.toLocaleString()}
-            </div>
-            <div class="stat-sub">Cached input tokens / requests</div>
-          </div>
-        </div>
-      ) : (
-        <div class="muted">{reconciliation.error ?? 'Unavailable'}</div>
-      )}
-    </div>,
-    container
-  );
+  render(<ReconciliationBlock reconciliation={reconciliation} />, container);
 }
 
 function renderPlaceholder(containerId: string, title: string, message: string): void {
@@ -500,7 +341,7 @@ function renderCodexSection(filteredDaily: DailyModelRow[], filteredSessions: ty
   else renderPlaceholder('codex-hourly-chart', 'Codex Hourly Distribution', 'No hourly token distribution is available for Codex in the current selection.');
 }
 
-// ── Aggregation & filtering ────────────────────────────────────────────
+// ── Filter driver ────────────────────────────────────────────────────
 function applyFilter(): void {
   if (!rawData.value) return;
   const cutoff = getRangeCutoff(selectedRange.value);
@@ -517,42 +358,23 @@ function applyFilter(): void {
 
   $('daily-chart-title').textContent = 'Daily Token Usage - ' + RANGE_LABELS[selectedRange.value];
 
-  renderStats(totals, daily);
+  render(<StatsCards totals={totals} daily={daily} />, $('stats-row'));
   renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
   renderOpenAiReconciliation(rawData.value.openai_reconciliation);
-  renderDailyChart(daily);
-  renderModelChart(byModel);
-  renderProjectChart(byProject);
+  render(<DailyChart daily={daily} />, $('chart-daily'));
+  render(<ModelChart byModel={byModel} />, $('chart-model'));
+  render(<ProjectChart byProject={byProject} />, $('chart-project'));
+
   lastFilteredSessions.value = filteredSessions;
   lastByProject.value = byProject;
+
   render(<ModelCostTable byModel={byModel} />, $('model-cost-mount'));
   render(<SessionsTable onExportCSV={exportSessionsCSV} />, $('sessions-mount'));
   render(<ProjectCostTable byProject={lastByProject.value.slice(0, 30)} onExportCSV={exportProjectsCSV} />, $('project-cost-mount'));
   renderCodexSection(filteredDaily, filteredSessions);
 }
 
-// ── Renderers ──────────────────────────────────────────────────────────
-function renderStats(t: Totals, daily: DailyAgg[]): void {
-  render(<StatsCards totals={t} daily={daily} />, $('stats-row'));
-}
-
-function renderDailyChart(daily: DailyAgg[]): void {
-  const container = document.getElementById('chart-daily')!;
-  render(<DailyChart daily={daily} />, container);
-}
-
-function renderModelChart(byModel: ModelAgg[]): void {
-  const container = document.getElementById('chart-model')!;
-  render(<ModelChart byModel={byModel} />, container);
-}
-
-function renderProjectChart(byProject: ProjectAgg[]): void {
-  const container = document.getElementById('chart-project')!;
-  render(<ProjectChart byProject={byProject} />, container);
-}
-
-
-// ── CSV Export ──────────────────────────────────────────────────────────
+// ── CSV Export ───────────────────────────────────────────────────────
 function exportSessionsCSV(): void {
   const header = ['Session', 'Provider', 'Project', 'Last Active', 'Duration (min)', 'Model', 'Turns', 'Input', 'Output', 'Cached Input', 'Cache Creation', 'Reasoning Output', 'Est. Cost'];
   const rows = lastFilteredSessions.value.map(s => {
@@ -574,71 +396,48 @@ function exportProjectsCSV(): void {
   exportProjectRowsCSV('projects', lastByProject.value);
 }
 
-// ── Usage Windows & Budget ──────────────────────────────────────────────
-function renderWindowCard(label: string, w: WindowInfo): string {
-  const pct = Math.min(100, w.used_percent);
-  const color = progressColor(pct);
-  const resetText = w.resets_in_minutes != null ? `Resets in ${fmtResetTime(w.resets_in_minutes)}` : '';
-  return `<div class="stat-card">
-    <div class="stat-label">${esc(label)}</div>
-    <div class="stat-value" style="font-size:18px;color:${color}">${esc(pct.toFixed(1))}%</div>
-    <div class="progress-track">
-      <div class="progress-fill" style="background:${color};width:${pct}%"></div>
-    </div>
-    <div class="stat-sub">${esc(resetText)}</div>
-  </div>`;
-}
-
+// ── Usage windows ────────────────────────────────────────────────────
 function renderUsageWindows(data: UsageWindowsResponse): void {
   const container = $('usage-windows');
   if (!container) return;
 
   if (!data.available) {
-    const badge = $('plan-badge');
-    if (badge) badge.style.display = 'none';
+    planBadge.value = '';
     if (data.error) {
       container.style.display = 'grid';
-      container.innerHTML = `<div class="stat-card">
-        <div class="stat-label">Rate Windows</div>
-        <div class="stat-value" style="font-size:16px">Unavailable</div>
-        <div class="stat-sub">${esc(data.error)}</div>
-      </div>`;
+      render(<RateWindowUnavailable error={data.error} />, container);
     } else {
-      container.innerHTML = '';
       container.style.display = 'none';
+      render(null, container);
     }
     return;
   }
 
   container.style.display = 'grid';
-  let cards = '';
-  if (data.session) cards += renderWindowCard('Session (5h)', data.session);
-  if (data.weekly) cards += renderWindowCard('Weekly', data.weekly);
-  if (data.weekly_opus) cards += renderWindowCard('Weekly Opus', data.weekly_opus);
-  if (data.weekly_sonnet) cards += renderWindowCard('Weekly Sonnet', data.weekly_sonnet);
+  render(
+    <>
+      {data.session && <RateWindowCard label="Session (5h)" window={data.session} />}
+      {data.weekly && <RateWindowCard label="Weekly" window={data.weekly} />}
+      {data.weekly_opus && <RateWindowCard label="Weekly Opus" window={data.weekly_opus} />}
+      {data.weekly_sonnet && <RateWindowCard label="Weekly Sonnet" window={data.weekly_sonnet} />}
+      {data.budget && (
+        <BudgetCard
+          used={data.budget.used}
+          limit={data.budget.limit}
+          currency={data.budget.currency}
+          utilization={data.budget.utilization}
+        />
+      )}
+    </>,
+    container
+  );
 
-  if (data.budget) {
-    const b = data.budget;
-    const pct = Math.min(100, b.utilization);
-    const color = progressColor(pct);
-    cards += `<div class="stat-card">
-      <div class="stat-label">Monthly Budget</div>
-      <div class="stat-value" style="font-size:18px;color:${color}">${esc('$' + b.used.toFixed(2) + ' / $' + b.limit.toFixed(2))}</div>
-      <div class="progress-track">
-        <div class="progress-fill" style="background:${color};width:${pct}%"></div>
-      </div>
-      <div class="stat-sub">${esc(b.currency)}</div>
-    </div>`;
-  }
-
-  container.innerHTML = cards;
-
-  // Session depletion alert
+  // Session depletion inline alert (still via Toast for now; replaced by inline status in C4)
   if (data.session) {
     const currentPercent = 100 - data.session.used_percent;
     if (previousSessionPercent !== null) {
       if (previousSessionPercent > 0.01 && currentPercent <= 0.01) {
-        showError('Session depleted \u2014 resets in ' + fmtResetTime(data.session.resets_in_minutes));
+        showError('Session depleted \u2014 resets in ' + (data.session.resets_in_minutes ?? 0) + 'm');
       } else if (previousSessionPercent <= 0.01 && currentPercent > 0.01) {
         showSuccess('Session restored');
       }
@@ -646,18 +445,12 @@ function renderUsageWindows(data: UsageWindowsResponse): void {
     previousSessionPercent = currentPercent;
   }
 
-  // Plan badge
-  const badge = $('plan-badge');
-  if (badge && data.identity?.plan) {
-    badge.textContent = data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1);
-    badge.style.display = '';
-  } else if (badge) {
-    badge.style.display = 'none';
-  }
+  planBadge.value = data.identity?.plan
+    ? data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1)
+    : '';
 }
 
-
-
+// ── Secondary tables ─────────────────────────────────────────────────
 function renderSubagentSummary(summary: SubagentSummary): void {
   const container = $('subagent-summary');
   if (!container) return;
@@ -754,7 +547,6 @@ function renderHourlyChart(data: HourlyRow[]): void {
   render(<HourlyChart data={data} />, container);
 }
 
-
 async function loadUsageWindows(): Promise<void> {
   if (loadUsageWindowsInFlight) return;
   loadUsageWindowsInFlight = true;
@@ -769,28 +561,7 @@ async function loadUsageWindows(): Promise<void> {
   }
 }
 
-// ── Rescan ──────────────────────────────────────────────────────────────
-const triggerRescan = createTriggerRescan({
-  button: $('rescan-btn') as HTMLButtonElement,
-  fetchImpl: (input, init) => fetch(input, init),
-  loadData,
-  showError,
-  setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
-  logError: (error) => console.error(error),
-});
-
-// ── Loading skeleton ──────────────────────────────────────────────────
-function renderLoadingSkeleton(): void {
-  const statsRow = document.getElementById('stats-row');
-  if (statsRow && !rawData.value) {
-    statsRow.innerHTML = Array.from({ length: 7 }, () =>
-      '<div class="skeleton" style="height:80px"></div>'
-    ).join('');
-  }
-}
-renderLoadingSkeleton();
-
-// ── Data loading ───────────────────────────────────────────────────────
+// ── Data loading ─────────────────────────────────────────────────────
 async function loadData(force = false): Promise<void> {
   if (loadDataInFlight && !force) return;
   loadDataInFlight = true;
@@ -802,30 +573,19 @@ async function loadData(force = false): Promise<void> {
     }
     const d: DashboardData = await resp.json();
     if (d.error) {
-      document.body.innerHTML = '<div style="padding:40px;color:#f87171;font-family:monospace">' + esc(d.error) + '</div>';
+      showError(d.error);
       return;
     }
-    $('meta').textContent = 'Updated: ' + d.generated_at + ' \u00b7 Auto-refresh 30s';
+    metaText.value = 'Updated: ' + d.generated_at + ' \u00b7 Auto-refresh 30s';
 
     const isFirstLoad = rawData.value === null;
     rawData.value = d;
 
     if (isFirstLoad) {
       selectedRange.value = readURLRange();
-      document.querySelectorAll<HTMLButtonElement>('.range-btn').forEach(btn =>
-        btn.classList.toggle('active', btn.dataset.range === selectedRange.value)
-      );
-      buildFilterUI(d.all_models);
-
-      // Restore project search from URL
+      selectedModels.value = readURLModels(d.all_models);
       const urlProject = new URLSearchParams(window.location.search).get('project');
-      if (urlProject) {
-        projectSearchQuery.value = urlProject;
-        const input = document.getElementById('project-search') as HTMLInputElement;
-        if (input) input.value = urlProject;
-        const clearBtn = document.getElementById('project-clear-btn');
-        if (clearBtn) clearBtn.style.display = '';
-      }
+      if (urlProject) projectSearchQuery.value = urlProject;
     }
 
     applyFilter();
@@ -845,25 +605,28 @@ async function loadData(force = false): Promise<void> {
   }
 }
 
-// Expose functions to global scope for inline HTML event handlers
-Object.assign(window, {
-  setRange, onModelToggle, selectAllModels, clearAllModels,
-  exportSessionsCSV, exportProjectsCSV, triggerRescan,
-  onProjectSearch, clearProjectSearch, toggleTheme,
-});
+// ── Preact mounts ────────────────────────────────────────────────────
+const headerMount = document.getElementById('header-mount');
+if (headerMount) {
+  render(<Header onDataReload={loadData} onThemeToggle={toggleTheme} />, headerMount);
+}
 
-loadData();
-setInterval(loadData, 30000);
-loadUsageWindows();
-setInterval(loadUsageWindows, 60000);
+const filterBarMount = document.getElementById('filter-bar-mount');
+if (filterBarMount) {
+  render(<FilterBar onFilterChange={applyFilter} onURLUpdate={updateURL} />, filterBarMount);
+}
 
-// ── Preact mount: replace static footer with component ────────────────
 const footerEl = document.querySelector('footer');
 if (footerEl && footerEl.parentElement) {
   render(<Footer />, footerEl.parentElement, footerEl);
 }
 
-// ── Preact mount: toast container ─────────────────────────────────────
 const toastRoot = document.createElement('div');
 document.body.appendChild(toastRoot);
 render(<ToastContainer />, toastRoot);
+
+// ── Boot ─────────────────────────────────────────────────────────────
+loadData();
+setInterval(loadData, 30000);
+loadUsageWindows();
+setInterval(loadUsageWindows, 60000);

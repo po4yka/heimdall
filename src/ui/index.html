@@ -13,44 +13,17 @@
 </style>
 </head>
 <body>
-<header>
-  <h1><span class="accent">Code</span> Usage <span id="plan-badge" aria-live="polite" style="display:none;font-size:10px;padding:1px 6px;border-radius:3px;background:var(--accent-muted);color:var(--accent);vertical-align:middle;margin-left:6px;font-weight:500"></span></h1>
-  <div class="meta" id="meta"></div>
-  <div class="header-actions">
-    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-      <span id="theme-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></span>
-    </button>
-    <button id="rescan-btn" onclick="triggerRescan()" aria-label="Rescan database">Rescan</button>
-  </div>
-</header>
-
-<div id="filter-bar" role="toolbar" aria-label="Filters">
-  <div class="filter-label">Models</div>
-  <div id="model-checkboxes" role="group" aria-label="Model filters"></div>
-  <button class="filter-btn" onclick="selectAllModels()">All</button>
-  <button class="filter-btn" onclick="clearAllModels()">None</button>
-  <div class="filter-sep"></div>
-  <div class="filter-label">Range</div>
-  <div class="range-group" role="group" aria-label="Date range">
-    <button class="range-btn" data-range="7d" onclick="setRange('7d')">7d</button>
-    <button class="range-btn" data-range="30d" onclick="setRange('30d')">30d</button>
-    <button class="range-btn" data-range="90d" onclick="setRange('90d')">90d</button>
-    <button class="range-btn" data-range="all" onclick="setRange('all')">All</button>
-  </div>
-  <div class="filter-sep"></div>
-  <label for="project-search" class="filter-label">Project</label>
-  <input type="text" id="project-search" placeholder="Search..." aria-label="Filter by project" oninput="onProjectSearch(this.value)" style="background:transparent;border:1px solid var(--border);color:var(--text);padding:3px 10px;border-radius:6px;font-size:11px;width:140px;outline:none;font-family:inherit;">
-  <button class="filter-btn" id="project-clear-btn" onclick="clearProjectSearch()" style="display:none">Clear</button>
-</div>
+<div id="header-mount"></div>
+<div id="filter-bar-mount"></div>
 
 <div class="bento" role="main">
   <!-- Rate windows (conditional) -->
-  <div id="usage-windows" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px"></div>
-  <div id="estimation-meta" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px"></div>
+  <div id="usage-windows" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px"></div>
+  <div id="estimation-meta" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px"></div>
   <div id="openai-reconciliation" class="bento-full" style="display:none"></div>
 
   <!-- Stat cards -->
-  <div id="stats-row" class="bento-full" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"></div>
+  <div id="stats-row" class="bento-full" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px"></div>
 
   <!-- Charts row -->
   <div class="card bento-2 chart-card">
@@ -82,11 +55,11 @@
   <div class="bento-full" id="project-cost-mount"></div>
 
   <section id="codex-section" class="bento-full" style="display:none">
-    <div class="card card-flat" style="margin-bottom:12px">
+    <div class="card card-flat" style="margin-bottom:16px">
       <h2>Codex Analytics</h2>
       <div class="muted">Provider-specific local usage from Codex archived session logs.</div>
     </div>
-    <div id="codex-stats-row" class="bento-full" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:12px"></div>
+    <div id="codex-stats-row" class="bento-full" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:16px"></div>
     <div class="card bento-2 chart-card">
       <h2 id="codex-daily-chart-title">Codex Daily Usage</h2>
       <div class="chart-wrap tall"><div id="codex-chart-daily"></div></div>

@@ -314,65 +314,6 @@
     ] }) });
   }
 
-  // src/ui/lib/format.ts
-  function esc(s4) {
-    const d5 = document.createElement("div");
-    d5.textContent = String(s4);
-    return d5.innerHTML;
-  }
-  function $2(id) {
-    return document.getElementById(id);
-  }
-  function fmt(n3) {
-    if (n3 >= 1e9) return (n3 / 1e9).toFixed(2) + "B";
-    if (n3 >= 1e6) return (n3 / 1e6).toFixed(2) + "M";
-    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
-    return n3.toLocaleString();
-  }
-  function fmtCost(c4) {
-    return "$" + c4.toFixed(4);
-  }
-  function fmtCostBig(c4) {
-    return "$" + c4.toFixed(2);
-  }
-  function fmtResetTime(minutes) {
-    if (minutes == null || minutes <= 0) return "now";
-    if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
-    if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
-    return minutes + "m";
-  }
-  function progressColor(percent) {
-    if (percent >= 90) return "var(--red)";
-    if (percent >= 70) return "var(--yellow)";
-    return "var(--green)";
-  }
-
-  // src/ui/lib/charts.ts
-  var TOKEN_COLORS = {
-    input: "rgba(59,130,246,0.8)",
-    // blue
-    output: "rgba(167,139,250,0.8)",
-    // purple
-    cache_read: "rgba(34,197,94,0.5)",
-    // green
-    cache_creation: "rgba(234,179,8,0.5)"
-    // yellow
-  };
-  var MODEL_COLORS = ["#6366f1", "#3b82f6", "#22c55e", "#a78bfa", "#eab308", "#f472b6", "#14b8a6", "#60a5fa"];
-  var RANGE_LABELS = {
-    "7d": "Last 7 Days",
-    "30d": "Last 30 Days",
-    "90d": "Last 90 Days",
-    "all": "All Time"
-  };
-  var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
-  function apexThemeMode() {
-    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-  }
-  function cssVar(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  }
-
   // node_modules/preact/hooks/dist/hooks.module.js
   var t2;
   var r2;
@@ -513,6 +454,42 @@
   }
   function D2(n3, t4) {
     return "function" == typeof t4 ? t4(n3) : t4;
+  }
+
+  // src/ui/lib/rescan.ts
+  function createTriggerRescan({
+    button,
+    fetchImpl,
+    loadData: loadData2,
+    showError: showError2,
+    setTimer,
+    logError = () => void 0
+  }) {
+    return async function triggerRescan() {
+      button.disabled = true;
+      button.textContent = "\u21BB Scanning...";
+      try {
+        const resp = await fetchImpl("/api/rescan", { method: "POST" });
+        if (!resp.ok) {
+          showError2(`Rescan failed: HTTP ${resp.status} ${resp.statusText}`);
+          button.textContent = "\u21BB Rescan (failed)";
+          return;
+        }
+        const data = await resp.json();
+        button.textContent = "\u21BB Rescan (" + data.new + " new, " + data.updated + " updated)";
+        await loadData2(true);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        showError2("Rescan failed: " + msg);
+        button.textContent = "\u21BB Rescan (error)";
+        logError(error);
+      } finally {
+        setTimer(() => {
+          button.textContent = "\u21BB Rescan";
+          button.disabled = false;
+        }, 3e3);
+      }
+    };
   }
 
   // node_modules/@preact/signals-core/dist/signals-core.module.js
@@ -1123,21 +1100,458 @@
     if (1 === _3.push(this)) (l.requestAnimationFrame || q2)(x3);
   }
 
+  // src/ui/components/Toast.tsx
+  var toasts = y3([]);
+  var toastId = 0;
+  function showError(msg) {
+    const id = ++toastId;
+    toasts.value = [...toasts.value, { text: msg, type: "error", id }];
+    setTimeout(() => {
+      toasts.value = toasts.value.filter((t4) => t4.id !== id);
+    }, 6e3);
+  }
+  function showSuccess(msg) {
+    const id = ++toastId;
+    toasts.value = [...toasts.value, { text: msg, type: "success", id }];
+    setTimeout(() => {
+      toasts.value = toasts.value.filter((t4) => t4.id !== id);
+    }, 6e3);
+  }
+  function ToastContainer() {
+    return /* @__PURE__ */ u2("div", { style: {
+      position: "fixed",
+      top: 56,
+      right: 16,
+      zIndex: 999,
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px"
+    }, children: toasts.value.map((t4) => /* @__PURE__ */ u2("div", { role: t4.type === "error" ? "alert" : "status", style: {
+      background: `var(--toast-${t4.type === "error" ? "error" : "success"}-bg)`,
+      color: `var(--toast-${t4.type === "error" ? "error" : "success"}-text)`,
+      padding: "10px 16px",
+      borderRadius: "8px",
+      fontSize: "12px",
+      fontWeight: 500,
+      maxWidth: "360px",
+      border: "1px solid var(--border)",
+      animation: "slideIn 0.2s ease-out",
+      backdropFilter: "blur(12px) saturate(150%)",
+      WebkitBackdropFilter: "blur(12px) saturate(150%)",
+      boxShadow: "0 4px 16px rgba(99,102,241,0.08)"
+    }, children: t4.text }, t4.id)) });
+  }
+
   // src/ui/state/store.ts
   var rawData = y3(null);
   var selectedModels = y3(/* @__PURE__ */ new Set());
   var selectedRange = y3("30d");
   var projectSearchQuery = y3("");
-  var SESSIONS_PAGE_SIZE = 25;
   var lastFilteredSessions = y3([]);
   var lastByProject = y3([]);
+  var metaText = y3("");
+  var planBadge = y3("");
+  var rescanLabel = y3("\u21BB Rescan");
+  var rescanDisabled = y3(false);
+  var themeMode = y3("dark");
+  var SESSIONS_PAGE_SIZE = 25;
+
+  // src/ui/components/Header.tsx
+  function Header({ onDataReload, onThemeToggle }) {
+    const btnRef = A2(null);
+    const triggerRef = A2(null);
+    y2(() => {
+      if (!btnRef.current) return;
+      const proxy = {
+        get disabled() {
+          return rescanDisabled.value;
+        },
+        set disabled(v4) {
+          rescanDisabled.value = v4;
+        },
+        get textContent() {
+          return rescanLabel.value;
+        },
+        set textContent(v4) {
+          rescanLabel.value = v4 ?? "";
+        }
+      };
+      triggerRef.current = createTriggerRescan({
+        button: proxy,
+        fetchImpl: (input, init) => fetch(input, init),
+        loadData: onDataReload,
+        showError,
+        setTimer: (cb, ms) => window.setTimeout(cb, ms),
+        logError: (e4) => console.error(e4)
+      });
+    }, [onDataReload]);
+    const mode = themeMode.value;
+    const icon = mode === "dark" ? /* @__PURE__ */ u2("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: /* @__PURE__ */ u2("path", { d: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" }) }) : /* @__PURE__ */ u2("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: [
+      /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "5" }),
+      /* @__PURE__ */ u2("line", { x1: "12", y1: "1", x2: "12", y2: "3" }),
+      /* @__PURE__ */ u2("line", { x1: "12", y1: "21", x2: "12", y2: "23" }),
+      /* @__PURE__ */ u2("line", { x1: "4.22", y1: "4.22", x2: "5.64", y2: "5.64" }),
+      /* @__PURE__ */ u2("line", { x1: "18.36", y1: "18.36", x2: "19.78", y2: "19.78" }),
+      /* @__PURE__ */ u2("line", { x1: "1", y1: "12", x2: "3", y2: "12" }),
+      /* @__PURE__ */ u2("line", { x1: "21", y1: "12", x2: "23", y2: "12" }),
+      /* @__PURE__ */ u2("line", { x1: "4.22", y1: "19.78", x2: "5.64", y2: "18.36" }),
+      /* @__PURE__ */ u2("line", { x1: "18.36", y1: "5.64", x2: "19.78", y2: "4.22" })
+    ] });
+    return /* @__PURE__ */ u2("header", { children: [
+      /* @__PURE__ */ u2("h1", { children: [
+        /* @__PURE__ */ u2("span", { class: "accent", children: "Code" }),
+        " ",
+        "Usage",
+        planBadge.value && /* @__PURE__ */ u2(
+          "span",
+          {
+            "aria-live": "polite",
+            style: {
+              fontFamily: "var(--font-mono)",
+              fontSize: "10px",
+              padding: "1px 8px",
+              borderRadius: "999px",
+              border: "1px solid var(--border-visible)",
+              color: "var(--text-secondary)",
+              verticalAlign: "middle",
+              marginLeft: "8px",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase"
+            },
+            children: planBadge.value
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "meta", children: metaText.value }),
+      /* @__PURE__ */ u2("div", { class: "header-actions", children: [
+        /* @__PURE__ */ u2(
+          "button",
+          {
+            class: "theme-toggle",
+            type: "button",
+            onClick: onThemeToggle,
+            "aria-label": "Toggle theme",
+            children: icon
+          }
+        ),
+        /* @__PURE__ */ u2(
+          "button",
+          {
+            id: "rescan-btn",
+            ref: btnRef,
+            type: "button",
+            disabled: rescanDisabled.value,
+            onClick: () => triggerRef.current?.(),
+            "aria-label": "Rescan database",
+            children: rescanLabel.value
+          }
+        )
+      ] })
+    ] });
+  }
+
+  // src/ui/components/FilterBar.tsx
+  var RANGES = ["7d", "30d", "90d", "all"];
+  function modelPriority(m4) {
+    const ml = m4.toLowerCase();
+    if (ml.includes("opus")) return 0;
+    if (ml.includes("sonnet")) return 1;
+    if (ml.includes("haiku")) return 2;
+    return 3;
+  }
+  function FilterBar({ onFilterChange, onURLUpdate }) {
+    const allModels = rawData.value?.all_models ?? [];
+    const sortedModels = [...allModels].sort((a4, b4) => {
+      const pa = modelPriority(a4);
+      const pb = modelPriority(b4);
+      return pa !== pb ? pa - pb : a4.localeCompare(b4);
+    });
+    const toggleModel = (model, checked) => {
+      const next = new Set(selectedModels.value);
+      if (checked) next.add(model);
+      else next.delete(model);
+      selectedModels.value = next;
+      onURLUpdate();
+      onFilterChange();
+    };
+    const selectAll = () => {
+      selectedModels.value = new Set(sortedModels);
+      onURLUpdate();
+      onFilterChange();
+    };
+    const clearAll = () => {
+      selectedModels.value = /* @__PURE__ */ new Set();
+      onURLUpdate();
+      onFilterChange();
+    };
+    const setRange = (range) => {
+      selectedRange.value = range;
+      onURLUpdate();
+      onFilterChange();
+    };
+    const onSearchInput = (e4) => {
+      const value = e4.currentTarget.value;
+      projectSearchQuery.value = value.toLowerCase().trim();
+      onURLUpdate();
+      onFilterChange();
+    };
+    const clearSearch = () => {
+      projectSearchQuery.value = "";
+      onURLUpdate();
+      onFilterChange();
+    };
+    return /* @__PURE__ */ u2("div", { id: "filter-bar", role: "toolbar", "aria-label": "Filters", children: [
+      /* @__PURE__ */ u2("div", { class: "filter-label", children: "Models" }),
+      /* @__PURE__ */ u2("div", { id: "model-checkboxes", role: "group", "aria-label": "Model filters", children: sortedModels.map((model) => {
+        const checked = selectedModels.value.has(model);
+        return /* @__PURE__ */ u2("label", { class: `model-cb-label${checked ? " checked" : ""}`, "data-model": model, children: [
+          /* @__PURE__ */ u2(
+            "input",
+            {
+              type: "checkbox",
+              value: model,
+              checked,
+              onChange: (e4) => toggleModel(model, e4.currentTarget.checked),
+              "aria-label": model
+            }
+          ),
+          model
+        ] }, model);
+      }) }),
+      /* @__PURE__ */ u2("button", { class: "filter-btn", type: "button", onClick: selectAll, children: "All" }),
+      /* @__PURE__ */ u2("button", { class: "filter-btn", type: "button", onClick: clearAll, children: "None" }),
+      /* @__PURE__ */ u2("div", { class: "filter-sep" }),
+      /* @__PURE__ */ u2("div", { class: "filter-label", children: "Range" }),
+      /* @__PURE__ */ u2("div", { class: "range-group", role: "group", "aria-label": "Date range", children: RANGES.map((range) => /* @__PURE__ */ u2(
+        "button",
+        {
+          class: `range-btn${selectedRange.value === range ? " active" : ""}`,
+          type: "button",
+          "data-range": range,
+          onClick: () => setRange(range),
+          children: range
+        },
+        range
+      )) }),
+      /* @__PURE__ */ u2("div", { class: "filter-sep" }),
+      /* @__PURE__ */ u2("label", { for: "project-search", class: "filter-label", children: "Project" }),
+      /* @__PURE__ */ u2(
+        "input",
+        {
+          type: "text",
+          id: "project-search",
+          placeholder: "Search...",
+          "aria-label": "Filter by project",
+          value: projectSearchQuery.value,
+          onInput: onSearchInput,
+          style: {
+            background: "transparent",
+            border: "1px solid var(--border-visible)",
+            color: "var(--text-primary)",
+            padding: "3px 10px",
+            borderRadius: "4px",
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            letterSpacing: "0.04em",
+            width: "160px",
+            outline: "none"
+          }
+        }
+      ),
+      projectSearchQuery.value && /* @__PURE__ */ u2("button", { class: "filter-btn", id: "project-clear-btn", type: "button", onClick: clearSearch, children: "Clear" })
+    ] });
+  }
+
+  // src/ui/lib/format.ts
+  function $2(id) {
+    return document.getElementById(id);
+  }
+  function fmt(n3) {
+    if (n3 >= 1e9) return (n3 / 1e9).toFixed(2) + "B";
+    if (n3 >= 1e6) return (n3 / 1e6).toFixed(2) + "M";
+    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
+    return n3.toLocaleString();
+  }
+  function fmtCost(c4) {
+    return "$" + c4.toFixed(4);
+  }
+  function fmtCostBig(c4) {
+    return "$" + c4.toFixed(2);
+  }
+  function fmtResetTime(minutes) {
+    if (minutes == null || minutes <= 0) return "now";
+    if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
+    if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
+    return minutes + "m";
+  }
+  function progressColor(percent) {
+    if (percent >= 90) return "var(--red)";
+    if (percent >= 70) return "var(--yellow)";
+    return "var(--green)";
+  }
+
+  // src/ui/components/RateWindowCard.tsx
+  function RateWindowCard({ label, window: window2 }) {
+    const pct = Math.min(100, window2.used_percent);
+    const color = progressColor(pct);
+    const resetText = window2.resets_in_minutes != null ? `Resets in ${fmtResetTime(window2.resets_in_minutes)}` : "";
+    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u2("div", { class: "stat-label", children: label }),
+      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "28px", color }, children: [
+        pct.toFixed(1),
+        "%"
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "progress-track", style: { marginTop: "12px" }, children: /* @__PURE__ */ u2("div", { class: "progress-fill", style: { background: color, width: `${pct}%` } }) }),
+      resetText && /* @__PURE__ */ u2("div", { class: "stat-sub", children: resetText })
+    ] }) });
+  }
+  function BudgetCard({ used, limit, currency, utilization }) {
+    const pct = Math.min(100, utilization);
+    const color = progressColor(pct);
+    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u2("div", { class: "stat-label", children: "Monthly Budget" }),
+      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "24px", color }, children: [
+        "$",
+        used.toFixed(2),
+        " / $",
+        limit.toFixed(2)
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "progress-track", style: { marginTop: "12px" }, children: /* @__PURE__ */ u2("div", { class: "progress-fill", style: { background: color, width: `${pct}%` } }) }),
+      /* @__PURE__ */ u2("div", { class: "stat-sub", children: currency })
+    ] }) });
+  }
+  function RateWindowUnavailable({ error }) {
+    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u2("div", { class: "stat-label", children: "Rate Windows" }),
+      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "16px", color: "var(--text-secondary)" }, children: "Unavailable" }),
+      /* @__PURE__ */ u2("div", { class: "stat-sub", children: error })
+    ] }) });
+  }
+
+  // src/ui/components/EstimationMeta.tsx
+  function EstimationMeta({
+    confidenceBreakdown,
+    billingModeBreakdown,
+    pricingVersions
+  }) {
+    return /* @__PURE__ */ u2(S, { children: [
+      /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Cost Confidence" }),
+        /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: confidenceBreakdown.length ? confidenceBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
+        /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Session mix in current filter" })
+      ] }) }),
+      /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Billing Mode" }),
+        /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: billingModeBreakdown.length ? billingModeBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
+        /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Local estimate vs subscriber-included sessions" })
+      ] }) }),
+      /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Pricing Snapshot" }),
+        /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: pricingVersions.length === 0 ? "n/a" : pricingVersions.length === 1 ? pricingVersions[0] : `mixed (${pricingVersions.length})` }),
+        /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Stored per-session pricing metadata" })
+      ] }) })
+    ] });
+  }
+
+  // src/ui/components/ReconciliationBlock.tsx
+  function ReconciliationBlock({ reconciliation }) {
+    const deltaMatch = Math.abs(reconciliation.delta_cost) < 0.01;
+    return /* @__PURE__ */ u2("div", { class: "card card-flat bento-full", children: [
+      /* @__PURE__ */ u2("h2", { children: "OpenAI Org Usage Reconciliation" }),
+      /* @__PURE__ */ u2("div", { class: "muted", style: { marginBottom: "12px" }, children: [
+        "Official OpenAI organization usage buckets for Codex-compatible models over the last ",
+        reconciliation.lookback_days,
+        " days."
+      ] }),
+      reconciliation.available ? /* @__PURE__ */ u2("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "16px" }, children: [
+        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Period" }),
+          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.start_date,
+            " - ",
+            reconciliation.end_date
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Rolling comparison window" })
+        ] }) }),
+        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Local Estimated Cost" }),
+          /* @__PURE__ */ u2("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
+            "$",
+            reconciliation.estimated_local_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Codex local logs" })
+        ] }) }),
+        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Org Usage Cost" }),
+          /* @__PURE__ */ u2("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
+            "$",
+            reconciliation.api_usage_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "OpenAI organization usage API" })
+        ] }) }),
+        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Delta" }),
+          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "20px", color: deltaMatch ? "var(--text-primary)" : "var(--accent)" }, children: [
+            reconciliation.delta_cost >= 0 ? "+" : "",
+            "$",
+            reconciliation.delta_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Org usage cost minus local estimate" })
+        ] }) }),
+        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "API Tokens" }),
+          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.api_input_tokens.toLocaleString(),
+            " / ",
+            reconciliation.api_output_tokens.toLocaleString()
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Input / output tokens" })
+        ] }) }),
+        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Cached Input + Requests" }),
+          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.api_cached_input_tokens.toLocaleString(),
+            " / ",
+            reconciliation.api_requests.toLocaleString()
+          ] }),
+          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Cached input tokens / requests" })
+        ] }) })
+      ] }) : /* @__PURE__ */ u2("div", { class: "muted", children: reconciliation.error ?? "Unavailable" })
+    ] });
+  }
+
+  // src/ui/lib/charts.ts
+  var TOKEN_COLORS = {
+    input: "rgba(59,130,246,0.8)",
+    // blue
+    output: "rgba(167,139,250,0.8)",
+    // purple
+    cache_read: "rgba(34,197,94,0.5)",
+    // green
+    cache_creation: "rgba(234,179,8,0.5)"
+    // yellow
+  };
+  var MODEL_COLORS = ["#6366f1", "#3b82f6", "#22c55e", "#a78bfa", "#eab308", "#f472b6", "#14b8a6", "#60a5fa"];
+  var RANGE_LABELS = {
+    "7d": "Last 7 Days",
+    "30d": "Last 30 Days",
+    "90d": "Last 90 Days",
+    "all": "All Time"
+  };
+  var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
+  function apexThemeMode() {
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  }
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
 
   // src/ui/components/ApexChart.tsx
   function ApexChart({ options, id }) {
     const ref = A2(null);
     const chartRef = A2(null);
     const prevThemeRef = A2(void 0);
-    const themeMode = options.theme?.mode ?? "";
+    const themeMode2 = options.theme?.mode ?? "";
     const optionsKey = T2(() => {
       const s4 = options.series;
       const type = options.chart?.type ?? "";
@@ -1153,7 +1567,7 @@
     }, [options]);
     y2(() => {
       if (chartRef.current) chartRef.current.destroy();
-      prevThemeRef.current = themeMode;
+      prevThemeRef.current = themeMode2;
       if (ref.current && options) {
         chartRef.current = new ApexCharts(ref.current, options);
         chartRef.current.render();
@@ -1165,16 +1579,16 @@
     }, [optionsKey]);
     y2(() => {
       if (!chartRef.current) return;
-      if (themeMode === prevThemeRef.current) return;
-      prevThemeRef.current = themeMode;
+      if (themeMode2 === prevThemeRef.current) return;
+      prevThemeRef.current = themeMode2;
       chartRef.current.updateOptions({
-        theme: { mode: themeMode },
+        theme: { mode: themeMode2 },
         chart: { background: "transparent" },
         grid: { borderColor: cssVar("--chart-grid") },
         xaxis: { labels: { style: { colors: cssVar("--muted-foreground") } } },
         yaxis: { labels: { style: { colors: cssVar("--muted-foreground") } } }
       });
-    }, [themeMode]);
+    }, [themeMode2]);
     return /* @__PURE__ */ u2("div", { ref, id, style: { width: "100%", height: "100%" } });
   }
 
@@ -1223,48 +1637,6 @@
       ] }),
       s4.isCost && daily && daily.length >= 2 ? /* @__PURE__ */ u2("div", { class: "stat-sparkline", children: /* @__PURE__ */ u2(Sparkline, { daily }) }) : null
     ] }, s4.label)) });
-  }
-
-  // src/ui/components/Toast.tsx
-  var toasts = y3([]);
-  var toastId = 0;
-  function showError(msg) {
-    const id = ++toastId;
-    toasts.value = [...toasts.value, { text: msg, type: "error", id }];
-    setTimeout(() => {
-      toasts.value = toasts.value.filter((t4) => t4.id !== id);
-    }, 6e3);
-  }
-  function showSuccess(msg) {
-    const id = ++toastId;
-    toasts.value = [...toasts.value, { text: msg, type: "success", id }];
-    setTimeout(() => {
-      toasts.value = toasts.value.filter((t4) => t4.id !== id);
-    }, 6e3);
-  }
-  function ToastContainer() {
-    return /* @__PURE__ */ u2("div", { style: {
-      position: "fixed",
-      top: 56,
-      right: 16,
-      zIndex: 999,
-      display: "flex",
-      flexDirection: "column",
-      gap: "8px"
-    }, children: toasts.value.map((t4) => /* @__PURE__ */ u2("div", { role: t4.type === "error" ? "alert" : "status", style: {
-      background: `var(--toast-${t4.type === "error" ? "error" : "success"}-bg)`,
-      color: `var(--toast-${t4.type === "error" ? "error" : "success"}-text)`,
-      padding: "10px 16px",
-      borderRadius: "8px",
-      fontSize: "12px",
-      fontWeight: 500,
-      maxWidth: "360px",
-      border: "1px solid var(--border)",
-      animation: "slideIn 0.2s ease-out",
-      backdropFilter: "blur(12px) saturate(150%)",
-      WebkitBackdropFilter: "blur(12px) saturate(150%)",
-      boxShadow: "0 4px 16px rgba(99,102,241,0.08)"
-    }, children: t4.text }, t4.id)) });
   }
 
   // src/ui/components/SubagentSummary.tsx
@@ -4873,67 +5245,30 @@
     setTimeout(() => URL.revokeObjectURL(a4.href), 1e3);
   }
 
-  // src/ui/lib/rescan.ts
-  function createTriggerRescan({
-    button,
-    fetchImpl,
-    loadData: loadData2,
-    showError: showError2,
-    setTimer,
-    logError = () => void 0
-  }) {
-    return async function triggerRescan2() {
-      button.disabled = true;
-      button.textContent = "\u21BB Scanning...";
-      try {
-        const resp = await fetchImpl("/api/rescan", { method: "POST" });
-        if (!resp.ok) {
-          showError2(`Rescan failed: HTTP ${resp.status} ${resp.statusText}`);
-          button.textContent = "\u21BB Rescan (failed)";
-          return;
-        }
-        const data = await resp.json();
-        button.textContent = "\u21BB Rescan (" + data.new + " new, " + data.updated + " updated)";
-        await loadData2(true);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        showError2("Rescan failed: " + msg);
-        button.textContent = "\u21BB Rescan (error)";
-        logError(error);
-      } finally {
-        setTimer(() => {
-          button.textContent = "\u21BB Rescan";
-          button.disabled = false;
-        }, 3e3);
-      }
-    };
-  }
-
   // src/ui/lib/theme.ts
   function getTheme() {
     const stored = localStorage.getItem("theme");
     if (stored === "light" || stored === "dark") return stored;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
-
-  // src/ui/app.tsx
   function applyTheme(theme) {
     if (theme === "light") {
       document.documentElement.setAttribute("data-theme", "light");
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
-    const icon = document.getElementById("theme-icon");
-    if (icon) icon.innerHTML = theme === "dark" ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
-    if (rawData.value) applyFilter();
+    themeMode.value = theme;
   }
+
+  // src/ui/app.tsx
+  applyTheme(getTheme());
   function toggleTheme() {
     const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
     const next = current === "light" ? "dark" : "light";
     localStorage.setItem("theme", next);
     applyTheme(next);
+    if (rawData.value) applyFilter();
   }
-  applyTheme(getTheme());
   var previousSessionPercent = null;
   var loadDataInFlight = false;
   var loadUsageWindowsInFlight = false;
@@ -4948,21 +5283,6 @@
     const p5 = new URLSearchParams(window.location.search).get("range");
     return ["7d", "30d", "90d", "all"].includes(p5) ? p5 : "30d";
   }
-  function setRange(range) {
-    selectedRange.value = range;
-    document.querySelectorAll(".range-btn").forEach(
-      (btn) => btn.classList.toggle("active", btn.dataset.range === range)
-    );
-    updateURL();
-    applyFilter();
-  }
-  function modelPriority(m4) {
-    const ml = m4.toLowerCase();
-    if (ml.includes("opus")) return 0;
-    if (ml.includes("sonnet")) return 1;
-    if (ml.includes("haiku")) return 2;
-    return 3;
-  }
   function readURLModels(allModels) {
     const param = new URLSearchParams(window.location.search).get("models");
     if (!param) return new Set(allModels);
@@ -4973,83 +5293,18 @@
     if (selectedModels.value.size !== allModels.length) return false;
     return allModels.every((m4) => selectedModels.value.has(m4));
   }
-  function buildFilterUI(allModels) {
-    const sorted = [...allModels].sort((a4, b4) => {
-      const pa = modelPriority(a4), pb = modelPriority(b4);
-      return pa !== pb ? pa - pb : a4.localeCompare(b4);
-    });
-    selectedModels.value = readURLModels(allModels);
-    const container = $2("model-checkboxes");
-    container.innerHTML = sorted.map((m4) => {
-      const checked = selectedModels.value.has(m4);
-      return `<label class="model-cb-label ${checked ? "checked" : ""}" data-model="${esc(m4)}">
-      <input type="checkbox" value="${esc(m4)}" ${checked ? "checked" : ""} onchange="onModelToggle(this)" aria-label="${esc(m4)}">
-      ${esc(m4)}
-    </label>`;
-    }).join("");
-  }
-  function onModelToggle(cb) {
-    const label = cb.closest("label");
-    const next = new Set(selectedModels.value);
-    if (cb.checked) {
-      next.add(cb.value);
-      label.classList.add("checked");
-    } else {
-      next.delete(cb.value);
-      label.classList.remove("checked");
-    }
-    selectedModels.value = next;
-    updateURL();
-    applyFilter();
-  }
-  function selectAllModels() {
-    const next = new Set(selectedModels.value);
-    document.querySelectorAll("#model-checkboxes input").forEach((cb) => {
-      cb.checked = true;
-      next.add(cb.value);
-      cb.closest("label").classList.add("checked");
-    });
-    selectedModels.value = next;
-    updateURL();
-    applyFilter();
-  }
-  function clearAllModels() {
-    document.querySelectorAll("#model-checkboxes input").forEach((cb) => {
-      cb.checked = false;
-      cb.closest("label").classList.remove("checked");
-    });
-    selectedModels.value = /* @__PURE__ */ new Set();
-    updateURL();
-    applyFilter();
-  }
-  function onProjectSearch(query) {
-    projectSearchQuery.value = query.toLowerCase().trim();
-    const clearBtn = document.getElementById("project-clear-btn");
-    if (clearBtn) clearBtn.style.display = projectSearchQuery.value ? "" : "none";
-    updateURL();
-    applyFilter();
-  }
-  function clearProjectSearch() {
-    projectSearchQuery.value = "";
-    const input = document.getElementById("project-search");
-    if (input) input.value = "";
-    const clearBtn = document.getElementById("project-clear-btn");
-    if (clearBtn) clearBtn.style.display = "none";
-    updateURL();
-    applyFilter();
-  }
-  function matchesProjectSearch(project) {
-    if (!projectSearchQuery.value) return true;
-    return project.toLowerCase().includes(projectSearchQuery.value);
-  }
   function updateURL() {
-    const allModels = Array.from(document.querySelectorAll("#model-checkboxes input")).map((cb) => cb.value);
+    const allModels = rawData.value?.all_models ?? [];
     const params = new URLSearchParams();
     if (selectedRange.value !== "30d") params.set("range", selectedRange.value);
     if (!isDefaultModelSelection(allModels)) params.set("models", Array.from(selectedModels.value).join(","));
     if (projectSearchQuery.value) params.set("project", projectSearchQuery.value);
     const search = params.toString() ? "?" + params.toString() : "";
     history.replaceState(null, "", window.location.pathname + search);
+  }
+  function matchesProjectSearch(project) {
+    if (!projectSearchQuery.value) return true;
+    return project.toLowerCase().includes(projectSearchQuery.value);
   }
   function buildAggregations(filteredDaily, filteredSessions) {
     const dailyMap = {};
@@ -5178,28 +5433,19 @@
     if (!container) return;
     if (!confidenceBreakdown.length && !billingModeBreakdown.length && !pricingVersions.length) {
       container.style.display = "none";
-      container.innerHTML = "";
+      R(null, container);
       return;
     }
     container.style.display = "grid";
     R(
-      /* @__PURE__ */ u2(S, { children: [
-        /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Cost Confidence" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: confidenceBreakdown.length ? confidenceBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Session mix in current filter" })
-        ] }),
-        /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Billing Mode" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: billingModeBreakdown.length ? billingModeBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Local estimate vs subscriber-included sessions" })
-        ] }),
-        /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Pricing Snapshot" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: pricingVersions.length === 0 ? "n/a" : pricingVersions.length === 1 ? pricingVersions[0] : `mixed (${pricingVersions.length})` }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Stored per-session pricing metadata" })
-        ] })
-      ] }),
+      /* @__PURE__ */ u2(
+        EstimationMeta,
+        {
+          confidenceBreakdown,
+          billingModeBreakdown,
+          pricingVersions
+        }
+      ),
       container
     );
   }
@@ -5212,71 +5458,7 @@
       return;
     }
     container.style.display = "";
-    R(
-      /* @__PURE__ */ u2("div", { class: "card card-flat bento-full", children: [
-        /* @__PURE__ */ u2("h2", { children: "OpenAI Org Usage Reconciliation" }),
-        /* @__PURE__ */ u2("div", { class: "muted", style: { marginBottom: "10px" }, children: [
-          "Official OpenAI organization usage buckets for Codex-compatible models over the last ",
-          reconciliation.lookback_days,
-          " days."
-        ] }),
-        reconciliation.available ? /* @__PURE__ */ u2("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: "12px" }, children: [
-          /* @__PURE__ */ u2("div", { class: "stat-card", children: [
-            /* @__PURE__ */ u2("div", { class: "stat-label", children: "Period" }),
-            /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: [
-              reconciliation.start_date,
-              " - ",
-              reconciliation.end_date
-            ] }),
-            /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Rolling comparison window" })
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-card", children: [
-            /* @__PURE__ */ u2("div", { class: "stat-label", children: "Local Estimated Cost" }),
-            /* @__PURE__ */ u2("div", { class: "stat-value cost-value", style: { fontSize: "18px" }, children: [
-              "$",
-              reconciliation.estimated_local_cost.toFixed(4)
-            ] }),
-            /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Codex local logs" })
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-card", children: [
-            /* @__PURE__ */ u2("div", { class: "stat-label", children: "Org Usage Cost" }),
-            /* @__PURE__ */ u2("div", { class: "stat-value cost-value", style: { fontSize: "18px" }, children: [
-              "$",
-              reconciliation.api_usage_cost.toFixed(4)
-            ] }),
-            /* @__PURE__ */ u2("div", { class: "stat-sub", children: "OpenAI organization usage API" })
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-card", children: [
-            /* @__PURE__ */ u2("div", { class: "stat-label", children: "Delta" }),
-            /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px", color: Math.abs(reconciliation.delta_cost) < 0.01 ? "var(--text)" : "var(--accent)" }, children: [
-              reconciliation.delta_cost >= 0 ? "+" : "",
-              "$",
-              reconciliation.delta_cost.toFixed(4)
-            ] }),
-            /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Org usage cost minus local estimate" })
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-card", children: [
-            /* @__PURE__ */ u2("div", { class: "stat-label", children: "API Tokens" }),
-            /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: [
-              reconciliation.api_input_tokens.toLocaleString(),
-              " / ",
-              reconciliation.api_output_tokens.toLocaleString()
-            ] }),
-            /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Input / output tokens" })
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-card", children: [
-            /* @__PURE__ */ u2("div", { class: "stat-label", children: "Cached Input + Requests" }),
-            /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: [
-              reconciliation.api_cached_input_tokens.toLocaleString(),
-              " / ",
-              reconciliation.api_requests.toLocaleString()
-            ] }),
-            /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Cached input tokens / requests" })
-          ] })
-        ] }) : /* @__PURE__ */ u2("div", { class: "muted", children: reconciliation.error ?? "Unavailable" })
-      ] }),
-      container
-    );
+    R(/* @__PURE__ */ u2(ReconciliationBlock, { reconciliation }), container);
   }
   function renderPlaceholder(containerId, title, message) {
     const container = $2(containerId);
@@ -5341,33 +5523,18 @@
     );
     const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } = buildAggregations(filteredDaily, filteredSessions);
     $2("daily-chart-title").textContent = "Daily Token Usage - " + RANGE_LABELS[selectedRange.value];
-    renderStats(totals, daily);
+    R(/* @__PURE__ */ u2(StatsCards, { totals, daily }), $2("stats-row"));
     renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
     renderOpenAiReconciliation(rawData.value.openai_reconciliation);
-    renderDailyChart(daily);
-    renderModelChart(byModel);
-    renderProjectChart(byProject);
+    R(/* @__PURE__ */ u2(DailyChart, { daily }), $2("chart-daily"));
+    R(/* @__PURE__ */ u2(ModelChart, { byModel }), $2("chart-model"));
+    R(/* @__PURE__ */ u2(ProjectChart, { byProject }), $2("chart-project"));
     lastFilteredSessions.value = filteredSessions;
     lastByProject.value = byProject;
     R(/* @__PURE__ */ u2(ModelCostTable, { byModel }), $2("model-cost-mount"));
     R(/* @__PURE__ */ u2(SessionsTable, { onExportCSV: exportSessionsCSV }), $2("sessions-mount"));
     R(/* @__PURE__ */ u2(ProjectCostTable, { byProject: lastByProject.value.slice(0, 30), onExportCSV: exportProjectsCSV }), $2("project-cost-mount"));
     renderCodexSection(filteredDaily, filteredSessions);
-  }
-  function renderStats(t4, daily) {
-    R(/* @__PURE__ */ u2(StatsCards, { totals: t4, daily }), $2("stats-row"));
-  }
-  function renderDailyChart(daily) {
-    const container = document.getElementById("chart-daily");
-    R(/* @__PURE__ */ u2(DailyChart, { daily }), container);
-  }
-  function renderModelChart(byModel) {
-    const container = document.getElementById("chart-model");
-    R(/* @__PURE__ */ u2(ModelChart, { byModel }), container);
-  }
-  function renderProjectChart(byProject) {
-    const container = document.getElementById("chart-project");
-    R(/* @__PURE__ */ u2(ProjectChart, { byProject }), container);
   }
   function exportSessionsCSV() {
     const header = ["Session", "Provider", "Project", "Last Active", "Duration (min)", "Model", "Turns", "Input", "Output", "Cached Input", "Cache Creation", "Reasoning Output", "Est. Cost"];
@@ -5387,76 +5554,51 @@
   function exportProjectsCSV() {
     exportProjectRowsCSV("projects", lastByProject.value);
   }
-  function renderWindowCard(label, w5) {
-    const pct = Math.min(100, w5.used_percent);
-    const color = progressColor(pct);
-    const resetText = w5.resets_in_minutes != null ? `Resets in ${fmtResetTime(w5.resets_in_minutes)}` : "";
-    return `<div class="stat-card">
-    <div class="stat-label">${esc(label)}</div>
-    <div class="stat-value" style="font-size:18px;color:${color}">${esc(pct.toFixed(1))}%</div>
-    <div class="progress-track">
-      <div class="progress-fill" style="background:${color};width:${pct}%"></div>
-    </div>
-    <div class="stat-sub">${esc(resetText)}</div>
-  </div>`;
-  }
   function renderUsageWindows(data) {
     const container = $2("usage-windows");
     if (!container) return;
     if (!data.available) {
-      const badge2 = $2("plan-badge");
-      if (badge2) badge2.style.display = "none";
+      planBadge.value = "";
       if (data.error) {
         container.style.display = "grid";
-        container.innerHTML = `<div class="stat-card">
-        <div class="stat-label">Rate Windows</div>
-        <div class="stat-value" style="font-size:16px">Unavailable</div>
-        <div class="stat-sub">${esc(data.error)}</div>
-      </div>`;
+        R(/* @__PURE__ */ u2(RateWindowUnavailable, { error: data.error }), container);
       } else {
-        container.innerHTML = "";
         container.style.display = "none";
+        R(null, container);
       }
       return;
     }
     container.style.display = "grid";
-    let cards = "";
-    if (data.session) cards += renderWindowCard("Session (5h)", data.session);
-    if (data.weekly) cards += renderWindowCard("Weekly", data.weekly);
-    if (data.weekly_opus) cards += renderWindowCard("Weekly Opus", data.weekly_opus);
-    if (data.weekly_sonnet) cards += renderWindowCard("Weekly Sonnet", data.weekly_sonnet);
-    if (data.budget) {
-      const b4 = data.budget;
-      const pct = Math.min(100, b4.utilization);
-      const color = progressColor(pct);
-      cards += `<div class="stat-card">
-      <div class="stat-label">Monthly Budget</div>
-      <div class="stat-value" style="font-size:18px;color:${color}">${esc("$" + b4.used.toFixed(2) + " / $" + b4.limit.toFixed(2))}</div>
-      <div class="progress-track">
-        <div class="progress-fill" style="background:${color};width:${pct}%"></div>
-      </div>
-      <div class="stat-sub">${esc(b4.currency)}</div>
-    </div>`;
-    }
-    container.innerHTML = cards;
+    R(
+      /* @__PURE__ */ u2(S, { children: [
+        data.session && /* @__PURE__ */ u2(RateWindowCard, { label: "Session (5h)", window: data.session }),
+        data.weekly && /* @__PURE__ */ u2(RateWindowCard, { label: "Weekly", window: data.weekly }),
+        data.weekly_opus && /* @__PURE__ */ u2(RateWindowCard, { label: "Weekly Opus", window: data.weekly_opus }),
+        data.weekly_sonnet && /* @__PURE__ */ u2(RateWindowCard, { label: "Weekly Sonnet", window: data.weekly_sonnet }),
+        data.budget && /* @__PURE__ */ u2(
+          BudgetCard,
+          {
+            used: data.budget.used,
+            limit: data.budget.limit,
+            currency: data.budget.currency,
+            utilization: data.budget.utilization
+          }
+        )
+      ] }),
+      container
+    );
     if (data.session) {
       const currentPercent = 100 - data.session.used_percent;
       if (previousSessionPercent !== null) {
         if (previousSessionPercent > 0.01 && currentPercent <= 0.01) {
-          showError("Session depleted \u2014 resets in " + fmtResetTime(data.session.resets_in_minutes));
+          showError("Session depleted \u2014 resets in " + (data.session.resets_in_minutes ?? 0) + "m");
         } else if (previousSessionPercent <= 0.01 && currentPercent > 0.01) {
           showSuccess("Session restored");
         }
       }
       previousSessionPercent = currentPercent;
     }
-    const badge = $2("plan-badge");
-    if (badge && data.identity?.plan) {
-      badge.textContent = data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1);
-      badge.style.display = "";
-    } else if (badge) {
-      badge.style.display = "none";
-    }
+    planBadge.value = data.identity?.plan ? data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1) : "";
   }
   function renderSubagentSummary(summary) {
     const container = $2("subagent-summary");
@@ -5559,24 +5701,6 @@
       loadUsageWindowsInFlight = false;
     }
   }
-  var triggerRescan = createTriggerRescan({
-    button: $2("rescan-btn"),
-    fetchImpl: (input, init) => fetch(input, init),
-    loadData,
-    showError,
-    setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
-    logError: (error) => console.error(error)
-  });
-  function renderLoadingSkeleton() {
-    const statsRow = document.getElementById("stats-row");
-    if (statsRow && !rawData.value) {
-      statsRow.innerHTML = Array.from(
-        { length: 7 },
-        () => '<div class="skeleton" style="height:80px"></div>'
-      ).join("");
-    }
-  }
-  renderLoadingSkeleton();
   async function loadData(force = false) {
     if (loadDataInFlight && !force) return;
     loadDataInFlight = true;
@@ -5588,26 +5712,17 @@
       }
       const d5 = await resp.json();
       if (d5.error) {
-        document.body.innerHTML = '<div style="padding:40px;color:#f87171;font-family:monospace">' + esc(d5.error) + "</div>";
+        showError(d5.error);
         return;
       }
-      $2("meta").textContent = "Updated: " + d5.generated_at + " \xB7 Auto-refresh 30s";
+      metaText.value = "Updated: " + d5.generated_at + " \xB7 Auto-refresh 30s";
       const isFirstLoad = rawData.value === null;
       rawData.value = d5;
       if (isFirstLoad) {
         selectedRange.value = readURLRange();
-        document.querySelectorAll(".range-btn").forEach(
-          (btn) => btn.classList.toggle("active", btn.dataset.range === selectedRange.value)
-        );
-        buildFilterUI(d5.all_models);
+        selectedModels.value = readURLModels(d5.all_models);
         const urlProject = new URLSearchParams(window.location.search).get("project");
-        if (urlProject) {
-          projectSearchQuery.value = urlProject;
-          const input = document.getElementById("project-search");
-          if (input) input.value = urlProject;
-          const clearBtn = document.getElementById("project-clear-btn");
-          if (clearBtn) clearBtn.style.display = "";
-        }
+        if (urlProject) projectSearchQuery.value = urlProject;
       }
       applyFilter();
       if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
@@ -5624,22 +5739,14 @@
       loadDataInFlight = false;
     }
   }
-  Object.assign(window, {
-    setRange,
-    onModelToggle,
-    selectAllModels,
-    clearAllModels,
-    exportSessionsCSV,
-    exportProjectsCSV,
-    triggerRescan,
-    onProjectSearch,
-    clearProjectSearch,
-    toggleTheme
-  });
-  loadData();
-  setInterval(loadData, 3e4);
-  loadUsageWindows();
-  setInterval(loadUsageWindows, 6e4);
+  var headerMount = document.getElementById("header-mount");
+  if (headerMount) {
+    R(/* @__PURE__ */ u2(Header, { onDataReload: loadData, onThemeToggle: toggleTheme }), headerMount);
+  }
+  var filterBarMount = document.getElementById("filter-bar-mount");
+  if (filterBarMount) {
+    R(/* @__PURE__ */ u2(FilterBar, { onFilterChange: applyFilter, onURLUpdate: updateURL }), filterBarMount);
+  }
   var footerEl = document.querySelector("footer");
   if (footerEl && footerEl.parentElement) {
     R(/* @__PURE__ */ u2(Footer, {}), footerEl.parentElement, footerEl);
@@ -5647,6 +5754,10 @@
   var toastRoot = document.createElement("div");
   document.body.appendChild(toastRoot);
   R(/* @__PURE__ */ u2(ToastContainer, {}), toastRoot);
+  loadData();
+  setInterval(loadData, 3e4);
+  loadUsageWindows();
+  setInterval(loadUsageWindows, 6e4);
 })();
 /*! Bundled license information:
 
