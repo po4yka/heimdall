@@ -207,6 +207,12 @@ pub fn init_db(conn: &Connection) -> Result<()> {
          WHERE tool_use_id IS NOT NULL AND tool_use_id != '';",
     )?;
 
+    // Backfill: ensure no row has a NULL or empty provider (idempotent no-op on clean DBs)
+    conn.execute_batch(
+        "UPDATE sessions SET provider = 'claude' WHERE provider IS NULL OR provider = '';
+         UPDATE turns    SET provider = 'claude' WHERE provider IS NULL OR provider = '';",
+    )?;
+
     prefix_existing_session_ids(conn)?;
     backfill_turn_pricing(conn)?;
     recompute_session_totals(conn)?;

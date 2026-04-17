@@ -672,4 +672,23 @@ mod tests {
         assert!(!data.daily_by_model.is_empty());
         assert_eq!(data.daily_by_model[0].day, "2026-04-08");
     }
+
+    #[test]
+    fn test_provider_column_backfill_is_idempotent() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = tmp.path().join("usage.db");
+        let conn = db::open_db(&db_path).unwrap();
+        db::init_db(&conn).unwrap();
+        // Second call must not error
+        db::init_db(&conn).unwrap();
+        // All sessions rows must have non-empty provider
+        let bad: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sessions WHERE provider IS NULL OR provider = ''",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(bad, 0);
+    }
 }
