@@ -2,11 +2,19 @@ import {
   rawData,
   selectedModels,
   selectedRange,
+  selectedProvider,
   projectSearchQuery,
+  type ProviderFilter,
 } from '../state/store';
 import type { RangeKey } from '../state/types';
 
 const RANGES: RangeKey[] = ['7d', '30d', '90d', 'all'];
+const PROVIDERS: ProviderFilter[] = ['both', 'claude', 'codex'];
+const PROVIDER_LABEL: Record<ProviderFilter, string> = {
+  both: 'Both',
+  claude: 'Claude',
+  codex: 'Codex',
+};
 
 function modelPriority(m: string): number {
   const ml = m.toLowerCase();
@@ -55,6 +63,14 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
     onURLUpdate();
     onFilterChange();
   };
+
+  const setProvider = (provider: ProviderFilter) => {
+    selectedProvider.value = provider;
+    onURLUpdate();
+    onFilterChange();
+  };
+
+  const hasCodexData = rawData.value?.provider_breakdown?.some(p => p.provider === 'codex') ?? false;
 
   const onSearchInput = (e: Event) => {
     const value = (e.currentTarget as HTMLInputElement).value;
@@ -106,6 +122,25 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
           </button>
         ))}
       </div>
+      {hasCodexData && (
+        <>
+          <div class="filter-sep"></div>
+          <div class="filter-label">Provider</div>
+          <div class="range-group" role="group" aria-label="Provider">
+            {PROVIDERS.map(provider => (
+              <button
+                key={provider}
+                class={`range-btn${selectedProvider.value === provider ? ' active' : ''}`}
+                type="button"
+                data-provider={provider}
+                onClick={() => setProvider(provider)}
+              >
+                {PROVIDER_LABEL[provider]}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <div class="filter-sep"></div>
       <label for="project-search" class="filter-label">Project</label>
       <input

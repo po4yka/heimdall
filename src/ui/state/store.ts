@@ -5,8 +5,11 @@ import type { DashboardData, RangeKey, SessionRow, ProjectAgg } from './types';
 export const rawData = signal<DashboardData | null>(null);
 
 // ── Filter state ─────────────────────────────────────────────────────
+export type ProviderFilter = 'claude' | 'codex' | 'both';
+
 export const selectedModels = signal<Set<string>>(new Set());
 export const selectedRange = signal<RangeKey>('30d');
+export const selectedProvider = signal<ProviderFilter>('both');
 export const projectSearchQuery = signal('');
 
 // ── Cached derivations (updated by applyFilter) ──────────────────────

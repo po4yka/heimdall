@@ -1104,6 +1104,7 @@
   var rawData = y3(null);
   var selectedModels = y3(/* @__PURE__ */ new Set());
   var selectedRange = y3("30d");
+  var selectedProvider = y3("both");
   var projectSearchQuery = y3("");
   var lastFilteredSessions = y3([]);
   var lastByProject = y3([]);
@@ -1296,6 +1297,12 @@
 
   // src/ui/components/FilterBar.tsx
   var RANGES = ["7d", "30d", "90d", "all"];
+  var PROVIDERS = ["both", "claude", "codex"];
+  var PROVIDER_LABEL = {
+    both: "Both",
+    claude: "Claude",
+    codex: "Codex"
+  };
   function modelPriority(m4) {
     const ml = m4.toLowerCase();
     if (ml.includes("opus")) return 0;
@@ -1333,6 +1340,12 @@
       onURLUpdate();
       onFilterChange();
     };
+    const setProvider = (provider) => {
+      selectedProvider.value = provider;
+      onURLUpdate();
+      onFilterChange();
+    };
+    const hasCodexData = rawData.value?.provider_breakdown?.some((p5) => p5.provider === "codex") ?? false;
     const onSearchInput = (e4) => {
       const value = e4.currentTarget.value;
       projectSearchQuery.value = value.toLowerCase().trim();
@@ -1377,6 +1390,21 @@
         },
         range
       )) }),
+      hasCodexData && /* @__PURE__ */ u2(S, { children: [
+        /* @__PURE__ */ u2("div", { class: "filter-sep" }),
+        /* @__PURE__ */ u2("div", { class: "filter-label", children: "Provider" }),
+        /* @__PURE__ */ u2("div", { class: "range-group", role: "group", "aria-label": "Provider", children: PROVIDERS.map((provider) => /* @__PURE__ */ u2(
+          "button",
+          {
+            class: `range-btn${selectedProvider.value === provider ? " active" : ""}`,
+            type: "button",
+            "data-provider": provider,
+            onClick: () => setProvider(provider),
+            children: PROVIDER_LABEL[provider]
+          },
+          provider
+        )) })
+      ] }),
       /* @__PURE__ */ u2("div", { class: "filter-sep" }),
       /* @__PURE__ */ u2("label", { for: "project-search", class: "filter-label", children: "Project" }),
       /* @__PURE__ */ u2(
@@ -5526,11 +5554,20 @@
     const p5 = new URLSearchParams(window.location.search).get("range");
     return ["7d", "30d", "90d", "all"].includes(p5) ? p5 : "30d";
   }
+  function readURLProvider() {
+    const p5 = new URLSearchParams(window.location.search).get("provider");
+    return ["claude", "codex", "both"].includes(p5) ? p5 : "both";
+  }
   function readURLModels(allModels) {
     const param = new URLSearchParams(window.location.search).get("models");
     if (!param) return new Set(allModels);
     const fromURL = new Set(param.split(",").map((s4) => s4.trim()).filter(Boolean));
     return new Set(allModels.filter((m4) => fromURL.has(m4)));
+  }
+  function matchesProvider(row) {
+    const p5 = selectedProvider.value;
+    if (p5 === "both") return true;
+    return row.provider === p5;
   }
   function isDefaultModelSelection(allModels) {
     if (selectedModels.value.size !== allModels.length) return false;
@@ -5540,6 +5577,7 @@
     const allModels = rawData.value?.all_models ?? [];
     const params = new URLSearchParams();
     if (selectedRange.value !== "30d") params.set("range", selectedRange.value);
+    if (selectedProvider.value !== "both") params.set("provider", selectedProvider.value);
     if (!isDefaultModelSelection(allModels)) params.set("models", Array.from(selectedModels.value).join(","));
     if (projectSearchQuery.value) params.set("project", projectSearchQuery.value);
     const search = params.toString() ? "?" + params.toString() : "";
@@ -5703,69 +5741,18 @@
     container.style.display = "";
     R(/* @__PURE__ */ u2(ReconciliationBlock, { reconciliation }), container);
   }
-  function renderPlaceholder(containerId, title, message) {
-    const container = $2(containerId);
-    if (!container) return;
-    R(
-      /* @__PURE__ */ u2("div", { class: "card", children: [
-        /* @__PURE__ */ u2("h2", { children: title }),
-        /* @__PURE__ */ u2("div", { class: "muted", children: message })
-      ] }),
-      container
-    );
-  }
-  function renderCodexSection(filteredDaily, filteredSessions) {
-    const section = $2("codex-section");
-    if (!section || !rawData.value) return;
-    const codexDailyRows = filteredDaily.filter((r4) => r4.provider === "codex");
-    const codexSessions = filteredSessions.filter((s4) => s4.provider === "codex");
-    const hasCodex = codexDailyRows.length > 0 || codexSessions.length > 0 || rawData.value.provider_breakdown.some((row) => row.provider === "codex");
-    section.style.display = hasCodex ? "" : "none";
-    if (!hasCodex) return;
-    const { daily, byModel, byProject, totals } = buildAggregations(codexDailyRows, codexSessions);
-    $2("codex-daily-chart-title").textContent = "Codex Daily Usage - " + RANGE_LABELS[selectedRange.value];
-    R(/* @__PURE__ */ u2(StatsCards, { totals, daily }), $2("codex-stats-row"));
-    R(/* @__PURE__ */ u2(DailyChart, { daily }), $2("codex-chart-daily"));
-    R(/* @__PURE__ */ u2(ModelChart, { byModel }), $2("codex-chart-model"));
-    R(/* @__PURE__ */ u2(ProjectChart, { byProject }), $2("codex-chart-project"));
-    R(/* @__PURE__ */ u2(ModelCostTable, { byModel }), $2("codex-model-cost-mount"));
-    R(
-      /* @__PURE__ */ u2(
-        ProjectCostTable,
-        {
-          byProject: byProject.slice(0, 30),
-          onExportCSV: () => exportProjectRowsCSV("codex-projects", byProject)
-        }
-      ),
-      $2("codex-project-cost-mount")
-    );
-    const codexTools = rawData.value.tool_summary.filter((row) => row.provider === "codex");
-    if (codexTools.length) R(/* @__PURE__ */ u2(ToolUsageTable, { data: codexTools }), $2("codex-tool-summary"));
-    else renderPlaceholder("codex-tool-summary", "Codex Tool Usage", "No Codex tool calls were recorded.");
-    const codexMcp = rawData.value.mcp_summary.filter((row) => row.provider === "codex");
-    if (codexMcp.length) R(/* @__PURE__ */ u2(McpSummaryTable, { data: codexMcp }), $2("codex-mcp-summary"));
-    else renderPlaceholder("codex-mcp-summary", "Codex MCP Servers", "No MCP usage was recorded for Codex sessions.");
-    const codexBranches = rawData.value.git_branch_summary.filter((row) => row.provider === "codex");
-    if (codexBranches.length) R(/* @__PURE__ */ u2(BranchTable, { data: codexBranches }), $2("codex-branch-summary"));
-    else renderPlaceholder("codex-branch-summary", "Codex Branches", "Git branch metadata was not present in the recorded Codex logs.");
-    const codexVersions = rawData.value.version_summary.filter((row) => row.provider === "codex");
-    if (codexVersions.length) R(/* @__PURE__ */ u2(VersionTable, { data: codexVersions }), $2("codex-version-summary"));
-    else renderPlaceholder("codex-version-summary", "Codex Versions", "CLI version metadata was not available for the current Codex sessions.");
-    const codexHourly = rawData.value.hourly_distribution.filter((row) => row.provider === "codex");
-    if (codexHourly.length) R(/* @__PURE__ */ u2(HourlyChart, { data: codexHourly }), $2("codex-hourly-chart"));
-    else renderPlaceholder("codex-hourly-chart", "Codex Hourly Distribution", "No hourly token distribution is available for Codex in the current selection.");
-  }
   function applyFilter() {
     if (!rawData.value) return;
     const cutoff = getRangeCutoff(selectedRange.value);
     const filteredDaily = rawData.value.daily_by_model.filter(
-      (r4) => selectedModels.value.has(r4.model) && (!cutoff || r4.day >= cutoff)
+      (r4) => selectedModels.value.has(r4.model) && (!cutoff || r4.day >= cutoff) && matchesProvider(r4)
     );
     const filteredSessions = rawData.value.sessions_all.filter(
-      (s4) => selectedModels.value.has(s4.model) && (!cutoff || s4.last_date >= cutoff) && matchesProjectSearch(s4.project)
+      (s4) => selectedModels.value.has(s4.model) && (!cutoff || s4.last_date >= cutoff) && matchesProjectSearch(s4.project) && matchesProvider(s4)
     );
     const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } = buildAggregations(filteredDaily, filteredSessions);
-    $2("daily-chart-title").textContent = "Daily Token Usage - " + RANGE_LABELS[selectedRange.value];
+    const providerLabel = selectedProvider.value === "both" ? "" : ` (${selectedProvider.value})`;
+    $2("daily-chart-title").textContent = "Daily Token Usage - " + RANGE_LABELS[selectedRange.value] + providerLabel;
     R(/* @__PURE__ */ u2(StatsCards, { totals, daily }), $2("stats-row"));
     renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
     renderOpenAiReconciliation(rawData.value.openai_reconciliation);
@@ -5777,7 +5764,14 @@
     R(/* @__PURE__ */ u2(ModelCostTable, { byModel }), $2("model-cost-mount"));
     R(/* @__PURE__ */ u2(SessionsTable, { onExportCSV: exportSessionsCSV }), $2("sessions-mount"));
     R(/* @__PURE__ */ u2(ProjectCostTable, { byProject: lastByProject.value.slice(0, 30), onExportCSV: exportProjectsCSV }), $2("project-cost-mount"));
-    renderCodexSection(filteredDaily, filteredSessions);
+    if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
+    renderEntrypointBreakdown((rawData.value.entrypoint_breakdown ?? []).filter(matchesProvider));
+    renderServiceTiers((rawData.value.service_tiers ?? []).filter(matchesProvider));
+    renderToolSummary((rawData.value.tool_summary ?? []).filter(matchesProvider));
+    renderMcpSummary((rawData.value.mcp_summary ?? []).filter(matchesProvider));
+    renderBranchSummary((rawData.value.git_branch_summary ?? []).filter(matchesProvider));
+    renderVersionSummary((rawData.value.version_summary ?? []).filter(matchesProvider));
+    renderHourlyChart((rawData.value.hourly_distribution ?? []).filter(matchesProvider));
   }
   function exportSessionsCSV() {
     const header = ["Session", "Provider", "Project", "Last Active", "Duration (min)", "Model", "Turns", "Input", "Output", "Cached Input", "Cache Creation", "Reasoning Output", "Est. Cost"];
@@ -5969,19 +5963,12 @@
       rawData.value = d5;
       if (isFirstLoad) {
         selectedRange.value = readURLRange();
+        selectedProvider.value = readURLProvider();
         selectedModels.value = readURLModels(d5.all_models);
         const urlProject = new URLSearchParams(window.location.search).get("project");
         if (urlProject) projectSearchQuery.value = urlProject;
       }
       applyFilter();
-      if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
-      if (rawData.value.entrypoint_breakdown) renderEntrypointBreakdown(rawData.value.entrypoint_breakdown);
-      if (rawData.value.service_tiers) renderServiceTiers(rawData.value.service_tiers);
-      if (rawData.value.tool_summary) renderToolSummary(rawData.value.tool_summary);
-      if (rawData.value.mcp_summary) renderMcpSummary(rawData.value.mcp_summary);
-      if (rawData.value.git_branch_summary) renderBranchSummary(rawData.value.git_branch_summary);
-      if (rawData.value.version_summary) renderVersionSummary(rawData.value.version_summary);
-      if (rawData.value.hourly_distribution) renderHourlyChart(rawData.value.hourly_distribution);
     } catch (e4) {
       console.error(e4);
     } finally {

@@ -45,11 +45,13 @@ import {
   rawData,
   selectedModels,
   selectedRange,
+  selectedProvider,
   projectSearchQuery,
   lastFilteredSessions,
   lastByProject,
   metaText,
   planBadge,
+  type ProviderFilter,
 } from './state/store';
 import { $ } from './lib/format';
 import { downloadCSV } from './lib/csv';
@@ -86,11 +88,24 @@ function readURLRange(): RangeKey {
   return (['7d', '30d', '90d', 'all'] as RangeKey[]).includes(p as RangeKey) ? (p as RangeKey) : '30d';
 }
 
+function readURLProvider(): ProviderFilter {
+  const p = new URLSearchParams(window.location.search).get('provider');
+  return (['claude', 'codex', 'both'] as ProviderFilter[]).includes(p as ProviderFilter)
+    ? (p as ProviderFilter)
+    : 'both';
+}
+
 function readURLModels(allModels: string[]): Set<string> {
   const param = new URLSearchParams(window.location.search).get('models');
   if (!param) return new Set(allModels);
   const fromURL = new Set(param.split(',').map(s => s.trim()).filter(Boolean));
   return new Set(allModels.filter(m => fromURL.has(m)));
+}
+
+function matchesProvider<T extends { provider?: string }>(row: T): boolean {
+  const p = selectedProvider.value;
+  if (p === 'both') return true;
+  return row.provider === p;
 }
 
 function isDefaultModelSelection(allModels: string[]): boolean {
@@ -102,6 +117,7 @@ function updateURL(): void {
   const allModels = rawData.value?.all_models ?? [];
   const params = new URLSearchParams();
   if (selectedRange.value !== '30d') params.set('range', selectedRange.value);
+  if (selectedProvider.value !== 'both') params.set('provider', selectedProvider.value);
   if (!isDefaultModelSelection(allModels)) params.set('models', Array.from(selectedModels.value).join(','));
   if (projectSearchQuery.value) params.set('project', projectSearchQuery.value);
   const search = params.toString() ? '?' + params.toString() : '';
@@ -280,84 +296,23 @@ function renderOpenAiReconciliation(reconciliation: DashboardData['openai_reconc
   render(<ReconciliationBlock reconciliation={reconciliation} />, container);
 }
 
-function renderPlaceholder(containerId: string, title: string, message: string): void {
-  const container = $(containerId);
-  if (!container) return;
-  render(
-    <div class="card">
-      <h2>{title}</h2>
-      <div class="muted">{message}</div>
-    </div>,
-    container
-  );
-}
-
-function renderCodexSection(filteredDaily: DailyModelRow[], filteredSessions: typeof lastFilteredSessions.value): void {
-  const section = $('codex-section');
-  if (!section || !rawData.value) return;
-
-  const codexDailyRows = filteredDaily.filter(r => r.provider === 'codex');
-  const codexSessions = filteredSessions.filter(s => s.provider === 'codex');
-  const hasCodex =
-    codexDailyRows.length > 0 ||
-    codexSessions.length > 0 ||
-    rawData.value.provider_breakdown.some(row => row.provider === 'codex');
-  section.style.display = hasCodex ? '' : 'none';
-  if (!hasCodex) return;
-
-  const { daily, byModel, byProject, totals } = buildAggregations(codexDailyRows, codexSessions);
-  $('codex-daily-chart-title').textContent = 'Codex Daily Usage - ' + RANGE_LABELS[selectedRange.value];
-
-  render(<StatsCards totals={totals} daily={daily} />, $('codex-stats-row'));
-  render(<DailyChart daily={daily} />, $('codex-chart-daily'));
-  render(<ModelChart byModel={byModel} />, $('codex-chart-model'));
-  render(<ProjectChart byProject={byProject} />, $('codex-chart-project'));
-  render(<ModelCostTable byModel={byModel} />, $('codex-model-cost-mount'));
-  render(
-    <ProjectCostTable
-      byProject={byProject.slice(0, 30)}
-      onExportCSV={() => exportProjectRowsCSV('codex-projects', byProject)}
-    />,
-    $('codex-project-cost-mount')
-  );
-
-  const codexTools = rawData.value.tool_summary.filter(row => row.provider === 'codex');
-  if (codexTools.length) render(<ToolUsageTable data={codexTools} />, $('codex-tool-summary'));
-  else renderPlaceholder('codex-tool-summary', 'Codex Tool Usage', 'No Codex tool calls were recorded.');
-
-  const codexMcp = rawData.value.mcp_summary.filter(row => row.provider === 'codex');
-  if (codexMcp.length) render(<McpSummaryTable data={codexMcp} />, $('codex-mcp-summary'));
-  else renderPlaceholder('codex-mcp-summary', 'Codex MCP Servers', 'No MCP usage was recorded for Codex sessions.');
-
-  const codexBranches = rawData.value.git_branch_summary.filter(row => row.provider === 'codex');
-  if (codexBranches.length) render(<BranchTable data={codexBranches} />, $('codex-branch-summary'));
-  else renderPlaceholder('codex-branch-summary', 'Codex Branches', 'Git branch metadata was not present in the recorded Codex logs.');
-
-  const codexVersions = rawData.value.version_summary.filter(row => row.provider === 'codex');
-  if (codexVersions.length) render(<VersionTable data={codexVersions} />, $('codex-version-summary'));
-  else renderPlaceholder('codex-version-summary', 'Codex Versions', 'CLI version metadata was not available for the current Codex sessions.');
-
-  const codexHourly = rawData.value.hourly_distribution.filter(row => row.provider === 'codex');
-  if (codexHourly.length) render(<HourlyChart data={codexHourly} />, $('codex-hourly-chart'));
-  else renderPlaceholder('codex-hourly-chart', 'Codex Hourly Distribution', 'No hourly token distribution is available for Codex in the current selection.');
-}
-
 // ── Filter driver ────────────────────────────────────────────────────
 function applyFilter(): void {
   if (!rawData.value) return;
   const cutoff = getRangeCutoff(selectedRange.value);
 
   const filteredDaily = rawData.value.daily_by_model.filter(r =>
-    selectedModels.value.has(r.model) && (!cutoff || r.day >= cutoff)
+    selectedModels.value.has(r.model) && (!cutoff || r.day >= cutoff) && matchesProvider(r)
   );
 
   const filteredSessions = rawData.value.sessions_all.filter(s =>
-    selectedModels.value.has(s.model) && (!cutoff || s.last_date >= cutoff) && matchesProjectSearch(s.project)
+    selectedModels.value.has(s.model) && (!cutoff || s.last_date >= cutoff) && matchesProjectSearch(s.project) && matchesProvider(s)
   );
   const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } =
     buildAggregations(filteredDaily, filteredSessions);
 
-  $('daily-chart-title').textContent = 'Daily Token Usage - ' + RANGE_LABELS[selectedRange.value];
+  const providerLabel = selectedProvider.value === 'both' ? '' : ` (${selectedProvider.value})`;
+  $('daily-chart-title').textContent = 'Daily Token Usage - ' + RANGE_LABELS[selectedRange.value] + providerLabel;
 
   render(<StatsCards totals={totals} daily={daily} />, $('stats-row'));
   renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
@@ -372,7 +327,16 @@ function applyFilter(): void {
   render(<ModelCostTable byModel={byModel} />, $('model-cost-mount'));
   render(<SessionsTable onExportCSV={exportSessionsCSV} />, $('sessions-mount'));
   render(<ProjectCostTable byProject={lastByProject.value.slice(0, 30)} onExportCSV={exportProjectsCSV} />, $('project-cost-mount'));
-  renderCodexSection(filteredDaily, filteredSessions);
+
+  // Secondary tables honour the provider filter too.
+  if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
+  renderEntrypointBreakdown((rawData.value.entrypoint_breakdown ?? []).filter(matchesProvider));
+  renderServiceTiers((rawData.value.service_tiers ?? []).filter(matchesProvider));
+  renderToolSummary((rawData.value.tool_summary ?? []).filter(matchesProvider));
+  renderMcpSummary((rawData.value.mcp_summary ?? []).filter(matchesProvider));
+  renderBranchSummary((rawData.value.git_branch_summary ?? []).filter(matchesProvider));
+  renderVersionSummary((rawData.value.version_summary ?? []).filter(matchesProvider));
+  renderHourlyChart((rawData.value.hourly_distribution ?? []).filter(matchesProvider));
 }
 
 // ── CSV Export ───────────────────────────────────────────────────────
@@ -592,20 +556,13 @@ async function loadData(force = false): Promise<void> {
 
     if (isFirstLoad) {
       selectedRange.value = readURLRange();
+      selectedProvider.value = readURLProvider();
       selectedModels.value = readURLModels(d.all_models);
       const urlProject = new URLSearchParams(window.location.search).get('project');
       if (urlProject) projectSearchQuery.value = urlProject;
     }
 
     applyFilter();
-    if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
-    if (rawData.value.entrypoint_breakdown) renderEntrypointBreakdown(rawData.value.entrypoint_breakdown);
-    if (rawData.value.service_tiers) renderServiceTiers(rawData.value.service_tiers);
-    if (rawData.value.tool_summary) renderToolSummary(rawData.value.tool_summary);
-    if (rawData.value.mcp_summary) renderMcpSummary(rawData.value.mcp_summary);
-    if (rawData.value.git_branch_summary) renderBranchSummary(rawData.value.git_branch_summary);
-    if (rawData.value.version_summary) renderVersionSummary(rawData.value.version_summary);
-    if (rawData.value.hourly_distribution) renderHourlyChart(rawData.value.hourly_distribution);
   } catch (e) {
     console.error(e);
   }
