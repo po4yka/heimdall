@@ -160,6 +160,29 @@ Edit `pricing.rs` only. Add to `PRICING_TABLE`. Set `threshold_tokens: None` unl
 2. Add route in `server/mod.rs`
 3. Add test in `server/tests.rs` (include in `test_app()` router)
 
+### Adding a new scanner provider
+
+Providers live at `src/scanner/providers/<name>.rs` and implement `crate::scanner::provider::Provider`:
+
+```rust
+pub trait Provider: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn discover_sessions(&self) -> anyhow::Result<Vec<SessionSource>>;
+    fn parse(&self, path: &Path) -> anyhow::Result<Vec<Turn>>;
+}
+```
+
+Steps:
+
+1. Create `src/scanner/providers/<name>.rs` with a struct (`FooProvider`) and a trivial `new()` that resolves default discovery directories (e.g. from `HOME`).
+2. Implement `name()` returning a stable slug like `"foo"`. This slug is stored in `turns.provider` and `sessions.provider` and surfaces in the dashboard's Provider filter.
+3. Implement `discover_sessions()` by walking the appropriate filesystem path and returning one `SessionSource` per session file.
+4. Implement `parse()` — either delegate to `parser.rs::parse_claude_jsonl_file` if the format is Claude-compatible (overwrite `turn.provider` on the returned `Vec<Turn>`) or write a dedicated parser in the provider module.
+5. Register the provider in `src/scanner/providers/mod.rs` inside `pub fn all()`. Platform-gate via `#[cfg(target_os = "...")]` on the `push` call only — never on the whole function.
+6. Tests go in `src/scanner/tests.rs`. Minimum coverage: `name()` returns the expected slug, and a fixture-based parse test asserts returned `Turn`s carry the provider tag.
+
+The explicit `--projects-dir` CLI override routes through `provider_for_dir()` in `src/scanner/mod.rs` — update that helper if the new provider needs path-based detection from that override surface.
+
 ### Changing the database schema
 
 Always use additive migrations (ALTER TABLE ADD COLUMN). Check for column existence before adding. Never drop columns or tables in migrations -- only in full rescan.
