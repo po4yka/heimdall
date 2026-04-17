@@ -8,9 +8,12 @@ use crate::models::Turn;
 #[derive(Debug, Clone)]
 pub struct SessionSource {
     pub path: std::path::PathBuf,
+    // Used by provider implementations to tag discovered sessions.
+    #[allow(dead_code)]
     pub provider_name: &'static str,
 }
 
+#[allow(dead_code)]
 pub trait Provider: Send + Sync {
     fn name(&self) -> &'static str;
     fn discover_sessions(&self) -> Result<Vec<SessionSource>>;

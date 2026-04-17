@@ -674,6 +674,15 @@ mod tests {
     }
 
     #[test]
+    fn registry_all_returns_at_least_two_providers() {
+        let providers = crate::scanner::providers::all();
+        assert!(providers.len() >= 2);
+        let names: Vec<&str> = providers.iter().map(|p| p.name()).collect();
+        assert!(names.contains(&"claude"));
+        assert!(names.contains(&"codex"));
+    }
+
+    #[test]
     fn test_provider_column_backfill_is_idempotent() {
         let tmp = TempDir::new().unwrap();
         let db_path = tmp.path().join("usage.db");

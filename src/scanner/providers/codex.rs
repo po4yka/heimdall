@@ -9,8 +9,8 @@ use walkdir::WalkDir;
 use crate::models::{SessionMeta, Turn};
 use crate::pricing;
 use crate::scanner::parser::{
-    empty_parse_result, file_timestamp_rfc3339, merge_session_meta, project_name_from_cwd,
-    session_key, touch_session_meta, upsert_session_meta, ParseResult, PROVIDER_CODEX,
+    PROVIDER_CODEX, ParseResult, empty_parse_result, file_timestamp_rfc3339, project_name_from_cwd,
+    session_key, touch_session_meta, upsert_session_meta,
 };
 use crate::scanner::provider::{Provider, SessionSource};
 

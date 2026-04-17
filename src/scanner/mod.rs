@@ -24,22 +24,6 @@ fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn default_projects_dirs() -> Vec<PathBuf> {
-    let home = home_dir();
-    let mut dirs = vec![home.join(".claude").join("projects")];
-    #[cfg(target_os = "macos")]
-    dirs.push(home.join("Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/projects"));
-    dirs
-}
-
-fn default_codex_dirs() -> Vec<PathBuf> {
-    let home = home_dir();
-    vec![
-        home.join(".codex").join("sessions"),
-        home.join(".codex").join("archived_sessions"),
-    ]
-}
-
 fn provider_for_dir(path: &Path) -> &'static str {
     let normalized = path.to_string_lossy().replace('\\', "/");
     if normalized.contains("/.codex/") {
@@ -72,10 +56,22 @@ pub fn scan(
         }
         grouped.into_iter().collect()
     } else {
-        vec![
-            (PROVIDER_CLAUDE.to_string(), default_projects_dirs()),
-            (PROVIDER_CODEX.to_string(), default_codex_dirs()),
-        ]
+        // Use the provider registry to get default directories.
+        providers::all()
+            .into_iter()
+            .map(|p| {
+                let name = p.name().to_string();
+                let dirs = p
+                    .discover_sessions()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|s| s.path.parent().unwrap_or(Path::new(".")).to_path_buf())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                (name, dirs)
+            })
+            .collect()
     };
 
     let mut jsonl_files: Vec<(String, PathBuf)> = Vec::new();
