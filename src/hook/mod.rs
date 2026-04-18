@@ -162,6 +162,9 @@ mod tests {
 
     #[test]
     fn ingest_event_writes_row_to_db() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("hook_test.db");
 
@@ -214,6 +217,9 @@ mod tests {
 
     #[test]
     fn ingest_event_is_idempotent_on_duplicate_dedup_key() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("dedup_test.db");
 

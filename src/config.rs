@@ -343,6 +343,19 @@ pub fn load_config_from(path: &Path) -> Config {
     }
 }
 
+/// Process-wide mutex for tests that mutate the `HEIMDALL_CONFIG` environment
+/// variable. Rust's default test harness runs tests in parallel threads, and
+/// `set_var`/`remove_var` are process-global — without serialisation one test's
+/// `remove_var` at teardown can wipe another test's `set_var` mid-flight,
+/// causing the config resolver to fall back to `~/.claude/usage.db` (which may
+/// not exist on a fresh CI runner).
+///
+/// Any test that touches `HEIMDALL_CONFIG` must hold this guard for its whole
+/// body. `unwrap_or_else(|p| p.into_inner())` keeps the suite running even if
+/// a previous test panicked while holding the lock.
+#[cfg(test)]
+pub(crate) static HEIMDALL_CONFIG_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -630,11 +643,14 @@ output = 8.0
 
     #[test]
     fn test_resolve_config_path_env_var_wins() {
+        let _guard = super::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let tmp = TempDir::new().unwrap();
         let explicit = tmp.path().join("explicit.toml");
         std::fs::File::create(&explicit).unwrap();
 
-        // SAFETY: single-threaded test; env mutation is safe here.
+        // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
         unsafe { std::env::set_var("HEIMDALL_CONFIG", &explicit) };
         let result = resolve_config_path();
         unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
@@ -644,13 +660,16 @@ output = 8.0
 
     #[test]
     fn test_resolve_config_path_env_var_nonexistent_falls_through() {
+        let _guard = super::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         // If HEIMDALL_CONFIG points at a non-existent file, fall through to
         // the next candidate. With a HOME that has no config files this
         // returns None.
         let tmp = TempDir::new().unwrap();
         let nonexistent = tmp.path().join("does_not_exist.toml");
 
-        // SAFETY: single-threaded test; env mutation is safe here.
+        // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
         unsafe { std::env::set_var("HEIMDALL_CONFIG", &nonexistent) };
         // We don't assert the exact value because the test machine might have
         // real config files; we only assert we don't get the nonexistent path.
@@ -662,8 +681,11 @@ output = 8.0
 
     #[test]
     fn test_resolve_config_path_returns_none_when_nothing_exists() {
+        let _guard = super::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         // Make sure env var is not set.
-        // SAFETY: single-threaded test; env mutation is safe here.
+        // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
         unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
         // We can't easily override HOME without unsafe or extra deps,
         // but we can verify the function doesn't panic and returns
@@ -732,12 +754,15 @@ spike_webhook = false
 
     #[test]
     fn test_load_config_resolved_uses_env_var() {
+        let _guard = super::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("resolved.toml");
         let mut f = std::fs::File::create(&path).unwrap();
         write!(f, "port = 7777\n").unwrap();
 
-        // SAFETY: single-threaded test; env mutation is safe here.
+        // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
         unsafe { std::env::set_var("HEIMDALL_CONFIG", &path) };
         let config = load_config_resolved();
         unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
