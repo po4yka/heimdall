@@ -6,6 +6,7 @@ mod menubar;
 mod models;
 mod oauth;
 mod openai;
+mod optimizer;
 mod pricing;
 mod scanner;
 mod scheduler;
@@ -100,6 +101,14 @@ enum Commands {
     Scheduler {
         #[command(subcommand)]
         action: SchedulerAction,
+    },
+    /// Analyse usage data and report waste findings (Phase 6)
+    Optimize {
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
     },
 }
 
@@ -270,6 +279,10 @@ fn main() -> Result<()> {
         Commands::Scheduler { action } => {
             cmd_scheduler(action, &default_db(None))?;
         }
+        Commands::Optimize { db_path, format } => {
+            let db = default_db(db_path);
+            cmd_optimize(&db, &format)?;
+        }
     }
     Ok(())
 }
@@ -360,6 +373,60 @@ fn apply_pricing_overrides(cfg: &config::Config) {
         .collect();
     tracing::info!("Loaded {} pricing override(s) from config", overrides.len());
     pricing::set_overrides(overrides);
+}
+
+fn cmd_optimize(db_path: &std::path::Path, format: &str) -> Result<()> {
+    use optimizer::Severity;
+
+    if !db_path.exists() {
+        anyhow::bail!(
+            "Database not found at {}. Run: claude-usage-tracker scan",
+            db_path.display()
+        );
+    }
+
+    let report = optimizer::run_optimize(db_path)?;
+
+    match format.to_ascii_lowercase().as_str() {
+        "json" => {
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        _ => {
+            println!();
+            println!("{}", "=".repeat(70));
+            println!("  Optimize Report  --  Grade: {}", report.grade);
+            println!("{}", "=".repeat(70));
+
+            if report.findings.is_empty() {
+                println!("  No waste findings. Configuration looks clean.");
+            } else {
+                let waste_usd = report.total_monthly_waste_nanos as f64 / 1_000_000_000.0;
+                println!(
+                    "  {} finding(s)  |  Est. monthly waste: {}",
+                    report.findings.len(),
+                    pricing::fmt_cost(waste_usd),
+                );
+                println!("{}", "-".repeat(70));
+                for f in &report.findings {
+                    let sev = match f.severity {
+                        Severity::Low => "[low]   ",
+                        Severity::Medium => "[medium]",
+                        Severity::High => "[HIGH]  ",
+                    };
+                    println!("  {} {}", sev, f.title);
+                    println!("          {}", f.detail);
+                    if f.estimated_monthly_waste_nanos > 0 {
+                        let w = f.estimated_monthly_waste_nanos as f64 / 1_000_000_000.0;
+                        println!("          Est. monthly waste: {}", pricing::fmt_cost(w));
+                    }
+                    println!();
+                }
+            }
+            println!("{}", "=".repeat(70));
+            println!();
+        }
+    }
+    Ok(())
 }
 
 fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Result<()> {
