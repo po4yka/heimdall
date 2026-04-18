@@ -622,7 +622,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 22 -- macOS Distribution Hardening
+## Phase 22 -- macOS Distribution Hardening **[x]**
 
 **Motivation:** Heimdall ships as `cargo install --git` today. Guardian's distribution stack (Homebrew cask with lifecycle hooks + LaunchAgent for autostart + universal arm64/x86_64 binary via `lipo`) is the gold standard for macOS developer tools. Extends Phase 11 with macOS-specific polish.
 
