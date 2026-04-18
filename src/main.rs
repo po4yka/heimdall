@@ -8,6 +8,7 @@ mod oauth;
 mod openai;
 mod pricing;
 mod scanner;
+mod scheduler;
 mod server;
 mod tz;
 mod webhooks;
@@ -95,6 +96,11 @@ enum Commands {
         #[command(subcommand)]
         action: PricingAction,
     },
+    /// Manage the platform-native scheduled scan job
+    Scheduler {
+        #[command(subcommand)]
+        action: SchedulerAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -105,6 +111,23 @@ enum PricingAction {
         #[arg(long)]
         cache_path: Option<PathBuf>,
     },
+}
+
+#[derive(Subcommand)]
+enum SchedulerAction {
+    /// Install a platform-native scheduled scan job
+    Install {
+        /// How often to run: hourly or daily (default: hourly)
+        #[arg(long, default_value = "hourly")]
+        interval: String,
+        /// Override the database path used by the scheduled job
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+    },
+    /// Remove the scheduled scan job
+    Uninstall,
+    /// Show the current scheduler status
+    Status,
 }
 
 fn main() -> Result<()> {
@@ -244,6 +267,9 @@ fn main() -> Result<()> {
                 }
             }
         }
+        Commands::Scheduler { action } => {
+            cmd_scheduler(action, &default_db(None))?;
+        }
     }
     Ok(())
 }
@@ -334,6 +360,65 @@ fn apply_pricing_overrides(cfg: &config::Config) {
         .collect();
     tracing::info!("Loaded {} pricing override(s) from config", overrides.len());
     pricing::set_overrides(overrides);
+}
+
+fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Result<()> {
+    use scheduler::{InstallStatus, Interval};
+    use std::str::FromStr;
+
+    let sched = scheduler::current();
+
+    match action {
+        SchedulerAction::Install { interval, db_path } => {
+            let interval = Interval::from_str(&interval)?;
+            let bin_path = scheduler::resolve_bin_path()?;
+            let db = db_path.unwrap_or_else(|| default_db.to_path_buf());
+            sched.install(interval, &bin_path, &db)?;
+            // Report status after install.
+            match sched.status()? {
+                InstallStatus::Installed {
+                    next_run_hint,
+                    config_path,
+                } => {
+                    if let Some(path) = config_path {
+                        println!("Installed: {} ({})", next_run_hint, path.display());
+                    } else {
+                        println!("Installed: {}", next_run_hint);
+                    }
+                }
+                InstallStatus::NotInstalled => {
+                    println!("Installed (status unknown)");
+                }
+                InstallStatus::UnsupportedPlatform(plat) => {
+                    eprintln!("Unsupported platform: {}", plat);
+                    std::process::exit(1);
+                }
+            }
+        }
+        SchedulerAction::Uninstall => {
+            sched.uninstall()?;
+            println!("Uninstalled: scheduled scan job removed");
+        }
+        SchedulerAction::Status => match sched.status()? {
+            InstallStatus::Installed {
+                next_run_hint,
+                config_path,
+            } => {
+                if let Some(path) = config_path {
+                    println!("Installed: {} ({})", next_run_hint, path.display());
+                } else {
+                    println!("Installed: {}", next_run_hint);
+                }
+            }
+            InstallStatus::NotInstalled => {
+                println!("Not installed");
+            }
+            InstallStatus::UnsupportedPlatform(plat) => {
+                println!("Unsupported platform: {}", plat);
+            }
+        },
+    }
+    Ok(())
 }
 
 #[cfg(test)]
