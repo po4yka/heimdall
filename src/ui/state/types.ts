@@ -358,6 +358,61 @@ export interface CommunitySignal {
   enabled: boolean;
 }
 
+// ── Phase 2: Billing Blocks ──────────────────────────────────────────────────
+
+export type QuotaSeverity = 'ok' | 'warn' | 'danger';
+
+export interface BurnRate {
+  tokens_per_min: number;
+  cost_per_hour_nanos: number;
+}
+
+export interface BlockProjection {
+  projected_cost_nanos: number;
+  projected_tokens: number;
+}
+
+export interface BlockQuota {
+  limit_tokens: number;
+  used_tokens: number;
+  projected_tokens: number;
+  current_pct: number;
+  projected_pct: number;
+  remaining_tokens: number;
+  current_severity: QuotaSeverity;
+  projected_severity: QuotaSeverity;
+}
+
+export interface BlockTokens {
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_creation: number;
+  reasoning_output: number;
+}
+
+export interface BillingBlockView {
+  start: string;
+  end: string;
+  first_timestamp: string;
+  last_timestamp: string;
+  tokens: BlockTokens;
+  cost_nanos: number;
+  models: string[];
+  is_active: boolean;
+  entry_count: number;
+  burn_rate?: BurnRate | null;
+  projection?: BlockProjection;
+  quota?: BlockQuota;
+}
+
+export interface BillingBlocksResponse {
+  session_length_hours: number;
+  token_limit: number | null;
+  historical_max_tokens: number;
+  blocks: BillingBlockView[];
+}
+
 // ── Phase 13: Activity Heatmap ───────────────────────────────────────────────
 
 export interface HeatmapCell {

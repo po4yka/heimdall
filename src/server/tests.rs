@@ -93,6 +93,7 @@ mod tests {
             agent_status_cache: tokio::sync::RwLock::new(None),
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
+            blocks_token_limit: None,
         });
         let html = assets::render_dashboard();
 
@@ -114,6 +115,10 @@ mod tests {
             .route("/api/heatmap", get(crate::server::api::api_heatmap))
             .route("/api/agent-status", get(api_agent_status))
             .route("/api/community-signal", get(api_community_signal))
+            .route(
+                "/api/billing-blocks",
+                get(crate::server::api::api_billing_blocks),
+            )
             .with_state(state)
     }
 
@@ -1042,6 +1047,7 @@ mod tests {
             ))),
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
+            blocks_token_limit: None,
         });
 
         let html = assets::render_dashboard();
@@ -1231,6 +1237,7 @@ mod tests {
             agent_status_cache: tokio::sync::RwLock::new(None),
             aggregator_config: agg_cfg,
             aggregator_cache: tokio::sync::RwLock::new(None),
+            blocks_token_limit: None,
         });
 
         let html = crate::server::assets::render_dashboard();
@@ -1324,6 +1331,7 @@ mod tests {
                 std::time::Instant::now(),
                 cached_signal,
             ))),
+            blocks_token_limit: None,
         });
 
         let html = crate::server::assets::render_dashboard();
@@ -1357,5 +1365,142 @@ mod tests {
         assert_eq!(claude_arr.len(), 1);
         assert_eq!(claude_arr[0]["slug"], "claude-ai");
         assert_eq!(claude_arr[0]["level"], "normal");
+    }
+
+    fn test_app_with_token_limit(
+        db_path: std::path::PathBuf,
+        projects_dir: std::path::PathBuf,
+        token_limit: Option<i64>,
+    ) -> Router {
+        let state = Arc::new(AppState {
+            db_path,
+            projects_dirs: Some(vec![projects_dir]),
+            oauth_enabled: false,
+            oauth_refresh_interval: 60,
+            oauth_cache: tokio::sync::RwLock::new(None),
+            openai_enabled: false,
+            openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
+            openai_refresh_interval: 300,
+            openai_lookback_days: 30,
+            openai_cache: tokio::sync::RwLock::new(None),
+            db_lock: tokio::sync::Mutex::new(()),
+            webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
+            webhook_config: WebhookConfig::default(),
+            scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
+            agent_status_config: AgentStatusConfig::default(),
+            agent_status_cache: tokio::sync::RwLock::new(None),
+            aggregator_config: AggregatorConfig::default(),
+            aggregator_cache: tokio::sync::RwLock::new(None),
+            blocks_token_limit: token_limit,
+        });
+        let html = assets::render_dashboard();
+        Router::new()
+            .route(
+                "/",
+                get({
+                    let h = html.clone();
+                    move || async { Html(h) }
+                }),
+            )
+            .route(
+                "/api/billing-blocks",
+                get(crate::server::api::api_billing_blocks),
+            )
+            .with_state(state)
+    }
+
+    #[tokio::test]
+    async fn test_api_billing_blocks_quota_present_when_limit_set() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app_with_token_limit(db_path, projects, Some(1_000_000));
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/billing-blocks")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        // token_limit must be echoed back.
+        assert_eq!(json["token_limit"].as_i64().unwrap(), 1_000_000);
+
+        let blocks = json["blocks"].as_array().unwrap();
+        assert!(
+            !blocks.is_empty(),
+            "seeded DB must produce at least one block"
+        );
+
+        for b in blocks {
+            if b["is_active"].as_bool().unwrap_or(false) {
+                // Active block must carry a quota object.
+                let quota = b.get("quota").expect("active block must have quota");
+                assert_eq!(quota["limit_tokens"].as_i64().unwrap(), 1_000_000);
+                let sev = quota["current_severity"].as_str().unwrap();
+                assert!(
+                    ["ok", "warn", "danger"].contains(&sev),
+                    "current_severity must be ok/warn/danger, got: {sev}"
+                );
+            } else {
+                // Inactive (historical) blocks must NOT have quota.
+                assert!(
+                    b.get("quota").is_none(),
+                    "inactive block must not have quota field"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_api_billing_blocks_shape() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/billing-blocks")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        // Required top-level fields.
+        assert!(json.get("session_length_hours").is_some());
+        assert!(json.get("historical_max_tokens").is_some());
+        assert!(json.get("blocks").is_some());
+        // token_limit should be null when not configured.
+        assert!(json["token_limit"].is_null());
+        // blocks must be an array.
+        assert!(json["blocks"].is_array());
+        // At least one block from the seeded turn.
+        let blocks = json["blocks"].as_array().unwrap();
+        assert!(
+            !blocks.is_empty(),
+            "seeded DB should produce at least one block"
+        );
+        // Each block must have required fields.
+        let b = &blocks[0];
+        assert!(b.get("start").is_some());
+        assert!(b.get("end").is_some());
+        assert!(b.get("tokens").is_some());
+        assert!(b.get("cost_nanos").is_some());
+        assert!(b.get("is_active").is_some());
+        assert!(b.get("entry_count").is_some());
+        // quota field must be absent when token_limit is not set.
+        assert!(b.get("quota").is_none());
     }
 }

@@ -34,6 +34,8 @@ pub struct ServeOptions {
     pub agent_status_config: AgentStatusConfig,
     /// Community signal aggregator config (opt-in, off by default).
     pub aggregator_config: AggregatorConfig,
+    /// Token quota for the billing-blocks dashboard endpoint (from config [blocks.token_limit]).
+    pub blocks_token_limit: Option<i64>,
 }
 
 pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
@@ -60,6 +62,7 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         agent_status_cache: RwLock::new(None),
         aggregator_config: options.aggregator_config,
         aggregator_cache: RwLock::new(None),
+        blocks_token_limit: options.blocks_token_limit,
     });
 
     // Phase 20: start file-watcher if --watch was requested.
@@ -161,6 +164,7 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         .route("/api/stream", get(api::api_stream))
         .route("/api/agent-status", get(api::api_agent_status))
         .route("/api/community-signal", get(api::api_community_signal))
+        .route("/api/billing-blocks", get(api::api_billing_blocks))
         .with_state(state);
 
     let addr = format!("{}:{}", options.host, options.port);

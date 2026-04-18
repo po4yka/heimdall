@@ -140,7 +140,32 @@ enum Commands {
         /// Emit JSON instead of a human-readable table
         #[arg(long)]
         json: bool,
+        /// Token quota for the active billing block: a number, or "max" to use the historical peak.
+        #[arg(long, value_parser = parse_token_limit)]
+        token_limit: Option<TokenLimit>,
     },
+}
+
+/// Token quota specification for `--token-limit`.
+#[derive(Debug, Clone)]
+enum TokenLimit {
+    /// A fixed absolute token count.
+    Absolute(i64),
+    /// Resolve to the highest token count seen across all historical blocks.
+    HistoricalMax,
+}
+
+fn parse_token_limit(s: &str) -> Result<TokenLimit, String> {
+    if s.eq_ignore_ascii_case("max") {
+        return Ok(TokenLimit::HistoricalMax);
+    }
+    match s.parse::<i64>() {
+        Ok(n) if n > 0 => Ok(TokenLimit::Absolute(n)),
+        Ok(_) => Err(format!("token-limit must be a positive integer, got: {s}")),
+        Err(_) => Err(format!(
+            "invalid token-limit value '{s}': expected a positive integer or \"max\""
+        )),
+    }
 }
 
 #[derive(Subcommand)]
@@ -232,6 +257,7 @@ fn main() -> Result<()> {
     let cfg_display_currency = cfg.display.currency.unwrap_or_else(|| "USD".into());
     let cfg_agent_status = cfg.agent_status;
     let cfg_aggregator = cfg.aggregator;
+    let cfg_blocks_token_limit = cfg.blocks.token_limit;
 
     let default_db = |cli_db: Option<PathBuf>| -> PathBuf {
         cli_db
@@ -309,6 +335,7 @@ fn main() -> Result<()> {
                 watch,
                 agent_status_config: cfg_agent_status,
                 aggregator_config: cfg_aggregator,
+                blocks_token_limit: cfg_blocks_token_limit,
             }))?;
         }
         Commands::Export {
@@ -373,9 +400,10 @@ fn main() -> Result<()> {
             session_length,
             active,
             json,
+            token_limit,
         } => {
             let db = default_db(db_path);
-            cmd_blocks(&db, session_length, active, json)?;
+            cmd_blocks(&db, session_length, active, json, token_limit)?;
         }
     }
     Ok(())
@@ -1379,8 +1407,10 @@ fn cmd_blocks(
     session_hours: f64,
     active_only: bool,
     json_output: bool,
+    token_limit: Option<TokenLimit>,
 ) -> anyhow::Result<()> {
     use analytics::blocks::{calculate_burn_rate, identify_blocks, project_block_usage};
+    use analytics::quota::compute_quota;
 
     anyhow::ensure!(
         session_hours > 0.0 && session_hours <= 168.0,
@@ -1391,6 +1421,16 @@ fn cmd_blocks(
     let turns = scanner::db::load_all_turns(&conn)?;
     let mut blocks = identify_blocks(&turns, session_hours);
 
+    // Resolve the token limit once before rendering.
+    let resolved_limit: Option<i64> = match &token_limit {
+        None => None,
+        Some(TokenLimit::Absolute(n)) => Some(*n),
+        Some(TokenLimit::HistoricalMax) => Some(scanner::db::historical_max_block_tokens(
+            &conn,
+            session_hours,
+        )?),
+    };
+
     if active_only {
         blocks.retain(|b| b.is_active);
     }
@@ -1400,9 +1440,18 @@ fn cmd_blocks(
         let json_blocks: Vec<serde_json::Value> = blocks
             .iter()
             .map(|b| {
+                let rate = if b.is_active {
+                    calculate_burn_rate(b, now)
+                } else {
+                    None
+                };
+                let proj = project_block_usage(b, rate, now);
+
                 let mut v = serde_json::json!({
                     "start": b.start.to_rfc3339(),
                     "end": b.end.to_rfc3339(),
+                    "first_timestamp": b.first_timestamp.to_rfc3339(),
+                    "last_timestamp": b.last_timestamp.to_rfc3339(),
                     "tokens": b.tokens,
                     "cost_nanos": b.cost_nanos,
                     "estimated_cost": b.cost_nanos as f64 / 1_000_000_000.0,
@@ -1411,8 +1460,6 @@ fn cmd_blocks(
                     "entry_count": b.entry_count,
                 });
                 if b.is_active {
-                    let rate = calculate_burn_rate(b, now);
-                    let proj = project_block_usage(b, rate, now);
                     v["burn_rate"] = match rate {
                         Some(r) => serde_json::json!({
                             "tokens_per_min": r.tokens_per_min,
@@ -1426,6 +1473,11 @@ fn cmd_blocks(
                         "projected_cost": proj.projected_cost_nanos as f64 / 1_000_000_000.0,
                         "projected_tokens": proj.projected_tokens,
                     });
+                }
+                if let Some(limit) = resolved_limit
+                    && let Some(quota) = compute_quota(b, &proj, limit)
+                {
+                    v["quota"] = serde_json::to_value(quota).unwrap_or(serde_json::Value::Null);
                 }
                 v
             })
@@ -1499,10 +1551,89 @@ fn cmd_blocks(
             println!(
                 "      -> PROJECTED:  {rem_h}h {rem_m:02}m remaining   {proj_cost} total   {proj_tok} tokens"
             );
+
+            // Quota lines — only rendered for active blocks in text mode.
+            if let Some(limit) = resolved_limit
+                && let Some(quota) = compute_quota(block, &proj, limit)
+            {
+                let remaining_tok = pricing::fmt_tokens(quota.remaining_tokens.abs());
+                let remaining_sign = if quota.remaining_tokens < 0 { "-" } else { "" };
+                let used_tok = pricing::fmt_tokens(quota.used_tokens);
+                let limit_tok = pricing::fmt_tokens(quota.limit_tokens);
+                let proj_tok_q = pricing::fmt_tokens(quota.projected_tokens);
+                let proj_pct_pct = (quota.projected_pct * 100.0).round() as i64;
+                let used_pct_pct = (quota.current_pct * 100.0).round() as i64;
+                let sev_str = |s: analytics::quota::Severity| match s {
+                    analytics::quota::Severity::Ok => "[OK]",
+                    analytics::quota::Severity::Warn => "[WARN]",
+                    analytics::quota::Severity::Danger => "[CRIT]",
+                };
+                println!(
+                    "    -> REMAINING:  {remaining_sign}{remaining_tok} tokens   {used_tok} used ({used_pct_pct}% of {limit_tok} limit)   {}",
+                    sev_str(quota.current_severity)
+                );
+                println!(
+                    "    -> PROJECTED:  {proj_tok_q} tokens   {proj_pct_pct}% of {limit_tok} limit   {}",
+                    sev_str(quota.projected_severity)
+                );
+            }
         }
     }
 
     println!("{}", "-".repeat(120));
     println!();
     Ok(())
+}
+
+// ── tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::TokenLimit;
+    use super::parse_token_limit;
+
+    #[test]
+    fn parse_token_limit_max_lowercase() {
+        let tl = parse_token_limit("max").unwrap();
+        assert!(matches!(tl, TokenLimit::HistoricalMax));
+    }
+
+    #[test]
+    fn parse_token_limit_max_uppercase() {
+        let tl = parse_token_limit("MAX").unwrap();
+        assert!(matches!(tl, TokenLimit::HistoricalMax));
+    }
+
+    #[test]
+    fn parse_token_limit_positive_integer() {
+        let tl = parse_token_limit("1000000").unwrap();
+        assert!(matches!(tl, TokenLimit::Absolute(1_000_000)));
+    }
+
+    #[test]
+    fn parse_token_limit_bogus_returns_err() {
+        assert!(parse_token_limit("bogus").is_err());
+    }
+
+    #[test]
+    fn parse_token_limit_zero_returns_err() {
+        assert!(parse_token_limit("0").is_err());
+    }
+
+    #[test]
+    fn parse_token_limit_negative_returns_err() {
+        assert!(parse_token_limit("-100").is_err());
+    }
+
+    #[test]
+    fn parse_token_limit_max_mixed_case() {
+        assert!(matches!(
+            parse_token_limit("Max"),
+            Ok(TokenLimit::HistoricalMax)
+        ));
+        assert!(matches!(
+            parse_token_limit("mAx"),
+            Ok(TokenLimit::HistoricalMax)
+        ));
+    }
 }

@@ -1102,6 +1102,7 @@
 
   // src/ui/state/store.ts
   var rawData = y3(null);
+  var billingBlocksData = y3(null);
   var selectedModels = y3(/* @__PURE__ */ new Set());
   var selectedRange = y3("30d");
   var selectedProvider = y3("both");
@@ -2121,8 +2122,198 @@
     ] });
   }
 
+  // src/ui/components/BillingBlocksCard.tsx
+  function severityToStatus(s4) {
+    if (s4 === "ok") return "success";
+    if (s4 === "warn") return "warning";
+    return "accent";
+  }
+  function severityLabel(s4) {
+    return s4 === "ok" ? "[OK]" : s4 === "warn" ? "[WARN]" : "[CRIT]";
+  }
+  function formatDuration(from, to) {
+    const diffMs = new Date(to).getTime() - new Date(from).getTime();
+    if (isNaN(diffMs) || diffMs < 0) return "--";
+    const totalMin = Math.floor(diffMs / 6e4);
+    const h5 = Math.floor(totalMin / 60);
+    const m4 = totalMin % 60;
+    if (h5 === 0) return `${m4}m`;
+    return `${h5}h ${m4}m`;
+  }
+  function fmtTokens(n3) {
+    if (n3 >= 1e6) return (n3 / 1e6).toFixed(1) + "M";
+    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
+    return n3.toString();
+  }
+  function fmtUtcTime(iso) {
+    try {
+      const d5 = new Date(iso);
+      return d5.toISOString().slice(11, 16) + " UTC";
+    } catch {
+      return "--";
+    }
+  }
+  function QuotaSection({ block }) {
+    const { quota } = block;
+    if (!quota) {
+      return /* @__PURE__ */ u2(
+        "div",
+        {
+          class: "stat-sub",
+          style: { marginTop: "8px", fontStyle: "italic", opacity: 0.6 },
+          children: "Token quota not configured \u2014 set [blocks.token_limit] in config."
+        }
+      );
+    }
+    const currentPct = Math.min(100, quota.current_pct).toFixed(0);
+    const projectedPct = Math.min(999, quota.projected_pct).toFixed(0);
+    return /* @__PURE__ */ u2("div", { style: { marginTop: "10px" }, children: [
+      /* @__PURE__ */ u2("div", { style: { marginBottom: "4px" }, children: [
+        /* @__PURE__ */ u2(
+          "div",
+          {
+            style: {
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginBottom: "3px"
+            },
+            children: [
+              /* @__PURE__ */ u2("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "USED" }),
+              /* @__PURE__ */ u2(
+                "span",
+                {
+                  class: "stat-sub",
+                  style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
+                  children: [
+                    fmtTokens(quota.used_tokens),
+                    " / ",
+                    fmtTokens(quota.limit_tokens),
+                    " ",
+                    currentPct,
+                    "%",
+                    " ",
+                    /* @__PURE__ */ u2(
+                      "span",
+                      {
+                        style: {
+                          color: quota.current_severity === "danger" ? "var(--accent)" : quota.current_severity === "warn" ? "var(--warning)" : void 0
+                        },
+                        children: severityLabel(quota.current_severity)
+                      }
+                    )
+                  ]
+                }
+              )
+            ]
+          }
+        ),
+        /* @__PURE__ */ u2(
+          SegmentedProgressBar,
+          {
+            value: quota.used_tokens,
+            max: quota.limit_tokens,
+            status: severityToStatus(quota.current_severity),
+            "aria-label": "Token quota used"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u2("div", { style: { marginTop: "1px" }, children: [
+        /* @__PURE__ */ u2(
+          "div",
+          {
+            style: {
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginBottom: "3px"
+            },
+            children: [
+              /* @__PURE__ */ u2("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "PROJECTED" }),
+              /* @__PURE__ */ u2(
+                "span",
+                {
+                  class: "stat-sub",
+                  style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
+                  children: [
+                    fmtTokens(quota.projected_tokens),
+                    " / ",
+                    fmtTokens(quota.limit_tokens),
+                    " ",
+                    projectedPct,
+                    "%",
+                    " ",
+                    /* @__PURE__ */ u2(
+                      "span",
+                      {
+                        style: {
+                          color: quota.projected_severity === "danger" ? "var(--accent)" : quota.projected_severity === "warn" ? "var(--warning)" : void 0
+                        },
+                        children: severityLabel(quota.projected_severity)
+                      }
+                    )
+                  ]
+                }
+              )
+            ]
+          }
+        ),
+        /* @__PURE__ */ u2(
+          SegmentedProgressBar,
+          {
+            value: quota.projected_tokens,
+            max: quota.limit_tokens,
+            status: severityToStatus(quota.projected_severity),
+            "aria-label": "Projected token quota"
+          }
+        )
+      ] })
+    ] });
+  }
+  function BillingBlocksCard({ data }) {
+    const activeBlock = data.blocks.find((b4) => b4.is_active) ?? null;
+    if (!activeBlock) {
+      return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "BILLING BLOCK" }),
+        /* @__PURE__ */ u2("div", { class: "stat-value", style: { opacity: 0.4 }, children: "NO ACTIVE BLOCK" }),
+        /* @__PURE__ */ u2("div", { class: "stat-sub", children: [
+          "7d historical max:",
+          " ",
+          /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)" }, children: fmtTokens(data.historical_max_tokens) }),
+          " ",
+          "tokens"
+        ] })
+      ] }) });
+    }
+    const totalTokens = activeBlock.tokens.input + activeBlock.tokens.output + activeBlock.tokens.cache_read + activeBlock.tokens.cache_creation + activeBlock.tokens.reasoning_output;
+    const elapsed = formatDuration(activeBlock.first_timestamp, activeBlock.last_timestamp);
+    const blockEnd = fmtUtcTime(activeBlock.end);
+    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
+      /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "BILLING BLOCK" }),
+        /* @__PURE__ */ u2(
+          "div",
+          {
+            class: "stat-value",
+            style: { fontFamily: "var(--font-mono)", letterSpacing: "-0.02em" },
+            children: fmtTokens(totalTokens)
+          }
+        ),
+        /* @__PURE__ */ u2("div", { class: "stat-sub", children: [
+          elapsed,
+          " elapsed \xB7 ends ",
+          blockEnd,
+          " \xB7 ",
+          activeBlock.entry_count,
+          " entries"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2(QuotaSection, { block: activeBlock })
+    ] });
+  }
+
   // src/ui/components/StatsCards.tsx
-  function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency }) {
+  function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency, billingBlocks }) {
     const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
     const avgPerActiveDay = (() => {
       if (activeDays === void 0 || activeDays === null) return "--";
@@ -2155,6 +2346,7 @@
         /* @__PURE__ */ u2("div", { class: "stat-value", children: avgPerActiveDay }),
         /* @__PURE__ */ u2("div", { class: "stat-sub", children: activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `${activeDays} active ${activeDays === 1 ? "day" : "days"}` : "no spend" })
       ] }) }),
+      billingBlocks && /* @__PURE__ */ u2(BillingBlocksCard, { data: billingBlocks }),
       cacheEfficiency && /* @__PURE__ */ u2(CacheEfficiencyCard, { data: cacheEfficiency })
     ] });
   }
@@ -6296,6 +6488,7 @@
   var loadAgentStatusInFlight = false;
   var loadCommunitySignalInFlight = false;
   var lastCommunitySignal = null;
+  var loadBillingBlocksInFlight = false;
   function getRangeCutoff(range) {
     if (range === "all") return null;
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
@@ -6515,7 +6708,8 @@
           daily,
           activeDays: lastHeatmapData?.active_days,
           heatmapTotalNanos: lastHeatmapData?.total_cost_nanos,
-          cacheEfficiency: rawData.value?.cache_efficiency
+          cacheEfficiency: rawData.value?.cache_efficiency,
+          billingBlocks: billingBlocksData.value
         }
       ),
       $2("stats-row")
@@ -6779,6 +6973,24 @@
       loadCommunitySignalInFlight = false;
     }
   }
+  async function loadBillingBlocks() {
+    if (loadBillingBlocksInFlight) return;
+    loadBillingBlocksInFlight = true;
+    try {
+      const resp = await fetch("/api/billing-blocks");
+      if (!resp.ok) {
+        billingBlocksData.value = null;
+        return;
+      }
+      const data = await resp.json();
+      billingBlocksData.value = data;
+      if (rawData.value) applyFilter();
+    } catch {
+      billingBlocksData.value = null;
+    } finally {
+      loadBillingBlocksInFlight = false;
+    }
+  }
   async function loadHeatmap(period = "month") {
     if (loadHeatmapInFlight) return;
     loadHeatmapInFlight = true;
@@ -6863,6 +7075,8 @@
   }, 6e4);
   loadHeatmap("all");
   setInterval(() => loadHeatmap("all"), 3e4);
+  loadBillingBlocks();
+  setInterval(loadBillingBlocks, 3e4);
 })();
 /*! Bundled license information:
 

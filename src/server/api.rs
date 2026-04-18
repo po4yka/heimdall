@@ -50,6 +50,8 @@ pub struct AppState {
     pub aggregator_config: AggregatorConfig,
     /// Community-signal cache: (fetched_at, signal).
     pub aggregator_cache: RwLock<Option<(Instant, CommunitySignal)>>,
+    /// Token quota for the /api/billing-blocks endpoint (from config [blocks.token_limit]).
+    pub blocks_token_limit: Option<i64>,
 }
 
 pub async fn api_data(
@@ -443,6 +445,99 @@ pub async fn api_stream(State(state): State<Arc<AppState>>) -> impl axum::respon
             .interval(std::time::Duration::from_secs(15))
             .text("ping"),
     )
+}
+
+/// `GET /api/billing-blocks` — returns all billing blocks with optional quota metadata.
+///
+/// Response shape:
+/// ```json
+/// {
+///   "session_length_hours": 5.0,
+///   "token_limit": 1000000,          // from config [blocks.token_limit], or null
+///   "historical_max_tokens": 823412, // always computed
+///   "blocks": [ ... ]
+/// }
+/// ```
+pub async fn api_billing_blocks(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, StatusCode> {
+    use crate::analytics::blocks::{calculate_burn_rate, identify_blocks, project_block_usage};
+    use crate::analytics::quota::compute_quota;
+
+    let db_path = state.db_path.clone();
+    let token_limit = state.blocks_token_limit;
+    const SESSION_HOURS: f64 = 5.0;
+
+    let value = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+
+        let turns = db::load_all_turns(&conn)?;
+        let blocks = identify_blocks(&turns, SESSION_HOURS);
+        // Compute historical max directly from the already-loaded blocks vec —
+        // avoids a redundant full-table scan via historical_max_block_tokens.
+        let historical_max_tokens = blocks.iter().map(|b| b.tokens.total()).max().unwrap_or(0);
+
+        let now = chrono::Utc::now();
+
+        let json_blocks: Vec<Value> = blocks
+            .iter()
+            .map(|b| {
+                let rate = if b.is_active {
+                    calculate_burn_rate(b, now)
+                } else {
+                    None
+                };
+                let proj = project_block_usage(b, rate, now);
+
+                let mut v = serde_json::json!({
+                    "start": b.start.to_rfc3339(),
+                    "end": b.end.to_rfc3339(),
+                    "first_timestamp": b.first_timestamp.to_rfc3339(),
+                    "last_timestamp": b.last_timestamp.to_rfc3339(),
+                    "tokens": b.tokens,
+                    "cost_nanos": b.cost_nanos,
+                    "models": b.models,
+                    "is_active": b.is_active,
+                    "entry_count": b.entry_count,
+                });
+                if b.is_active {
+                    v["burn_rate"] = match rate {
+                        Some(r) => serde_json::json!({
+                            "tokens_per_min": r.tokens_per_min,
+                            "cost_per_hour_nanos": r.cost_per_hour_nanos,
+                        }),
+                        None => Value::Null,
+                    };
+                    v["projection"] = serde_json::json!({
+                        "projected_cost_nanos": proj.projected_cost_nanos,
+                        "projected_tokens": proj.projected_tokens,
+                    });
+                }
+                // Quota is only meaningful for the active block — historical blocks
+                // have projected_tokens == used_tokens (no real projection).
+                if let Some(limit) = token_limit
+                    && b.is_active
+                    && let Some(quota) = compute_quota(b, &proj, limit)
+                {
+                    v["quota"] = serde_json::to_value(quota).unwrap_or(Value::Null);
+                }
+                v
+            })
+            .collect();
+
+        Ok(serde_json::json!({
+            "session_length_hours": SESSION_HOURS,
+            "token_limit": token_limit,
+            "historical_max_tokens": historical_max_tokens,
+            "blocks": json_blocks,
+        }))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(value))
 }
 
 fn sqlite_sidecar_paths(path: &std::path::Path) -> [PathBuf; 2] {

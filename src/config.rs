@@ -48,6 +48,26 @@ pub struct Config {
     /// TOML section: [status_aggregator]
     #[serde(default, rename = "status_aggregator")]
     pub aggregator: AggregatorConfig,
+
+    /// Billing-block quota settings.
+    /// TOML section: [blocks]
+    #[serde(default)]
+    pub blocks: BlocksConfig,
+}
+
+/// Billing-block quota configuration.
+///
+/// Example TOML:
+/// ```toml
+/// [blocks]
+/// token_limit = 1000000  # optional; CLI --token-limit takes precedence
+/// ```
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(default)]
+pub struct BlocksConfig {
+    /// Token quota for the active billing block used by the dashboard.
+    /// The CLI `--token-limit` flag takes precedence over this value.
+    pub token_limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]

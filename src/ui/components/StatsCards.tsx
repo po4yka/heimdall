@@ -3,7 +3,8 @@ import { RANGE_LABELS } from '../lib/charts';
 import { selectedRange } from '../state/store';
 import { Sparkline } from './Sparkline';
 import { CacheEfficiencyCard } from './CacheEfficiencyCard';
-import type { Totals, StatCard, DailyAgg, CacheEfficiency } from '../state/types';
+import { BillingBlocksCard } from './BillingBlocksCard';
+import type { Totals, StatCard, DailyAgg, CacheEfficiency, BillingBlocksResponse } from '../state/types';
 
 interface StatsCardsProps {
   totals: Totals;
@@ -16,9 +17,11 @@ interface StatsCardsProps {
   calendarDays?: number | undefined;
   /** Phase 21: cache-efficiency aggregate from /api/data. */
   cacheEfficiency?: CacheEfficiency | undefined;
+  /** Phase 2: billing blocks data from /api/billing-blocks. */
+  billingBlocks?: BillingBlocksResponse | null;
 }
 
-export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency }: StatsCardsProps) {
+export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency, billingBlocks }: StatsCardsProps) {
   const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
 
   // Active-period average: divide total by active days.
@@ -73,6 +76,10 @@ export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cache
           </div>
         </div>
       </div>
+      {/* Phase 2: Billing block quota card — most time-sensitive, rendered first */}
+      {billingBlocks && (
+        <BillingBlocksCard data={billingBlocks} />
+      )}
       {/* Phase 21: Cache hit rate card */}
       {cacheEfficiency && (
         <CacheEfficiencyCard data={cacheEfficiency} />

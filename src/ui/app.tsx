@@ -46,9 +46,11 @@ import type {
   HeatmapData,
   AgentStatusSnapshot,
   CommunitySignal,
+  BillingBlocksResponse,
 } from './state/types';
 import {
   rawData,
+  billingBlocksData,
   selectedModels,
   selectedRange,
   selectedProvider,
@@ -86,6 +88,7 @@ let lastHeatmapData: HeatmapData | null = null;
 let loadAgentStatusInFlight = false;
 let loadCommunitySignalInFlight = false;
 let lastCommunitySignal: CommunitySignal | null = null;
+let loadBillingBlocksInFlight = false;
 
 // ── URL persistence ──────────────────────────────────────────────────
 function getRangeCutoff(range: RangeKey): string | null {
@@ -336,6 +339,7 @@ function applyFilter(): void {
       activeDays={lastHeatmapData?.active_days}
       heatmapTotalNanos={lastHeatmapData?.total_cost_nanos}
       cacheEfficiency={rawData.value?.cache_efficiency}
+      billingBlocks={billingBlocksData.value}
     />,
     $('stats-row')
   );
@@ -642,6 +646,28 @@ async function loadCommunitySignal(): Promise<void> {
   }
 }
 
+// ── Phase 2: Billing blocks fetch ────────────────────────────────────
+async function loadBillingBlocks(): Promise<void> {
+  if (loadBillingBlocksInFlight) return;
+  loadBillingBlocksInFlight = true;
+  try {
+    const resp = await fetch('/api/billing-blocks');
+    if (!resp.ok) {
+      // 404 expected until the Rust side lands — set null, card hides gracefully.
+      billingBlocksData.value = null;
+      return;
+    }
+    const data: BillingBlocksResponse = await resp.json();
+    billingBlocksData.value = data;
+    // Re-render StatsCards so billing block reflects fresh data.
+    if (rawData.value) applyFilter();
+  } catch {
+    billingBlocksData.value = null;
+  } finally {
+    loadBillingBlocksInFlight = false;
+  }
+}
+
 // ── Phase 13: Heatmap fetch ──────────────────────────────────────────
 // Fetches the 7x24 heatmap from /api/heatmap, threading the client
 // timezone offset so dow/hour bucketing respects local time.
@@ -751,3 +777,5 @@ loadCommunitySignal();
 setInterval(() => { loadUsageWindows(); loadAgentStatus(); loadCommunitySignal(); }, 60000);
 loadHeatmap('all');
 setInterval(() => loadHeatmap('all'), 30000);
+loadBillingBlocks();
+setInterval(loadBillingBlocks, 30000);
