@@ -389,10 +389,18 @@ Release pipeline: `.github/workflows/release.yml` builds all 5 targets on `v*.*.
 Heimdall harvests patterns from three sibling projects in the local-AI-observability space:
 
 - **[Codeburn](https://github.com/AgentSeal/codeburn)** (TypeScript CLI) — upstream session parser, 13-category classifier, provider plugin pattern, `optimize` waste detector concept, SwiftBar menubar, currency conversion.
+  - Source last reviewed: 2026-04-18 (upstream commit `69268a9` — "docs: remove .claudeignore references from README", 2026-04-17).
 - **[Third-Eye](https://github.com/fien-atone/third-eye)** (TypeScript web) — tool-event cost attribution, 7×24 heatmap, client-sent timezone handling, active-period averaging, cross-platform scheduler, CC-version tracking.
+  - Source last reviewed: 2026-04-18 (upstream commit `2076cb3` — "v1.1.1: localize date-range preset buttons", 2026-04-15).
 - **[Claude-Guardian](https://github.com/anshaneja5/Claude-Guardian)** (Swift + Python, macOS) — real-time PreToolUse cost injection, file-watcher auto-refresh, usage-limits file parsing, cache-token breakdown, Homebrew cask + LaunchAgent + universal-binary distribution stack.
+  - Source last reviewed: 2026-04-18 (upstream commit `c3cc925` — "Fix SHA256 for v2.3.1 (GitHub repackaged zip)", 2026-03-27).
 
-Also inspired by [phuryn/claude-usage](https://github.com/phuryn/claude-usage) (Python) and [CodexBar](https://github.com/nicepkg/CodexBar) (macOS menu bar app).
+Also inspired by:
+
+- **[phuryn/claude-usage](https://github.com/phuryn/claude-usage)** (Python) — local dashboard for Claude Code token usage, costs, and session history; Pro/Max progress bar.
+  - Source last reviewed: 2026-04-18 (upstream commit `af507cd` — "docs: add CHANGELOG.md (#36)", 2026-04-09).
+- **[CodexBar](https://github.com/steipete/CodexBar)** (macOS menu bar app) — usage stats for OpenAI Codex and Claude Code without requiring login.
+  - Source last reviewed: 2026-04-18 (upstream commit `b5f7e73` — "fix: broaden CLI binary lookup to native installer paths for Claude (#731)", 2026-04-18).
 
 See [ROADMAP.md](ROADMAP.md) for the full phased implementation history.
 
