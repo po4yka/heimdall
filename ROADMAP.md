@@ -473,7 +473,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 16 -- Claude Code Version Tracking + Distribution
+## Phase 16 -- Claude Code Version Tracking + Distribution **[x]**
 
 **Motivation:** Heimdall already captures `cc_version` in the data model (`VersionTable.tsx` exists). Third-Eye takes it further: a donut chart + metric switcher (cost / calls / tokens) that answers "did upgrading Claude Code change my spend." Low-cost enhancement that produces a talkable screenshot.
 
