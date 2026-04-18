@@ -80,8 +80,9 @@ fn ingest_event(json: &str) -> Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO live_events
             (dedup_key, received_at, session_id, tool_name,
-             cost_usd_nanos, input_tokens, output_tokens, raw_json)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             cost_usd_nanos, input_tokens, output_tokens, raw_json,
+             context_input_tokens, context_window_size)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         rusqlite::params![
             event.dedup_key,
             event.received_at,
@@ -91,6 +92,8 @@ fn ingest_event(json: &str) -> Result<()> {
             event.input_tokens,
             event.output_tokens,
             event.raw_json,
+            event.context_input_tokens,
+            event.context_window_size,
         ],
     )?;
 
@@ -213,6 +216,59 @@ mod tests {
         assert_eq!(session_id, "test-session");
         assert_eq!(tool_name, "Read");
         assert_eq!(cost_nanos, 500_000); // 0.0005 USD * 1e9
+    }
+
+    /// Phase 5: context_window fields in hook payload are persisted to DB.
+    #[test]
+    fn ingest_event_persists_context_window_columns() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("ctx_test.db");
+
+        {
+            let conn = open_db(&db_path).unwrap();
+            init_db(&conn).unwrap();
+        }
+
+        let cfg_path = dir.path().join("config.toml");
+        std::fs::write(
+            &cfg_path,
+            format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
+        )
+        .unwrap();
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+
+        let json = r#"{
+            "session_id": "ctx-session",
+            "tool_name": "Read",
+            "tool_use_id": "tu_ctx1",
+            "hook_input": {
+                "cost": { "total_cost_usd": 0.001 },
+                "usage": { "input_tokens": 200, "output_tokens": 50 },
+                "context_window": {
+                    "total_input_tokens": 45231,
+                    "context_window_size": 200000
+                }
+            }
+        }"#;
+
+        ingest_event(json).unwrap();
+
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+
+        let conn = open_db(&db_path).unwrap();
+        let (ctx_tokens, ctx_size): (Option<i64>, Option<i64>) = conn
+            .query_row(
+                "SELECT context_input_tokens, context_window_size FROM live_events LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+
+        assert_eq!(ctx_tokens, Some(45231));
+        assert_eq!(ctx_size, Some(200_000));
     }
 
     #[test]

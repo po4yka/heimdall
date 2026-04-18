@@ -49,10 +49,12 @@ import type {
   AgentStatusSnapshot,
   CommunitySignal,
   BillingBlocksResponse,
+  ContextWindowResponse,
 } from './state/types';
 import {
   rawData,
   billingBlocksData,
+  contextWindowData,
   selectedModels,
   selectedRange,
   selectedProvider,
@@ -93,6 +95,7 @@ let loadAgentStatusInFlight = false;
 let loadCommunitySignalInFlight = false;
 let lastCommunitySignal: CommunitySignal | null = null;
 let loadBillingBlocksInFlight = false;
+let loadContextWindowInFlight = false;
 
 // ── URL persistence ──────────────────────────────────────────────────
 function getRangeCutoff(range: RangeKey): string | null {
@@ -405,6 +408,7 @@ function applyFilter(): void {
       heatmapTotalNanos={lastHeatmapData?.total_cost_nanos}
       cacheEfficiency={rawData.value?.cache_efficiency}
       billingBlocks={billingBlocksData.value}
+      contextWindow={contextWindowData.value}
     />,
     $('stats-row')
   );
@@ -739,6 +743,28 @@ async function loadBillingBlocks(): Promise<void> {
   }
 }
 
+// ── Phase 5: Context window fetch ───────────────────────────────────
+async function loadContextWindow(): Promise<void> {
+  if (loadContextWindowInFlight) return;
+  loadContextWindowInFlight = true;
+  try {
+    const resp = await fetch('/api/context-window');
+    if (!resp.ok) {
+      // 404 expected until Rust side lands — card hides gracefully.
+      contextWindowData.value = null;
+      return;
+    }
+    const data: ContextWindowResponse = await resp.json();
+    contextWindowData.value = data;
+    // Re-render StatsCards so context window card reflects fresh data.
+    if (rawData.value) applyFilter();
+  } catch {
+    contextWindowData.value = null;
+  } finally {
+    loadContextWindowInFlight = false;
+  }
+}
+
 // ── Phase 13: Heatmap fetch ──────────────────────────────────────────
 // Fetches the 7x24 heatmap from /api/heatmap, threading the client
 // timezone offset so dow/hour bucketing respects local time.
@@ -856,3 +882,5 @@ loadHeatmap('all');
 setInterval(() => loadHeatmap('all'), 30000);
 loadBillingBlocks();
 setInterval(loadBillingBlocks, 30000);
+loadContextWindow();
+setInterval(loadContextWindow, 30000);

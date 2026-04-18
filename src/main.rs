@@ -337,6 +337,8 @@ fn main() -> Result<()> {
     let cfg_agent_status = cfg.agent_status;
     let cfg_aggregator = cfg.aggregator;
     let cfg_blocks_token_limit = cfg.blocks.token_limit;
+    let cfg_statusline_low = cfg.statusline.context_low_threshold;
+    let cfg_statusline_medium = cfg.statusline.context_medium_threshold;
 
     let default_db = |cli_db: Option<PathBuf>| -> PathBuf {
         cli_db
@@ -504,6 +506,8 @@ fn main() -> Result<()> {
                 cost_source,
                 offline,
                 db_path,
+                context_low_threshold: cfg_statusline_low,
+                context_medium_threshold: cfg_statusline_medium,
             };
             statusline::run(&opts);
         }

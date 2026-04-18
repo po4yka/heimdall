@@ -1103,6 +1103,7 @@
   // src/ui/state/store.ts
   var rawData = y3(null);
   var billingBlocksData = y3(null);
+  var contextWindowData = y3(null);
   var selectedModels = y3(/* @__PURE__ */ new Set());
   var selectedRange = y3("30d");
   var selectedProvider = y3("both");
@@ -2337,8 +2338,66 @@
     ] });
   }
 
+  // src/ui/components/ContextWindowCard.tsx
+  function severityToStatus2(s4) {
+    if (s4 === "ok") return "success";
+    if (s4 === "warn") return "warning";
+    return "accent";
+  }
+  function severityLabel2(s4) {
+    return s4 === "ok" ? "[OK]" : s4 === "warn" ? "[WARN]" : "[CRIT]";
+  }
+  function ContextWindowCard({ data }) {
+    if (!data || data.enabled === false) return null;
+    if (data.total_input_tokens == null || data.context_window_size == null) return null;
+    if (data.context_window_size <= 0) return null;
+    const used = data.total_input_tokens;
+    const size = data.context_window_size;
+    const pct = Math.max(0, Math.min(999, (data.pct ?? used / size) * 100));
+    const severity = data.severity ?? "ok";
+    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
+      /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "CONTEXT WINDOW" }),
+        /* @__PURE__ */ u2(
+          "div",
+          {
+            class: "stat-value",
+            style: { fontFamily: "var(--font-mono)", letterSpacing: "-0.02em" },
+            children: fmt(used)
+          }
+        ),
+        /* @__PURE__ */ u2("div", { class: "stat-sub", children: [
+          "of ",
+          fmt(size),
+          " \xB7 ",
+          pct.toFixed(1),
+          "%",
+          " ",
+          /* @__PURE__ */ u2(
+            "span",
+            {
+              style: {
+                color: severity === "danger" ? "var(--accent)" : severity === "warn" ? "var(--warning)" : void 0
+              },
+              children: severityLabel2(severity)
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ u2(
+        SegmentedProgressBar,
+        {
+          value: used,
+          max: size,
+          status: severityToStatus2(severity),
+          "aria-label": "Context window usage"
+        }
+      )
+    ] });
+  }
+
   // src/ui/components/StatsCards.tsx
-  function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency, billingBlocks }) {
+  function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency, billingBlocks, contextWindow }) {
     const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
     const avgPerActiveDay = (() => {
       if (activeDays === void 0 || activeDays === null) return "--";
@@ -2372,6 +2431,7 @@
         /* @__PURE__ */ u2("div", { class: "stat-sub", children: activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `${activeDays} active ${activeDays === 1 ? "day" : "days"}` : "no spend" })
       ] }) }),
       billingBlocks && /* @__PURE__ */ u2(BillingBlocksCard, { data: billingBlocks }),
+      /* @__PURE__ */ u2(ContextWindowCard, { data: contextWindow ?? null }),
       cacheEfficiency && /* @__PURE__ */ u2(CacheEfficiencyCard, { data: cacheEfficiency })
     ] });
   }
@@ -6558,6 +6618,7 @@
   var loadCommunitySignalInFlight = false;
   var lastCommunitySignal = null;
   var loadBillingBlocksInFlight = false;
+  var loadContextWindowInFlight = false;
   function getRangeCutoff(range) {
     if (range === "all") return null;
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
@@ -6825,7 +6886,8 @@
           activeDays: lastHeatmapData?.active_days,
           heatmapTotalNanos: lastHeatmapData?.total_cost_nanos,
           cacheEfficiency: rawData.value?.cache_efficiency,
-          billingBlocks: billingBlocksData.value
+          billingBlocks: billingBlocksData.value,
+          contextWindow: contextWindowData.value
         }
       ),
       $2("stats-row")
@@ -7112,6 +7174,24 @@
       loadBillingBlocksInFlight = false;
     }
   }
+  async function loadContextWindow() {
+    if (loadContextWindowInFlight) return;
+    loadContextWindowInFlight = true;
+    try {
+      const resp = await fetch("/api/context-window");
+      if (!resp.ok) {
+        contextWindowData.value = null;
+        return;
+      }
+      const data = await resp.json();
+      contextWindowData.value = data;
+      if (rawData.value) applyFilter();
+    } catch {
+      contextWindowData.value = null;
+    } finally {
+      loadContextWindowInFlight = false;
+    }
+  }
   async function loadHeatmap(period = "month") {
     if (loadHeatmapInFlight) return;
     loadHeatmapInFlight = true;
@@ -7202,6 +7282,8 @@
   setInterval(() => loadHeatmap("all"), 3e4);
   loadBillingBlocks();
   setInterval(loadBillingBlocks, 3e4);
+  loadContextWindow();
+  setInterval(loadContextWindow, 3e4);
 })();
 /*! Bundled license information:
 

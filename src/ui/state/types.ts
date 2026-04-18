@@ -436,6 +436,20 @@ export interface BillingBlocksResponse {
   blocks: BillingBlockView[];
 }
 
+// ── Phase 5: Context Window ──────────────────────────────────────────────────
+
+export type ContextWindowSeverity = "ok" | "warn" | "danger";
+
+export interface ContextWindowResponse {
+  enabled?: false;
+  total_input_tokens?: number;
+  context_window_size?: number;
+  pct?: number;
+  severity?: ContextWindowSeverity;
+  session_id?: string;
+  captured_at?: string;
+}
+
 // ── Phase 13: Activity Heatmap ───────────────────────────────────────────────
 
 export interface HeatmapCell {

@@ -119,6 +119,10 @@ mod tests {
                 "/api/billing-blocks",
                 get(crate::server::api::api_billing_blocks),
             )
+            .route(
+                "/api/context-window",
+                get(crate::server::api::api_context_window),
+            )
             .with_state(state)
     }
 
@@ -1620,5 +1624,85 @@ mod tests {
             weeks, sorted_weeks,
             "weekly_by_model must be sorted by week ASC"
         );
+    }
+
+    // ── Phase 5: /api/context-window ──────────────────────────────────────────
+
+    /// Empty live_events (no context rows) → `{"enabled": false}`.
+    #[tokio::test]
+    async fn test_api_context_window_empty_returns_disabled() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/context-window")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            data["enabled"], false,
+            "empty live_events must return enabled:false, got: {}",
+            data
+        );
+    }
+
+    /// live_events with context columns → endpoint returns expected shape.
+    #[tokio::test]
+    async fn test_api_context_window_populated_returns_shape() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+
+        // Seed a live_events row with context data directly.
+        {
+            use crate::scanner::db::{init_db, open_db};
+            let conn = open_db(&db_path).unwrap();
+            init_db(&conn).unwrap();
+            conn.execute(
+                "INSERT OR IGNORE INTO live_events
+                    (dedup_key, received_at, session_id, tool_name,
+                     cost_usd_nanos, input_tokens, output_tokens, raw_json,
+                     context_input_tokens, context_window_size)
+                 VALUES ('ctx-key-1', '2026-04-18T10:00:00Z', 'claude:ses1', 'Edit',
+                         1000000, 500, 100, '{}', 110000, 200000)",
+                [],
+            )
+            .unwrap();
+        }
+
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/context-window")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(data["total_input_tokens"].as_i64(), Some(110_000));
+        assert_eq!(data["context_window_size"].as_i64(), Some(200_000));
+        let pct = data["pct"].as_f64().expect("pct must be f64");
+        assert!((pct - 0.55).abs() < 1e-6, "expected pct≈0.55, got {}", pct);
+        assert_eq!(
+            data["severity"].as_str(),
+            Some("warn"),
+            "55% fill should be warn"
+        );
+        assert!(data.get("captured_at").is_some(), "captured_at missing");
     }
 }

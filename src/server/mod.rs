@@ -165,6 +165,7 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         .route("/api/agent-status", get(api::api_agent_status))
         .route("/api/community-signal", get(api::api_community_signal))
         .route("/api/billing-blocks", get(api::api_billing_blocks))
+        .route("/api/context-window", get(api::api_context_window))
         .with_state(state);
 
     let addr = format!("{}:{}", options.host, options.port);

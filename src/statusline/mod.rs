@@ -12,6 +12,7 @@
 /// Exit 0 in every code path — never block Claude Code.
 pub mod cache;
 pub mod compute;
+pub mod context_window;
 pub mod input;
 pub mod install;
 pub mod render;
@@ -28,7 +29,7 @@ use crate::statusline::cache::{
 };
 use crate::statusline::compute::{CostSource, compute};
 use crate::statusline::input::parse_stdin_with_timeout;
-use crate::statusline::render::render_status_line;
+use crate::statusline::render::render_status_line_with_thresholds;
 
 pub use compute::CostSource as StatuslineCostSource;
 pub use install::{
@@ -43,6 +44,8 @@ pub struct StatuslineOpts {
     pub cost_source: CostSource,
     pub offline: bool,
     pub db_path: Option<PathBuf>,
+    pub context_low_threshold: f64,
+    pub context_medium_threshold: f64,
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -104,7 +107,11 @@ fn run_inner(opts: &StatuslineOpts) -> anyhow::Result<String> {
     let stats = compute(&db_path, &input, opts.cost_source)?;
 
     // 5. Render.
-    let line = render_status_line(&stats);
+    let line = render_status_line_with_thresholds(
+        &stats,
+        opts.context_low_threshold,
+        opts.context_medium_threshold,
+    );
 
     // 6. Write cache.
     let entry = CacheEntry {

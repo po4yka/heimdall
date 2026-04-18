@@ -30,6 +30,9 @@ pub struct LiveEvent {
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub raw_json: String,
+    /// Phase 5: context-window fields (NULL when absent in payload).
+    pub context_input_tokens: Option<i64>,
+    pub context_window_size: Option<i64>,
 }
 
 // ── Internal deserialization types ──────────────────────────────────────────
@@ -46,6 +49,13 @@ struct HookPayload {
 struct HookInput {
     cost: Option<CostBlock>,
     usage: Option<UsageBlock>,
+    context_window: Option<ContextWindowBlock>,
+}
+
+#[derive(Deserialize, Default)]
+struct ContextWindowBlock {
+    total_input_tokens: Option<i64>,
+    context_window_size: Option<i64>,
 }
 
 #[derive(Deserialize, Default)]
@@ -90,6 +100,18 @@ pub fn parse_hook_payload(json: &str, received_at: &str) -> Option<LiveEvent> {
         .and_then(|u| u.output_tokens)
         .unwrap_or(0);
 
+    let context_input_tokens = payload
+        .hook_input
+        .as_ref()
+        .and_then(|hi| hi.context_window.as_ref())
+        .and_then(|cw| cw.total_input_tokens);
+
+    let context_window_size = payload
+        .hook_input
+        .as_ref()
+        .and_then(|hi| hi.context_window.as_ref())
+        .and_then(|cw| cw.context_window_size);
+
     let dedup_key = build_dedup_key(
         payload.session_id.as_deref(),
         payload.tool_use_id.as_deref(),
@@ -105,6 +127,8 @@ pub fn parse_hook_payload(json: &str, received_at: &str) -> Option<LiveEvent> {
         input_tokens,
         output_tokens,
         raw_json: json.to_string(),
+        context_input_tokens,
+        context_window_size,
     })
 }
 
@@ -204,5 +228,39 @@ mod tests {
     #[test]
     fn dedup_key_falls_back_to_received_at_for_empty_tool_use_id() {
         assert_eq!(build_dedup_key(Some("ses"), Some(""), "ts123"), "ses:ts123");
+    }
+
+    /// Phase 5: context_window fields are extracted when present in hook_input.
+    #[test]
+    fn parse_context_window_fields_extracted() {
+        let json = r#"{
+            "session_id": "s1",
+            "tool_name": "Edit",
+            "tool_use_id": "tu1",
+            "hook_input": {
+                "cost": { "total_cost_usd": 0.001 },
+                "usage": { "input_tokens": 500, "output_tokens": 100 },
+                "context_window": {
+                    "total_input_tokens": 45231,
+                    "context_window_size": 200000
+                }
+            }
+        }"#;
+        let event = parse_hook_payload(json, "2026-04-18T10:00:00Z").expect("should parse");
+        assert_eq!(event.context_input_tokens, Some(45231));
+        assert_eq!(event.context_window_size, Some(200_000));
+    }
+
+    /// Phase 5: context_window absent → both fields are None.
+    #[test]
+    fn parse_context_window_absent_gives_none() {
+        let json = r#"{
+            "session_id": "s1",
+            "tool_use_id": "tu2",
+            "hook_input": { "cost": { "total_cost_usd": 0.0 } }
+        }"#;
+        let event = parse_hook_payload(json, "ts").expect("should parse");
+        assert!(event.context_input_tokens.is_none());
+        assert!(event.context_window_size.is_none());
     }
 }

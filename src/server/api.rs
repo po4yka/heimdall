@@ -540,6 +540,90 @@ pub async fn api_billing_blocks(
     Ok(Json(value))
 }
 
+/// `GET /api/context-window` — returns the most recent context-window snapshot
+/// from `live_events`, or `{"enabled": false}` when no rows have context data.
+///
+/// Response (populated):
+/// ```json
+/// {
+///   "total_input_tokens": 45231,
+///   "context_window_size": 200000,
+///   "pct": 0.2262,
+///   "severity": "ok",
+///   "session_id": "claude:abc",
+///   "model": "claude-sonnet-4-6",
+///   "captured_at": "2026-04-18T10:00:00Z"
+/// }
+/// ```
+pub async fn api_context_window(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, StatusCode> {
+    use crate::analytics::quota::severity_for_pct;
+    use rusqlite::OptionalExtension;
+
+    let db_path = state.db_path.clone();
+
+    let value = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+
+        struct Row {
+            context_input_tokens: i64,
+            context_window_size: i64,
+            session_id: Option<String>,
+            captured_at: String,
+        }
+
+        let result: Option<Row> = {
+            let mut stmt = conn.prepare(
+                "SELECT context_input_tokens, context_window_size, session_id, received_at
+                 FROM live_events
+                 WHERE context_input_tokens IS NOT NULL AND context_window_size > 0
+                 ORDER BY received_at DESC LIMIT 1",
+            )?;
+            stmt.query_row([], |r| {
+                Ok(Row {
+                    context_input_tokens: r.get(0)?,
+                    context_window_size: r.get(1)?,
+                    session_id: r.get(2)?,
+                    captured_at: r.get(3)?,
+                })
+            })
+            .optional()
+            .map_err(anyhow::Error::from)?
+        };
+
+        match result {
+            None => Ok(serde_json::json!({ "enabled": false })),
+            Some(row) => {
+                let pct = row.context_input_tokens as f64 / row.context_window_size as f64;
+                let severity = severity_for_pct(pct);
+                let severity_str = match severity {
+                    crate::analytics::quota::Severity::Ok => "ok",
+                    crate::analytics::quota::Severity::Warn => "warn",
+                    crate::analytics::quota::Severity::Danger => "danger",
+                };
+                let mut v = serde_json::json!({
+                    "total_input_tokens": row.context_input_tokens,
+                    "context_window_size": row.context_window_size,
+                    "pct": pct,
+                    "severity": severity_str,
+                    "captured_at": row.captured_at,
+                });
+                if let Some(sid) = row.session_id {
+                    v["session_id"] = serde_json::json!(sid);
+                }
+                Ok(v)
+            }
+        }
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(value))
+}
+
 fn sqlite_sidecar_paths(path: &std::path::Path) -> [PathBuf; 2] {
     [
         PathBuf::from(format!("{}-wal", path.to_string_lossy())),

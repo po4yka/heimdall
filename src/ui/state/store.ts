@@ -1,9 +1,10 @@
 import { signal } from '@preact/signals';
-import type { DashboardData, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse } from './types';
+import type { DashboardData, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse } from './types';
 
 // ── Core data ────────────────────────────────────────────────────────
 export const rawData = signal<DashboardData | null>(null);
 export const billingBlocksData = signal<BillingBlocksResponse | null>(null);
+export const contextWindowData = signal<ContextWindowResponse | null>(null);
 
 // ── Filter state ─────────────────────────────────────────────────────
 export type ProviderFilter = 'claude' | 'codex' | 'both';

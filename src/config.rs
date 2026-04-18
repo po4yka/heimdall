@@ -53,6 +53,11 @@ pub struct Config {
     /// TOML section: [blocks]
     #[serde(default)]
     pub blocks: BlocksConfig,
+
+    /// Statusline display settings.
+    /// TOML section: [statusline]
+    #[serde(default)]
+    pub statusline: StatuslineConfig,
 }
 
 /// Billing-block quota configuration.
@@ -68,6 +73,32 @@ pub struct BlocksConfig {
     /// Token quota for the active billing block used by the dashboard.
     /// The CLI `--token-limit` flag takes precedence over this value.
     pub token_limit: Option<i64>,
+}
+
+/// Statusline display configuration.
+///
+/// Example TOML:
+/// ```toml
+/// [statusline]
+/// context_low_threshold = 0.5   # below → no marker
+/// context_medium_threshold = 0.8 # below → [WARN], above → [CRIT]
+/// ```
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(default)]
+pub struct StatuslineConfig {
+    /// Fractional fill below which no severity marker is shown (default: 0.5).
+    pub context_low_threshold: f64,
+    /// Fractional fill above which [CRIT] is shown; between low and this → [WARN] (default: 0.8).
+    pub context_medium_threshold: f64,
+}
+
+impl Default for StatuslineConfig {
+    fn default() -> Self {
+        Self {
+            context_low_threshold: 0.5,
+            context_medium_threshold: 0.8,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

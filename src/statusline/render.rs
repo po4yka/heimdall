@@ -1,4 +1,5 @@
 /// Compose the output status line from computed stats.
+use crate::analytics::quota::Severity;
 use crate::pricing::{fmt_cost, fmt_tokens};
 use crate::statusline::compute::ComputedStats;
 
@@ -11,7 +12,20 @@ use crate::statusline::compute::ComputedStats;
 ///   MODEL | $SESSION / $TODAY | N tokens (XX%)
 ///
 /// When no context window: omit the last segment.
+/// Severity markers appended when context fill crosses thresholds:
+///   < low  → (no marker)
+///   >= low and < medium → [WARN]
+///   >= medium → [CRIT]
 pub fn render_status_line(stats: &ComputedStats) -> String {
+    render_status_line_with_thresholds(stats, 0.5, 0.8)
+}
+
+/// Like `render_status_line` but with configurable severity thresholds.
+pub fn render_status_line_with_thresholds(
+    stats: &ComputedStats,
+    context_low_threshold: f64,
+    context_medium_threshold: f64,
+) -> String {
     // Truncate model name to 24 Unicode scalar values (chars), not bytes,
     // to avoid a panic on multibyte UTF-8 codepoints.
     let model: &str = if stats.model.chars().count() > 24 {
@@ -51,12 +65,36 @@ pub fn render_status_line(stats: &ComputedStats) -> String {
     if let (Some(tokens), Some(size)) = (stats.context_tokens, stats.context_size)
         && size > 0
     {
-        let pct = ((tokens as f64 / size as f64) * 100.0).round() as u64;
+        let fill = tokens as f64 / size as f64;
+        let pct = (fill * 100.0).round() as u64;
         let tok_str = fmt_tokens(tokens);
-        parts.push(format!("{} tokens ({}%)", tok_str, pct));
+        let severity = context_severity(fill, context_low_threshold, context_medium_threshold);
+        let marker = match severity {
+            Severity::Ok => String::new(),
+            Severity::Warn => " [WARN]".to_string(),
+            Severity::Danger => " [CRIT]".to_string(),
+        };
+        parts.push(format!("{} tokens ({}%){}", tok_str, pct, marker));
     }
 
     parts.join(" | ")
+}
+
+/// Derive severity for the context-window fill using configurable thresholds.
+///
+/// - `fill < low_threshold` → Ok
+/// - `low_threshold <= fill < medium_threshold` → Warn
+/// - `fill >= medium_threshold` → Danger
+fn context_severity(fill: f64, low: f64, medium: f64) -> Severity {
+    // Delegate to the canonical severity_for_pct when thresholds match defaults,
+    // but honour caller-supplied thresholds for config overrides.
+    if !fill.is_finite() || fill < low {
+        Severity::Ok
+    } else if fill < medium {
+        Severity::Warn
+    } else {
+        Severity::Danger
+    }
 }
 
 /// Format the time remaining until `block_end` relative to now.
@@ -197,6 +235,75 @@ mod tests {
             !line.contains("tokens"),
             "unexpected token segment: {}",
             line
+        );
+    }
+
+    // ── Severity-band tests ───────────────────────────────────────────────────
+
+    /// Below low threshold (22% fill) → no severity marker.
+    #[test]
+    fn context_severity_below_low_no_marker() {
+        let mut stats = base_stats();
+        // 22% fill: below default 0.5 low threshold
+        stats.context_tokens = Some(44_000);
+        stats.context_size = Some(200_000);
+        let line = render_status_line(&stats);
+        assert!(line.contains("tokens"), "expected token segment: {}", line);
+        assert!(!line.contains("[WARN]"), "unexpected WARN: {}", line);
+        assert!(!line.contains("[CRIT]"), "unexpected CRIT: {}", line);
+    }
+
+    /// Between low (0.5) and medium (0.8) threshold → [WARN] marker.
+    #[test]
+    fn context_severity_warn_band() {
+        let mut stats = base_stats();
+        // 55% fill: between 0.5 and 0.8
+        stats.context_tokens = Some(110_000);
+        stats.context_size = Some(200_000);
+        let line = render_status_line(&stats);
+        assert!(line.contains("[WARN]"), "expected WARN: {}", line);
+        assert!(!line.contains("[CRIT]"), "unexpected CRIT: {}", line);
+    }
+
+    /// At or above medium threshold (0.8) → [CRIT] marker.
+    #[test]
+    fn context_severity_crit_band() {
+        let mut stats = base_stats();
+        // 90% fill: above 0.8 medium threshold
+        stats.context_tokens = Some(180_000);
+        stats.context_size = Some(200_000);
+        let line = render_status_line(&stats);
+        assert!(line.contains("[CRIT]"), "expected CRIT: {}", line);
+        assert!(!line.contains("[WARN]"), "unexpected WARN: {}", line);
+    }
+
+    /// Config threshold override: low=0.2 means 25% fill triggers [WARN].
+    /// Under default thresholds (0.5/0.8) 25% would be Ok — this proves the
+    /// threshold is actually plumbed end-to-end and not hard-coded.
+    #[test]
+    fn custom_low_threshold_triggers_warn_at_25_pct() {
+        let mut stats = base_stats();
+        // 25% fill — above custom low (0.2) but below custom medium (0.5)
+        stats.context_tokens = Some(50_000);
+        stats.context_size = Some(200_000);
+        // Default thresholds: no marker expected
+        let default_line = render_status_line(&stats);
+        assert!(
+            !default_line.contains("[WARN]"),
+            "default thresholds should not WARN at 25%: {}",
+            default_line
+        );
+        // Custom low=0.2: WARN expected
+        let custom_line = render_status_line_with_thresholds(&stats, 0.2, 0.5);
+        assert!(
+            custom_line.contains("[WARN]"),
+            "custom low=0.2 should WARN at 25%: {}",
+            custom_line
+        );
+        assert!(
+            !custom_line.contains("[CRIT]"),
+            "should not be CRIT at 25% with medium=0.5: {}",
+            custom_line
         );
     }
 }

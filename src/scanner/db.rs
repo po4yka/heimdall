@@ -278,6 +278,14 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_live_events_session ON live_events(session_id);",
     )?;
 
+    // Phase 5: context-window columns on live_events (idempotent ALTER TABLE).
+    if !has_column(conn, "live_events", "context_input_tokens") {
+        conn.execute_batch("ALTER TABLE live_events ADD COLUMN context_input_tokens INTEGER;")?;
+    }
+    if !has_column(conn, "live_events", "context_window_size") {
+        conn.execute_batch("ALTER TABLE live_events ADD COLUMN context_window_size INTEGER;")?;
+    }
+
     // Agent status history: one row per component per poll.
     // PRIMARY KEY (ts_epoch, provider, component_id) ensures INSERT OR IGNORE is idempotent.
     conn.execute_batch(

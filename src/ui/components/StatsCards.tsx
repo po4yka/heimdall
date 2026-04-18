@@ -4,7 +4,8 @@ import { selectedRange } from '../state/store';
 import { Sparkline } from './Sparkline';
 import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { BillingBlocksCard } from './BillingBlocksCard';
-import type { Totals, StatCard, DailyAgg, CacheEfficiency, BillingBlocksResponse } from '../state/types';
+import { ContextWindowCard } from './ContextWindowCard';
+import type { Totals, StatCard, DailyAgg, CacheEfficiency, BillingBlocksResponse, ContextWindowResponse } from '../state/types';
 
 interface StatsCardsProps {
   totals: Totals;
@@ -19,9 +20,11 @@ interface StatsCardsProps {
   cacheEfficiency?: CacheEfficiency | undefined;
   /** Phase 2: billing blocks data from /api/billing-blocks. */
   billingBlocks?: BillingBlocksResponse | null;
+  /** Phase 5: context window data from /api/context-window. */
+  contextWindow?: ContextWindowResponse | null;
 }
 
-export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency, billingBlocks }: StatsCardsProps) {
+export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency, billingBlocks, contextWindow }: StatsCardsProps) {
   const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
 
   // Active-period average: divide total by active days.
@@ -80,6 +83,8 @@ export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cache
       {billingBlocks && (
         <BillingBlocksCard data={billingBlocks} />
       )}
+      {/* Phase 5: Context window card — hides automatically when data unavailable */}
+      <ContextWindowCard data={contextWindow ?? null} />
       {/* Phase 21: Cache hit rate card */}
       {cacheEfficiency && (
         <CacheEfficiencyCard data={cacheEfficiency} />

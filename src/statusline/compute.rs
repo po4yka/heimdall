@@ -6,6 +6,7 @@ use chrono::{DateTime, Local, Utc};
 
 use crate::analytics::blocks::{BurnRate, calculate_burn_rate, identify_blocks_with_now};
 use crate::scanner::db::{load_turns_since, open_db};
+use crate::statusline::context_window;
 use crate::statusline::input::HookInput;
 
 // ── Cost source ───────────────────────────────────────────────────────────────
@@ -83,7 +84,9 @@ pub fn compute(
     let active_block = query_active_block(&conn, now)?;
 
     // ── Context window ────────────────────────────────────────────────────────
-    let (context_tokens, context_size) = extract_context(input);
+    let cw = context_window::resolve(input);
+    let context_tokens = cw.map(|c| c.total_input_tokens);
+    let context_size = cw.map(|c| c.context_window_size);
 
     Ok(ComputedStats {
         model: input.model.clone().unwrap_or_else(|| "unknown".to_string()),
@@ -107,7 +110,9 @@ fn zeroed_stats(input: &HookInput, cost_source: CostSource) -> ComputedStats {
         CostSource::Hook | CostSource::Auto | CostSource::Both => hook_cost,
         CostSource::Local => 0,
     };
-    let (context_tokens, context_size) = extract_context(input);
+    let cw = context_window::resolve(input);
+    let context_tokens = cw.map(|c| c.total_input_tokens);
+    let context_size = cw.map(|c| c.context_window_size);
     ComputedStats {
         model: input.model.clone().unwrap_or_else(|| "unknown".to_string()),
         session_cost_nanos,
@@ -239,13 +244,6 @@ fn query_active_block(
 fn is_missing_table_error(e: &anyhow::Error) -> bool {
     let msg = e.to_string();
     msg.contains("no such table") || msg.contains("no such column")
-}
-
-fn extract_context(input: &HookInput) -> (Option<i64>, Option<i64>) {
-    match &input.context_window {
-        Some(cw) => (cw.total_input_tokens, cw.context_window_size),
-        None => (None, None),
-    }
 }
 
 #[cfg(test)]
