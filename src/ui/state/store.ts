@@ -40,3 +40,15 @@ export const statusByPlacement = signal<Record<StatusPlacement, StatusEntry | nu
 
 // ── Pagination page size (used by SessionsTable via DataTable) ───────
 export const SESSIONS_PAGE_SIZE = 25;
+
+// ── Phase 16: Version donut metric selector ──────────────────────────
+export type VersionMetric = 'cost' | 'calls' | 'tokens';
+
+function readVersionMetric(): VersionMetric {
+  const p = new URLSearchParams(window.location.search).get('version_metric');
+  return (['cost', 'calls', 'tokens'] as VersionMetric[]).includes(p as VersionMetric)
+    ? (p as VersionMetric)
+    : 'cost';
+}
+
+export const versionDonutMetric = signal<VersionMetric>(readVersionMetric());

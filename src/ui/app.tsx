@@ -15,6 +15,7 @@ import { ToolUsageTable } from './components/ToolUsageTable';
 import { McpSummaryTable } from './components/McpSummaryTable';
 import { BranchTable } from './components/BranchTable';
 import { VersionTable } from './components/VersionTable';
+import { VersionDonut } from './components/VersionDonut';
 import { HourlyChart } from './components/HourlyChart';
 import { ActivityHeatmap } from './components/ActivityHeatmap';
 import { SessionsTable } from './components/SessionsTable';
@@ -53,6 +54,7 @@ import {
   lastByProject,
   metaText,
   planBadge,
+  versionDonutMetric,
   type ProviderFilter,
 } from './state/store';
 import { $ } from './lib/format';
@@ -124,6 +126,7 @@ function updateURL(): void {
   if (selectedProvider.value !== 'both') params.set('provider', selectedProvider.value);
   if (!isDefaultModelSelection(allModels)) params.set('models', Array.from(selectedModels.value).join(','));
   if (projectSearchQuery.value) params.set('project', projectSearchQuery.value);
+  if (versionDonutMetric.value !== 'cost') params.set('version_metric', versionDonutMetric.value);
   const search = params.toString() ? '?' + params.toString() : '';
   history.replaceState(null, '', window.location.pathname + search);
 }
@@ -516,7 +519,28 @@ function renderVersionSummary(data: VersionSummary[]): void {
     return;
   }
   container.style.display = '';
-  render(<VersionTable data={data} />, container);
+
+  const handleMetricChange = (next: import('./state/store').VersionMetric) => {
+    versionDonutMetric.value = next;
+    updateURL();
+    renderVersionSummary(data);
+  };
+
+  render(
+    <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 260px', minWidth: '220px', height: '300px' }}>
+        <VersionDonut
+          rows={data}
+          metric={versionDonutMetric.value}
+          onMetricChange={handleMetricChange}
+        />
+      </div>
+      <div style={{ flex: '2 1 320px', minWidth: '280px' }}>
+        <VersionTable data={data} />
+      </div>
+    </div>,
+    container
+  );
 }
 
 function renderHourlyChart(data: HourlyRow[]): void {

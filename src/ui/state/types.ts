@@ -137,6 +137,8 @@ export interface VersionSummary {
   version: string;
   turns: number;
   sessions: number;
+  cost: number;
+  tokens: number;
 }
 
 export interface DailyProjectRow {

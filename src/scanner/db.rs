@@ -1327,11 +1327,12 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
 
     let version_summary: Vec<VersionSummary> = {
         let mut stmt = conn.prepare(
-            "SELECT provider, COALESCE(version, 'unknown') as ver,
+            "SELECT provider, COALESCE(NULLIF(version, ''), 'unknown') as ver,
                     COUNT(*) as turns,
-                    COUNT(DISTINCT session_id) as sessions
+                    COUNT(DISTINCT session_id) as sessions,
+                    COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos,
+                    COALESCE(SUM(input_tokens + output_tokens), 0) as tokens
              FROM turns
-             WHERE version IS NOT NULL AND version != ''
              GROUP BY provider, ver
              ORDER BY turns DESC",
         )?;
@@ -1341,6 +1342,8 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 version: row.get(1)?,
                 turns: row.get(2)?,
                 sessions: row.get(3)?,
+                cost: row.get::<_, i64>(4)? as f64 / 1_000_000_000.0,
+                tokens: row.get(5)?,
             })
         })?
         .filter_map(|r| match r {

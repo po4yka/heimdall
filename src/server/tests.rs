@@ -734,4 +734,208 @@ mod tests {
             "turns on 2 distinct days → active_days=2"
         );
     }
+
+    // -----------------------------------------------------------------------
+    // Phase 16 — CC Version distribution: version_summary aggregation tests
+    // -----------------------------------------------------------------------
+
+    /// Build a DB with three turns:
+    ///   - two with `version = "1.0.0"` (known version)
+    ///   - one with no version field at all (NULL → should appear as "unknown")
+    ///
+    /// The test asserts that the `/api/data` response `version_summary` array:
+    ///   1. Contains exactly two entries (one for "1.0.0", one for "unknown").
+    ///   2. The cost + tokens fields are non-negative numbers.
+    ///   3. The NULL-version bucket uses the sentinel key "unknown".
+    fn setup_version_test_db(tmp: &TempDir) -> (std::path::PathBuf, std::path::PathBuf) {
+        let projects = tmp.path().join("projects").join("user").join("verproj");
+        std::fs::create_dir_all(&projects).unwrap();
+
+        let filepath = projects.join("ver_sess.jsonl");
+        let mut f = std::fs::File::create(&filepath).unwrap();
+
+        // Anchor user message
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({
+                "type": "user",
+                "sessionId": "ver-session",
+                "timestamp": "2026-04-10T10:00:00Z",
+                "cwd": "/home/user/verproj"
+            })
+        )
+        .unwrap();
+
+        // Turn 1 — version = "1.0.0"
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({
+                "type": "assistant",
+                "sessionId": "ver-session",
+                "timestamp": "2026-04-10T10:01:00Z",
+                "cwd": "/home/user/verproj",
+                "version": "1.0.0",
+                "message": {
+                    "id": "ver-msg-1",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 100,
+                        "output_tokens": 50,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 0
+                    },
+                    "content": []
+                }
+            })
+        )
+        .unwrap();
+
+        // Turn 2 — version = "1.0.0" (same bucket)
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({
+                "type": "assistant",
+                "sessionId": "ver-session",
+                "timestamp": "2026-04-10T10:02:00Z",
+                "cwd": "/home/user/verproj",
+                "version": "1.0.0",
+                "message": {
+                    "id": "ver-msg-2",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 200,
+                        "output_tokens": 100,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 0
+                    },
+                    "content": []
+                }
+            })
+        )
+        .unwrap();
+
+        // Turn 3 — no version field → NULL → "unknown"
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({
+                "type": "assistant",
+                "sessionId": "ver-session",
+                "timestamp": "2026-04-10T10:03:00Z",
+                "cwd": "/home/user/verproj",
+                "message": {
+                    "id": "ver-msg-3",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 50,
+                        "output_tokens": 25,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 0
+                    },
+                    "content": []
+                }
+            })
+        )
+        .unwrap();
+
+        let db_path = tmp.path().join("ver_usage.db");
+        let parent = tmp.path().join("projects");
+        scanner::scan(Some(vec![parent.clone()]), &db_path, false).unwrap();
+        (db_path, parent)
+    }
+
+    #[tokio::test]
+    async fn test_version_summary_includes_unknown_bucket() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_version_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/data")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        let version_summary = data["version_summary"]
+            .as_array()
+            .expect("version_summary is array");
+
+        // Must have exactly two buckets: "1.0.0" and "unknown"
+        assert_eq!(version_summary.len(), 2, "expected 2 version buckets");
+
+        let known = version_summary
+            .iter()
+            .find(|v| v["version"].as_str() == Some("1.0.0"))
+            .expect("bucket for version 1.0.0 must exist");
+        let unknown = version_summary
+            .iter()
+            .find(|v| v["version"].as_str() == Some("unknown"))
+            .expect("bucket for unknown version must exist");
+
+        // known bucket: 2 turns, tokens = 100+50 + 200+100 = 450
+        assert_eq!(known["turns"].as_i64().unwrap(), 2);
+        assert_eq!(known["tokens"].as_i64().unwrap(), 450);
+        assert!(known["cost"].as_f64().unwrap() >= 0.0);
+
+        // unknown bucket: 1 turn, tokens = 50+25 = 75
+        assert_eq!(unknown["turns"].as_i64().unwrap(), 1);
+        assert_eq!(unknown["tokens"].as_i64().unwrap(), 75);
+        assert!(unknown["cost"].as_f64().unwrap() >= 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_version_summary_cost_and_tokens_fields_present() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/data")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        // version_summary is present in the payload (may be empty when no version field present)
+        assert!(
+            data.get("version_summary").is_some(),
+            "version_summary field must exist"
+        );
+
+        // If entries exist, each must carry cost and tokens
+        if let Some(entries) = data["version_summary"].as_array() {
+            for entry in entries {
+                assert!(
+                    entry.get("cost").is_some(),
+                    "each version entry must have cost"
+                );
+                assert!(
+                    entry.get("tokens").is_some(),
+                    "each version entry must have tokens"
+                );
+                assert!(entry["cost"].as_f64().is_some(), "cost must be a number");
+                assert!(
+                    entry["tokens"].as_i64().is_some(),
+                    "tokens must be an integer"
+                );
+            }
+        }
+    }
 }

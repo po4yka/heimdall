@@ -252,6 +252,10 @@ pub struct VersionSummary {
     pub version: String,
     pub turns: i64,
     pub sessions: i64,
+    /// Aggregated cost in USD (display-layer float, not stored as nanos).
+    pub cost: f64,
+    /// Total tokens (input + output) for this version bucket.
+    pub tokens: i64,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

@@ -1119,6 +1119,11 @@
     "rescan": null
   });
   var SESSIONS_PAGE_SIZE = 25;
+  function readVersionMetric() {
+    const p5 = new URLSearchParams(window.location.search).get("version_metric");
+    return ["cost", "calls", "tokens"].includes(p5) ? p5 : "cost";
+  }
+  var versionDonutMetric = y3(readVersionMetric());
 
   // src/ui/lib/status.ts
   var timers = {};
@@ -5035,6 +5040,103 @@
     return /* @__PURE__ */ u2(DataTable, { columns: columns6, data, title: "CLI Versions" });
   }
 
+  // src/ui/components/VersionDonut.tsx
+  var METRIC_LABELS = {
+    cost: "Cost",
+    calls: "Calls",
+    tokens: "Tokens"
+  };
+  function metricValue(row, metric) {
+    switch (metric) {
+      case "cost":
+        return row.cost;
+      case "calls":
+        return row.turns;
+      case "tokens":
+        return row.tokens;
+    }
+  }
+  function formatMetricTotal(total, metric) {
+    if (metric === "cost") return fmtCost(total);
+    return fmt(total);
+  }
+  function formatMetricSlice(val, metric) {
+    if (metric === "cost") return fmtCost(val);
+    return fmt(val);
+  }
+  function VersionDonut({ rows, metric, onMetricChange }) {
+    if (!rows.length) return null;
+    const normalized = rows.map((r4) => ({
+      ...r4,
+      version: r4.version === "" || r4.version === "unknown" ? "(unknown)" : r4.version
+    }));
+    const series = normalized.map((r4) => metricValue(r4, metric));
+    const labels = normalized.map((r4) => r4.version);
+    const total = series.reduce((s4, v4) => s4 + v4, 0);
+    const base = industrialChartOptions("donut");
+    const options = {
+      ...base,
+      chart: { ...base.chart, type: "donut" },
+      series,
+      labels,
+      colors: modelSeriesColors(normalized.length),
+      stroke: { width: 2, colors: [cssVar("--surface")] },
+      plotOptions: {
+        pie: {
+          donut: {
+            size: "64%",
+            labels: {
+              show: true,
+              total: {
+                show: true,
+                label: "TOTAL",
+                fontFamily: 'var(--font-mono), "Space Mono", monospace',
+                fontSize: "11px",
+                color: cssVar("--text-secondary"),
+                formatter: () => formatMetricTotal(total, metric)
+              },
+              value: {
+                fontFamily: 'var(--font-mono), "Space Mono", monospace',
+                fontSize: "18px",
+                color: cssVar("--text-display"),
+                formatter: (val) => formatMetricSlice(Number(val), metric)
+              },
+              name: {
+                fontFamily: 'var(--font-mono), "Space Mono", monospace',
+                fontSize: "11px",
+                color: cssVar("--text-secondary")
+              }
+            }
+          }
+        }
+      },
+      tooltip: {
+        ...base.tooltip,
+        custom: ({ seriesIndex }) => {
+          const r4 = normalized[seriesIndex];
+          const label = r4.version;
+          const cost = fmtCost(r4.cost);
+          const calls = fmt(r4.turns);
+          const tokens = fmt(r4.tokens);
+          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${label}</strong><br/>${cost} &nbsp;&bull;&nbsp; ${calls} calls &nbsp;&bull;&nbsp; ${tokens} tokens</div>`;
+        }
+      }
+    };
+    return /* @__PURE__ */ u2("div", { style: { display: "flex", flexDirection: "column", gap: "8px", height: "100%" }, children: [
+      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "4px", alignItems: "center" }, children: Object.keys(METRIC_LABELS).map((m4) => /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          class: `range-btn${metric === m4 ? " active" : ""}`,
+          onClick: () => onMetricChange(m4),
+          children: METRIC_LABELS[m4]
+        },
+        m4
+      )) }),
+      /* @__PURE__ */ u2("div", { style: { flex: 1, minHeight: 0 }, children: /* @__PURE__ */ u2(ApexChart, { options, id: "chart-version-donut" }) })
+    ] });
+  }
+
   // src/ui/components/HourlyChart.tsx
   function HourlyChart({ data }) {
     if (!data.length) return null;
@@ -5731,6 +5833,7 @@
     if (selectedProvider.value !== "both") params.set("provider", selectedProvider.value);
     if (!isDefaultModelSelection(allModels)) params.set("models", Array.from(selectedModels.value).join(","));
     if (projectSearchQuery.value) params.set("project", projectSearchQuery.value);
+    if (versionDonutMetric.value !== "cost") params.set("version_metric", versionDonutMetric.value);
     const search = params.toString() ? "?" + params.toString() : "";
     history.replaceState(null, "", window.location.pathname + search);
   }
@@ -6079,7 +6182,25 @@
       return;
     }
     container.style.display = "";
-    R(/* @__PURE__ */ u2(VersionTable, { data }), container);
+    const handleMetricChange = (next) => {
+      versionDonutMetric.value = next;
+      updateURL();
+      renderVersionSummary(data);
+    };
+    R(
+      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "24px", alignItems: "flex-start", flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ u2("div", { style: { flex: "1 1 260px", minWidth: "220px", height: "300px" }, children: /* @__PURE__ */ u2(
+          VersionDonut,
+          {
+            rows: data,
+            metric: versionDonutMetric.value,
+            onMetricChange: handleMetricChange
+          }
+        ) }),
+        /* @__PURE__ */ u2("div", { style: { flex: "2 1 320px", minWidth: "280px" }, children: /* @__PURE__ */ u2(VersionTable, { data }) })
+      ] }),
+      container
+    );
   }
   function renderHourlyChart(data) {
     const container = $2("hourly-chart");
