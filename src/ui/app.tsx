@@ -16,6 +16,7 @@ import { McpSummaryTable } from './components/McpSummaryTable';
 import { BranchTable } from './components/BranchTable';
 import { VersionTable } from './components/VersionTable';
 import { HourlyChart } from './components/HourlyChart';
+import { ActivityHeatmap } from './components/ActivityHeatmap';
 import { SessionsTable } from './components/SessionsTable';
 import { ModelCostTable } from './components/ModelCostTable';
 import { ProjectCostTable } from './components/ProjectCostTable';
@@ -40,6 +41,7 @@ import type {
   ProjectAgg,
   Totals,
   RangeKey,
+  HeatmapData,
 } from './state/types';
 import {
   rawData,
@@ -73,6 +75,8 @@ function toggleTheme(): void {
 let previousSessionPercent: number | null = null;
 let loadDataInFlight = false;
 let loadUsageWindowsInFlight = false;
+let loadHeatmapInFlight = false;
+let lastHeatmapData: HeatmapData | null = null;
 
 // ── URL persistence ──────────────────────────────────────────────────
 function getRangeCutoff(range: RangeKey): string | null {
@@ -314,7 +318,15 @@ function applyFilter(): void {
   const providerLabel = selectedProvider.value === 'both' ? '' : ` (${selectedProvider.value})`;
   $('daily-chart-title').textContent = 'Daily Token Usage - ' + RANGE_LABELS[selectedRange.value] + providerLabel;
 
-  render(<StatsCards totals={totals} daily={daily} />, $('stats-row'));
+  render(
+    <StatsCards
+      totals={totals}
+      daily={daily}
+      activeDays={lastHeatmapData?.active_days}
+      heatmapTotalNanos={lastHeatmapData?.total_cost_nanos}
+    />,
+    $('stats-row')
+  );
   renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
   renderOpenAiReconciliation(rawData.value.openai_reconciliation);
   render(<DailyChart daily={daily} />, $('chart-daily'));
@@ -519,6 +531,21 @@ function renderHourlyChart(data: HourlyRow[]): void {
   render(<HourlyChart data={data} />, container);
 }
 
+function renderActivityHeatmap(data: HeatmapData | null): void {
+  lastHeatmapData = data;
+  const container = $('activity-heatmap');
+  if (!container) return;
+  if (!data) {
+    container.style.display = 'none';
+    render(null, container);
+    return;
+  }
+  container.style.display = '';
+  render(<ActivityHeatmap data={data} />, container);
+  // Re-render StatsCards so the active-period avg reflects fresh heatmap data.
+  if (rawData.value) applyFilter();
+}
+
 async function loadUsageWindows(): Promise<void> {
   if (loadUsageWindowsInFlight) return;
   loadUsageWindowsInFlight = true;
@@ -530,6 +557,29 @@ async function loadUsageWindows(): Promise<void> {
   } catch { /* silent */ }
   finally {
     loadUsageWindowsInFlight = false;
+  }
+}
+
+// ── Phase 13: Heatmap fetch ──────────────────────────────────────────
+// Fetches the 7x24 heatmap from /api/heatmap, threading the client
+// timezone offset so dow/hour bucketing respects local time.
+// Defaults to UTC when the browser API is unavailable.
+async function loadHeatmap(period = 'month'): Promise<void> {
+  if (loadHeatmapInFlight) return;
+  loadHeatmapInFlight = true;
+  try {
+    const tzOffset = (typeof window !== 'undefined' && typeof window.Date !== 'undefined')
+      ? new Date().getTimezoneOffset() * -1
+      : 0;
+    const resp = await fetch(
+      `/api/heatmap?period=${encodeURIComponent(period)}&tz_offset_min=${tzOffset}`
+    );
+    if (!resp.ok) return;
+    const data: HeatmapData = await resp.json();
+    renderActivityHeatmap(data);
+  } catch { /* silent */ }
+  finally {
+    loadHeatmapInFlight = false;
   }
 }
 
@@ -597,3 +647,5 @@ loadData();
 setInterval(loadData, 30000);
 loadUsageWindows();
 setInterval(loadUsageWindows, 60000);
+loadHeatmap('all');
+setInterval(() => loadHeatmap('all'), 30000);

@@ -1817,8 +1817,15 @@
   }
 
   // src/ui/components/StatsCards.tsx
-  function StatsCards({ totals, daily }) {
+  function StatsCards({ totals, daily, activeDays, heatmapTotalNanos }) {
     const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
+    const avgPerActiveDay = (() => {
+      if (activeDays === void 0 || activeDays === null) return "--";
+      if (activeDays === 0) return "--";
+      const totalUsd = (heatmapTotalNanos ?? 0) / 1e9;
+      return fmtCost(totalUsd / activeDays);
+    })();
+    const activeDayTooltip = activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `Averaged over ${activeDays} day${activeDays === 1 ? "" : "s"} with non-zero spend` : "No spend in selected period";
     const stats = [
       { label: "Sessions", value: totals.sessions.toLocaleString(), sub: rangeLabel },
       { label: "Turns", value: fmt(totals.turns), sub: rangeLabel },
@@ -1829,14 +1836,21 @@
       { label: "Reasoning", value: fmt(totals.reasoning_output), sub: "subset of output" },
       { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing", isCost: true }
     ];
-    return /* @__PURE__ */ u2(S, { children: stats.map((s4) => /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
-      /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", children: s4.label }),
-        /* @__PURE__ */ u2("div", { class: `stat-value${s4.isCost ? " cost-value doto-hero" : ""}`, children: s4.value }),
-        s4.sub ? /* @__PURE__ */ u2("div", { class: "stat-sub", children: s4.sub }) : null
-      ] }),
-      s4.isCost && daily && daily.length >= 2 ? /* @__PURE__ */ u2("div", { class: "stat-sparkline", children: /* @__PURE__ */ u2(Sparkline, { daily }) }) : null
-    ] }, s4.label)) });
+    return /* @__PURE__ */ u2(S, { children: [
+      stats.map((s4) => /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u2("div", { class: "stat-label", children: s4.label }),
+          /* @__PURE__ */ u2("div", { class: `stat-value${s4.isCost ? " cost-value doto-hero" : ""}`, children: s4.value }),
+          s4.sub ? /* @__PURE__ */ u2("div", { class: "stat-sub", children: s4.sub }) : null
+        ] }),
+        s4.isCost && daily && daily.length >= 2 ? /* @__PURE__ */ u2("div", { class: "stat-sparkline", children: /* @__PURE__ */ u2(Sparkline, { daily }) }) : null
+      ] }, s4.label)),
+      /* @__PURE__ */ u2("div", { class: "card stat-card", title: activeDayTooltip, children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Avg / Active Day" }),
+        /* @__PURE__ */ u2("div", { class: "stat-value", children: avgPerActiveDay }),
+        /* @__PURE__ */ u2("div", { class: "stat-sub", children: activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `${activeDays} active ${activeDays === 1 ? "day" : "days"}` : "no spend" })
+      ] }) })
+    ] });
   }
 
   // src/ui/components/SubagentSummary.tsx
@@ -5069,6 +5083,141 @@
     ] });
   }
 
+  // src/ui/components/ActivityHeatmap.tsx
+  var DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function cellOpacity(costNanos, maxCostNanos) {
+    if (maxCostNanos <= 0 || costNanos <= 0) return 0.05;
+    const ratio = costNanos / maxCostNanos;
+    return Math.min(0.05 + 0.85 * ratio, 0.9);
+  }
+  function ActivityHeatmap({ data }) {
+    const { cells, max_cost_nanos, active_days, total_cost_nanos, period } = data;
+    const lookup = /* @__PURE__ */ new Map();
+    for (const c4 of cells) {
+      lookup.set(`${c4.dow},${c4.hour}`, c4);
+    }
+    const avgPerDay = active_days > 0 ? fmtCost(total_cost_nanos / 1e9 / active_days) : "--";
+    return /* @__PURE__ */ u2("div", { children: [
+      /* @__PURE__ */ u2(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "baseline",
+            gap: "12px",
+            marginBottom: "8px",
+            flexWrap: "wrap"
+          },
+          children: [
+            /* @__PURE__ */ u2(
+              "span",
+              {
+                class: "section-title",
+                style: {
+                  padding: 0,
+                  fontFamily: "var(--font-mono)",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase"
+                },
+                children: [
+                  "ACTIVITY / 7x24 / ",
+                  period.toUpperCase()
+                ]
+              }
+            ),
+            /* @__PURE__ */ u2(
+              "span",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11px",
+                  color: "var(--text-secondary)",
+                  letterSpacing: "0.04em"
+                },
+                children: [
+                  active_days,
+                  " active ",
+                  active_days === 1 ? "day" : "days",
+                  " \xB7 ",
+                  avgPerDay,
+                  " per active day"
+                ]
+              }
+            )
+          ]
+        }
+      ),
+      /* @__PURE__ */ u2(
+        "div",
+        {
+          style: {
+            display: "grid",
+            gridTemplateColumns: "28px repeat(24, 1fr)",
+            gap: "2px"
+          },
+          children: [
+            /* @__PURE__ */ u2("div", {}),
+            Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u2(
+              "div",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "9px",
+                  color: "var(--text-secondary)",
+                  textAlign: "center",
+                  letterSpacing: "0.04em",
+                  // Show only 0, 6, 12, 18 to avoid crowding
+                  visibility: [0, 6, 12, 18].includes(h5) ? "visible" : "hidden"
+                },
+                children: String(h5).padStart(2, "0")
+              },
+              h5
+            )),
+            Array.from({ length: 7 }, (_4, dow) => /* @__PURE__ */ u2(S, { children: [
+              /* @__PURE__ */ u2(
+                "div",
+                {
+                  style: {
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "9px",
+                    color: "var(--text-secondary)",
+                    display: "flex",
+                    alignItems: "center",
+                    letterSpacing: "0.04em"
+                  },
+                  children: DOW_LABELS[dow]
+                },
+                `label-${dow}`
+              ),
+              Array.from({ length: 24 }, (_5, hour) => {
+                const cell = lookup.get(`${dow},${hour}`);
+                const costNanos = cell?.cost_nanos ?? 0;
+                const callCount = cell?.call_count ?? 0;
+                const opacity = cellOpacity(costNanos, max_cost_nanos);
+                const bg = withAlpha("--text-display", opacity);
+                const costUsd = costNanos / 1e9;
+                const title = `${DOW_LABELS[dow]} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${callCount} call${callCount !== 1 ? "s" : ""}`;
+                return /* @__PURE__ */ u2(
+                  "div",
+                  {
+                    title,
+                    style: {
+                      background: bg,
+                      borderRadius: "2px",
+                      aspectRatio: "1",
+                      minHeight: "10px"
+                    }
+                  },
+                  `${dow}-${hour}`
+                );
+              })
+            ] }))
+          ]
+        }
+      )
+    ] });
+  }
+
   // src/ui/components/SessionsTable.tsx
   var defaultSort = [{ id: "last", desc: true }];
   function useSessionColumns() {
@@ -5543,6 +5692,8 @@
   var previousSessionPercent = null;
   var loadDataInFlight = false;
   var loadUsageWindowsInFlight = false;
+  var loadHeatmapInFlight = false;
+  var lastHeatmapData = null;
   function getRangeCutoff(range) {
     if (range === "all") return null;
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
@@ -5753,7 +5904,18 @@
     const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } = buildAggregations(filteredDaily, filteredSessions);
     const providerLabel = selectedProvider.value === "both" ? "" : ` (${selectedProvider.value})`;
     $2("daily-chart-title").textContent = "Daily Token Usage - " + RANGE_LABELS[selectedRange.value] + providerLabel;
-    R(/* @__PURE__ */ u2(StatsCards, { totals, daily }), $2("stats-row"));
+    R(
+      /* @__PURE__ */ u2(
+        StatsCards,
+        {
+          totals,
+          daily,
+          activeDays: lastHeatmapData?.active_days,
+          heatmapTotalNanos: lastHeatmapData?.total_cost_nanos
+        }
+      ),
+      $2("stats-row")
+    );
     renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
     renderOpenAiReconciliation(rawData.value.openai_reconciliation);
     R(/* @__PURE__ */ u2(DailyChart, { daily }), $2("chart-daily"));
@@ -5930,6 +6092,19 @@
     container.style.display = "";
     R(/* @__PURE__ */ u2(HourlyChart, { data }), container);
   }
+  function renderActivityHeatmap(data) {
+    lastHeatmapData = data;
+    const container = $2("activity-heatmap");
+    if (!container) return;
+    if (!data) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(ActivityHeatmap, { data }), container);
+    if (rawData.value) applyFilter();
+  }
   async function loadUsageWindows() {
     if (loadUsageWindowsInFlight) return;
     loadUsageWindowsInFlight = true;
@@ -5941,6 +6116,22 @@
     } catch {
     } finally {
       loadUsageWindowsInFlight = false;
+    }
+  }
+  async function loadHeatmap(period = "month") {
+    if (loadHeatmapInFlight) return;
+    loadHeatmapInFlight = true;
+    try {
+      const tzOffset = typeof window !== "undefined" && typeof window.Date !== "undefined" ? (/* @__PURE__ */ new Date()).getTimezoneOffset() * -1 : 0;
+      const resp = await fetch(
+        `/api/heatmap?period=${encodeURIComponent(period)}&tz_offset_min=${tzOffset}`
+      );
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderActivityHeatmap(data);
+    } catch {
+    } finally {
+      loadHeatmapInFlight = false;
     }
   }
   async function loadData(force = false) {
@@ -5995,6 +6186,8 @@
   setInterval(loadData, 3e4);
   loadUsageWindows();
   setInterval(loadUsageWindows, 6e4);
+  loadHeatmap("all");
+  setInterval(() => loadHeatmap("all"), 3e4);
 })();
 /*! Bundled license information:
 

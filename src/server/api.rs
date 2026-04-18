@@ -191,6 +191,84 @@ pub async fn api_health() -> &'static str {
     "ok"
 }
 
+/// Phase 13: Query params for the heatmap endpoint.
+///
+/// `tz_offset_min` and `week_starts_on` mirror `TzParams` fields directly
+/// (serde `flatten` does not compose with axum's `Query` extractor).
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct HeatmapParams {
+    #[serde(default)]
+    pub period: Option<String>,
+    #[serde(default)]
+    pub tz_offset_min: Option<i32>,
+    #[serde(default)]
+    pub week_starts_on: Option<u8>,
+}
+
+/// Phase 13: JSON response shape for `GET /api/heatmap`.
+#[derive(Debug, serde::Serialize)]
+pub struct HeatmapResponse {
+    pub cells: Vec<crate::models::HeatmapCell>,
+    pub max_cost_nanos: i64,
+    pub max_call_count: i64,
+    /// Count of distinct calendar days with non-zero spend.
+    pub active_days: i64,
+    /// Total cost nanos for the period (used by the caller for avg/day).
+    pub total_cost_nanos: i64,
+    pub period: String,
+    /// The resolved tz offset (0 when absent — UTC default).
+    pub tz_offset_min: i32,
+}
+
+/// `GET /api/heatmap?period=<period>&tz_offset_min=<n>&week_starts_on=<n>`
+///
+/// Returns a 7×24 activity heatmap for the requested period.
+/// `period` defaults to `"month"` when absent.
+/// `tz_offset_min` defaults to 0 (UTC) when absent.
+pub async fn api_heatmap(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HeatmapParams>,
+) -> Result<Json<Value>, StatusCode> {
+    let _db_guard = state.db_lock.lock().await;
+    let db_path = state.db_path.clone();
+    let period = params.period.unwrap_or_else(|| "month".to_string());
+    let period_clone = period.clone();
+    let tz = TzParams {
+        tz_offset_min: params.tz_offset_min,
+        week_starts_on: params.week_starts_on,
+    };
+
+    let result = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        let cells = db::get_heatmap(&conn, &period_clone, tz)?;
+        let (total_cost_nanos, active_days) =
+            db::active_period_avg_cost_nanos(&conn, &period_clone, tz)?;
+        Ok((cells, total_cost_nanos, active_days))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let (cells, total_cost_nanos, active_days) = result;
+    let max_cost_nanos = cells.iter().map(|c| c.cost_nanos).max().unwrap_or(0);
+    let max_call_count = cells.iter().map(|c| c.call_count).max().unwrap_or(0);
+    let tz_offset_min = tz.normalized_offset_min();
+
+    let resp = HeatmapResponse {
+        cells,
+        max_cost_nanos,
+        max_call_count,
+        active_days,
+        total_cost_nanos,
+        period,
+        tz_offset_min,
+    };
+
+    let value = serde_json::to_value(resp).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
+}
+
 /// Phase 20: SSE endpoint — emits `event: scan_completed` whenever the
 /// file-watcher triggers a background re-scan.
 ///

@@ -1,11 +1,36 @@
-import { fmt, fmtCostBig } from '../lib/format';
+import { fmt, fmtCost, fmtCostBig } from '../lib/format';
 import { RANGE_LABELS } from '../lib/charts';
 import { selectedRange } from '../state/store';
 import { Sparkline } from './Sparkline';
 import type { Totals, StatCard, DailyAgg } from '../state/types';
 
-export function StatsCards({ totals, daily }: { totals: Totals; daily?: DailyAgg[] }) {
+interface StatsCardsProps {
+  totals: Totals;
+  daily?: DailyAgg[];
+  /** Active-period average: days with non-zero spend. From /api/heatmap. */
+  activeDays?: number;
+  /** Total cost nanos for the heatmap period (matches activeDays). */
+  heatmapTotalNanos?: number;
+  /** Total calendar days in the heatmap period (for tooltip). */
+  calendarDays?: number;
+}
+
+export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos }: StatsCardsProps) {
   const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
+
+  // Active-period average: divide total by active days.
+  // Displays "--" when no active days (empty range).
+  const avgPerActiveDay: string = (() => {
+    if (activeDays === undefined || activeDays === null) return '--';
+    if (activeDays === 0) return '--';
+    const totalUsd = (heatmapTotalNanos ?? 0) / 1_000_000_000;
+    return fmtCost(totalUsd / activeDays);
+  })();
+
+  const activeDayTooltip = activeDays !== undefined && activeDays !== null && activeDays > 0
+    ? `Averaged over ${activeDays} day${activeDays === 1 ? '' : 's'} with non-zero spend`
+    : 'No spend in selected period';
+
   const stats: StatCard[] = [
     { label: 'Sessions',       value: totals.sessions.toLocaleString(), sub: rangeLabel },
     { label: 'Turns',          value: fmt(totals.turns),                sub: rangeLabel },
@@ -33,6 +58,18 @@ export function StatsCards({ totals, daily }: { totals: Totals; daily?: DailyAgg
           ) : null}
         </div>
       ))}
+      {/* Active-period average cost card (Phase 13) */}
+      <div class="card stat-card" title={activeDayTooltip}>
+        <div class="stat-content">
+          <div class="stat-label">Avg / Active Day</div>
+          <div class="stat-value">{avgPerActiveDay}</div>
+          <div class="stat-sub">
+            {activeDays !== undefined && activeDays !== null && activeDays > 0
+              ? `${activeDays} active ${activeDays === 1 ? 'day' : 'days'}`
+              : 'no spend'}
+          </div>
+        </div>
+      </div>
     </>
   );
 }

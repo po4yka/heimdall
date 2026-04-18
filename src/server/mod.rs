@@ -149,6 +149,7 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         .route("/api/rescan", post(api::api_rescan))
         .route("/api/usage-windows", get(api::api_usage_windows))
         .route("/api/health", get(api::api_health))
+        .route("/api/heatmap", get(api::api_heatmap))
         .route("/api/stream", get(api::api_stream))
         .with_state(state);
 

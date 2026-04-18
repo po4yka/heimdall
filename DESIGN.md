@@ -353,3 +353,17 @@ Max width:     1400px
 - Tokens: `.claude/skills/industrial-design/references/tokens.md`
 - Components: `.claude/skills/industrial-design/references/components.md`
 - Platform mapping (Preact + Tailwind v4): `.claude/skills/industrial-design/references/platform-mapping.md`
+
+---
+
+## 11. Active-Period Averaging
+
+**Formula:** `avg_cost_per_active_day = total_cost_nanos / active_days`
+
+**`active_days`** = `COUNT(DISTINCT date)` where `date` is the calendar day (in the client's local timezone) of turns with `estimated_cost_nanos > 0`.
+
+**Example:** If a user worked on 12 of 30 calendar days in a month with a total spend of $24.00, the active-period average is $2.00/day — not $0.80/day (which would result from dividing by 30).
+
+**Display rule:** Show `--` (two dashes) rather than a computed value when `active_days = 0` (no spend in the selected period) to avoid confusing a divide-by-zero edge case with a meaningful zero result.
+
+**Timezone note:** The day boundary respects `tz_offset_min` sent by the client (Phase 14). When absent, days are bucketed in UTC. The `GET /api/heatmap` endpoint computes both `active_days` and `total_cost_nanos` and returns them alongside the 7×24 cell matrix so the StatsCards "Avg / Active Day" card can read them without a separate request.

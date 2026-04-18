@@ -85,6 +85,17 @@ pub struct ScanResult {
     pub sessions: usize,
 }
 
+/// One cell in the 7×24 activity heatmap.
+/// `dow` = 0..6 (Sunday=0, matching SQLite strftime '%w').
+/// `hour` = 0..23.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct HeatmapCell {
+    pub dow: i64,
+    pub hour: i64,
+    pub cost_nanos: i64,
+    pub call_count: i64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DashboardData {
     pub all_models: Vec<String>,

@@ -1453,6 +1453,186 @@ pub fn get_rate_window_history(
     Ok(rows)
 }
 
+// ── Phase 13: 7×24 Activity Heatmap + Active-Period Averaging ────────────────
+
+/// Date-bound SQL fragment for a given period.
+///
+/// Returns `Some((start_str, end_str))` for bounded periods, or `None` for
+/// `"all"` (no bounds).  Shares the same convention as `export.rs`
+/// `period_bounds()`.
+fn heatmap_date_bounds(period: &str) -> Option<(String, String)> {
+    let today = chrono::Local::now().date_naive();
+    let start = match period {
+        "today" => today,
+        "week" => today - chrono::Duration::days(6),
+        "month" => today - chrono::Duration::days(29),
+        "year" => today - chrono::Duration::days(364),
+        _ => return None, // "all" or unknown → unbounded
+    };
+    Some((
+        start.format("%Y-%m-%d").to_string(),
+        today.format("%Y-%m-%d").to_string(),
+    ))
+}
+
+/// Build the shifted-timestamp expression used for dow/hour bucketing.
+///
+/// When `tz_offset_min` is 0 (UTC) the expression is the cheap
+/// `"timestamp"`.  For a non-zero offset it wraps the column with
+/// `datetime(timestamp, '+N minutes')`.
+///
+/// The caller must bind the offset string when `needs_param` is true.
+fn shifted_ts_expr(tz: &crate::tz::TzParams) -> (String, bool) {
+    let offset = tz.normalized_offset_min();
+    if offset == 0 {
+        ("timestamp".to_string(), false)
+    } else {
+        ("datetime(timestamp, ?)".to_string(), true)
+    }
+}
+
+/// Query the 7×24 heatmap for the given period.
+///
+/// Returns exactly 168 cells (7 days × 24 hours).  Cells with no turns
+/// are filled with zeros in Rust after the SQL query (the query returns
+/// only non-zero cells).
+///
+/// `period` accepts `"today" | "week" | "month" | "year" | "all"`.
+/// Bucketing respects `tz` — the SQL applies
+/// `datetime(timestamp, '+N minutes')` before strftime when the offset is
+/// non-zero.  Defaults to UTC when `tz_offset_min` is absent.
+pub fn get_heatmap(
+    conn: &Connection,
+    period: &str,
+    tz: crate::tz::TzParams,
+) -> Result<Vec<crate::models::HeatmapCell>> {
+    let (ts_expr, needs_tz_param) = shifted_ts_expr(&tz);
+    let bounds = heatmap_date_bounds(period);
+
+    let mut sql = format!(
+        "SELECT CAST(strftime('%w', {ts_expr}) AS INTEGER) AS dow,
+                CAST(strftime('%H', {ts_expr}) AS INTEGER) AS hour,
+                COALESCE(SUM(estimated_cost_nanos), 0) AS cost_nanos,
+                COUNT(*) AS call_count
+         FROM turns
+         WHERE timestamp IS NOT NULL AND length(timestamp) >= 10"
+    );
+    let mut params: Vec<String> = Vec::new();
+
+    // Bind tz offset param(s) — one per strftime call in SELECT (2 calls).
+    if needs_tz_param {
+        let offset_str = tz.offset_sql_param().unwrap_or_default();
+        // Two strftime calls reference the shifted expression.
+        params.push(offset_str.clone());
+        params.push(offset_str);
+    }
+
+    if let Some((start, end)) = bounds {
+        let day_expr = tz.sql_day_expr("timestamp");
+        sql.push_str(&format!(" AND {day_expr} BETWEEN ? AND ?"));
+        // If the day_expr itself uses a bound param, insert it before start/end.
+        if let Some(offset_param) = tz.offset_sql_param() {
+            params.push(offset_param);
+        }
+        params.push(start);
+        params.push(end);
+    }
+
+    sql.push_str(" GROUP BY dow, hour ORDER BY dow, hour");
+
+    let mut stmt = conn.prepare(&sql)?;
+    let non_zero: Vec<(i64, i64, i64, i64)> = stmt
+        .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?
+        .filter_map(|r| match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                warn!("heatmap row error: {e}");
+                None
+            }
+        })
+        .collect();
+
+    // Build a lookup map and fill all 168 cells.
+    let mut lookup: std::collections::HashMap<(i64, i64), (i64, i64)> =
+        std::collections::HashMap::with_capacity(non_zero.len());
+    for (dow, hour, cost, count) in non_zero {
+        lookup.insert((dow, hour), (cost, count));
+    }
+
+    let mut cells: Vec<crate::models::HeatmapCell> = Vec::with_capacity(168);
+    for dow in 0i64..7 {
+        for hour in 0i64..24 {
+            let (cost_nanos, call_count) = lookup.get(&(dow, hour)).copied().unwrap_or((0, 0));
+            cells.push(crate::models::HeatmapCell {
+                dow,
+                hour,
+                cost_nanos,
+                call_count,
+            });
+        }
+    }
+    Ok(cells)
+}
+
+/// Active-period average cost.
+///
+/// Returns `(total_cost_nanos, active_days)` where `active_days` is the
+/// count of distinct calendar days (in the client timezone) that had at
+/// least one turn with non-zero cost.
+///
+/// Divide `total_cost_nanos / active_days` in the caller to get the
+/// per-active-day average.  Returns `(0, 0)` when there are no turns so
+/// the caller can display `--` rather than dividing by zero.
+pub fn active_period_avg_cost_nanos(
+    conn: &Connection,
+    period: &str,
+    tz: crate::tz::TzParams,
+) -> Result<(i64, i64)> {
+    let day_expr = tz.sql_day_expr("timestamp");
+    let bounds = heatmap_date_bounds(period);
+
+    let mut sql = format!(
+        "SELECT COALESCE(SUM(estimated_cost_nanos), 0),
+                COUNT(DISTINCT {day_expr})
+         FROM turns
+         WHERE timestamp IS NOT NULL AND estimated_cost_nanos > 0"
+    );
+    let mut params: Vec<String> = Vec::new();
+
+    // Bind tz offset param for day_expr in SELECT (if non-UTC).
+    if let Some(offset_param) = tz.offset_sql_param() {
+        params.push(offset_param);
+    }
+
+    if let Some((start, end)) = bounds {
+        // day_expr appears again in the WHERE clause bound.
+        let day_expr2 = tz.sql_day_expr("timestamp");
+        sql.push_str(&format!(" AND {day_expr2} BETWEEN ? AND ?"));
+        if let Some(offset_param2) = tz.offset_sql_param() {
+            params.push(offset_param2);
+        }
+        params.push(start);
+        params.push(end);
+    }
+
+    let (total_nanos, active_days): (i64, i64) = conn
+        .query_row(&sql, rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap_or((0, 0));
+
+    Ok((total_nanos, active_days))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 pub fn get_provider_estimated_cost_nanos_since(
     conn: &Connection,
     provider: &str,

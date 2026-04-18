@@ -97,6 +97,7 @@ mod tests {
                 "/api/usage-windows",
                 get(crate::server::api::api_usage_windows),
             )
+            .route("/api/heatmap", get(crate::server::api::api_heatmap))
             .with_state(state)
     }
 
@@ -497,6 +498,240 @@ mod tests {
             days.len(),
             2,
             "No offset: expected 2 UTC buckets, got: {days:?}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 13 — 7×24 Activity Heatmap tests
+    // -----------------------------------------------------------------------
+
+    /// Helper: build a DB with no turns and return the app router.
+    fn empty_db_app(tmp: &TempDir) -> Router {
+        let db_path = tmp.path().join("empty.db");
+        let conn = crate::scanner::db::open_db(&db_path).unwrap();
+        crate::scanner::db::init_db(&conn).unwrap();
+        drop(conn);
+        let projects = tmp.path().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+        test_app(db_path, projects)
+    }
+
+    /// Helper: build a DB seeded with specific turns and return the app router.
+    fn seeded_heatmap_db(tmp: &TempDir, entries: &[(&str, &str, i64, i64)]) -> Router {
+        // entries: (session_id, timestamp, input_tokens, output_tokens)
+        let projects = tmp.path().join("projects").join("user").join("hm");
+        std::fs::create_dir_all(&projects).unwrap();
+        let filepath = projects.join("hm.jsonl");
+        let mut f = std::fs::File::create(&filepath).unwrap();
+
+        for (i, (session_id, ts, _input, _output)) in entries.iter().enumerate() {
+            // user message to anchor session
+            writeln!(
+                f,
+                "{}",
+                serde_json::json!({
+                    "type": "user",
+                    "sessionId": session_id,
+                    "timestamp": ts,
+                    "cwd": "/tmp/hm"
+                })
+            )
+            .unwrap();
+            writeln!(
+                f,
+                "{}",
+                serde_json::json!({
+                    "type": "assistant",
+                    "sessionId": session_id,
+                    "timestamp": ts,
+                    "cwd": "/tmp/hm",
+                    "message": {
+                        "id": format!("msg-hm-{i}"),
+                        "model": "claude-sonnet-4-6",
+                        "usage": {
+                            "input_tokens": entries[i].2,
+                            "output_tokens": entries[i].3,
+                            "cache_read_input_tokens": 0,
+                            "cache_creation_input_tokens": 0
+                        },
+                        "content": []
+                    }
+                })
+            )
+            .unwrap();
+        }
+
+        let db_path = tmp.path().join("hm.db");
+        let parent = tmp.path().join("projects");
+        crate::scanner::scan(Some(vec![parent.clone()]), &db_path, false).unwrap();
+        test_app(db_path, parent)
+    }
+
+    /// Empty DB → /api/heatmap returns 168 cells, all zero.
+    #[tokio::test]
+    async fn test_heatmap_empty_db_returns_168_zero_cells() {
+        let tmp = TempDir::new().unwrap();
+        let app = empty_db_app(&tmp);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/heatmap?period=all")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        let cells = data["cells"].as_array().unwrap();
+        assert_eq!(cells.len(), 168, "expected exactly 168 cells");
+        for cell in cells {
+            assert_eq!(cell["cost_nanos"].as_i64().unwrap(), 0);
+            assert_eq!(cell["call_count"].as_i64().unwrap(), 0);
+        }
+        assert_eq!(data["max_cost_nanos"].as_i64().unwrap(), 0);
+        assert_eq!(data["active_days"].as_i64().unwrap(), 0);
+    }
+
+    /// Seeded turns on a specific known timestamp → correct cell non-zero.
+    /// 2026-04-17T10:30:00Z → Friday (dow=5) hour=10.
+    #[tokio::test]
+    async fn test_heatmap_seeded_turns_correct_cell() {
+        let tmp = TempDir::new().unwrap();
+        // 2026-04-17T10:30:00Z: strftime('%w')=5 (Fri), strftime('%H')=10
+        let entries = [
+            ("s-hm1", "2026-04-17T10:30:00Z", 1000i64, 500i64),
+            ("s-hm2", "2026-04-17T10:45:00Z", 800i64, 400i64),
+            ("s-hm3", "2026-04-17T14:00:00Z", 200i64, 100i64),
+        ];
+        let app = seeded_heatmap_db(&tmp, &entries);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/heatmap?period=all")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        let cells = data["cells"].as_array().unwrap();
+        assert_eq!(cells.len(), 168, "must still be 168 cells");
+
+        // Find cell dow=5, hour=10 (Friday 10:00)
+        let cell_fri_10 = cells
+            .iter()
+            .find(|c| c["dow"].as_i64() == Some(5) && c["hour"].as_i64() == Some(10))
+            .expect("cell dow=5 hour=10 not found");
+        assert!(
+            cell_fri_10["call_count"].as_i64().unwrap() >= 2,
+            "two turns at hour 10 → call_count >= 2"
+        );
+        assert!(
+            cell_fri_10["cost_nanos"].as_i64().unwrap() > 0,
+            "cost_nanos must be positive for non-zero turns"
+        );
+
+        // Find cell dow=5, hour=14
+        let cell_fri_14 = cells
+            .iter()
+            .find(|c| c["dow"].as_i64() == Some(5) && c["hour"].as_i64() == Some(14))
+            .expect("cell dow=5 hour=14 not found");
+        assert!(
+            cell_fri_14["call_count"].as_i64().unwrap() >= 1,
+            "one turn at hour 14"
+        );
+
+        // active_days should be 1 (all turns on 2026-04-17)
+        assert_eq!(
+            data["active_days"].as_i64().unwrap(),
+            1,
+            "all turns same day → 1 active day"
+        );
+    }
+
+    /// TZ shift: turn at 2026-04-17T23:30:00Z with +120 min offset → hour=1 on Apr 18.
+    #[tokio::test]
+    async fn test_heatmap_tz_shift_moves_hour() {
+        let tmp = TempDir::new().unwrap();
+        // 2026-04-17T23:30:00Z + 120min = 2026-04-18T01:30 local → hour=1, dow=6 (Sat)
+        let entries = [("s-tz", "2026-04-17T23:30:00Z", 1000i64, 500i64)];
+        let app = seeded_heatmap_db(&tmp, &entries);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/heatmap?period=all&tz_offset_min=120")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let cells = data["cells"].as_array().unwrap();
+
+        // UTC: dow=5 (Fri), hour=23. Shifted: dow=6 (Sat), hour=1.
+        let cell_shifted = cells
+            .iter()
+            .find(|c| c["dow"].as_i64() == Some(6) && c["hour"].as_i64() == Some(1))
+            .expect("shifted cell dow=6 hour=1 not found");
+        assert!(
+            cell_shifted["call_count"].as_i64().unwrap() >= 1,
+            "turn should appear at shifted hour=1"
+        );
+
+        // Original UTC slot should be empty.
+        let cell_utc = cells
+            .iter()
+            .find(|c| c["dow"].as_i64() == Some(5) && c["hour"].as_i64() == Some(23))
+            .unwrap();
+        assert_eq!(
+            cell_utc["call_count"].as_i64().unwrap(),
+            0,
+            "UTC slot must be empty after shift"
+        );
+    }
+
+    /// active_days counts distinct spend days correctly.
+    #[tokio::test]
+    async fn test_heatmap_active_days_counting() {
+        let tmp = TempDir::new().unwrap();
+        // Three turns across two days.
+        let entries = [
+            ("s-ad1", "2026-04-15T09:00:00Z", 1000i64, 500i64),
+            ("s-ad2", "2026-04-15T15:00:00Z", 800i64, 400i64),
+            ("s-ad3", "2026-04-16T11:00:00Z", 200i64, 100i64),
+        ];
+        let app = seeded_heatmap_db(&tmp, &entries);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/heatmap?period=all")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            data["active_days"].as_i64().unwrap(),
+            2,
+            "turns on 2 distinct days → active_days=2"
         );
     }
 }

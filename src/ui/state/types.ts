@@ -267,3 +267,22 @@ export interface StatCard {
 
 export type SortDir = 'asc' | 'desc';
 export type RangeKey = '7d' | '30d' | '90d' | 'all';
+
+// ── Phase 13: Activity Heatmap ───────────────────────────────────────────────
+
+export interface HeatmapCell {
+  dow: number;   // 0..6 (Sunday=0)
+  hour: number;  // 0..23
+  cost_nanos: number;
+  call_count: number;
+}
+
+export interface HeatmapData {
+  cells: HeatmapCell[];
+  max_cost_nanos: number;
+  max_call_count: number;
+  active_days: number;
+  total_cost_nanos: number;
+  period: string;
+  tz_offset_min: number;
+}
