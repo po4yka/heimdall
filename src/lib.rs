@@ -24,5 +24,6 @@ pub mod scanner;
 pub mod scheduler;
 pub mod server;
 pub mod status_aggregator;
+pub mod statusline;
 pub mod tz;
 pub mod webhooks;

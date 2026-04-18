@@ -11,6 +11,7 @@ use claude_usage_tracker::pricing;
 use claude_usage_tracker::scanner;
 use claude_usage_tracker::scheduler;
 use claude_usage_tracker::server;
+use claude_usage_tracker::statusline;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -159,6 +160,26 @@ enum Commands {
         #[arg(long)]
         breakdown: bool,
     },
+    /// Emit a Claude Code status line from the PostToolUse hook JSON on stdin
+    Statusline {
+        /// Max seconds since last render before recomputing
+        #[arg(long, default_value_t = 30)]
+        refresh_interval: u64,
+        /// Which cost to display: auto (prefer hook), local, hook, or both
+        #[arg(long, default_value = "auto", value_parser = parse_cost_source)]
+        cost_source: statusline::StatuslineCostSource,
+        /// Skip any potential network calls (currency, LiteLLM); purely local
+        #[arg(long)]
+        offline: bool,
+        /// Path to SQLite DB file
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+    },
+    /// Manage the statusline PostToolUse hook entry in ~/.claude/settings.json
+    StatuslineHook {
+        #[command(subcommand)]
+        action: StatuslineHookAction,
+    },
 }
 
 /// Token quota specification for `--token-limit`.
@@ -168,6 +189,20 @@ enum TokenLimit {
     Absolute(i64),
     /// Resolve to the highest token count seen across all historical blocks.
     HistoricalMax,
+}
+
+#[derive(Subcommand)]
+enum StatuslineHookAction {
+    /// Install the statusLine entry into ~/.claude/settings.json
+    Install,
+    /// Remove the statusLine entry from ~/.claude/settings.json
+    Uninstall,
+    /// Show whether the statusLine entry is present
+    Status,
+}
+
+fn parse_cost_source(s: &str) -> Result<statusline::StatuslineCostSource, String> {
+    statusline::StatuslineCostSource::parse(s)
 }
 
 fn parse_token_limit(s: &str) -> Result<TokenLimit, String> {
@@ -458,6 +493,23 @@ fn main() -> Result<()> {
             let db = default_db(db_path);
             cmd_weekly(&db, start_of_week, json, breakdown)?;
         }
+        Commands::Statusline {
+            refresh_interval,
+            cost_source,
+            offline,
+            db_path,
+        } => {
+            let opts = statusline::StatuslineOpts {
+                refresh_interval,
+                cost_source,
+                offline,
+                db_path,
+            };
+            statusline::run(&opts);
+        }
+        Commands::StatuslineHook { action } => {
+            cmd_statusline_hook(action)?;
+        }
     }
     Ok(())
 }
@@ -700,6 +752,46 @@ fn cmd_hook(action: HookAction) -> Result<()> {
             HookStatus::Absent => {
                 println!("Not installed");
                 println!("  Run: claude-usage-tracker hook install");
+            }
+        },
+    }
+    Ok(())
+}
+
+fn cmd_statusline_hook(action: StatuslineHookAction) -> Result<()> {
+    use statusline::{
+        StatuslineActionResult, StatuslineStatus, install as sl_install, status as sl_status,
+        uninstall as sl_uninstall,
+    };
+
+    match action {
+        StatuslineHookAction::Install => match sl_install()? {
+            StatuslineActionResult::Installed => {
+                println!("Installed: statusLine entry added to ~/.claude/settings.json");
+                println!("  command: claude-usage-tracker statusline");
+            }
+            StatuslineActionResult::AlreadyInstalled => {
+                println!("Already installed (no change made)");
+            }
+            _ => {}
+        },
+        StatuslineHookAction::Uninstall => match sl_uninstall()? {
+            StatuslineActionResult::Uninstalled => {
+                println!("Uninstalled: statusLine entry removed from ~/.claude/settings.json");
+            }
+            StatuslineActionResult::NothingToUninstall => {
+                println!("Nothing to uninstall: no heimdall statusLine entry found");
+            }
+            _ => {}
+        },
+        StatuslineHookAction::Status => match sl_status()? {
+            StatuslineStatus::Present { command } => {
+                println!("Installed");
+                println!("  command: {}", command);
+            }
+            StatuslineStatus::Absent => {
+                println!("Not installed");
+                println!("  Run: claude-usage-tracker statusline-hook install");
             }
         },
     }

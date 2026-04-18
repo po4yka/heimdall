@@ -2044,6 +2044,54 @@ pub fn historical_max_block_tokens(conn: &Connection, session_hours: f64) -> Res
     Ok(max)
 }
 
+/// Load turns with `timestamp >= cutoff_iso` ordered by timestamp ascending.
+///
+/// Used by the statusline compute path to avoid a full-table scan; callers
+/// pass a cutoff roughly 24 h in the past so only recent data is read.
+pub fn load_turns_since(
+    conn: &Connection,
+    cutoff_iso: &str,
+) -> Result<Vec<crate::analytics::blocks::TurnForBlocks>> {
+    let mut stmt = conn.prepare(
+        "SELECT timestamp, COALESCE(model, 'unknown'),
+                input_tokens, output_tokens, cache_read_tokens,
+                cache_creation_tokens, reasoning_output_tokens,
+                COALESCE(estimated_cost_nanos, 0)
+         FROM turns
+         WHERE timestamp >= ?1
+         ORDER BY timestamp ASC",
+    )?;
+    let rows = stmt.query_map([cutoff_iso], |row| {
+        let ts_str: String = row.get(0)?;
+        let ts = chrono::DateTime::parse_from_rfc3339(&ts_str)
+            .map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            })?
+            .with_timezone(&chrono::Utc);
+        Ok(crate::analytics::blocks::TurnForBlocks {
+            timestamp: ts,
+            model: row.get::<_, String>(1)?,
+            tokens: crate::analytics::blocks::TokenBreakdown {
+                input: row.get(2)?,
+                output: row.get(3)?,
+                cache_read: row.get(4)?,
+                cache_creation: row.get(5)?,
+                reasoning_output: row.get(6)?,
+            },
+            cost_nanos: row.get(7)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
 /// Load all turns ordered by timestamp ascending (no date filter).
 /// Used by the `blocks` CLI subcommand when no range is specified.
 pub fn load_all_turns(conn: &Connection) -> Result<Vec<crate::analytics::blocks::TurnForBlocks>> {
@@ -3383,5 +3431,87 @@ mod tests {
             dec_input, 200,
             "2027-52 bucket should contain 200 input tokens (two turns)"
         );
+    }
+
+    // ── load_turns_since ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_load_turns_since_filters_and_orders() {
+        let conn = test_conn();
+
+        // Seed three turns: one old, two recent.
+        let seed = vec![
+            Turn {
+                session_id: "s1".into(),
+                timestamp: "2020-01-01T00:00:00Z".into(),
+                model: "claude-sonnet-4-6".into(),
+                input_tokens: 999,
+                output_tokens: 1,
+                estimated_cost_nanos: 1,
+                message_id: "old".into(),
+                ..Default::default()
+            },
+            Turn {
+                session_id: "s1".into(),
+                timestamp: "2026-01-01T10:00:00Z".into(),
+                model: "claude-sonnet-4-6".into(),
+                input_tokens: 100,
+                output_tokens: 50,
+                estimated_cost_nanos: 1_000,
+                message_id: "r1".into(),
+                ..Default::default()
+            },
+            Turn {
+                session_id: "s1".into(),
+                timestamp: "2026-01-01T11:00:00Z".into(),
+                model: "claude-haiku-3-5".into(),
+                input_tokens: 200,
+                output_tokens: 80,
+                estimated_cost_nanos: 2_000,
+                message_id: "r2".into(),
+                ..Default::default()
+            },
+        ];
+        insert_turns(&conn, &seed).unwrap();
+
+        // Query since 2026 — should exclude the 2020 turn.
+        let rows = load_turns_since(&conn, "2026-01-01T00:00:00Z").unwrap();
+        assert_eq!(rows.len(), 2, "should return 2 turns since cutoff");
+
+        // Verify ascending order.
+        assert!(
+            rows[0].timestamp < rows[1].timestamp,
+            "rows must be in ascending timestamp order"
+        );
+
+        // The old turn must not appear.
+        use chrono::Datelike as _;
+        for r in &rows {
+            assert!(
+                r.timestamp.year() >= 2026,
+                "unexpected old turn: {:?}",
+                r.timestamp
+            );
+        }
+    }
+
+    #[test]
+    fn test_load_turns_since_empty_when_all_old() {
+        let conn = test_conn();
+
+        let seed = vec![Turn {
+            session_id: "s1".into(),
+            timestamp: "2020-06-01T00:00:00Z".into(),
+            model: "claude-sonnet-4-6".into(),
+            input_tokens: 100,
+            output_tokens: 10,
+            estimated_cost_nanos: 500,
+            message_id: "m1".into(),
+            ..Default::default()
+        }];
+        insert_turns(&conn, &seed).unwrap();
+
+        let rows = load_turns_since(&conn, "2026-01-01T00:00:00Z").unwrap();
+        assert!(rows.is_empty(), "should return nothing for a future cutoff");
     }
 }
