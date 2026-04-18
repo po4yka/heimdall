@@ -1,3 +1,7 @@
+// Heimdall deliberately does not integrate claudestatus.com because it exposes
+// no API and its RSS feed is redundant with status.claude.com. The rolling
+// uptime signal is computed from owned data (agent_status_history table) instead.
+
 pub mod client;
 pub mod filter;
 pub mod models;

@@ -278,6 +278,21 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_live_events_session ON live_events(session_id);",
     )?;
 
+    // Agent status history: one row per component per poll.
+    // PRIMARY KEY (ts_epoch, provider, component_id) ensures INSERT OR IGNORE is idempotent.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS agent_status_history (
+            ts_epoch       INTEGER NOT NULL,
+            provider       TEXT NOT NULL,
+            component_id   TEXT NOT NULL,
+            component_name TEXT NOT NULL,
+            status         TEXT NOT NULL,
+            PRIMARY KEY (ts_epoch, provider, component_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ash_lookup
+            ON agent_status_history(provider, component_id, ts_epoch DESC);",
+    )?;
+
     Ok(())
 }
 
@@ -484,6 +499,89 @@ pub fn insert_tool_events(conn: &Connection, events: &[ToolEvent]) -> Result<()>
 pub fn delete_tool_events_by_source_path(conn: &Connection, path: &str) -> Result<()> {
     conn.execute("DELETE FROM tool_events WHERE source_path = ?1", [path])?;
     Ok(())
+}
+
+// ── Agent status history ──────────────────────────────────────────────────────
+
+/// Insert one row per component into `agent_status_history`.
+///
+/// Uses `INSERT OR IGNORE` so repeated calls with the same `(ts_epoch, provider,
+/// component_id)` triple are safe — the first sample wins (PK constraint).
+///
+/// `components` is a slice of `(component_id, component_name, status)` tuples.
+pub fn insert_agent_status_samples(
+    conn: &Connection,
+    provider: &str,
+    components: &[(String, String, String)],
+    ts_epoch: i64,
+) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "INSERT OR IGNORE INTO agent_status_history
+            (ts_epoch, provider, component_id, component_name, status)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )?;
+    for (component_id, component_name, status) in components {
+        stmt.execute(rusqlite::params![
+            ts_epoch,
+            provider,
+            component_id,
+            component_name,
+            status,
+        ])?;
+    }
+    Ok(())
+}
+
+/// Compute a rolling uptime percentage for a given provider + component.
+///
+/// - Queries `agent_status_history` where `ts_epoch >= now - window_days * 86400`.
+/// - Returns `None` when fewer than 10 samples exist in the window (avoids
+///   misleading precision from sparse datasets).
+/// - `under_maintenance` counts as NOT operational — keeps the semantics simple
+///   and conservative. If a component is under maintenance it is not "up" for
+///   uptime-SLA purposes even though it is not degraded.
+/// - Returns `Some(up_count / total_count)` where `up_count` is the number of
+///   `'operational'` samples.
+pub fn uptime_pct(
+    conn: &Connection,
+    provider: &str,
+    component_id: &str,
+    window_days: i64,
+) -> Result<Option<f64>> {
+    let cutoff = chrono::Utc::now().timestamp() - window_days * 86400;
+    // COALESCE the SUM() because SQLite returns NULL (not 0) when no rows match;
+    // that would make row.get::<i64>() error rather than produce a zero count.
+    let mut stmt = conn.prepare(
+        "SELECT
+             COUNT(*) AS total,
+             COALESCE(SUM(CASE WHEN status = 'operational' THEN 1 ELSE 0 END), 0) AS up
+         FROM agent_status_history
+         WHERE provider = ?1
+           AND component_id = ?2
+           AND ts_epoch >= ?3",
+    )?;
+    let (total, up): (i64, i64) = stmt
+        .query_row(rusqlite::params![provider, component_id, cutoff], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?;
+    if total < 10 {
+        return Ok(None);
+    }
+    Ok(Some(up as f64 / total as f64))
+}
+
+/// Delete `agent_status_history` rows older than `keep_days`.
+///
+/// Returns the number of rows deleted. Call this after each successful poll to
+/// bound table growth. `keep_days = 90` is the recommended default — it covers
+/// the 30-day uptime window with a comfortable margin.
+pub fn prune_agent_status_history(conn: &Connection, keep_days: i64) -> Result<usize> {
+    let cutoff = chrono::Utc::now().timestamp() - keep_days * 86400;
+    let deleted = conn.execute(
+        "DELETE FROM agent_status_history WHERE ts_epoch < ?1",
+        rusqlite::params![cutoff],
+    )?;
+    Ok(deleted)
 }
 
 /// Aggregate `cost_nanos` by `kind`, sorted descending by total cost.

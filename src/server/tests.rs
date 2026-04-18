@@ -954,6 +954,144 @@ mod tests {
     // Agent status endpoint tests
     // -----------------------------------------------------------------------
 
+    /// Build a minimal app with a pre-populated cache snapshot carrying non-null
+    /// uptime fields — used to verify that `/api/agent-status` serialises them.
+    fn test_app_with_seeded_history(tmp: &TempDir) -> Router {
+        use crate::agent_status::models::{
+            AgentStatusSnapshot, ComponentStatus, ProviderStatus, StatusIndicator,
+        };
+        use crate::scanner::db;
+
+        let db_path = tmp.path().join("history_test.db");
+        let conn = db::open_db(&db_path).unwrap();
+        db::init_db(&conn).unwrap();
+
+        // Seed 15 samples (all operational) for the Claude Code component so
+        // uptime_pct() returns a non-None value when called live.
+        let now = chrono::Utc::now().timestamp();
+        for i in 0..15i64 {
+            db::insert_agent_status_samples(
+                &conn,
+                "claude",
+                &[(
+                    "yyzkbfz2thpt".to_string(),
+                    "Claude Code".to_string(),
+                    "operational".to_string(),
+                )],
+                now - i,
+            )
+            .unwrap();
+        }
+        drop(conn);
+
+        // Pre-populate the cache with a snapshot that already has uptime values.
+        // The handler returns the cached snapshot immediately (refresh_interval is
+        // large), so the test asserts the serialised fields are present.
+        let snapshot = AgentStatusSnapshot {
+            claude: Some(ProviderStatus {
+                indicator: StatusIndicator::None,
+                description: "All Systems Operational".to_string(),
+                components: vec![ComponentStatus {
+                    id: "yyzkbfz2thpt".to_string(),
+                    name: "Claude Code".to_string(),
+                    status: "operational".to_string(),
+                    uptime_30d: Some(1.0),
+                    uptime_7d: Some(1.0),
+                }],
+                active_incidents: vec![],
+                page_url: "https://status.claude.com".to_string(),
+            }),
+            openai: None,
+            fetched_at: chrono::Utc::now().to_rfc3339(),
+        };
+
+        let projects = tmp.path().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+
+        let mut cfg = AgentStatusConfig::default();
+        cfg.enabled = true;
+        cfg.claude_enabled = false;
+        cfg.openai_enabled = false;
+        cfg.refresh_interval = 3600; // long TTL — cache never expires during test
+
+        let state = Arc::new(AppState {
+            db_path,
+            projects_dirs: Some(vec![projects]),
+            oauth_enabled: false,
+            oauth_refresh_interval: 60,
+            oauth_cache: tokio::sync::RwLock::new(None),
+            openai_enabled: false,
+            openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
+            openai_refresh_interval: 300,
+            openai_lookback_days: 30,
+            openai_cache: tokio::sync::RwLock::new(None),
+            db_lock: tokio::sync::Mutex::new(()),
+            webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
+            webhook_config: WebhookConfig::default(),
+            scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
+            agent_status_config: cfg,
+            agent_status_cache: tokio::sync::RwLock::new(Some((
+                std::time::Instant::now(),
+                snapshot,
+                None,
+            ))),
+        });
+
+        let html = assets::render_dashboard();
+        Router::new()
+            .route(
+                "/",
+                get({
+                    let h = html.clone();
+                    move || async { Html(h) }
+                }),
+            )
+            .route("/api/agent-status", get(api_agent_status))
+            .with_state(state)
+    }
+
+    #[tokio::test]
+    async fn test_agent_status_with_seeded_history_returns_uptime_fields() {
+        let tmp = TempDir::new().unwrap();
+        let app = test_app_with_seeded_history(&tmp);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/agent-status")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        let components = json["claude"]["components"].as_array().unwrap();
+        assert!(!components.is_empty(), "should have at least one component");
+
+        let comp = &components[0];
+        assert!(
+            comp.get("uptime_30d").is_some(),
+            "uptime_30d should be present"
+        );
+        assert!(
+            comp.get("uptime_7d").is_some(),
+            "uptime_7d should be present"
+        );
+        // The pre-seeded cache has non-null values.
+        assert!(
+            !comp["uptime_30d"].is_null(),
+            "uptime_30d should be non-null when samples exist"
+        );
+        assert!(
+            !comp["uptime_7d"].is_null(),
+            "uptime_7d should be non-null when samples exist"
+        );
+    }
+
     #[tokio::test]
     async fn test_agent_status_disabled_returns_empty_snapshot() {
         let tmp = TempDir::new().unwrap();

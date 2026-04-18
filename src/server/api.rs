@@ -229,10 +229,64 @@ pub async fn api_agent_status(
         cache.as_ref().and_then(|(_, _, etag)| etag.clone())
     };
 
-    let (snapshot, new_etag) =
-        tokio::task::spawn_blocking(move || agent_status::poll(&config, cached_etag.as_deref()))
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let db_path = state.db_path.clone();
+    let (snapshot, new_etag) = tokio::task::spawn_blocking(move || {
+        let (mut snap, etag) = agent_status::poll(&config, cached_etag.as_deref());
+        let is_fresh = snap.claude.is_some() || snap.openai.is_some();
+        if is_fresh {
+            // Persist history and enrich with uptime. Errors are non-fatal.
+            if let Ok(conn) = db::open_db(&db_path) {
+                let _ = db::init_db(&conn);
+                let ts_epoch = chrono::Utc::now().timestamp();
+
+                // Persist Claude components.
+                if let Some(ref claude) = snap.claude {
+                    let samples: Vec<(String, String, String)> = claude
+                        .components
+                        .iter()
+                        .map(|c| (c.id.clone(), c.name.clone(), c.status.clone()))
+                        .collect();
+                    let _ = db::insert_agent_status_samples(&conn, "claude", &samples, ts_epoch);
+                }
+
+                // Persist OpenAI components (use name as stable id — no UUID from the shim).
+                if let Some(ref openai) = snap.openai {
+                    let samples: Vec<(String, String, String)> = openai
+                        .components
+                        .iter()
+                        .map(|c| (c.id.clone(), c.name.clone(), c.status.clone()))
+                        .collect();
+                    let _ = db::insert_agent_status_samples(&conn, "openai", &samples, ts_epoch);
+                }
+
+                // Prune rows older than 90 days (cheap; run every poll).
+                if let Err(e) = db::prune_agent_status_history(&conn, 90) {
+                    tracing::debug!("agent_status prune error: {}", e);
+                }
+
+                // Enrich Claude components with uptime.
+                if let Some(ref mut claude) = snap.claude {
+                    for c in &mut claude.components {
+                        let id = c.id.clone();
+                        c.uptime_30d = db::uptime_pct(&conn, "claude", &id, 30).ok().flatten();
+                        c.uptime_7d = db::uptime_pct(&conn, "claude", &id, 7).ok().flatten();
+                    }
+                }
+
+                // Enrich OpenAI components with uptime.
+                if let Some(ref mut openai) = snap.openai {
+                    for c in &mut openai.components {
+                        let id = c.id.clone();
+                        c.uptime_30d = db::uptime_pct(&conn, "openai", &id, 30).ok().flatten();
+                        c.uptime_7d = db::uptime_pct(&conn, "openai", &id, 7).ok().flatten();
+                    }
+                }
+            }
+        }
+        (snap, etag)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Fire agent-status webhooks on severity-threshold transitions.
     maybe_send_agent_status_webhooks(&state, &snapshot).await;

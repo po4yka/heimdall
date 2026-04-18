@@ -1222,4 +1222,260 @@ mod tests {
         assert_eq!(ce.cache_read_cost_nanos, bd.cache_read_cost_nanos);
         assert_eq!(ce.cache_write_cost_nanos, bd.cache_write_cost_nanos);
     }
+
+    // ── agent_status_history helpers ──────────────────────────────────────────
+
+    fn open_tmp_db(tmp: &TempDir) -> rusqlite::Connection {
+        let db_path = tmp.path().join("test.db");
+        let conn = db::open_db(&db_path).unwrap();
+        db::init_db(&conn).unwrap();
+        conn
+    }
+
+    fn now_epoch() -> i64 {
+        chrono::Utc::now().timestamp()
+    }
+
+    /// Insert `n` samples for a component. `up_count` of them are 'operational';
+    /// the rest are `degraded_status`. Samples are spaced 1 second apart going
+    /// backwards from `anchor_epoch`.
+    fn seed_history(
+        conn: &rusqlite::Connection,
+        provider: &str,
+        component_id: &str,
+        n: i64,
+        up_count: i64,
+        degraded_status: &str,
+        anchor_epoch: i64,
+    ) {
+        for i in 0..n {
+            let ts = anchor_epoch - i;
+            let status = if i < up_count {
+                "operational"
+            } else {
+                degraded_status
+            };
+            db::insert_agent_status_samples(
+                conn,
+                provider,
+                &[(
+                    component_id.to_string(),
+                    "Test Component".to_string(),
+                    status.to_string(),
+                )],
+                ts,
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn test_uptime_pct_all_operational() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        let now = now_epoch();
+        seed_history(
+            &conn,
+            "claude",
+            "comp-a",
+            10,
+            10,
+            "degraded_performance",
+            now,
+        );
+        let pct = db::uptime_pct(&conn, "claude", "comp-a", 30).unwrap();
+        assert_eq!(pct, Some(1.0));
+    }
+
+    #[test]
+    fn test_uptime_pct_partial_degraded() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        let now = now_epoch();
+        // 7 operational, 3 degraded → 7/10 = 0.7
+        seed_history(
+            &conn,
+            "claude",
+            "comp-b",
+            10,
+            7,
+            "degraded_performance",
+            now,
+        );
+        let pct = db::uptime_pct(&conn, "claude", "comp-b", 30).unwrap();
+        assert_eq!(pct, Some(0.7));
+    }
+
+    #[test]
+    fn test_uptime_pct_insufficient_samples() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        let now = now_epoch();
+        // Only 5 samples — below the 10-sample floor → None
+        seed_history(&conn, "claude", "comp-c", 5, 5, "degraded_performance", now);
+        let pct = db::uptime_pct(&conn, "claude", "comp-c", 30).unwrap();
+        assert_eq!(pct, None);
+    }
+
+    #[test]
+    fn test_uptime_pct_outside_window() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        // All 10 samples are 35+ days old — outside a 30-day window → None
+        let old_epoch = now_epoch() - 35 * 86400;
+        seed_history(
+            &conn,
+            "claude",
+            "comp-d",
+            10,
+            10,
+            "degraded_performance",
+            old_epoch,
+        );
+        let pct = db::uptime_pct(&conn, "claude", "comp-d", 30).unwrap();
+        assert_eq!(pct, None);
+    }
+
+    #[test]
+    fn test_uptime_pct_no_rows() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        let pct = db::uptime_pct(&conn, "claude", "nonexistent-comp", 30).unwrap();
+        assert_eq!(pct, None);
+    }
+
+    #[test]
+    fn test_insert_agent_status_samples_roundtrip() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        let ts = now_epoch();
+        let samples = vec![
+            (
+                "cid-1".to_string(),
+                "Claude Code".to_string(),
+                "operational".to_string(),
+            ),
+            (
+                "cid-2".to_string(),
+                "Claude API".to_string(),
+                "degraded_performance".to_string(),
+            ),
+        ];
+        db::insert_agent_status_samples(&conn, "claude", &samples, ts).unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM agent_status_history WHERE ts_epoch = ?1 AND provider = 'claude'",
+                rusqlite::params![ts],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 2);
+
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM agent_status_history WHERE component_id = 'cid-2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "degraded_performance");
+    }
+
+    #[test]
+    fn test_prune_agent_status_history() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        let now = now_epoch();
+        let old = now - 100 * 86400; // 100 days ago — older than 90-day keep window
+
+        // Insert 5 old rows and 5 recent rows.
+        for i in 0..5i64 {
+            db::insert_agent_status_samples(
+                &conn,
+                "claude",
+                &[(
+                    format!("old-{i}"),
+                    "Old".to_string(),
+                    "operational".to_string(),
+                )],
+                old + i,
+            )
+            .unwrap();
+        }
+        for i in 0..5i64 {
+            db::insert_agent_status_samples(
+                &conn,
+                "claude",
+                &[(
+                    format!("new-{i}"),
+                    "New".to_string(),
+                    "operational".to_string(),
+                )],
+                now - i,
+            )
+            .unwrap();
+        }
+
+        let deleted = db::prune_agent_status_history(&conn, 90).unwrap();
+        assert_eq!(deleted, 5, "should delete exactly 5 old rows");
+
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_status_history", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(remaining, 5, "5 recent rows should survive pruning");
+    }
+
+    #[test]
+    fn test_uptime_pct_under_maintenance_counts_as_not_up() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        let now = now_epoch();
+        // 7 operational, 3 under_maintenance → 7/10 = 0.7 (not 1.0)
+        seed_history(
+            &conn,
+            "claude",
+            "comp-maint",
+            10,
+            7,
+            "under_maintenance",
+            now,
+        );
+        let pct = db::uptime_pct(&conn, "claude", "comp-maint", 30).unwrap();
+        assert_eq!(pct, Some(0.7));
+    }
+
+    #[test]
+    fn test_insert_agent_status_samples_pk_conflict_ignored() {
+        let tmp = TempDir::new().unwrap();
+        let conn = open_tmp_db(&tmp);
+        let ts = now_epoch();
+        let samples = vec![(
+            "cid-pk".to_string(),
+            "Claude Code".to_string(),
+            "operational".to_string(),
+        )];
+        // First insert succeeds.
+        db::insert_agent_status_samples(&conn, "claude", &samples, ts).unwrap();
+        // Second insert with same PK (ts, provider, component_id) is silently ignored.
+        let samples2 = vec![(
+            "cid-pk".to_string(),
+            "Claude Code".to_string(),
+            "degraded_performance".to_string(),
+        )];
+        db::insert_agent_status_samples(&conn, "claude", &samples2, ts).unwrap();
+
+        // Should still be exactly 1 row; the first sample's status is preserved.
+        let (count, status): (i64, String) = conn
+            .query_row(
+                "SELECT COUNT(*), status FROM agent_status_history WHERE component_id = 'cid-pk'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+        assert_eq!(status, "operational", "first sample wins on PK conflict");
+    }
 }

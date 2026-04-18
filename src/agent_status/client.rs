@@ -78,8 +78,11 @@ fn build_claude_status(summary: StatuspageSummary) -> ProviderStatus {
         .into_iter()
         .filter(|c| claude_component_allowed(&c.id))
         .map(|c| ComponentStatus {
+            id: c.id,
             name: c.name,
             status: c.status,
+            uptime_30d: None,
+            uptime_7d: None,
         })
         .collect();
 

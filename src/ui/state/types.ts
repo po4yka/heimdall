@@ -308,8 +308,11 @@ export type StatusIndicator =
   | 'unknown';
 
 export interface ComponentStatus {
+  id: string;
   name: string;
   status: string;
+  uptime_30d: number | null;
+  uptime_7d: number | null;
 }
 
 export interface IncidentSummary {

@@ -1639,10 +1639,28 @@
             /* @__PURE__ */ u2("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Component" }),
             /* @__PURE__ */ u2("th", { style: { textAlign: "left", padding: "2px 0", fontWeight: 500 }, children: "Status" })
           ] }) }),
-          /* @__PURE__ */ u2("tbody", { children: status.components.map((c4, i4) => /* @__PURE__ */ u2("tr", { children: [
-            /* @__PURE__ */ u2("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: c4.name }),
-            /* @__PURE__ */ u2("td", { style: { padding: "2px 0", color: "var(--text-secondary)" }, children: c4.status.replace(/_/g, " ") })
-          ] }, i4)) })
+          /* @__PURE__ */ u2("tbody", { children: status.components.map((c4, i4) => {
+            const fmt2 = (v4) => v4 != null ? `${(v4 * 100).toFixed(2)}%` : "--";
+            const has30 = c4.uptime_30d != null;
+            const has7 = c4.uptime_7d != null;
+            const showUptime = has30 || has7;
+            return /* @__PURE__ */ u2(S, { children: [
+              /* @__PURE__ */ u2("tr", { children: [
+                /* @__PURE__ */ u2("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: c4.name }),
+                /* @__PURE__ */ u2("td", { style: { padding: "2px 0", color: "var(--text-secondary)" }, children: c4.status.replace(/_/g, " ") })
+              ] }, i4),
+              showUptime && /* @__PURE__ */ u2("tr", { children: /* @__PURE__ */ u2("td", { colSpan: 2, style: { padding: "0 0 4px 0" }, children: /* @__PURE__ */ u2("span", { style: {
+                fontFamily: "var(--font-mono)",
+                fontSize: "11px",
+                letterSpacing: "0.04em"
+              }, children: [
+                /* @__PURE__ */ u2("span", { style: { color: "var(--text-secondary)" }, children: "30D " }),
+                /* @__PURE__ */ u2("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_30d) }),
+                /* @__PURE__ */ u2("span", { style: { color: "var(--text-secondary)" }, children: " \xB7 7D " }),
+                /* @__PURE__ */ u2("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_7d) })
+              ] }) }) }, `${i4}-uptime`)
+            ] });
+          }) })
         ] }),
         status.active_incidents.map((inc, i4) => /* @__PURE__ */ u2(
           "div",

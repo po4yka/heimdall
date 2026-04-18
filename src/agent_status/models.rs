@@ -52,8 +52,18 @@ impl StatusIndicator {
 /// Per-component health snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentStatus {
+    /// Stable component identifier used as the history key.
+    /// For Claude: the Statuspage component UUID (e.g. `yyzkbfz2thpt`).
+    /// For OpenAI: the component name (no stable UUID available from the shim).
+    pub id: String,
     pub name: String,
     pub status: String,
+    /// Rolling 30-day uptime percentage (0.0–1.0). `None` until ≥10 samples exist in the window.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uptime_30d: Option<f64>,
+    /// Rolling 7-day uptime percentage (0.0–1.0). `None` until ≥10 samples exist in the window.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uptime_7d: Option<f64>,
 }
 
 /// Summary of an active incident.

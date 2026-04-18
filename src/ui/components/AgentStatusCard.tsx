@@ -94,12 +94,37 @@ function ProviderRow({ name, status, expanded }: ProviderRowProps) {
                 </tr>
               </thead>
               <tbody>
-                {status.components.map((c, i) => (
-                  <tr key={i}>
-                    <td style={{ padding: '2px 8px 2px 0', fontFamily: 'var(--font-mono)' }}>{c.name}</td>
-                    <td style={{ padding: '2px 0', color: 'var(--text-secondary)' }}>{c.status.replace(/_/g, ' ')}</td>
-                  </tr>
-                ))}
+                {status.components.map((c, i) => {
+                  const fmt = (v: number | null | undefined) =>
+                    v != null ? `${(v * 100).toFixed(2)}%` : '--';
+                  const has30 = c.uptime_30d != null;
+                  const has7 = c.uptime_7d != null;
+                  const showUptime = has30 || has7;
+                  return (
+                    <>
+                      <tr key={i}>
+                        <td style={{ padding: '2px 8px 2px 0', fontFamily: 'var(--font-mono)' }}>{c.name}</td>
+                        <td style={{ padding: '2px 0', color: 'var(--text-secondary)' }}>{c.status.replace(/_/g, ' ')}</td>
+                      </tr>
+                      {showUptime && (
+                        <tr key={`${i}-uptime`}>
+                          <td colSpan={2} style={{ padding: '0 0 4px 0' }}>
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '11px',
+                              letterSpacing: '0.04em',
+                            }}>
+                              <span style={{ color: 'var(--text-secondary)' }}>30D </span>
+                              <span style={{ color: 'var(--text-primary)' }}>{fmt(c.uptime_30d)}</span>
+                              <span style={{ color: 'var(--text-secondary)' }}> · 7D </span>
+                              <span style={{ color: 'var(--text-primary)' }}>{fmt(c.uptime_7d)}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
               </tbody>
             </table>
           )}
