@@ -21,6 +21,12 @@ pub struct WebhookState {
     pub claude_degraded: Option<bool>,
     /// Track whether OpenAI was last seen degraded (Major/Critical).
     pub openai_degraded: Option<bool>,
+    /// Track whether Claude community signal was last seen as a spike while
+    /// official status was below Major (leading-indicator dedup).
+    pub claude_community_spike: Option<bool>,
+    /// Track whether OpenAI community signal was last seen as a spike while
+    /// official status was below Major (leading-indicator dedup).
+    pub openai_community_spike: Option<bool>,
 }
 
 /// POST a webhook event to the given URL. Fire-and-forget via `tokio::spawn`.
@@ -90,6 +96,7 @@ pub fn notify_if_configured(config: &WebhookConfig, event: WebhookEvent) {
         "session_depleted" | "session_restored" => config.session_depleted,
         "cost_threshold" => config.cost_threshold.is_some(),
         "agent_status_degraded" | "agent_status_restored" => config.agent_status,
+        "community_signal_spike" => config.spike_webhook,
         _ => {
             debug!("Unknown webhook event type: {}", event.event_type);
             false
@@ -231,6 +238,57 @@ pub fn cost_threshold_event(
     })
 }
 
+/// Produce a `community_signal_spike` webhook event when the crowd signal for a
+/// provider transitions to Spike AND the official indicator is below Major
+/// (i.e., the crowd sees something the official status page hasn't confirmed).
+///
+/// - Fires only on `false → true` transition (dedup via `spike_state`).
+/// - Clears the spike state when either the crowd signal normalises or the
+///   official page catches up to Major/Critical (official_is_major = true).
+///
+/// `provider` is a display name like `"Claude"` or `"OpenAI"`.
+/// `is_crowd_spike` is whether any slug for this provider is at Spike level.
+/// `official_is_major` is whether the official status is already Major/Critical.
+/// `spike_state` is the mutable per-provider dedup flag on `WebhookState`.
+pub fn community_signal_spike_event(
+    config: &WebhookConfig,
+    spike_state: &mut Option<bool>,
+    provider: &str,
+    is_crowd_spike: bool,
+    official_is_major: bool,
+) -> Option<WebhookEvent> {
+    // Leading-indicator condition: crowd=Spike AND official < Major.
+    let is_leading_spike = is_crowd_spike && !official_is_major;
+
+    if !config.spike_webhook {
+        *spike_state = Some(is_leading_spike);
+        return None;
+    }
+
+    let previous = spike_state.replace(is_leading_spike);
+
+    match previous {
+        // Same state — no transition.
+        Some(prev) if prev == is_leading_spike => None,
+        // false → true: crowd detected something official hasn't confirmed.
+        Some(false) if is_leading_spike => Some(WebhookEvent {
+            event_type: "community_signal_spike".to_string(),
+            message: format!(
+                "{} community reports spike while official status is nominal — possible leading indicator.",
+                provider
+            ),
+            details: serde_json::json!({
+                "provider": provider,
+                "crowd_spike": true,
+                "official_is_major": false,
+            }),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }),
+        // First observation or true→false — no event.
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,6 +320,7 @@ mod tests {
             cost_threshold: Some(50.0),
             session_depleted: true,
             agent_status: true,
+            spike_webhook: true,
         };
 
         let event = WebhookEvent {
@@ -282,6 +341,7 @@ mod tests {
             cost_threshold: Some(50.0),
             session_depleted: false, // session events disabled
             agent_status: true,
+            spike_webhook: true,
         };
 
         let event = WebhookEvent {
@@ -302,6 +362,7 @@ mod tests {
             cost_threshold: None, // cost threshold not set
             session_depleted: true,
             agent_status: true,
+            spike_webhook: true,
         };
 
         let event = WebhookEvent {
@@ -322,6 +383,7 @@ mod tests {
             cost_threshold: Some(50.0),
             session_depleted: true,
             agent_status: true,
+            spike_webhook: true,
         };
 
         let event = WebhookEvent {
@@ -342,6 +404,7 @@ mod tests {
             cost_threshold: None,
             session_depleted: true,
             agent_status: true,
+            spike_webhook: true,
         };
         let mut state = WebhookState::default();
 
@@ -363,6 +426,7 @@ mod tests {
             cost_threshold: Some(50.0),
             session_depleted: false,
             agent_status: true,
+            spike_webhook: true,
         };
         let mut state = WebhookState::default();
 
@@ -381,6 +445,7 @@ mod tests {
             cost_threshold: None,
             session_depleted: false,
             agent_status: true,
+            spike_webhook: true,
         }
     }
 
@@ -390,6 +455,7 @@ mod tests {
             cost_threshold: None,
             session_depleted: false,
             agent_status: false,
+            spike_webhook: true,
         }
     }
 

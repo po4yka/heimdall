@@ -46,6 +46,7 @@ import type {
   HeatmapData,
   CacheEfficiency,
   AgentStatusSnapshot,
+  CommunitySignal,
 } from './state/types';
 import {
   rawData,
@@ -84,6 +85,8 @@ let loadUsageWindowsInFlight = false;
 let loadHeatmapInFlight = false;
 let lastHeatmapData: HeatmapData | null = null;
 let loadAgentStatusInFlight = false;
+let loadCommunitySignalInFlight = false;
+let lastCommunitySignal: CommunitySignal | null = null;
 
 // ── URL persistence ──────────────────────────────────────────────────
 function getRangeCutoff(range: RangeKey): string | null {
@@ -604,7 +607,7 @@ function renderAgentStatus(snapshot: AgentStatusSnapshot): void {
   const container = $('agent-status');
   if (!container) return;
   container.style.display = '';
-  render(<AgentStatusCard snapshot={snapshot} />, container);
+  render(<AgentStatusCard snapshot={snapshot} communitySignal={lastCommunitySignal} />, container);
 }
 
 async function loadAgentStatus(): Promise<void> {
@@ -618,6 +621,33 @@ async function loadAgentStatus(): Promise<void> {
   } catch { /* silent */ }
   finally {
     loadAgentStatusInFlight = false;
+  }
+}
+
+// ── Community signal ──────────────────────────────────────────────────
+async function loadCommunitySignal(): Promise<void> {
+  if (loadCommunitySignalInFlight) return;
+  loadCommunitySignalInFlight = true;
+  try {
+    const resp = await fetch('/api/community-signal');
+    if (!resp.ok) return;
+    const data: CommunitySignal = await resp.json();
+    // When the aggregator is disabled the server returns {enabled: false}.
+    lastCommunitySignal = data.enabled ? data : null;
+    // Re-render the agent-status card so the community section appears.
+    const container = $('agent-status');
+    if (container && container.style.display !== 'none') {
+      // Re-use the last rendered snapshot if available; no-op when absent.
+      const existing = container.querySelector('[aria-label]');
+      if (existing) {
+        // Trigger a re-render via loadAgentStatus (reads cache, no network).
+        // This keeps the snapshot fresh without duplicating state.
+        loadAgentStatus();
+      }
+    }
+  } catch { /* silent */ }
+  finally {
+    loadCommunitySignalInFlight = false;
   }
 }
 
@@ -726,6 +756,7 @@ loadData();
 setInterval(loadData, 30000);
 loadUsageWindows();
 loadAgentStatus();
-setInterval(() => { loadUsageWindows(); loadAgentStatus(); }, 60000);
+loadCommunitySignal();
+setInterval(() => { loadUsageWindows(); loadAgentStatus(); loadCommunitySignal(); }, 60000);
 loadHeatmap('all');
 setInterval(() => loadHeatmap('all'), 30000);

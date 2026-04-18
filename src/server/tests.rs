@@ -12,9 +12,11 @@ mod tests {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
-    use crate::config::{AgentStatusConfig, WebhookConfig};
+    use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
     use crate::scanner;
-    use crate::server::api::{AppState, api_agent_status, api_data, api_health, api_rescan};
+    use crate::server::api::{
+        AppState, api_agent_status, api_community_signal, api_data, api_health, api_rescan,
+    };
     use crate::server::assets;
     use crate::webhooks::WebhookState;
 
@@ -89,6 +91,8 @@ mod tests {
             scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
             agent_status_config,
             agent_status_cache: tokio::sync::RwLock::new(None),
+            aggregator_config: AggregatorConfig::default(),
+            aggregator_cache: tokio::sync::RwLock::new(None),
         });
         let html = assets::render_dashboard();
 
@@ -109,6 +113,7 @@ mod tests {
             )
             .route("/api/heatmap", get(crate::server::api::api_heatmap))
             .route("/api/agent-status", get(api_agent_status))
+            .route("/api/community-signal", get(api_community_signal))
             .with_state(state)
     }
 
@@ -1035,6 +1040,8 @@ mod tests {
                 snapshot,
                 None,
             ))),
+            aggregator_config: AggregatorConfig::default(),
+            aggregator_cache: tokio::sync::RwLock::new(None),
         });
 
         let html = assets::render_dashboard();
@@ -1159,5 +1166,196 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(json["claude"].is_null());
         assert!(json["openai"].is_null());
+    }
+
+    // -----------------------------------------------------------------------
+    // Community signal endpoint tests
+    // -----------------------------------------------------------------------
+
+    /// When aggregator is disabled (default), `/api/community-signal` returns
+    /// `{"enabled": false}` with status 200 and makes no network calls.
+    #[tokio::test]
+    async fn test_community_signal_disabled_returns_enabled_false() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects); // AggregatorConfig::default() has enabled=false
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/community-signal")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json["enabled"], false,
+            "disabled aggregator must return {{\"enabled\": false}}"
+        );
+    }
+
+    /// When aggregator is enabled but no API key is set, the endpoint still
+    /// returns 200 with a signal that has `enabled: true` (the backend returns
+    /// Unknown-level signals when the key is absent).
+    #[tokio::test]
+    async fn test_community_signal_enabled_no_key_returns_200() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+
+        let mut agg_cfg = AggregatorConfig::default();
+        agg_cfg.enabled = true;
+        // api_key_env points at a var that is definitely not set in CI.
+        agg_cfg.api_key_env = "HEIMDALL_TEST_NONEXISTENT_SG_KEY".into();
+
+        let state = Arc::new(crate::server::api::AppState {
+            db_path,
+            projects_dirs: Some(vec![projects]),
+            oauth_enabled: false,
+            oauth_refresh_interval: 60,
+            oauth_cache: tokio::sync::RwLock::new(None),
+            openai_enabled: false,
+            openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
+            openai_refresh_interval: 300,
+            openai_lookback_days: 30,
+            openai_cache: tokio::sync::RwLock::new(None),
+            db_lock: tokio::sync::Mutex::new(()),
+            webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
+            webhook_config: WebhookConfig::default(),
+            scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
+            agent_status_config: AgentStatusConfig::default(),
+            agent_status_cache: tokio::sync::RwLock::new(None),
+            aggregator_config: agg_cfg,
+            aggregator_cache: tokio::sync::RwLock::new(None),
+        });
+
+        let html = crate::server::assets::render_dashboard();
+        let app = Router::new()
+            .route(
+                "/",
+                get({
+                    let h = html.clone();
+                    move || async { Html(h) }
+                }),
+            )
+            .route("/api/community-signal", get(api_community_signal))
+            .with_state(state);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/community-signal")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        // The response must carry `enabled: true` when the feature is on.
+        assert_eq!(
+            json["enabled"], true,
+            "enabled aggregator must return enabled=true, got: {json}"
+        );
+        // Must have claude and openai arrays.
+        assert!(
+            json["claude"].is_array(),
+            "response must contain claude array"
+        );
+        assert!(
+            json["openai"].is_array(),
+            "response must contain openai array"
+        );
+    }
+
+    /// Cache hit: a pre-populated aggregator cache is returned without a
+    /// network call and the TTL is honoured.
+    #[tokio::test]
+    async fn test_community_signal_cache_hit_returns_cached_data() {
+        use crate::status_aggregator::models::{CommunitySignal, ServiceSignal, SignalLevel};
+
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+
+        let mut agg_cfg = AggregatorConfig::default();
+        agg_cfg.enabled = true;
+        agg_cfg.refresh_interval = 3600; // long TTL — cache never expires
+
+        let cached_signal = CommunitySignal {
+            fetched_at: chrono::Utc::now().to_rfc3339(),
+            enabled: true,
+            claude: vec![ServiceSignal {
+                slug: "claude-ai".into(),
+                name: "Claude AI".into(),
+                level: SignalLevel::Normal,
+                report_count_last_hour: Some(0),
+                report_baseline: Some(0),
+                detail: "All good".into(),
+                source_url: "https://statusgator.com/services/claude-ai".into(),
+            }],
+            openai: vec![],
+        };
+
+        let state = Arc::new(crate::server::api::AppState {
+            db_path,
+            projects_dirs: Some(vec![projects]),
+            oauth_enabled: false,
+            oauth_refresh_interval: 60,
+            oauth_cache: tokio::sync::RwLock::new(None),
+            openai_enabled: false,
+            openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
+            openai_refresh_interval: 300,
+            openai_lookback_days: 30,
+            openai_cache: tokio::sync::RwLock::new(None),
+            db_lock: tokio::sync::Mutex::new(()),
+            webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
+            webhook_config: WebhookConfig::default(),
+            scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
+            agent_status_config: AgentStatusConfig::default(),
+            agent_status_cache: tokio::sync::RwLock::new(None),
+            aggregator_config: agg_cfg,
+            aggregator_cache: tokio::sync::RwLock::new(Some((
+                std::time::Instant::now(),
+                cached_signal,
+            ))),
+        });
+
+        let html = crate::server::assets::render_dashboard();
+        let app = Router::new()
+            .route(
+                "/",
+                get({
+                    let h = html.clone();
+                    move || async { Html(h) }
+                }),
+            )
+            .route("/api/community-signal", get(api_community_signal))
+            .with_state(state);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/community-signal")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["enabled"], true);
+        // The cached claude slug must be present.
+        let claude_arr = json["claude"].as_array().unwrap();
+        assert_eq!(claude_arr.len(), 1);
+        assert_eq!(claude_arr[0]["slug"], "claude-ai");
+        assert_eq!(claude_arr[0]["level"], "normal");
     }
 }

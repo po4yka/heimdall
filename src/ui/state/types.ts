@@ -337,6 +337,27 @@ export interface AgentStatusSnapshot {
   fetched_at: string;
 }
 
+// ── Community Signal ────────────────────────────────────────────────────────
+
+export type SignalLevel = 'normal' | 'elevated' | 'spike' | 'unknown';
+
+export interface ServiceSignal {
+  slug: string;
+  name: string;
+  level: SignalLevel;
+  report_count_last_hour: number | null;
+  report_baseline: number | null;
+  detail: string;
+  source_url: string;
+}
+
+export interface CommunitySignal {
+  fetched_at: string;
+  claude: ServiceSignal[];
+  openai: ServiceSignal[];
+  enabled: boolean;
+}
+
 // ── Phase 13: Activity Heatmap ───────────────────────────────────────────────
 
 export interface HeatmapCell {

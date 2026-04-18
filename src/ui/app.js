@@ -1118,7 +1118,8 @@
     "rate-windows": null,
     "rescan": null,
     "header-refresh": null,
-    "agent-status": null
+    "agent-status": null,
+    "community-signal": null
   });
   var SESSIONS_PAGE_SIZE = 25;
   var loadState = y3("idle");
@@ -1699,7 +1700,40 @@
       ] })
     ] });
   }
-  function AgentStatusCard({ snapshot }) {
+  function signalLevelStyle(level) {
+    switch (level) {
+      case "spike":
+        return { label: "SPIKE", color: "var(--accent)" };
+      case "elevated":
+        return { label: "ELEVATED", color: "var(--text-primary)" };
+      case "normal":
+        return { label: "NORMAL", color: "var(--text-secondary)" };
+      default:
+        return { label: "UNKNOWN", color: "var(--text-secondary)" };
+    }
+  }
+  function CommunitySignalRow({ label, signals }) {
+    if (!signals.length) return null;
+    const levelOrder = ["spike", "elevated", "normal", "unknown"];
+    const worstLevel = levelOrder.find((l5) => signals.some((s4) => s4.level === l5)) ?? "unknown";
+    const { label: levelLabel, color } = signalLevelStyle(worstLevel);
+    return /* @__PURE__ */ u2("div", { style: { display: "flex", alignItems: "center", padding: "4px 0", gap: "8px" }, children: [
+      /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: label }),
+      /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", color }, children: levelLabel }),
+      /* @__PURE__ */ u2(
+        "a",
+        {
+          href: signals[0].source_url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: { color: "var(--text-secondary)", fontSize: "11px" },
+          "aria-label": `${label} community signal source`,
+          children: "\u2197"
+        }
+      )
+    ] });
+  }
+  function AgentStatusCard({ snapshot, communitySignal }) {
     const expanded = agent_status_expanded.value;
     const hasData = snapshot.claude != null || snapshot.openai != null;
     return /* @__PURE__ */ u2("div", { class: "card stat-card", style: { minWidth: "300px" }, children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
@@ -1739,6 +1773,16 @@
       ),
       /* @__PURE__ */ u2(ProviderRow, { name: "Claude", status: snapshot.claude, expanded }),
       /* @__PURE__ */ u2(ProviderRow, { name: "OpenAI / Codex", status: snapshot.openai, expanded }),
+      communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && /* @__PURE__ */ u2("div", { style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }, children: [
+        /* @__PURE__ */ u2("div", { style: { fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", marginBottom: "6px", letterSpacing: "0.06em" }, children: "COMMUNITY SIGNAL" }),
+        /* @__PURE__ */ u2(CommunitySignalRow, { label: "Claude", signals: communitySignal.claude }),
+        /* @__PURE__ */ u2(CommunitySignalRow, { label: "OpenAI", signals: communitySignal.openai }),
+        communitySignal.fetched_at && /* @__PURE__ */ u2("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "4px", fontFamily: "var(--font-mono)" }, children: [
+          "Crowd data ",
+          communitySignal.fetched_at.slice(0, 19).replace("T", " "),
+          " UTC"
+        ] })
+      ] }),
       snapshot.fetched_at && /* @__PURE__ */ u2("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "8px", fontFamily: "var(--font-mono)" }, children: [
         "Refreshed ",
         snapshot.fetched_at.slice(0, 19).replace("T", " "),
@@ -6247,6 +6291,8 @@
   var loadHeatmapInFlight = false;
   var lastHeatmapData = null;
   var loadAgentStatusInFlight = false;
+  var loadCommunitySignalInFlight = false;
+  var lastCommunitySignal = null;
   function getRangeCutoff(range) {
     if (range === "all") return null;
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
@@ -6703,7 +6749,7 @@
     const container = $2("agent-status");
     if (!container) return;
     container.style.display = "";
-    R(/* @__PURE__ */ u2(AgentStatusCard, { snapshot }), container);
+    R(/* @__PURE__ */ u2(AgentStatusCard, { snapshot, communitySignal: lastCommunitySignal }), container);
   }
   async function loadAgentStatus() {
     if (loadAgentStatusInFlight) return;
@@ -6716,6 +6762,26 @@
     } catch {
     } finally {
       loadAgentStatusInFlight = false;
+    }
+  }
+  async function loadCommunitySignal() {
+    if (loadCommunitySignalInFlight) return;
+    loadCommunitySignalInFlight = true;
+    try {
+      const resp = await fetch("/api/community-signal");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      lastCommunitySignal = data.enabled ? data : null;
+      const container = $2("agent-status");
+      if (container && container.style.display !== "none") {
+        const existing = container.querySelector("[aria-label]");
+        if (existing) {
+          loadAgentStatus();
+        }
+      }
+    } catch {
+    } finally {
+      loadCommunitySignalInFlight = false;
     }
   }
   async function loadHeatmap(period = "month") {
@@ -6794,9 +6860,11 @@
   setInterval(loadData, 3e4);
   loadUsageWindows();
   loadAgentStatus();
+  loadCommunitySignal();
   setInterval(() => {
     loadUsageWindows();
     loadAgentStatus();
+    loadCommunitySignal();
   }, 6e4);
   loadHeatmap("all");
   setInterval(() => loadHeatmap("all"), 3e4);

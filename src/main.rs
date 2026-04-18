@@ -215,6 +215,7 @@ fn main() -> Result<()> {
     let cfg_openai_lookback_days = cfg.openai.lookback_days;
     let cfg_display_currency = cfg.display.currency.unwrap_or_else(|| "USD".into());
     let cfg_agent_status = cfg.agent_status;
+    let cfg_aggregator = cfg.aggregator;
 
     let default_db = |cli_db: Option<PathBuf>| -> PathBuf {
         cli_db
@@ -291,6 +292,7 @@ fn main() -> Result<()> {
                 webhook_config: cfg_webhooks,
                 watch,
                 agent_status_config: cfg_agent_status,
+                aggregator_config: cfg_aggregator,
             }))?;
         }
         Commands::Export {

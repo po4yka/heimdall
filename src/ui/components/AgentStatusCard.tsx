@@ -1,8 +1,9 @@
-import type { AgentStatusSnapshot, ProviderStatus, StatusIndicator } from '../state/types';
+import type { AgentStatusSnapshot, ProviderStatus, StatusIndicator, CommunitySignal, ServiceSignal, SignalLevel } from '../state/types';
 import { agent_status_expanded } from '../state/store';
 
 interface AgentStatusCardProps {
   snapshot: AgentStatusSnapshot;
+  communitySignal?: CommunitySignal | null;
 }
 
 /** Monochrome dot at three opacity levels; red only for Major/Critical. */
@@ -166,7 +167,47 @@ function ProviderRow({ name, status, expanded }: ProviderRowProps) {
   );
 }
 
-export function AgentStatusCard({ snapshot }: AgentStatusCardProps) {
+/** Map a SignalLevel to a display label and color. */
+function signalLevelStyle(level: SignalLevel): { label: string; color: string } {
+  switch (level) {
+    case 'spike':    return { label: 'SPIKE',    color: 'var(--accent)' };
+    case 'elevated': return { label: 'ELEVATED', color: 'var(--text-primary)' };
+    case 'normal':   return { label: 'NORMAL',   color: 'var(--text-secondary)' };
+    default:         return { label: 'UNKNOWN',  color: 'var(--text-secondary)' };
+  }
+}
+
+interface CommunitySignalRowProps {
+  label: string;
+  signals: ServiceSignal[];
+}
+
+function CommunitySignalRow({ label, signals }: CommunitySignalRowProps) {
+  if (!signals.length) return null;
+
+  // Worst level across all slugs for this provider.
+  const levelOrder: SignalLevel[] = ['spike', 'elevated', 'normal', 'unknown'];
+  const worstLevel: SignalLevel = levelOrder.find(l => signals.some(s => s.level === l)) ?? 'unknown';
+  const { label: levelLabel, color } = signalLevelStyle(worstLevel);
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', padding: '4px 0', gap: '8px' }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', flex: 1 }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color }}>{levelLabel}</span>
+      <a
+        href={signals[0].source_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: 'var(--text-secondary)', fontSize: '11px' }}
+        aria-label={`${label} community signal source`}
+      >
+        ↗
+      </a>
+    </div>
+  );
+}
+
+export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardProps) {
   const expanded = agent_status_expanded.value;
 
   const hasData = snapshot.claude != null || snapshot.openai != null;
@@ -205,6 +246,21 @@ export function AgentStatusCard({ snapshot }: AgentStatusCardProps) {
 
         <ProviderRow name="Claude" status={snapshot.claude} expanded={expanded} />
         <ProviderRow name="OpenAI / Codex" status={snapshot.openai} expanded={expanded} />
+
+        {communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && (
+          <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
+            <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: '6px', letterSpacing: '0.06em' }}>
+              COMMUNITY SIGNAL
+            </div>
+            <CommunitySignalRow label="Claude" signals={communitySignal.claude} />
+            <CommunitySignalRow label="OpenAI" signals={communitySignal.openai} />
+            {communitySignal.fetched_at && (
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
+                Crowd data {communitySignal.fetched_at.slice(0, 19).replace('T', ' ')} UTC
+              </div>
+            )}
+          </div>
+        )}
 
         {snapshot.fetched_at && (
           <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '8px', fontFamily: 'var(--font-mono)' }}>

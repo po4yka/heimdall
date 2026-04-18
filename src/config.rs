@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 /// Configuration loaded from ~/.claude/usage-tracker.toml
@@ -43,6 +43,11 @@ pub struct Config {
     /// TOML section: [agent_status]
     #[serde(default)]
     pub agent_status: AgentStatusConfig,
+
+    /// Optional community-signal aggregator (opt-in, off by default).
+    /// TOML section: [status_aggregator]
+    #[serde(default, rename = "status_aggregator")]
+    pub aggregator: AggregatorConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,7 +92,7 @@ impl Default for OpenAiConfig {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct WebhookConfig {
     /// URL to POST webhook events to.
@@ -99,6 +104,10 @@ pub struct WebhookConfig {
     /// Notify on agent status transitions (default: true when URL is set).
     #[serde(default = "default_true")]
     pub agent_status: bool,
+    /// Notify on community signal spike when official status is below Major
+    /// (default: true — fires only when the feature is enabled).
+    #[serde(default = "default_true")]
+    pub spike_webhook: bool,
 }
 
 fn default_true() -> bool {
@@ -139,6 +148,69 @@ impl Default for AgentStatusConfig {
             claude_enabled: true,
             openai_enabled: true,
             alert_min_severity: AlertSeverity::Major,
+        }
+    }
+}
+
+fn default_aggregator_provider() -> String {
+    "statusgator".into()
+}
+
+fn default_aggregator_api_key_env() -> String {
+    "STATUSGATOR_API_KEY".into()
+}
+
+fn default_aggregator_refresh_interval() -> u64 {
+    300
+}
+
+fn default_claude_services() -> Vec<String> {
+    vec!["claude-ai".into(), "claude".into()]
+}
+
+fn default_openai_services() -> Vec<String> {
+    vec!["openai".into(), "chatgpt".into()]
+}
+
+/// Configuration for the optional community-signal aggregator (opt-in feature).
+///
+/// TOML section: `[status_aggregator]`
+/// Feature is **off by default** (`enabled = false`).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct AggregatorConfig {
+    /// Enable community signal polling (default: false — explicit opt-in required).
+    pub enabled: bool,
+    /// Backend provider name (default: "statusgator").
+    #[serde(default = "default_aggregator_provider")]
+    pub provider: String,
+    /// Environment variable that holds the API key (key never stored in TOML).
+    #[serde(default = "default_aggregator_api_key_env")]
+    pub api_key_env: String,
+    /// Seconds between polls (default: 300 — respects StatusGator free-tier rate).
+    #[serde(default = "default_aggregator_refresh_interval")]
+    pub refresh_interval: u64,
+    /// StatusGator service slugs for Claude.
+    #[serde(default = "default_claude_services")]
+    pub claude_services: Vec<String>,
+    /// StatusGator service slugs for OpenAI.
+    #[serde(default = "default_openai_services")]
+    pub openai_services: Vec<String>,
+    /// Fire a webhook when crowd=Spike AND official indicator is below Major.
+    #[serde(default = "default_true")]
+    pub spike_webhook: bool,
+}
+
+impl Default for AggregatorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            provider: default_aggregator_provider(),
+            api_key_env: default_aggregator_api_key_env(),
+            refresh_interval: default_aggregator_refresh_interval(),
+            claude_services: default_claude_services(),
+            openai_services: default_openai_services(),
+            spike_webhook: true,
         }
     }
 }
@@ -597,6 +669,65 @@ output = 8.0
         // but we can verify the function doesn't panic and returns
         // Some or None based on the real filesystem.
         let _ = resolve_config_path(); // must not panic
+    }
+
+    #[test]
+    fn test_aggregator_config_defaults() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        std::fs::File::create(&path).unwrap();
+        let config = load_config_from(&path);
+        // Default: disabled, statusgator, STATUSGATOR_API_KEY, 300s
+        assert!(!config.aggregator.enabled);
+        assert_eq!(config.aggregator.provider, "statusgator");
+        assert_eq!(config.aggregator.api_key_env, "STATUSGATOR_API_KEY");
+        assert_eq!(config.aggregator.refresh_interval, 300);
+        assert!(config.aggregator.spike_webhook);
+        assert_eq!(
+            config.aggregator.claude_services,
+            vec!["claude-ai", "claude"]
+        );
+        assert_eq!(config.aggregator.openai_services, vec!["openai", "chatgpt"]);
+    }
+
+    #[test]
+    fn test_aggregator_config_full_section() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(
+            f,
+            r#"
+[status_aggregator]
+enabled = true
+provider = "statusgator"
+api_key_env = "MY_SG_KEY"
+refresh_interval = 600
+claude_services = ["claude-ai"]
+openai_services = ["openai"]
+spike_webhook = false
+"#
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert!(config.aggregator.enabled);
+        assert_eq!(config.aggregator.api_key_env, "MY_SG_KEY");
+        assert_eq!(config.aggregator.refresh_interval, 600);
+        assert_eq!(config.aggregator.claude_services, vec!["claude-ai"]);
+        assert!(!config.aggregator.spike_webhook);
+    }
+
+    #[test]
+    fn test_aggregator_config_enabled_only() {
+        // Only set enabled=true; all other fields should take defaults.
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(f, "[status_aggregator]\nenabled = true\n").unwrap();
+        let config = load_config_from(&path);
+        assert!(config.aggregator.enabled);
+        assert_eq!(config.aggregator.provider, "statusgator");
+        assert_eq!(config.aggregator.api_key_env, "STATUSGATOR_API_KEY");
     }
 
     #[test]

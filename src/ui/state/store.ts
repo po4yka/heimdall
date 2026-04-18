@@ -24,7 +24,7 @@ export const rescanDisabled = signal<boolean>(false);
 export const themeMode = signal<'dark' | 'light'>('dark');
 
 // ── Inline status (replaces toasts) ──────────────────────────────────
-export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status';
+export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal';
 export type StatusKind = 'success' | 'error' | 'loading' | 'info';
 
 export interface StatusEntry {
@@ -38,6 +38,7 @@ export const statusByPlacement = signal<Record<StatusPlacement, StatusEntry | nu
   'rescan': null,
   'header-refresh': null,
   'agent-status': null,
+  'community-signal': null,
 });
 
 // ── Pagination page size (used by SessionsTable via DataTable) ───────

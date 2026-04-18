@@ -15,12 +15,14 @@ use crate::tz::TzParams;
 
 use crate::agent_status;
 use crate::agent_status::models::AgentStatusSnapshot;
-use crate::config::{AgentStatusConfig, WebhookConfig};
+use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
 use crate::oauth;
 use crate::oauth::models::UsageWindowsResponse;
 use crate::openai;
 use crate::scanner;
 use crate::scanner::db;
+use crate::status_aggregator;
+use crate::status_aggregator::models::CommunitySignal;
 use crate::webhooks::{self, WebhookState};
 
 pub struct AppState {
@@ -44,6 +46,10 @@ pub struct AppState {
     pub agent_status_config: AgentStatusConfig,
     /// Cache: (fetched_at, snapshot, claude_etag).
     pub agent_status_cache: RwLock<Option<(Instant, AgentStatusSnapshot, Option<String>)>>,
+    /// Community-signal aggregator config (opt-in, off by default).
+    pub aggregator_config: AggregatorConfig,
+    /// Community-signal cache: (fetched_at, signal).
+    pub aggregator_cache: RwLock<Option<(Instant, CommunitySignal)>>,
 }
 
 pub async fn api_data(
@@ -509,6 +515,105 @@ async fn maybe_send_cost_threshold_webhook(
         &mut webhook_state,
         &today,
         daily_cost,
+    ) {
+        webhooks::notify_if_configured(&state.webhook_config, event);
+    }
+}
+
+/// `GET /api/community-signal` — returns the latest crowd-sourced signal snapshot.
+///
+/// When `aggregator_config.enabled` is false, returns `{"enabled": false}` with
+/// status 200 and makes no network calls.
+///
+/// When enabled, uses a TTL cache (default 300s). On cache miss, fetches fresh
+/// data from the configured backend (StatusGator), fires divergence webhooks if
+/// the crowd signal spikes while the official indicator is below Major, and
+/// updates the cache.
+pub async fn api_community_signal(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, StatusCode> {
+    if !state.aggregator_config.enabled {
+        return Ok(Json(serde_json::json!({ "enabled": false })));
+    }
+
+    // Check cache.
+    {
+        let cache = state.aggregator_cache.read().await;
+        if let Some((fetched_at, ref data)) = *cache
+            && fetched_at.elapsed().as_secs() < state.aggregator_config.refresh_interval
+        {
+            let value =
+                serde_json::to_value(data).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            return Ok(Json(value));
+        }
+    }
+
+    // Cache miss: fetch fresh data in a blocking task.
+    let config = state.aggregator_config.clone();
+    let signal = tokio::task::spawn_blocking(move || status_aggregator::poll(&config))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Fire divergence webhooks (leading-indicator guard).
+    maybe_send_community_spike_webhooks(&state, &signal).await;
+
+    // Update cache.
+    {
+        let mut cache = state.aggregator_cache.write().await;
+        *cache = Some((Instant::now(), signal.clone()));
+    }
+
+    let value = serde_json::to_value(&signal).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
+}
+
+/// Fire `community_signal_spike` webhook events when the crowd signal is at
+/// Spike level while the official agent-status indicator is below Major.
+///
+/// Deduplication: per-provider boolean on `WebhookState` — fires only on the
+/// `false → true` transition, then silences until the crowd normalises or the
+/// official page catches up.
+async fn maybe_send_community_spike_webhooks(state: &Arc<AppState>, signal: &CommunitySignal) {
+    use crate::status_aggregator::models::SignalLevel;
+
+    // Read the current official agent-status indicator from the cached snapshot.
+    let (claude_official_major, openai_official_major) = {
+        let cache = state.agent_status_cache.read().await;
+        let snap = cache.as_ref().map(|(_, s, _)| s.clone());
+        let claude_major = snap
+            .as_ref()
+            .and_then(|s| s.claude.as_ref())
+            .map(|p| p.indicator.is_alert_worthy())
+            .unwrap_or(false);
+        let openai_major = snap
+            .as_ref()
+            .and_then(|s| s.openai.as_ref())
+            .map(|p| p.indicator.is_alert_worthy())
+            .unwrap_or(false);
+        (claude_major, openai_major)
+    };
+
+    let claude_spike = signal.claude.iter().any(|s| s.level == SignalLevel::Spike);
+    let openai_spike = signal.openai.iter().any(|s| s.level == SignalLevel::Spike);
+
+    let mut webhook_state = state.webhook_state.lock().await;
+
+    if let Some(event) = webhooks::community_signal_spike_event(
+        &state.webhook_config,
+        &mut webhook_state.claude_community_spike,
+        "Claude",
+        claude_spike,
+        claude_official_major,
+    ) {
+        webhooks::notify_if_configured(&state.webhook_config, event);
+    }
+
+    if let Some(event) = webhooks::community_signal_spike_event(
+        &state.webhook_config,
+        &mut webhook_state.openai_community_spike,
+        "OpenAI",
+        openai_spike,
+        openai_official_major,
     ) {
         webhooks::notify_if_configured(&state.webhook_config, event);
     }

@@ -12,7 +12,7 @@ use axum::response::Html;
 use axum::routing::{get, post};
 use tokio::sync::{Mutex, RwLock};
 
-use crate::config::{AgentStatusConfig, WebhookConfig};
+use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
 use crate::webhooks::WebhookState;
 use api::AppState;
 
@@ -32,6 +32,8 @@ pub struct ServeOptions {
     pub watch: bool,
     /// Agent status monitoring config.
     pub agent_status_config: AgentStatusConfig,
+    /// Community signal aggregator config (opt-in, off by default).
+    pub aggregator_config: AggregatorConfig,
 }
 
 pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
@@ -56,6 +58,8 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         scan_event_tx: scan_event_tx.clone(),
         agent_status_config: options.agent_status_config,
         agent_status_cache: RwLock::new(None),
+        aggregator_config: options.aggregator_config,
+        aggregator_cache: RwLock::new(None),
     });
 
     // Phase 20: start file-watcher if --watch was requested.
@@ -156,6 +160,7 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         .route("/api/heatmap", get(api::api_heatmap))
         .route("/api/stream", get(api::api_stream))
         .route("/api/agent-status", get(api::api_agent_status))
+        .route("/api/community-signal", get(api::api_community_signal))
         .with_state(state);
 
     let addr = format!("{}:{}", options.host, options.port);

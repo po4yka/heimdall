@@ -22,5 +22,6 @@ pub mod pricing;
 pub mod scanner;
 pub mod scheduler;
 pub mod server;
+pub mod status_aggregator;
 pub mod tz;
 pub mod webhooks;
