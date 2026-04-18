@@ -1,8 +1,10 @@
 # Heimdall -- Roadmap
 
-Detailed phased plan for evolving `claude-usage-tracker` into a broader local AI observability platform. Each phase is self-contained: it lands in `main` behind no feature flags, adds tests, and leaves the tree green.
+Detailed phased plan for the next evolution of `claude-usage-tracker`. Each phase is self-contained: it lands in `main` behind no feature flags, adds tests, and leaves the tree green.
 
 Status legend: **[ ]** not started · **[~]** in progress · **[x]** done
+
+Completed phases (Phases 0--22 from prior cycles sourced from Codeburn, Third-Eye, and Claude-Guardian) have been removed from this file. See `git log` or README "Prior Art & Acknowledgements" for historical attribution.
 
 ---
 
@@ -19,632 +21,409 @@ Status legend: **[ ]** not started · **[~]** in progress · **[x]** done
 
 ## Sources & References
 
-Heimdall harvests patterns from two sibling projects in the local-AI-observability space. Each phase below that ports logic names a concrete source file for future implementation work.
+This roadmap cycle harvests patterns from one sibling project. Each phase names a concrete source file for future implementation work.
 
 | Project | Repo | Language | Role |
 |---------|------|----------|------|
-| **Codeburn** | https://github.com/AgentSeal/codeburn | TypeScript CLI | Upstream session parser and provider plugin pattern; widest provider coverage (Cursor, OpenCode, Pi, Copilot). Source of the 13-category classifier, `optimize` waste detector, SwiftBar menubar, and currency conversion. |
-| **Third-Eye** | https://github.com/fien-atone/third-eye | TypeScript web (Express + React) | Richest web-dashboard implementation of the same problem space. Vendors Codeburn's parser. Source of tool-event cost attribution, 7×24 activity heatmap, client-sent timezone handling, active-period averaging, cross-platform scheduler, and CC-version tracking. |
-| **Claude-Guardian** | https://github.com/anshaneja5/Claude-Guardian | Swift + Python (macOS-only) | Primarily a permission-approval UI (SwiftUI mascot + Python hook bridge), not an observability tool -- but its analytics subsystem and macOS packaging engineering are directly transferable. Source of the real-time PreToolUse cost injection pattern, file-watcher auto-refresh, usage-limits file parsing, cache-token breakdown, and the Homebrew cask + LaunchAgent + universal-binary distribution stack. |
+| **ccusage** | https://github.com/ryoppippi/ccusage | TypeScript pnpm monorepo (CLI + MCP + Amp) | Modern CLI analytics with distinct strengths in billing-window modeling and Claude Code integration. Source of the 5-hour billing-block burn-rate + projection engine, `statusline` PostToolUse hook command, context-window tracking, MCP server for inference-time usage queries, JSON-schema config with per-command overrides, project aliasing, Amp credit tracking, and `--jq` post-processing. Source last reviewed: 2026-04-18 (upstream commit `7258c34`). |
 
 When porting, prefer reading the source file directly over reimplementing from memory. Each "Source:" line points at the canonical file in the referenced repo.
 
 ---
 
-## Phase 0 -- Foundation: Formalize `Provider` Trait **[x]**
+## Phase 1 -- 5-Hour Billing Blocks + Burn Rate + End-of-Block Projection **[ ]**
 
-**Motivation:** Scanner logic is currently spread across `src/scanner/` with Claude and Codex paths interleaved. A `Provider` trait makes new sources a one-file contribution and mirrors Codeburn's plugin pattern.
+**Motivation:** Claude charges in 5-hour billing windows; Heimdall shows cumulative daily/monthly cost but never answers "am I going to blow my quota before this block resets?" ccusage explicitly models these windows with live burn rate and projected end-of-block cost -- the single highest-value analytics gap.
 
-**Source:** [codeburn/src/providers/](https://github.com/AgentSeal/codeburn/tree/main/src/providers) -- `types.ts` (trait shape), `index.ts` (registry), `codex.ts` (reference impl).
+**Source:** [ccusage/apps/ccusage/src/commands/blocks.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/blocks.ts), [ccusage/apps/ccusage/src/_session-blocks.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_session-blocks.ts) -- `identifySessionBlocks()` groups turn events into 5h windows anchored on first activity; `calculateBurnRate()` returns `tokensPerMinute` + `costPerHour` over elapsed time in the active block; `projectBlockUsage()` linearly extrapolates to block end.
 
-### Deliverables
+### TODO
 
-- `src/scanner/provider.rs` -- new trait:
-  ```rust
-  pub trait Provider: Send + Sync {
-      fn name(&self) -> &'static str;
-      fn discover_sessions(&self) -> Result<Vec<SessionSource>>;
-      fn parse(&self, path: &Path) -> Result<Vec<Turn>>;
-  }
-  ```
-- Extract existing Claude logic into `src/scanner/providers/claude.rs`.
-- Extract existing Codex logic into `src/scanner/providers/codex.rs`.
-- Extract Xcode CodingAssistant path into `src/scanner/providers/xcode.rs`.
-- Central registry: `src/scanner/providers/mod.rs` with `pub fn all() -> Vec<Box<dyn Provider>>`.
-- SQLite schema: add `provider` column to sessions table with migration + backfill.
-- Update `AGENTS.md` with a "Adding a Provider" section (template file, trait signature, test fixture layout).
+1. **Pure analytics module.** `src/analytics/blocks.rs` with:
+   ```rust
+   pub struct BillingBlock { pub start: DateTime<Utc>, pub end: DateTime<Utc>,
+       pub tokens: TokenBreakdown, pub cost_nanos: i64, pub models: Vec<String>,
+       pub is_active: bool, pub entry_count: u32 }
+   pub struct BurnRate { pub tokens_per_min: f64, pub cost_per_hour_nanos: i64 }
+   pub struct Projection { pub projected_cost_nanos: i64, pub projected_tokens: u64 }
+   pub fn identify_blocks(turns: &[Turn], session_hours: f64) -> Vec<BillingBlock>;
+   pub fn calculate_burn_rate(block: &BillingBlock, now: DateTime<Utc>) -> BurnRate;
+   pub fn project_block_usage(block: &BillingBlock, rate: &BurnRate) -> Projection;
+   ```
+2. **Block anchor semantics.** Mirror ccusage: a block starts at the first turn's `startedAt` floored to the hour, extends `session_hours` (default 5.0), and closes on the first turn that falls outside. Gaps longer than `session_hours` start a new block.
+3. **Integer-nanos discipline.** `cost_per_hour_nanos` computed as `cost_nanos * 3600_000_000_000 / elapsed_micros`; no `f64` in cost math (unlike ccusage, which is free to use JS numbers).
+4. **SQL helper.** `scanner/db.rs::load_turns_in_range(db, since, until) -> Vec<TurnForBlocks>` returning only the columns needed by the analytics module.
+5. **CLI subcommand.** `claude-usage-tracker blocks [--session-length=5] [--active] [--json]`. Table: `BLOCK START | ELAPSED | COST | TOKENS | MODELS | STATUS`.
+6. **Tests.** Fixtures: back-to-back activity, mid-block idle gap, cross-day UTC boundary, empty DB.
 
 ### Acceptance
 
-- `cargo test` green (no behavior change; the baseline 128 existing tests still pass, plus the new trait + backfill + xcode-retag coverage added in this phase).
-- `clippy -D warnings` clean.
-- Schema migration runs idempotently on an existing DB.
-- Dashboard "Provider" filter still works.
+- Block grouping matches ccusage output byte-for-byte on a 500-turn fixture (port `_session-blocks.test.ts` cases).
+- `calculate_burn_rate` on a half-elapsed block returns the expected tokens/min within ±1 ulp.
+- `--json` round-trips via `serde_json`.
 
-### Effort: M (1--2 days)
+### Effort: M (2--3 days)
 
 ---
 
-## Phase 1 -- CSV/JSON Multi-Period Export **[x]**
+## Phase 2 -- Token Quota Percentage + Inline REMAINING/PROJECTED Rows **[ ]**
 
-**Motivation:** Users need spreadsheet-friendly output for expense reports and manager dashboards. Heimdall currently has `--json` on `today` and `stats` only.
+**Motivation:** Knowing the burn rate is only half the battle; users also need "how close am I to the quota ceiling?" ccusage's blocks view injects live REMAINING and PROJECTED rows inline under the active block when `--token-limit` is set, with red/warning coloring near or past the limit.
 
-**Source:** [codeburn/src/export.ts](https://github.com/AgentSeal/codeburn/blob/main/src/export.ts) -- column set, period logic, multi-format dispatch.
+**Source:** [ccusage/apps/ccusage/src/commands/blocks.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/blocks.ts) lines 352--467 -- `tokenLimit` arg accepts a number or the string `max` (reuses the historical peak), and the renderer emits two pseudo-rows under the active block. Threshold coloring: green <50%, yellow 50--80%, red >80%.
 
-### Deliverables
+### TODO
 
-- New subcommand:
-  ```
-  claude-usage-tracker export --format=<csv|json|jsonl> \
-                              --period=<today|week|month|year|all> \
-                              --output=<path> \
-                              [--provider=<name>] [--project=<slug>]
-  ```
-- `src/export.rs` -- format-agnostic dispatch.
-- Add `csv` crate dependency (~30 KB).
-- Column set: `date, provider, project, model, input_tokens, output_tokens, cache_read, cache_write, cost_usd_nanos, cost_usd_display`.
-- Integration tests with tempfile + round-trip parse.
+1. **CLI flag.** `blocks --token-limit=<N|max>`. When `max`, resolve against `SELECT MAX(tokens) FROM billing_blocks_historical`.
+2. **Pseudo-row renderer.** Extend the `blocks` table writer to emit two extra rows under the active block: `→ REMAINING` and `→ PROJECTED`, each with a `%` column.
+3. **Threshold coloring.** Add `src/ui_cli/severity.rs` with `severity_for_pct(pct) -> Severity { Ok | Warn | Danger }`; ANSI-style via `owo-colors` (no new dep if already present; else add).
+4. **JSON parity.** When `--json` is set, serialize `{"remaining": {...}, "projected": {...}, "quota_pct": 0.73}` as siblings of the block object.
+5. **Dashboard card.** `BillingBlocksCard.tsx` adds a `SegmentedProgressBar` for the quota %; red accent only when crossing the danger threshold (matches industrial design rule).
 
 ### Acceptance
 
-- `export --format=csv --period=month` produces a file that round-trips via `csv::Reader` into identical records.
-- Nanos preserved as integers in CSV; float only in `cost_usd_display`.
-- Documented in README "Export" section.
+- With `--token-limit=1000000` on a block at 750K tokens, table shows `75% (WARN)` on REMAINING and a projected % based on burn rate.
+- `--token-limit=max` resolves to the historical maximum and never panics on empty history.
+
+### Effort: S (1 day, after Phase 1)
+
+---
+
+## Phase 3 -- Weekly Aggregation Report **[ ]**
+
+**Motivation:** Teams on sprint cadences need ISO-week views; Heimdall ships daily and monthly but no weekly. ccusage has a first-class `weekly` command with configurable start-of-week.
+
+**Source:** [ccusage/apps/ccusage/src/commands/weekly.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/weekly.ts) -- `--startOfWeek` enum (`sunday|monday|...`), `--instances`, `--breakdown`. Reuses the `_daily-grouping` aggregator with a different key function.
+
+### TODO
+
+1. **SQL bucket.** Extend `scanner/db.rs` with `fn sum_by_week(db, tz: TzParams, start_of_week: Weekday) -> Vec<WeekRow>`. Uses SQLite `strftime('%Y-%W', datetime(...))` with an offset for the chosen start-of-week.
+2. **CLI subcommand.** `claude-usage-tracker weekly [--start-of-week=monday] [--json] [--breakdown]`.
+3. **Dashboard toggle.** Add a `week` option to the existing period segmented control in `FilterBar.tsx`; SQL reuses the new helper.
+4. **API endpoint.** `/api/data?period=week&week_starts_on=1` returns the weekly bucket.
+
+### Acceptance
+
+- ISO-8601 week boundaries correct across the 2027 year-end transition.
+- `--start-of-week=sunday` shifts all buckets by one day vs the default.
+
+### Effort: S (1 day)
+
+---
+
+## Phase 4 -- `statusline` PostToolUse Hook Command **[ ]**
+
+**Motivation:** Claude Code's status bar is the highest-visibility surface for live usage feedback. ccusage's `statusline` reads the PostToolUse hook JSON from stdin and emits a single compact line for Claude Code to render. Complements Heimdall's existing PreToolUse `heimdall-hook` (which writes to the DB); `statusline` is the *read* side.
+
+**Source:** [ccusage/apps/ccusage/src/commands/statusline.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/statusline.ts) (577 lines), [ccusage/apps/ccusage/src/_types.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_types.ts) `statuslineHookJsonSchema`. Key pieces: stdin reader with timeout, hybrid time+mtime cache with PID semaphore (avoid redundant recomputation when hook fires per keystroke), layout composer.
+
+### TODO
+
+1. **Subcommand.** `claude-usage-tracker statusline [--refresh-interval=30] [--cost-source=auto] [--offline]`. Reads JSON from stdin, writes one line to stdout, exits 0. Never blocks longer than `--refresh-interval` seconds.
+2. **Input schema.** `src/statusline/hook_input.rs` mirrors `statuslineHookJsonSchema`: `session_id`, `transcript_path`, `model`, `cost`, `context_window { total_input_tokens, context_window_size }`.
+3. **Output layout.** `MODEL | $SESSION / $TODAY / $BLOCK (Xh Ym left) | $/hr | N tokens (XX%)`. No emoji by default (industrial style); allow `--emoji` opt-in for parity.
+4. **Cache.** `~/.cache/heimdall/statusline.json` with `{ session_id, last_computed_at, last_transcript_mtime, payload }`. PID semaphore: write `~/.cache/heimdall/statusline.lock` atomically with `O_EXCL`; stale-lock detection via PID existence check.
+5. **Hook installer extension.** `claude-usage-tracker hook install` grows `--statusline` flag that additionally writes the `statusLine` entry to `~/.claude/settings.json` (tagged `# heimdall-statusline:v1` for clean uninstall).
+
+### Acceptance
+
+- On synthetic PostToolUse JSON, output matches the ccusage layout minus emoji.
+- Statusline respects `--offline`: no network calls, no LiteLLM fetch, no currency conversion — pure local.
+- p99 latency <50ms on a warm cache (matches heimdall-hook's SLO).
+
+### Effort: L (3--4 days)
+
+---
+
+## Phase 5 -- Context-Window Usage Tracking **[ ]**
+
+**Motivation:** The single most user-visible gap in ccusage vs other tools: knowing "how full is my context window?" lets users compact before hitting the limit. ccusage surfaces it in the statusline as `N tokens (XX%)` with green/yellow/red thresholds.
+
+**Source:** [ccusage/apps/ccusage/src/commands/statusline.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/statusline.ts) lines 460--506. Reads `context_window.total_input_tokens / context_window.context_window_size` from the hook payload; falls back to computing context tokens from the transcript JSONL when the hook doesn't supply it.
+
+### TODO
+
+1. **Parser.** `src/statusline/context_window.rs::from_hook(&HookInput) -> Option<ContextWindow>` and `::from_transcript(&Path) -> Result<ContextWindow>` — the transcript fallback sums `input_tokens + cache_read_tokens` across the most recent assistant turn.
+2. **Thresholds.** Config-driven: `statusline.context_low_threshold = 0.50`, `statusline.context_medium_threshold = 0.80`.
+3. **Dashboard card.** `ContextWindowCard.tsx` when a currently-open transcript path is available (derived from newest mtime JSONL per project). Shows `45,231 / 200,000 (22%)` with a segmented bar.
+4. **Hook payload extension.** `heimdall-hook` persists the `context_window` block into `live_events.context_input_tokens` + `context_window_size` (new columns; schema migration).
+
+### Acceptance
+
+- Given a transcript with known turn tokens, `from_transcript` returns within 1% of the hook-reported value.
+- Dashboard card hides gracefully when no transcript is currently open.
+
+### Effort: M (2 days; depends on Phase 4 for payload schema)
+
+---
+
+## Phase 6 -- MCP Server for Inference-Time Usage Queries **[ ]**
+
+**Motivation:** Claude itself can query Heimdall during a session if Heimdall exposes an MCP server — novel integration that no other observability tool in the reference set offers. ccusage ships a standalone `@ccusage/mcp` package with 6 tools over stdio + Streamable HTTP.
+
+**Source:** [ccusage/apps/mcp/src/mcp.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/mcp/src/mcp.ts), [ccusage/apps/mcp/src/ccusage.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/mcp/src/ccusage.ts), [ccusage/apps/mcp/src/codex.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/mcp/src/codex.ts) -- `createMcpHttpApp` mounts a Hono app at `/mcp` with `StreamableHTTPTransport`; `createMcpStdioServer` handles stdio. 6 tools: `daily`, `session`, `monthly`, `blocks`, `codex-daily`, `codex-monthly`.
+
+### TODO
+
+1. **Crate choice.** Use [`rmcp`](https://crates.io/crates/rmcp) (official Rust MCP SDK). Add under a `mcp` cargo feature to keep default binary small.
+2. **Transports.** Both stdio (default) and HTTP-SSE via `axum` subrouter at `/mcp` (reuse the existing dashboard server).
+3. **Tools.** Mirror ccusage's 6 tools + add Heimdall-specific ones: `today`, `blocks_active`, `optimize_grade`, `rate_window_snapshot`, `weekly`. Each tool's input schema is a Rust struct with `#[derive(JsonSchema)]`.
+4. **Handlers.** Thin wrappers around existing `stats::*` / `optimize::*` / analytics functions; reuse integer-nanos types and serialize identically to the REST API.
+5. **Subcommand.** `claude-usage-tracker mcp [--transport=stdio|http]` and `claude-usage-tracker mcp install` (writes tagged entry into `~/.claude/.mcp.json` and/or `~/.cursor/mcp.json`).
+6. **Tests.** In-process client via `rmcp`'s test harness hitting each tool.
+
+### Acceptance
+
+- `claude mcp add heimdall -- claude-usage-tracker mcp` registers the server and `daily` tool returns JSON matching REST `/api/data?period=day`.
+- HTTP transport returns `Content-Type: text/event-stream` and survives a 60s idle without disconnecting.
+
+### Effort: L (4--5 days; new crate territory)
+
+---
+
+## Phase 7 -- Visual Burn-Rate Indicator **[ ]**
+
+**Motivation:** Raw $/hr is less scannable than a visual. ccusage maps burn rate to Normal/Moderate/High tiers with 🟢/⚠️/🚨 glyphs (or bracketed `[Normal]`/`[Moderate]`/`[High]` text) in the statusline.
+
+**Source:** [ccusage/apps/ccusage/src/commands/statusline.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/statusline.ts) lines 115--447 -- `--visual-burn-rate` enum (`off|emoji|text|emoji-text`), `burnRateTier()` maps `tokensPerMinute` to a tier with configurable thresholds.
+
+### TODO
+
+1. **Function.** `src/analytics/burn_rate.rs::tier(tokens_per_min: f64, cfg: &BurnRateConfig) -> BurnRateTier` returning `Normal | Moderate | High`.
+2. **Config.** `[statusline] burn_rate_normal_max = 4000`, `burn_rate_moderate_max = 10000` (tokens/min).
+3. **CLI flag.** `statusline --visual-burn-rate=<off|bracket|emoji|both>`. Default `bracket` to match Heimdall's industrial style.
+4. **Bracket renderer.** `[NORMAL]` / `[WARN]` / `[CRIT]` — reuses `src/ui_cli/severity.rs` from Phase 2.
+5. **Dashboard integration.** Active-block card shows the tier badge next to `$/hr`.
+
+### Acceptance
+
+- Configurable thresholds override defaults.
+- `--visual-burn-rate=off` strips the indicator entirely.
+
+### Effort: XS (half day; depends on Phase 1)
+
+---
+
+## Phase 8 -- Dual Cost Source Reconciliation **[ ]**
+
+**Motivation:** When Anthropic's hook-reported `cost` diverges from Heimdall's locally calculated cost, users want to see both side-by-side to diagnose pricing drift. ccusage's `--cost-source both` does exactly this.
+
+**Source:** [ccusage/apps/ccusage/src/commands/statusline.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/statusline.ts) lines 305--333 -- `costSourceChoices = ['auto', 'ccusage', 'cc', 'both']`. `both` emits `($0.12 cc / $0.14 ccusage)`.
+
+### TODO
+
+1. **Capture hook cost.** `heimdall-hook` already receives the hook payload; extend `live_events` schema with `hook_reported_cost_nanos` (nullable).
+2. **CLI flag.** `statusline --cost-source=<auto|local|hook|both>` (rename ccusage's `cc` to `hook` and `ccusage` to `local` for clarity).
+3. **Renderer.** In `both` mode output `($X hook / $Y local)`; add a divergence warning bracket when `|hook-local|/local > 0.10`.
+4. **Dashboard panel.** `CostReconciliationPanel.tsx` -- daily/monthly bar showing delta between hook-reported and locally calculated totals.
+5. **API endpoint.** `/api/cost-reconciliation?period=...` returns `{ hook_total_nanos, local_total_nanos, turn_breakdown: [...] }`.
+
+### Acceptance
+
+- Divergence >10% renders inline `[WARN: cost drift]` in the statusline.
+- Panel hidden when hook has never reported costs (all rows null).
+
+### Effort: S (1 day; depends on Phase 4)
+
+---
+
+## Phase 9 -- `--jq` Post-Processing on JSON Output **[ ]**
+
+**Motivation:** Power-user scriptability without shell pipelines. ccusage pipes its JSON output through the system `jq` binary via a `--jq` flag on every report command. Equivalent to `ccusage daily --json | jq '.totals.cost'` but preserves exit codes and avoids pipe setup.
+
+**Source:** [ccusage/apps/ccusage/src/_jq-processor.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_jq-processor.ts), shared arg registered in `_shared-args.ts`. Implies `--json`.
+
+### TODO
+
+1. **Shared flag.** Add `--jq=<filter>` to `today`, `stats`, `export`, `blocks`, `weekly`, `optimize` subcommands. Implies `--json`.
+2. **Bundled engine.** Use the `jaq` crate (pure-Rust `jq` clone) to avoid a system dependency. Pinned to a release tag; falls back to invoking system `jq` if present and `--jq-external` is set (rare).
+3. **Stream mode.** For `export --format=jsonl`, apply the filter per-record rather than loading the whole file.
+4. **Error path.** Jq parse errors exit 2 with a clear message; filter that yields `null` emits empty string and exits 0.
+
+### Acceptance
+
+- `today --jq '.total.cost_usd'` emits a single number.
+- `export --format=jsonl --jq '.model' --output=-` streams one model name per line.
+- No system `jq` required by default.
+
+### Effort: S (1 day)
+
+---
+
+## Phase 10 -- JSON-Schema-Backed Config File + Per-Command Overrides **[ ]**
+
+**Motivation:** Heimdall's TOML config is flat and unvalidated. ccusage ships a `ccusage.json` with `$schema` for IDE autocomplete and a `commands.<name>` section for per-command overrides -- both are big UX improvements for long-lived projects.
+
+**Source:** [ccusage/apps/ccusage/src/_config-loader-tokens.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_config-loader-tokens.ts), [ccusage/ccusage.example.json](https://github.com/ryoppippi/ccusage/blob/main/ccusage.example.json). Discovery: CWD `.ccusage/ccusage.json` → Claude config dir → project root.
+
+### TODO
+
+1. **Generate schema.** Add `schemars` to derive JSON Schema from the existing `Config` struct. Emit to `schemas/heimdall.config.schema.json` at build time via a `build.rs` or a `pricing refresh`-style subcommand.
+2. **New file format.** Support `~/.claude/usage-tracker.json` (in addition to the existing TOML) with `$schema` pointing at the hosted URL `https://raw.githubusercontent.com/po4yka/heimdall/main/schemas/heimdall.config.schema.json`.
+3. **Per-command section.** Parse `commands.blocks.tokenLimit`, `commands.statusline.offline`, `commands.daily.instances` etc. Precedence: CLI flag > `commands.<name>` > `defaults` > hardcoded.
+4. **`mergeConfigWithArgs` equivalent.** Refactor CLI arg parsing so every subcommand first resolves its effective config (flag ∪ per-command ∪ defaults) before running.
+5. **Publish schema.** GitHub Action publishes the schema to `gh-pages` on each release; README links to it for IDE integration.
+
+### Acceptance
+
+- `heimdall blocks` uses `commands.blocks.tokenLimit` from config when `--token-limit` is absent.
+- VSCode autocompletes config keys after `"$schema": "..."` reference.
+- Legacy TOML config still loads; users are not forced to migrate.
+
+### Effort: M (2 days)
+
+---
+
+## Phase 11 -- Project Aliases for Human-Readable Names **[ ]**
+
+**Motivation:** Claude Code project slugs are mangled directory hashes ("-Users-po4yka-GitRep-heimdall"). ccusage lets users define display aliases.
+
+**Source:** [ccusage/apps/ccusage/src/commands/daily.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/daily.ts) lines 54--69, [ccusage/apps/ccusage/src/_project-names.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_project-names.ts) -- `--project-aliases "hash=Display Name,other=Other"`.
+
+### TODO
+
+1. **Config section.** `[project_aliases]` in the config file: `"-Users-po4yka-GitRep-heimdall" = "Heimdall"`.
+2. **CLI override.** `--project-alias KEY=VALUE` repeatable flag.
+3. **Display layer only.** Storage keeps the raw slug (aliases are display-time).
+4. **Dashboard wiring.** `projects` API response adds `display_name` alongside `slug`; all components use `display_name || slug`.
+5. **URL-persistent filter** continues to use slug; aliases are purely cosmetic.
+
+### Acceptance
+
+- Alias applied to Sessions table, Project Cost table, ProjectChart, heatmap tooltip.
+- Unknown slug gracefully falls back to the raw slug.
 
 ### Effort: XS (half day)
 
 ---
 
-## Phase 2 -- Task Classifier (13 Categories) **[x]**
+## Phase 12 -- Amp Credit Tracking (Non-USD Billing Unit) **[ ]**
 
-**Motivation:** Tokens alone don't explain behavior. Knowing "60% of spend was debugging" is the single most requested insight from Codeburn.
+**Motivation:** Amp is Sourcegraph's AI coding tool that bills in "credits" (its own abstract unit), not USD. Heimdall currently ignores Amp credits entirely. ccusage ships a dedicated `@ccusage/amp` package.
 
-**Source:** [codeburn/src/classifier.ts](https://github.com/AgentSeal/codeburn/blob/main/src/classifier.ts) (regex tables) + [codeburn/tests/classifier.test.ts](https://github.com/AgentSeal/codeburn/blob/main/tests/classifier.test.ts) (golden vectors). [third-eye/server/lib/classifier.ts](https://github.com/fien-atone/third-eye/tree/main/server/lib) vendors the same 13 categories and confirms the taxonomy.
+**Source:** [ccusage/apps/amp/src/commands/daily.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/amp/src/commands/daily.ts), [monthly.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/amp/src/commands/monthly.ts), [session.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/amp/src/commands/session.ts), [_types.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/amp/src/_types.ts) -- each session emits a `credits: number` field accumulated in parallel with USD.
 
-### Deliverables
+### TODO
 
-- `src/scanner/classifier.rs`:
-  ```rust
-  pub enum TaskCategory {
-      Coding, Debugging, FeatureDev, Testing, Git, Docs,
-      Research, Refactor, DevOps, Config, Planning, Review, Other,
-  }
-  ```
-- Use `regex::RegexSet` for batch matching against tool names + first user message.
-- Run classifier during scan, store `category TEXT` on `turns` table (or `session_classifications` for session-level).
-- Aggregate query: `SELECT category, SUM(cost_nanos) FROM turns GROUP BY category`.
-- Dashboard: new `TaskBreakdownChart.tsx` donut + per-category drilldown.
-- CLI: `claude-usage-tracker stats --by=category`.
-- Port Codeburn's `tests/classifier.test.ts` fixtures to Rust test vectors.
+1. **Amp provider.** `src/scanner/providers/amp.rs` implementing the `Provider` trait. Discovery: `~/.amp/sessions/*.jsonl` (verify path against the Amp CLI).
+2. **Schema.** Add `credits REAL` column to `turns` + `sessions` tables (nullable; only populated for Amp).
+3. **Dashboard column.** New "Credits" column in `ProjectCostTable.tsx` / `SessionsTable.tsx` shown only when the filtered range has non-null credits.
+4. **Export.** `export --provider=amp` emits `credits` column in CSV.
+5. **Stats.** `today`, `stats`, `weekly`, `monthly`, `export` all surface credits for Amp sessions.
 
 ### Acceptance
 
-- ~500 Codeburn fixture cases reproduce identical categorization (port as golden tests).
-- Classifier is pure: no I/O, no mutable state, safe across threads.
-- `--by=category` JSON output stable and documented.
-
-### Effort: S (1--2 days)
-
----
-
-## Phase 3 -- One-Shot Rate Tracking **[x]**
-
-**Motivation:** A compact, viral metric for "how good is the model at this task." Detects Edit→Bash→Edit retry cycles as proxy for rework.
-
-**Source:** [codeburn/src/parser.ts](https://github.com/AgentSeal/codeburn/blob/main/src/parser.ts) -- retry detection heuristic lives alongside the main parse pass.
-
-### Deliverables
-
-- Post-processing pass in scanner: walk turns chronologically per session, flag retry loops.
-- Heuristic: same file edited, then Bash (typically build/test), then same file edited again within N turns → not one-shot.
-- Add `one_shot BOOLEAN` to `sessions` table (nullable for sessions without edits).
-- Metric: `SELECT AVG(CASE WHEN one_shot THEN 1.0 ELSE 0.0 END) FROM sessions WHERE one_shot IS NOT NULL`.
-- Dashboard: KPI card next to cost totals.
-- CLI: surface in `stats` output.
-
-### Acceptance
-
-- Fixture sessions hand-labeled for ground truth; classifier agrees ≥90%.
-- Heuristic constants (`N turns`, tool patterns) named consts with rationale comments.
-
-### Effort: S (1 day)
-
----
-
-## Phase 4 -- Currency Conversion **[x]**
-
-**Motivation:** Non-USD users currently read dollar amounts mentally. Codeburn's 162-currency Frankfurter integration ships this cleanly.
-
-**Source:** [codeburn/src/currency.ts](https://github.com/AgentSeal/codeburn/blob/main/src/currency.ts) -- Frankfurter client, 24h cache, 162-currency list.
-
-### Deliverables
-
-- `src/currency.rs` using existing `reqwest`; cache at `~/.cache/heimdall/fx.json` with 24h TTL.
-- Frankfurter API (ECB data, free, no auth).
-- Config:
-  ```toml
-  [display]
-  currency = "EUR"   # ISO 4217; USD is default
-  ```
-- Applied only in display layer (`pricing::format_cost`), never in storage.
-- Dashboard: currency picker in header, URL-persistent alongside existing filters.
-- Graceful offline fallback: if cache stale and network fails, display USD with warning annotation.
-
-### Acceptance
-
-- Storage remains USD nanos; verified by DB inspection test.
-- FX cache self-invalidates at 24h.
-- Offline mode shows `1.23 USD (FX unavailable)` rather than failing.
-
-### Effort: S (1 day)
-
----
-
-## Phase 5 -- Cursor Provider **[x]**
-
-**Motivation:** Cursor is the largest unpenetrated user base for Heimdall. Codeburn already proved the SQLite parsing pattern.
-
-**Source:** [codeburn/src/providers/cursor.ts](https://github.com/AgentSeal/codeburn/blob/main/src/providers/cursor.ts) + [codeburn/src/cursor-cache.ts](https://github.com/AgentSeal/codeburn/blob/main/src/cursor-cache.ts) -- DB paths per OS, cache invalidation on mtime/size.
-
-### Deliverables
-
-- `src/scanner/providers/cursor.rs` using existing `rusqlite` (no new optional dep; Heimdall already bundles it).
-- Read Cursor's session DB at platform-appropriate path:
-  - macOS: `~/Library/Application Support/Cursor/User/workspaceStorage/*/state.vscdb`
-  - Linux: `~/.config/Cursor/User/workspaceStorage/*/state.vscdb`
-  - Windows: `%APPDATA%/Cursor/User/workspaceStorage/*/state.vscdb`
-- File-based result cache at `~/.cache/heimdall/cursor/` keyed on source DB mtime+size.
-- Fixture-based tests (port Codeburn's `tests/providers/cursor.test.ts` fixtures).
-
-### Acceptance
-
-- Cursor sessions appear in dashboard with correct cost attribution.
-- Cache invalidates automatically when source DB changes.
-- Tests run without network and without a real Cursor install.
-
-### Effort: M (2--3 days)
-
----
-
-## Phase 6 -- `optimize` Waste Detector **[x]**
-
-**Motivation:** Highest-value differentiator from Codeburn. Users learn what to delete/fix to spend less next session.
-
-**Source:** [codeburn/src/optimize.ts](https://github.com/AgentSeal/codeburn/blob/main/src/optimize.ts) -- 41 KB file containing all detectors, findings shape, and A--F grade calculation. **Prerequisite:** Phase 12 (tool-event cost attribution) supplies the data model that makes per-MCP / per-file waste queries tractable.
-
-### Deliverables
-
-- New subcommand: `claude-usage-tracker optimize [--format=<text|json>]`.
-- New module tree under `src/optimizer/`:
-  - `reread.rs` -- same file read >2x per session
-  - `claude_md.rs` -- token cost of `~/.claude/CLAUDE.md` multiplied by session count
-  - `mcp.rs` -- MCP servers in `~/.claude/settings.json` never invoked in DB history
-  - `agents.rs` -- agents in `~/.claude/agents/` never referenced
-  - `bash.rs` -- repeated trivial commands (`ls`, `pwd`, `git status`) in single session
-  - `grade.rs` -- weight individual findings to produce A--F grade
-- Each detector is a trait impl returning `Vec<Finding>` with `{severity, title, detail, estimated_monthly_waste_nanos}`.
-- Dashboard: `/optimize` route, `OptimizationPanel.tsx` with collapsible findings.
-- Webhook: optional "weekly optimization digest" trigger.
-
-### Acceptance
-
-- `optimize --format=json` schema documented in SPEC.md.
-- Grade is stable across runs when inputs unchanged (deterministic).
-- Each detector has a dedicated test with a crafted fixture DB/config.
-
-### Effort: L (4--6 days)
-
----
-
-## Phase 7 -- OpenCode, Pi, Copilot Providers **[x]**
-
-**Motivation:** Round out provider coverage parity with Codeburn.
-
-**Source:** [codeburn/src/providers/opencode.ts](https://github.com/AgentSeal/codeburn/blob/main/src/providers/opencode.ts), [codeburn/src/providers/pi.ts](https://github.com/AgentSeal/codeburn/blob/main/src/providers/pi.ts), [codeburn/src/providers/copilot.ts](https://github.com/AgentSeal/codeburn/blob/main/src/providers/copilot.ts) -- each file documents its dedup key strategy in the header.
-
-### Deliverables (one sub-PR each)
-
-- `src/scanner/providers/opencode.rs` -- SQLite-backed, session + message ID dedup.
-- `src/scanner/providers/pi.rs` -- JSONL, `responseId` dedup.
-- `src/scanner/providers/copilot.rs` -- format depends on Copilot's local state; research first.
-- Per-provider fixtures in `tests/fixtures/<provider>/`.
-- Update dashboard provider filter + README provider table.
-
-### Acceptance
-
-- Each provider gated behind its own capability check (return empty if files absent; no error, no panic).
-- Dedup strategies documented in each module header.
-
-### Effort: M per provider (2 days each, ~1 week total)
-
----
-
-## Phase 8 -- SwiftBar Menubar Widget + Security **[x]**
-
-**Motivation:** macOS users want at-a-glance today-cost in the menu bar. Codeburn has a working SwiftBar plugin generator.
-
-**Source:** [codeburn/src/menubar.ts](https://github.com/AgentSeal/codeburn/blob/main/src/menubar.ts) + [codeburn/tests/security/menubar-injection.test.ts](https://github.com/AgentSeal/codeburn/blob/main/tests/security/menubar-injection.test.ts) -- **port the security test verbatim**; the injection vectors (pipe, newline, `bash=`, `href=`) are the acceptance contract.
-
-### Deliverables
-
-- New subcommand: `claude-usage-tracker menubar` printing SwiftBar-formatted stdout.
-- `src/menubar.rs` -- format today's cost, session count, one-shot rate.
-- Submenu: drill into per-provider split, "open dashboard" action.
-- **Mandatory security test:** `tests/security/menubar_injection.rs` -- project slugs, session titles, and any user-controlled strings passed through a strict sanitizer. Pipe character, newlines, and SwiftBar control sequences (`|`, `bash=`, `href=`) must be stripped or escaped.
-- Installation doc snippet: symlink command for `~/Library/Application Support/SwiftBar/Plugins/`.
-
-### Acceptance
-
-- Running `menubar` against a fixture DB with malicious project names produces no shell-executable output.
-- Injection test covers pipe, newline, URL schemes, and SwiftBar param keywords.
-
-### Effort: S (1 day feature + 0.5 day security test)
-
----
-
-## Phase 9 -- LiteLLM Pricing Refresh **[x]** **[x]**
-
-**Motivation:** Claude/GPT-5 already covered by Heimdall's hardcoded table; this handles long-tail providers (Gemini, Mistral, Groq) without release cuts.
-
-**Source:** [codeburn/src/models.ts](https://github.com/AgentSeal/codeburn/blob/main/src/models.ts) (LiteLLM fetch + hardcoded fallback). Third-Eye implements the same three-tier (live → 24h cache → hardcoded) pattern at [third-eye/server/lib/models.ts](https://github.com/fien-atone/third-eye/tree/main/server/lib) -- use as secondary reference.
-
-### Deliverables
-
-- New subcommand: `claude-usage-tracker pricing refresh` fetches LiteLLM `model_prices_and_context_window.json`, caches at `~/.cache/heimdall/pricing.json` with 24h TTL.
-- `PricingSource` enum:
-  ```rust
-  enum PricingSource {
-      Static,                    // current default
-      LiteLlm { cache_path: PathBuf },
-  }
-  ```
-- Lookup order preserved: exact hardcoded match wins over LiteLLM fuzzy match for Claude/GPT-5 families. Port Codeburn's lesson: never fuzzy-match critical model families.
-- Config:
-  ```toml
-  [pricing]
-  source = "litellm"  # or "static" (default)
-  refresh_hours = 24
-  ```
-
-### Acceptance
-
-- Existing pricing tests unchanged and still pass.
-- New test: fuzzy-match Claude-family input returns hardcoded price, not LiteLLM price, even when both present.
-- Offline: falls back to cache or static without error.
-
-### Effort: S (1 day)
-
----
-
-## Phase 10 -- UI Palette Migration (Industrial Design) **[x]**
-
-**Motivation:** Pre-existing gap called out in `CLAUDE.md:183`. `src/ui/` still uses the legacy indigo/Inter palette while the rest of the design system specifies industrial monochrome (OLED dark + warm-off-white light).
-
-### Deliverables
-
-- Audit every component under `src/ui/components/` against `DESIGN.md`.
-- Replace Tailwind classes: indigo → monochrome scale, Inter → system mono + display stack per DESIGN spec.
-- Regenerate `src/ui/style.css` and `src/ui/app.js` with `npm run build:ui`; commit artifacts.
-- Screenshot regression suite (Playwright or manual gallery in `docs/ui-gallery/`).
-
-### Acceptance
-
-- `rg "indigo|bg-blue|text-blue" src/ui/` returns zero matches.
-- Side-by-side screenshots reviewed for every panel type.
-- CLAUDE.md line flagging the gap is removed.
-
-### Effort: M (2--3 days)
-
----
-
-## Phase 11 -- Release Automation **[x]**
-
-**Motivation:** No binary distribution today. Users `cargo install --git` or build from source.
-
-### Deliverables
-
-- `.github/workflows/release.yml` triggered on `v*.*.*` tag.
-- Matrix build: macOS arm64, macOS x86_64, Linux x86_64, Linux arm64, Windows x86_64.
-- Publish to GitHub Releases with SHA256 checksums.
-- Optional: `cargo-dist` for a managed setup.
-- Homebrew tap formula for macOS one-liner install.
-- Update README install section with prebuilt-binary path as default, source build as fallback.
-
-### Acceptance
-
-- Tagging `v0.x.y` produces downloadable artifacts within 15 min.
-- Checksums published alongside artifacts.
-- Homebrew `brew install heimdall/tap/heimdall` works.
+- Amp session JSONL parses without errors; credits sum correctly across the day.
+- Non-Amp providers never display a Credits column.
 
 ### Effort: M (2 days)
 
 ---
 
-## Phase 12 -- Tool-Event Cost Attribution **[x]**
+## Phase 13 -- Configurable Session Block Duration **[ ]**
 
-**Motivation:** Third-Eye's single most valuable data-model innovation. Every API call today is attributed to a session and model but not to the specific *tool invocations* inside it. Splitting `cost_nanos / tool_event_count` across each tool event unlocks queries Heimdall currently cannot answer: "which MCP server costs most", "which files cost most to edit", "which bash commands cost most time-money". This is also the prerequisite data model that makes Phase 6's `optimize` detectors tractable.
+**Motivation:** 5-hour windows are Claude-specific; other providers (Codex API, custom) may use different billing cadences. ccusage's `--session-length` accepts any positive hour value including fractional.
 
-**Source:** [third-eye/server/db.ts](https://github.com/fien-atone/third-eye/blob/main/server/db.ts) (`tool_events` table schema) + [third-eye/server/ingest.ts](https://github.com/fien-atone/third-eye/blob/main/server/ingest.ts) (cost-splitting logic `costPer = cost / events.length`).
+**Source:** [ccusage/apps/ccusage/src/_session-blocks.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_session-blocks.ts) -- `identifySessionBlocks(entries, sessionDurationHours)`, default 5.
 
-### Deliverables
+### TODO
 
-- New SQLite table `tool_events`:
-  ```sql
-  CREATE TABLE tool_events (
-      dedup_key     TEXT PRIMARY KEY,
-      ts_epoch      INTEGER NOT NULL,
-      session_id    TEXT NOT NULL,
-      project       TEXT NOT NULL,
-      kind          TEXT NOT NULL,   -- subagent|skill|mcp|bash|file
-      value         TEXT NOT NULL,   -- tool name, file path, bash command, etc.
-      cost_nanos    INTEGER NOT NULL
-  );
-  CREATE INDEX idx_tool_events_kind ON tool_events(kind, ts_epoch);
-  ```
-- Ingest update: during parse, emit one `tool_events` row per tool invocation within each `assistant` message. Divide the call's `cost_nanos` evenly across events.
-- New API endpoint `/api/tool-costs?kind=<kind>&period=<period>` returning ranked aggregates.
-- Dashboard: extend `ToolUsageTable.tsx` and `McpSummaryTable.tsx` to show cost columns.
-- New dashboard panel: "File hotspots" -- top files by touch count × cost (third-eye has an exemplar).
+1. **Flag.** `blocks --session-length=<hours>` accepts any `f64 > 0`. Already wired in Phase 1's function signature; just surface the CLI flag and config key `commands.blocks.sessionLength`.
+2. **Per-provider defaults.** Config table: `[blocks.session_length_by_provider] claude = 5.0, codex = 1.0, amp = 24.0`. `blocks --provider=codex` picks up the provider default.
+3. **Validation.** Reject `≤0`, `>168` (one week) with a clear error.
 
 ### Acceptance
 
-- `SELECT SUM(cost_nanos) FROM tool_events WHERE session_id = ?` equals the session's total within floor-division error (±N nanos where N = event count).
-- Cost totals in the existing `/api/data` endpoint unchanged.
-- Tests: round-trip invariant that summed tool-event costs equal parent call costs.
+- `blocks --session-length=1` yields hourly windows.
+- Per-provider default applied when no explicit flag is set.
 
-### Effort: M (2--3 days)
+### Effort: XS (2 hours; depends on Phase 1)
 
 ---
 
-## Phase 13 -- 7×24 Activity Heatmap + Active-Period Averaging **[x]**
+## Phase 14 -- Per-Model Breakdown Sub-Rows in CLI Tables **[ ]**
 
-**Motivation:** Two small analytical upgrades from Third-Eye with disproportionate UX impact. The heatmap answers "when do I code" at a glance (the day/hour cell visual is distinctive and screenshot-worthy). Active-period averaging fixes a silent measurement bug: dividing cost by 30 calendar days when the user only worked 12 of them underreports real daily cost.
+**Motivation:** Terminal users scanning `today` or `weekly` often want to see "which model drove the cost" without switching to `--json`. ccusage's `--breakdown` flag injects indented per-model sub-rows under each aggregation row.
 
-**Source:** [third-eye/server/index.ts](https://github.com/fien-atone/third-eye/blob/main/server/index.ts) -- `SELECT strftime('%w', ts), strftime('%H', ts)` query for heatmap; active-period divisor logic documented inline.
+**Source:** ccusage shared arg `breakdown` in [_shared-args.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_shared-args.ts); rendering helper `pushBreakdownRows` in `packages/terminal` (monorepo root). Used in `daily.ts`, `weekly.ts`, `monthly.ts`.
 
-### Deliverables
+### TODO
 
-- Heatmap SQL query returning `(dow, hour, cost_nanos, call_count)` for selected date range.
-- New API endpoint `/api/heatmap?period=<period>`.
-- Dashboard: new `ActivityHeatmap.tsx` -- 7×24 CSS grid, intensity via opacity (per industrial-design: single accent only; use the monochrome ladder).
-- Replace existing "avg cost/day" calculation in `StatsCards.tsx` with active-period average; add a tooltip explaining the divisor ("7 active days of 30 calendar days").
-- Document the formula in `DESIGN.md`.
+1. **Shared flag.** Add `--breakdown` to `today`, `weekly`, `monthly`, `export` (CSV only when formatted as human-readable).
+2. **Table writer.** Extend `src/ui_cli/table.rs` (create if missing) with a generic `render_with_breakdown(row, sub_rows)` helper. Sub-rows render indented with a leading `└─`.
+3. **Respect industrial style.** Plain ASCII indent; no unicode boxes in the default theme.
 
 ### Acceptance
 
-- Heatmap respects current filter state (model, provider, project, date range).
-- Active-period average never divides by zero; empty range shows `--`.
-- Screenshot regression: add heatmap to UI gallery.
-
-### Effort: S (1 day)
-
----
-
-## Phase 14 -- Client-Sent Timezone Handling **[x]**
-
-**Motivation:** Today's dashboard bucket boundaries use UTC (or server-local time depending on code path), causing confusing "today" views for non-UTC users. Third-Eye solved this cleanly: the client sends `tzOffsetMin` and `weekStartsOn` on every request; the server applies `datetime(ts, '+N minutes')` in SQL before bucketing. Eliminates server TZ config entirely.
-
-**Source:** [third-eye/server/index.ts](https://github.com/fien-atone/third-eye/blob/main/server/index.ts) -- search for `tzOffsetMin` and `weekStartsOn` query parameter handling.
-
-### Deliverables
-
-- Add `tz_offset_min: Option<i32>` and `week_starts_on: Option<u8>` to all aggregation query handlers.
-- SQL helpers shift timestamps: `datetime(ts_epoch, 'unixepoch', ? || ' minutes')`.
-- Client: send `new Date().getTimezoneOffset() * -1` and locale-derived `weekStartsOn` on every fetch.
-- Fallback: missing params default to UTC (preserves current behavior).
-
-### Acceptance
-
-- Same DB produces correct "today" buckets for any client timezone without server restart.
-- Fixture test with 3 timezones (UTC, +9, -5) confirms bucketing.
-
-### Effort: S (1 day)
-
----
-
-## Phase 15 -- Cross-Platform Scheduler Subcommand **[x]**
-
-**Motivation:** Users currently run `claude-usage-tracker scan` manually or build their own cron entry. A single command that installs a platform-native scheduled job is a killer DX affordance.
-
-**Source:** [third-eye/server/schedule.ts](https://github.com/fien-atone/third-eye/blob/main/server/schedule.ts) -- platform detection, minute offset to avoid `:00` pile-ups, absolute-path resolution for nvm/Homebrew-style installs.
-
-### Deliverables
-
-- New subcommand tree:
-  ```
-  claude-usage-tracker scheduler install    [--interval=hourly|daily]
-  claude-usage-tracker scheduler uninstall
-  claude-usage-tracker scheduler status
-  ```
-- Platform dispatch in `src/scheduler/`:
-  - `launchd.rs` -- write `~/Library/LaunchAgents/dev.heimdall.scan.plist`, `launchctl load`
-  - `cron.rs` -- append line to user crontab via `crontab -l | ... | crontab -`
-  - `schtasks.rs` -- `schtasks /create /sc hourly ...` on Windows
-- Minute offset `:17` (not `:00`) to avoid scheduler pile-up.
-- Resolve absolute path to the running binary via `std::env::current_exe()`.
-
-### Acceptance
-
-- `scheduler install` followed by `scheduler status` shows "installed, next run at HH:17".
-- `scheduler uninstall` cleanly removes the entry (no stale config).
-- Integration test per platform gated by `cfg(target_os)`.
-
-### Effort: M (2 days)
-
----
-
-## Phase 16 -- Claude Code Version Tracking + Distribution **[x]**
-
-**Motivation:** Heimdall already captures `cc_version` in the data model (`VersionTable.tsx` exists). Third-Eye takes it further: a donut chart + metric switcher (cost / calls / tokens) that answers "did upgrading Claude Code change my spend." Low-cost enhancement that produces a talkable screenshot.
-
-**Source:** [third-eye/client/src/App.tsx](https://github.com/fien-atone/third-eye/blob/main/client/src/App.tsx) -- search for `cc_version` distribution donut and metric switcher.
-
-### Deliverables
-
-- New component `VersionDonut.tsx` wrapping `ApexChart.tsx`.
-- Metric switcher: cost / calls / tokens (radio pill buttons, URL-persistent).
-- Tooltip on hover shows all three metrics together.
-- Graceful handling of `cc_version = NULL` (legacy sessions without the field).
-
-### Acceptance
-
-- Donut sums match `VersionTable.tsx` totals exactly.
-- Switching metrics preserves selected version segment if any.
+- `today --breakdown` shows per-model rows under the daily total.
+- Plain `today` unchanged.
 
 ### Effort: XS (half day)
 
 ---
 
-## Phase 17 -- Cowork Ephemeral Label Resolution **[x]**
+## Phase 15 -- Gap Block Visualization in `blocks` Output **[ ]**
 
-**Motivation:** Claude Desktop Cowork sessions live in paths like `wizardly-charming-thompson/` -- procedurally generated slugs that are meaningless to humans. Third-Eye resolves these by walking `local-agent-mode-sessions/audit.jsonl` and extracting the first user message as the display label. If Heimdall adds Cowork support (implied by the broader provider plan), this is the only path to readable project names.
+**Motivation:** Zero-activity billing windows should be visible in the blocks table, not silently omitted. ccusage inserts explicit `(14h gap)` pseudo-rows to keep the time axis continuous.
 
-**Source:** [third-eye/server/lib/providers/](https://github.com/fien-atone/third-eye/tree/main/server/lib/providers) -- Cowork-specific file, label derivation from `audit.jsonl`.
+**Source:** [ccusage/apps/ccusage/src/_session-blocks.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_session-blocks.ts) `createGapBlock()`, rendered dim-gray at [blocks.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/commands/blocks.ts) lines 377--390 as `pc.gray('(inactive)')`.
 
-### Deliverables
+### TODO
 
-- `src/scanner/providers/cowork.rs` (or extend `claude.rs` if Cowork sessions live under `~/.claude/`).
-- Label resolver: walk `local-agent-mode-sessions/<slug>/audit.jsonl`, parse first user message, truncate to 80 chars.
-- Cache resolved labels in SQLite `projects` table.
+1. **Function.** `identify_blocks` (from Phase 1) gains `include_gaps: bool`. Gap block has `cost_nanos = 0`, `tokens = zero`, `is_gap = true`.
+2. **Renderer.** Show gap rows as `(Nh Nm gap)` in dim/gray style. Use `owo-colors` dim modifier.
+3. **JSON parity.** Gap blocks serialize with `"kind": "gap"` to distinguish from empty activity blocks.
+4. **Dashboard.** Gaps rendered as translucent rows in the activity timeline card (if added in Phase 1).
 
 ### Acceptance
 
-- Fixture with synthetic Cowork slug resolves to human-readable title.
-- Missing `audit.jsonl` falls back to the slug without error.
+- `blocks` on a week of sporadic activity shows continuous time axis.
+- `--json` includes gap entries under an explicit `kind`.
+
+### Effort: XS (2 hours; depends on Phase 1)
+
+---
+
+## Phase 16 -- Locale-Aware Date/Time Formatting **[ ]**
+
+**Motivation:** Users outside en-US expect dates in their locale ("4月18日" not "Apr 18"). ccusage threads a `--locale` flag through every formatter.
+
+**Source:** ccusage shared `locale` arg in [_shared-args.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_shared-args.ts), used by `formatBlockTime`, `formatDateCompact`, `formatDateLong` throughout commands.
+
+### TODO
+
+1. **Crate.** Add `icu_datetime` (or `time` with `formatting` feature if weight matters). Formatter takes a `LocaleFallbacker`.
+2. **Flag + config.** `--locale=ja-JP`, `commands.daily.locale`, global `[display] locale = "ja-JP"`. Default resolves from `$LANG`.
+3. **Render site.** All CLI table date columns and dashboard date labels pass through a single `format_date(dt, locale)` helper.
+4. **Tests.** Snapshot tests for `en-US`, `ja-JP`, `de-DE`, `ru-RU`.
+
+### Acceptance
+
+- `--locale=ja-JP` yields localized month/day labels in the `today` and `weekly` tables.
+- Dashboard respects browser locale (sent via `Accept-Language`) when config is unset.
 
 ### Effort: S (1 day)
 
 ---
 
-## Phase 18 -- UI Polish Pack **[x]**
+## Phase 17 -- Compact CLI Table Mode for Screenshot Sharing **[ ]**
 
-**Motivation:** Three small UX upgrades that each take hours but compound. From Third-Eye's dashboard.
+**Motivation:** Responsive auto-wrap tables look jumbled in narrow terminals and screenshots. ccusage's `--compact` forces a narrow layout by dropping cache columns and condensing model lists.
 
-**Source:** [third-eye/client/src/App.tsx](https://github.com/fien-atone/third-eye/blob/main/client/src/App.tsx) (inline bars, TanStack Query `keepPreviousData`) and [third-eye/server/ingest.ts](https://github.com/fien-atone/third-eye/blob/main/server/ingest.ts) (TTY rebuild guard).
+**Source:** ccusage shared `compact` arg in [_shared-args.ts](https://github.com/ryoppippi/ccusage/blob/main/apps/ccusage/src/_shared-args.ts); `ResponsiveTable` with `forceCompact` in `packages/terminal`.
 
-### Deliverables
+### TODO
 
-1. **Inline proportional bars for ranked lists.** Replace the per-row count number in `ToolUsageTable`, `McpSummaryTable`, `BranchTable` with a background div at `width: (count / max) * 100%`. Zero new deps; pure CSS. Per industrial-design: monochrome fill at 15% opacity.
-2. **Preserve-previous-data on filter change.** Signals-based equivalent of TanStack's `keepPreviousData`: when filters mutate, keep rendering the old data until the new fetch resolves. Prevents mid-interaction blank flashes.
-3. **TTY-guarded destructive rebuild.** New subcommand `claude-usage-tracker db reset` requires interactively typing `"rebuild"` to confirm. In non-TTY contexts (CI, pipes) refuse with exit 1 unless `--yes` is passed.
-
-### Acceptance
-
-- Inline-bar rows pass contrast-ratio check in both themes.
-- Switching filters triggers a network request with visible [LOADING] status but no UI flash.
-- `echo "rebuild" | claude-usage-tracker db reset` rejects (not a TTY); `db reset --yes` succeeds non-interactively.
-
-### Effort: S (1 day total, split across the three)
-
----
-
-## Phase 19 -- Real-Time PreToolUse Hook Ingest **[x]**
-
-**Motivation:** Heimdall currently only sees usage after Claude Code flushes JSONL to disk. Claude-Guardian proves that `hook_input["cost"]["total_cost_usd"]` arrives on *every* tool invocation via the PreToolUse hook -- true sub-second cost visibility with zero parsing overhead. Turns Heimdall from a periodic-scan tool into a live observer.
-
-**Source:** [Claude-Guardian/hook/pre_tool_use.py](https://github.com/anshaneja5/Claude-Guardian/blob/main/hook/pre_tool_use.py) -- cost extraction at `pre_tool_use.py:228`, bypass-mode ancestor walk at lines 197--213. [Claude-Guardian/hook/permission_request.py](https://github.com/anshaneja5/Claude-Guardian/blob/main/hook/permission_request.py) -- same cost field at line 145.
-
-### Deliverables
-
-- New binary target in `Cargo.toml`:
-  ```toml
-  [[bin]]
-  name = "heimdall-hook"
-  path = "src/hook/main.rs"
-  ```
-- Read JSONL event from stdin, extract `session_id`, `tool_name`, `cost.total_cost_usd`, `input_tokens`, `output_tokens`.
-- Write directly to SQLite `live_events` table (no IPC, no HTTP -- simpler than Guardian's `NWListener` server).
-- **Bypass detection**: walk `ps` process tree for `--dangerously-skip-permissions`; if found, exit 0 without logging.
-- **Dual-config resolution**: `~/.config/heimdall/config.toml` > `~/.claude/usage-tracker.toml` > bundled default. Port Guardian's `_find_config_path()` pattern.
-- New subcommand: `claude-usage-tracker hook install` -- writes hook entry into `~/.claude/settings.json` with absolute path to `heimdall-hook` binary. `hook uninstall` removes it cleanly.
-- Fire-and-forget by design: hook *always* outputs `{}` (no permission decisions) and exits within ~50 ms.
-- Fallback safety: on any error, exit 0 silently -- never block Claude Code's flow.
+1. **Shared flag.** `--compact` on all table-producing commands. Config key `[display] compact = false`.
+2. **Compact renderer.** Column whitelist per subcommand: `today` keeps DATE/COST/TOKENS; drops cache-read/cache-write. Model list condenses to first model + "+N more".
+3. **Auto-detect.** When stdout is a TTY with `COLUMNS < 100` and `--compact` is unset, emit a hint: `(narrow terminal detected; try --compact)`.
 
 ### Acceptance
 
-- Hook install + one Claude Code session produces `live_events` rows within 1 second of tool invocations.
-- `hook uninstall` leaves `settings.json` byte-identical to pre-install state (modulo the hook entry).
-- Timing test: hook p99 latency < 100 ms on cold invocation.
-- Bypass-mode integration test: crafted `ps` ancestry with `--dangerously-skip-permissions` results in zero `live_events` rows.
+- `today --compact` fits within 80 columns.
+- Default wide mode unchanged.
 
-### Effort: M (2--3 days)
-
----
-
-## Phase 20 -- File-Watcher Auto-Refresh + Usage-Limits Source **[x]**
-
-**Motivation:** Two live-update patterns from Guardian that compose naturally. The 30-second dashboard polling loop gets replaced by a file watcher on `~/.claude/`, and a new data source (`*-usage-limits` files) adds a rate-window signal that works without OAuth credentials.
-
-**Source:** [Claude-Guardian/app/ClaudeGuardian/Sources/ClaudeAnalytics.swift](https://github.com/anshaneja5/Claude-Guardian/blob/main/app/ClaudeGuardian/Sources/ClaudeAnalytics.swift) -- `AnalyticsFileWatcher` class (lines 593--660, 2s debounce) and usage-limits reader (lines 404--420).
-
-### Deliverables
-
-- Add `notify = "6"` crate dependency (Rust equivalent of `DispatchSource.makeFileSystemObjectSource`).
-- `src/scanner/watcher.rs`:
-  - Watch `~/.claude/projects/` recursively for `Write`/`Create` events.
-  - Debounce 2 s to coalesce bursty writes.
-  - On event: enqueue incremental scan (not full rescan).
-- Server push: WebSocket or SSE endpoint (`/api/stream`) emitting `scan_completed` events for dashboard live reload.
-- New provider-adjacent parser: `src/scanner/usage_limits.rs` reading `~/.claude/projects/**/*-usage-limits` into `rate_window_history` table.
-- Store parsed fields: `five_hour_pct`, `seven_day_pct`, `five_hour_reset_ts`, `seven_day_reset_ts`.
-- Dashboard: `RateWindowCard.tsx` gains a "file-derived" source indicator as fallback when OAuth unavailable.
-
-### Acceptance
-
-- Touching a JSONL file triggers dashboard refresh in < 3 s end-to-end.
-- Usage-limits ingestion reconciles against OAuth response when both present (±1 % tolerance).
-- File watcher survives symlinks and recovers from `~/.claude/` directory being temporarily missing.
-
-### Effort: M (2 days)
-
----
-
-## Phase 21 -- Cache Token Breakdown + Hit Rate Metric **[x]**
-
-**Motivation:** Heimdall already tracks the four token types (input / output / cache-write / cache-read), but treats them as implementation detail. Guardian's analytics surface them as first-class columns with per-type cost. The derived "cache hit rate" metric is viral: users immediately want to optimize it.
-
-**Source:** [Claude-Guardian/app/ClaudeGuardian/Sources/ClaudeAnalytics.swift](https://github.com/anshaneja5/Claude-Guardian/blob/main/app/ClaudeGuardian/Sources/ClaudeAnalytics.swift) -- four-way cost computation at lines 213--218 (Sonnet/Opus/Haiku pricing tables).
-
-### Deliverables
-
-- New API fields in `/api/data` response: `{input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, cache_write_cost_nanos, cache_read_cost_nanos, cache_hit_rate}`.
-- Cache hit rate formula: `cache_read / (cache_read + input_tokens)` -- document the denominator choice in `DESIGN.md`.
-- Dashboard: new `CacheEfficiencyCard.tsx` -- percentage with industrial-monochrome progress bar, tooltip showing absolute savings vs. no-cache baseline.
-- `ModelCostTable.tsx`: add cache-read and cache-write columns with share-of-cost micro-bars.
-
-### Acceptance
-
-- Per-type costs sum exactly to total cost within integer-nanos precision.
-- Cache hit rate is 0 when no cache was used (no div-by-zero).
-- Hit rate displays as `--` when both cache fields are zero to distinguish from "0 % hit rate".
-
-### Effort: S (1 day)
-
----
-
-## Phase 22 -- macOS Distribution Hardening **[x]**
-
-**Motivation:** Heimdall ships as `cargo install --git` today. Guardian's distribution stack (Homebrew cask with lifecycle hooks + LaunchAgent for autostart + universal arm64/x86_64 binary via `lipo`) is the gold standard for macOS developer tools. Extends Phase 11 with macOS-specific polish.
-
-**Source:** [Claude-Guardian/homebrew/claudeguardian.rb](https://github.com/anshaneja5/Claude-Guardian/blob/main/homebrew/claudeguardian.rb) (cask formula), [Claude-Guardian/post-install.sh](https://github.com/anshaneja5/Claude-Guardian/blob/main/post-install.sh) (LaunchAgent plist generation at lines 146--167), [Claude-Guardian/build-app.sh](https://github.com/anshaneja5/Claude-Guardian/blob/main/build-app.sh) (universal binary via `lipo` at lines 25--51).
-
-### Deliverables
-
-1. **Universal macOS binary.** Release workflow builds both `aarch64-apple-darwin` and `x86_64-apple-darwin`, then merges with `lipo -create -output heimdall`. Distribute a single binary that runs natively on both Apple Silicon and Intel.
-2. **Homebrew tap + cask formula.** New repo `heimdall/homebrew-tap` with `Casks/heimdall.rb`:
-   - `postflight` runs `xattr -cr` (quarantine strip) and an optional `heimdall scheduler install --interval=hourly` (from Phase 15).
-   - `preflight` runs `heimdall scheduler uninstall` cleanly on upgrades.
-   - `zap` stanza documents all user data locations: `~/.claude/usage-tracker.toml`, `~/.cache/heimdall/`, `~/Library/LaunchAgents/dev.heimdall.*.plist`, SQLite DB path.
-3. **LaunchAgent plist generator.** Optional `heimdall daemon install` writes `~/Library/LaunchAgents/dev.heimdall.daemon.plist` with `RunAtLoad: true`, `StartInterval` or `KeepAlive` mode, logs to `~/Library/Logs/heimdall/`.
-4. **README macOS install path.** Add one-liner: `brew install heimdall/tap/heimdall`.
-
-### Acceptance
-
-- Single binary runs on M-series and Intel without rebuild; verified via CI matrix or `lipo -info`.
-- `brew install` + `brew uninstall` round-trip leaves no stray files; `brew zap` cleanly removes user data with explicit confirmation.
-- LaunchAgent daemon survives logout/login; logs rotate sensibly.
-
-### Effort: M (2 days; overlaps Phase 11)
+### Effort: XS (2 hours)
 
 ---
 
@@ -654,49 +433,41 @@ When porting, prefer reading the source file directly over reimplementing from m
 - **Cloud sync / hosted dashboard.** Violates the "strictly local" architectural principle.
 - **LLM-based classification.** Determinism is a feature; regex classifier stays.
 - **Prometheus/OTel exporters.** Webhooks handle the real-time use case.
-- **Permission-approval UI / mascot layer** (from Claude-Guardian). Orthogonal problem space; Heimdall is observational, not interventional.
-- **Blocking hook polling loop** (from Claude-Guardian). Guardian needs approval round-trips; Heimdall's hooks are fire-and-forget observational writes only.
-- **Localhost HTTP IPC between hook and daemon** (from Claude-Guardian). Unnecessary layer for Heimdall -- direct SQLite writes from the hook binary are simpler and faster.
+- **Permission-approval UI / mascot layer.** Orthogonal problem space; Heimdall is observational, not interventional.
+- **Blocking hook polling loop.** Heimdall's hooks are fire-and-forget observational writes only.
+- **Localhost HTTP IPC between hook and daemon.** Direct SQLite writes from the hook binary are simpler and faster.
 
 ---
 
 ## Sequencing Summary
 
-| Phase | Feature | Source | Effort | Unlocks |
-|-------|---------|--------|--------|---------|
-| 0 | `Provider` trait | Codeburn | M | Phases 5, 7, 17 |
-| 1 | CSV/JSON export | Codeburn | XS | Enterprise users |
-| 2 | Task classifier | Codeburn + Third-Eye | S | Phase 6 drilldowns |
-| 3 | One-shot rate | Codeburn | S | Compelling KPI |
-| 4 | Currency conversion | Codeburn | S | International users |
-| 5 | Cursor provider | Codeburn | M | Largest untapped user base |
-| 6 | `optimize` command | Codeburn | L | Primary differentiator |
-| 7 | OpenCode/Pi/Copilot | Codeburn | M each | Coverage parity |
-| 8 | SwiftBar + security | Codeburn | S | macOS polish |
-| 9 | LiteLLM pricing refresh | Codeburn + Third-Eye | S | Long-tail models |
-| 10 | UI palette migration | Heimdall-native | M | Closes known gap |
-| 11 | Release automation | Heimdall-native | M | Distribution |
-| 12 | Tool-event cost attribution | Third-Eye | M | Phase 6 queries; per-tool insights |
-| 13 | Heatmap + active-period avg | Third-Eye | S | Screenshot-worthy UX |
-| 14 | Client-sent timezone | Third-Eye | S | Correct buckets for all users |
-| 15 | Cross-platform scheduler | Third-Eye | M | Hands-off ingest |
-| 16 | CC version donut | Third-Eye | XS | Upgrade-cost visibility |
-| 17 | Cowork label resolution | Third-Eye | S | Readable Cowork projects |
-| 18 | UI polish pack | Third-Eye | S | Feels-snappier UX |
-| 19 | Real-time PreToolUse hook ingest | Claude-Guardian | M | Sub-second cost visibility |
-| 20 | File-watcher + usage-limits source | Claude-Guardian | M | Live dashboard; OAuth-free rate data |
-| 21 | Cache token breakdown + hit rate | Claude-Guardian | S | Cache-efficiency insight |
-| 22 | macOS distribution hardening | Claude-Guardian | M | Homebrew + universal binary + LaunchAgent |
+| Phase | Feature | Effort | Unlocks |
+|-------|---------|--------|---------|
+| 1 | 5h billing blocks + burn rate + projection | M | Foundation for Phases 2, 7, 13, 15; "am I over quota" answer |
+| 2 | Token quota % + inline REMAINING/PROJECTED rows | S | Live quota pressure visibility |
+| 3 | Weekly aggregation report | S | Sprint-cadence teams |
+| 4 | `statusline` PostToolUse hook | L | Always-visible usage in Claude Code's own status bar |
+| 5 | Context-window usage tracking | M | Compact-before-overflow UX |
+| 6 | MCP server | L | Inference-time self-query by Claude/Cursor/Desktop |
+| 7 | Visual burn-rate indicator | XS | Scannable tier badge in statusline |
+| 8 | Dual cost source reconciliation | S | Diagnose Anthropic vs local cost drift |
+| 9 | `--jq` post-processing | S | Power-user scriptability |
+| 10 | JSON-schema config + per-command overrides | M | IDE autocomplete, persistent per-project defaults |
+| 11 | Project aliases | XS | Readable directory-hash project names |
+| 12 | Amp credit tracking | M | First-class non-USD billing unit |
+| 13 | Configurable session block duration | XS | Model non-5h providers |
+| 14 | Per-model breakdown sub-rows | XS | Terminal model-driver visibility |
+| 15 | Gap block visualization | XS | Continuous time axis in blocks |
+| 16 | Locale-aware date formatting | S | International users |
+| 17 | Compact CLI table mode | XS | Screenshot-friendly output |
 
-Total estimated effort: **~9--10 weeks focused work**.
+All phases in this cycle source from ccusage. Total estimated effort: **~7--8 weeks focused work**.
 
 **Dependency graph:**
-- Phase 0 blocks Phases 5, 7, 17.
-- Phase 2 blocks the category-dimension drilldowns in Phase 6.
-- Phase 12 blocks the per-tool/per-file detectors in Phase 6 (both can start independently; Phase 6's richer detectors land after 12).
-- Phase 14 should precede Phase 13 (heatmap is TZ-sensitive).
-- Phase 19 is a prerequisite for fully exercising Phase 20's file-watcher (both can land independently; combined they close the real-time loop).
-- Phase 22 extends Phase 11 -- sequence Phase 11 first for cross-platform release, then Phase 22 layers macOS polish.
+- Phase 1 is the foundation for Phases 2 (quota % piggybacks on blocks), 7 (burn-rate tier badge), 13 (configurable duration), 15 (gap blocks).
+- Phase 4 precedes Phase 5 (statusline payload schema must land before context-window integration) and Phase 8 (dual cost source is a statusline render mode).
+- Phase 10 is orthogonal but simplifies configuration of all later phases; sequence early if dev bandwidth allows.
+- Phase 6 (MCP) is standalone but benefits from Phase 1 (exposes `blocks_active` tool) and Phase 3 (exposes `weekly` tool).
 - All other phases are independent and parallelizable.
 
 ---
