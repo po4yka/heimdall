@@ -599,7 +599,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 21 -- Cache Token Breakdown + Hit Rate Metric
+## Phase 21 -- Cache Token Breakdown + Hit Rate Metric **[x]**
 
 **Motivation:** Heimdall already tracks the four token types (input / output / cache-write / cache-read), but treats them as implementation detail. Guardian's analytics surface them as first-class columns with per-type cost. The derived "cache hit rate" metric is viral: users immediately want to optimize it.
 
