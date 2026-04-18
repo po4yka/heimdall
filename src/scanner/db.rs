@@ -246,6 +246,24 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     backfill_turn_pricing(conn)?;
     recompute_session_totals(conn)?;
 
+    // Phase 19: Real-time PreToolUse hook ingest.
+    // The hook binary writes directly to this table; the scanner only reads it.
+    // dedup_key = "{session_id}:{tool_use_id}" (or "{session_id}:{received_at_ns}")
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS live_events (
+            dedup_key       TEXT PRIMARY KEY,
+            received_at     TEXT NOT NULL,
+            session_id      TEXT,
+            tool_name       TEXT,
+            cost_usd_nanos  INTEGER NOT NULL DEFAULT 0,
+            input_tokens    INTEGER NOT NULL DEFAULT 0,
+            output_tokens   INTEGER NOT NULL DEFAULT 0,
+            raw_json        TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_live_events_received ON live_events(received_at);
+        CREATE INDEX IF NOT EXISTS idx_live_events_session ON live_events(session_id);",
+    )?;
+
     Ok(())
 }
 

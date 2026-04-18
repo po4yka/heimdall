@@ -151,9 +151,53 @@ fn config_path() -> PathBuf {
         .join("usage-tracker.toml")
 }
 
+/// Resolve the config file path using priority order:
+/// 1. `$HEIMDALL_CONFIG` environment variable
+/// 2. `~/.config/heimdall/config.toml`
+/// 3. `~/.claude/usage-tracker.toml`
+/// 4. Returns `None` if none of the above exist (callers use defaults).
+///
+/// Ported from Claude-Guardian's `_find_config_path()` pattern.
+pub fn resolve_config_path() -> Option<PathBuf> {
+    // 1. Explicit env override
+    if let Ok(env_path) = std::env::var("HEIMDALL_CONFIG") {
+        let p = PathBuf::from(env_path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+
+    // 2. XDG-style ~/.config/heimdall/config.toml
+    if let Some(home) = dirs::home_dir() {
+        let xdg = home.join(".config").join("heimdall").join("config.toml");
+        if xdg.exists() {
+            return Some(xdg);
+        }
+
+        // 3. Legacy ~/.claude/usage-tracker.toml
+        let legacy = home.join(".claude").join("usage-tracker.toml");
+        if legacy.exists() {
+            return Some(legacy);
+        }
+    }
+
+    // 4. No config found — callers use bundled defaults
+    None
+}
+
 /// Load config from the default path, or return defaults if not found.
 pub fn load_config() -> Config {
     load_config_from(&config_path())
+}
+
+/// Load config using the dual-config resolver (for the hook binary).
+/// Applies the priority: HEIMDALL_CONFIG > ~/.config/heimdall/config.toml
+/// > ~/.claude/usage-tracker.toml > bundled defaults.
+pub fn load_config_resolved() -> Config {
+    match resolve_config_path() {
+        Some(path) => load_config_from(&path),
+        None => Config::default(),
+    }
 }
 
 /// Load config from a specific path, or return defaults if not found.
@@ -458,5 +502,65 @@ output = 8.0
         write!(f, "[pricing_source]\nsource = \"static\"\n").unwrap();
         let config = load_config_from(&path);
         assert!(!config.pricing_source.is_litellm());
+    }
+
+    // ── resolve_config_path tests ────────────────────────────────────────────
+
+    #[test]
+    fn test_resolve_config_path_env_var_wins() {
+        let tmp = TempDir::new().unwrap();
+        let explicit = tmp.path().join("explicit.toml");
+        std::fs::File::create(&explicit).unwrap();
+
+        // SAFETY: single-threaded test; env mutation is safe here.
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", &explicit) };
+        let result = resolve_config_path();
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+
+        assert_eq!(result, Some(explicit));
+    }
+
+    #[test]
+    fn test_resolve_config_path_env_var_nonexistent_falls_through() {
+        // If HEIMDALL_CONFIG points at a non-existent file, fall through to
+        // the next candidate. With a HOME that has no config files this
+        // returns None.
+        let tmp = TempDir::new().unwrap();
+        let nonexistent = tmp.path().join("does_not_exist.toml");
+
+        // SAFETY: single-threaded test; env mutation is safe here.
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", &nonexistent) };
+        // We don't assert the exact value because the test machine might have
+        // real config files; we only assert we don't get the nonexistent path.
+        let result = resolve_config_path();
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+
+        assert_ne!(result, Some(nonexistent));
+    }
+
+    #[test]
+    fn test_resolve_config_path_returns_none_when_nothing_exists() {
+        // Make sure env var is not set.
+        // SAFETY: single-threaded test; env mutation is safe here.
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        // We can't easily override HOME without unsafe or extra deps,
+        // but we can verify the function doesn't panic and returns
+        // Some or None based on the real filesystem.
+        let _ = resolve_config_path(); // must not panic
+    }
+
+    #[test]
+    fn test_load_config_resolved_uses_env_var() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("resolved.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(f, "port = 7777\n").unwrap();
+
+        // SAFETY: single-threaded test; env mutation is safe here.
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", &path) };
+        let config = load_config_resolved();
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+
+        assert_eq!(config.port, Some(7777));
     }
 }

@@ -1,18 +1,14 @@
-mod config;
-mod currency;
-mod export;
-mod litellm;
-mod menubar;
-mod models;
-mod oauth;
-mod openai;
-mod optimizer;
-mod pricing;
-mod scanner;
-mod scheduler;
-mod server;
-mod tz;
-mod webhooks;
+use claude_usage_tracker::config;
+use claude_usage_tracker::currency;
+use claude_usage_tracker::export;
+use claude_usage_tracker::hook;
+use claude_usage_tracker::litellm;
+use claude_usage_tracker::menubar;
+use claude_usage_tracker::optimizer;
+use claude_usage_tracker::pricing;
+use claude_usage_tracker::scanner;
+use claude_usage_tracker::scheduler;
+use claude_usage_tracker::server;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -110,6 +106,21 @@ enum Commands {
         #[arg(long, default_value = "text")]
         format: String,
     },
+    /// Manage the heimdall-hook real-time PreToolUse ingest hook
+    Hook {
+        #[command(subcommand)]
+        action: HookAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum HookAction {
+    /// Install the heimdall-hook entry into ~/.claude/settings.json
+    Install,
+    /// Remove the heimdall-hook entry from ~/.claude/settings.json
+    Uninstall,
+    /// Show whether the hook entry is present
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -282,6 +293,9 @@ fn main() -> Result<()> {
         Commands::Optimize { db_path, format } => {
             let db = default_db(db_path);
             cmd_optimize(&db, &format)?;
+        }
+        Commands::Hook { action } => {
+            cmd_hook(action)?;
         }
     }
     Ok(())
@@ -482,6 +496,49 @@ fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Resul
             }
             InstallStatus::UnsupportedPlatform(plat) => {
                 println!("Unsupported platform: {}", plat);
+            }
+        },
+    }
+    Ok(())
+}
+
+fn cmd_hook(action: HookAction) -> Result<()> {
+    use hook::install::{
+        HookActionResult, HookStatus, install, resolve_hook_binary_path, status, uninstall,
+    };
+
+    match action {
+        HookAction::Install => {
+            let bin = resolve_hook_binary_path()?;
+            match install(&bin)? {
+                HookActionResult::Installed { binary_path } => {
+                    println!("Installed: heimdall-hook entry added to ~/.claude/settings.json");
+                    println!("  binary: {}", binary_path.display());
+                }
+                HookActionResult::AlreadyInstalled { binary_path } => {
+                    println!("Already installed (no change made)");
+                    println!("  binary: {}", binary_path.display());
+                }
+                _ => {}
+            }
+        }
+        HookAction::Uninstall => match uninstall()? {
+            HookActionResult::Uninstalled => {
+                println!("Uninstalled: heimdall-hook entry removed from ~/.claude/settings.json");
+            }
+            HookActionResult::NothingToUninstall => {
+                println!("Nothing to uninstall: no heimdall-hook entry found");
+            }
+            _ => {}
+        },
+        HookAction::Status => match status()? {
+            HookStatus::Present { binary_path } => {
+                println!("Installed");
+                println!("  binary: {}", binary_path);
+            }
+            HookStatus::Absent => {
+                println!("Not installed");
+                println!("  Run: claude-usage-tracker hook install");
             }
         },
     }

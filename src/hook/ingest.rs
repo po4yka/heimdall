@@ -1,0 +1,208 @@
+/// Hook payload parsing and `live_events` row construction.
+///
+/// Claude Code delivers a JSON object on stdin for every PreToolUse event.
+/// The shape (from Claude-Guardian/hook/pre_tool_use.py) is roughly:
+///
+/// ```json
+/// {
+///   "session_id": "abc123",
+///   "tool_name": "Edit",
+///   "tool_use_id": "tu_xyz",
+///   "hook_input": {
+///     "cost": { "total_cost_usd": 0.000123 },
+///     "usage": { "input_tokens": 500, "output_tokens": 200 }
+///   }
+/// }
+/// ```
+///
+/// All fields are optional; missing fields map to `None` / 0.
+use serde::Deserialize;
+
+/// Extracted fields from a single PreToolUse hook payload.
+#[derive(Debug, PartialEq)]
+pub struct LiveEvent {
+    pub dedup_key: String,
+    pub received_at: String,
+    pub session_id: Option<String>,
+    pub tool_name: Option<String>,
+    /// Cost stored as integer nanos (1 USD = 1_000_000_000 nanos).
+    pub cost_usd_nanos: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub raw_json: String,
+}
+
+// ── Internal deserialization types ──────────────────────────────────────────
+
+#[derive(Deserialize, Default)]
+struct HookPayload {
+    session_id: Option<String>,
+    tool_name: Option<String>,
+    tool_use_id: Option<String>,
+    hook_input: Option<HookInput>,
+}
+
+#[derive(Deserialize, Default)]
+struct HookInput {
+    cost: Option<CostBlock>,
+    usage: Option<UsageBlock>,
+}
+
+#[derive(Deserialize, Default)]
+struct CostBlock {
+    total_cost_usd: Option<f64>,
+}
+
+#[derive(Deserialize, Default)]
+struct UsageBlock {
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
+
+/// Parse raw JSON bytes from stdin into a `LiveEvent`.
+///
+/// Returns `None` if `json` is not valid JSON — callers should log this to
+/// stderr and exit 0 without writing to the DB.
+pub fn parse_hook_payload(json: &str, received_at: &str) -> Option<LiveEvent> {
+    let payload: HookPayload = serde_json::from_str(json).ok()?;
+
+    let cost_usd_nanos = payload
+        .hook_input
+        .as_ref()
+        .and_then(|hi| hi.cost.as_ref())
+        .and_then(|c| c.total_cost_usd)
+        .map(usd_to_nanos)
+        .unwrap_or(0);
+
+    let input_tokens = payload
+        .hook_input
+        .as_ref()
+        .and_then(|hi| hi.usage.as_ref())
+        .and_then(|u| u.input_tokens)
+        .unwrap_or(0);
+
+    let output_tokens = payload
+        .hook_input
+        .as_ref()
+        .and_then(|hi| hi.usage.as_ref())
+        .and_then(|u| u.output_tokens)
+        .unwrap_or(0);
+
+    let dedup_key = build_dedup_key(
+        payload.session_id.as_deref(),
+        payload.tool_use_id.as_deref(),
+        received_at,
+    );
+
+    Some(LiveEvent {
+        dedup_key,
+        received_at: received_at.to_string(),
+        session_id: payload.session_id,
+        tool_name: payload.tool_name,
+        cost_usd_nanos,
+        input_tokens,
+        output_tokens,
+        raw_json: json.to_string(),
+    })
+}
+
+/// Convert a USD float to integer nanos, clamped to non-negative.
+fn usd_to_nanos(usd: f64) -> i64 {
+    (usd * 1_000_000_000.0).round().max(0.0) as i64
+}
+
+/// Build the dedup key: `"{session_id}:{tool_use_id}"` when tool_use_id is
+/// present, else `"{session_id}:{received_at}"`.
+fn build_dedup_key(
+    session_id: Option<&str>,
+    tool_use_id: Option<&str>,
+    received_at: &str,
+) -> String {
+    let sid = session_id.unwrap_or("unknown");
+    match tool_use_id {
+        Some(id) if !id.is_empty() => format!("{sid}:{id}"),
+        _ => format!("{sid}:{received_at}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const REALISTIC_PAYLOAD: &str = r#"{
+        "session_id": "session-abc123",
+        "tool_name": "Edit",
+        "tool_use_id": "tu_xyz789",
+        "hook_input": {
+            "cost": { "total_cost_usd": 0.001234 },
+            "usage": { "input_tokens": 1500, "output_tokens": 300 }
+        }
+    }"#;
+
+    #[test]
+    fn parse_realistic_payload_extracts_all_fields() {
+        let event = parse_hook_payload(REALISTIC_PAYLOAD, "2024-01-15T10:30:00.123Z")
+            .expect("should parse");
+
+        assert_eq!(event.session_id.as_deref(), Some("session-abc123"));
+        assert_eq!(event.tool_name.as_deref(), Some("Edit"));
+        assert_eq!(event.dedup_key, "session-abc123:tu_xyz789");
+        // 0.001234 USD * 1e9 rounded = 1_234_000
+        assert_eq!(event.cost_usd_nanos, 1_234_000);
+        assert_eq!(event.input_tokens, 1500);
+        assert_eq!(event.output_tokens, 300);
+    }
+
+    #[test]
+    fn parse_malformed_json_returns_none() {
+        let result = parse_hook_payload("not valid json {{{", "2024-01-15T10:30:00Z");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_empty_object_uses_defaults() {
+        let event = parse_hook_payload("{}", "2024-01-15T10:30:00Z").expect("should parse");
+        assert!(event.session_id.is_none());
+        assert!(event.tool_name.is_none());
+        assert_eq!(event.cost_usd_nanos, 0);
+        assert_eq!(event.input_tokens, 0);
+        assert_eq!(event.output_tokens, 0);
+        // dedup_key falls back to received_at
+        assert!(event.dedup_key.contains("unknown:"));
+    }
+
+    #[test]
+    fn parse_missing_tool_use_id_uses_received_at_in_dedup_key() {
+        let json = r#"{"session_id": "ses1"}"#;
+        let ts = "2024-01-15T10:30:00.999Z";
+        let event = parse_hook_payload(json, ts).expect("should parse");
+        assert_eq!(event.dedup_key, format!("ses1:{ts}"));
+    }
+
+    #[test]
+    fn parse_missing_cost_block_gives_zero_nanos() {
+        let json = r#"{"session_id": "s1", "tool_name": "Bash", "tool_use_id": "t1"}"#;
+        let event = parse_hook_payload(json, "ts").expect("should parse");
+        assert_eq!(event.cost_usd_nanos, 0);
+    }
+
+    #[test]
+    fn usd_to_nanos_rounds_correctly() {
+        assert_eq!(usd_to_nanos(0.001), 1_000_000);
+        assert_eq!(usd_to_nanos(1.0), 1_000_000_000);
+        // Negative values clamp to zero
+        assert_eq!(usd_to_nanos(-1.0), 0);
+    }
+
+    #[test]
+    fn dedup_key_uses_tool_use_id_when_present() {
+        assert_eq!(build_dedup_key(Some("ses"), Some("tu1"), "ts"), "ses:tu1");
+    }
+
+    #[test]
+    fn dedup_key_falls_back_to_received_at_for_empty_tool_use_id() {
+        assert_eq!(build_dedup_key(Some("ses"), Some(""), "ts123"), "ses:ts123");
+    }
+}

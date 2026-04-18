@@ -5,6 +5,14 @@ edition = "2024"
 description = "Local analytics dashboard for Claude Code usage and token consumption"
 license = "MIT"
 
+[[bin]]
+name = "claude-usage-tracker"
+path = "src/main.rs"
+
+[[bin]]
+name = "heimdall-hook"
+path = "src/hook/main.rs"
+
 [dependencies]
 anyhow = "1"
 axum = "0.8"
