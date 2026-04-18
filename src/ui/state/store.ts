@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals';
-import type { DashboardData, RangeKey, SessionRow, ProjectAgg, BillingBlocksResponse } from './types';
+import type { DashboardData, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse } from './types';
 
 // ── Core data ────────────────────────────────────────────────────────
 export const rawData = signal<DashboardData | null>(null);
@@ -12,6 +12,13 @@ export const selectedModels = signal<Set<string>>(new Set());
 export const selectedRange = signal<RangeKey>('30d');
 export const selectedProvider = signal<ProviderFilter>('both');
 export const projectSearchQuery = signal('');
+
+export function readBucket(): BucketKey {
+  const p = new URLSearchParams(window.location.search).get('bucket');
+  return (['day', 'week'] as BucketKey[]).includes(p as BucketKey) ? (p as BucketKey) : 'day';
+}
+
+export const selectedBucket = signal<BucketKey>(readBucket());
 
 // ── Cached derivations (updated by applyFilter) ──────────────────────
 export const lastFilteredSessions = signal<SessionRow[]>([]);

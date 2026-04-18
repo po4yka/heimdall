@@ -124,6 +124,25 @@ pub struct DashboardData {
     pub generated_at: String,
     /// Phase 21: cache-token breakdown and derived hit-rate metric.
     pub cache_efficiency: CacheEfficiency,
+    /// Phase 3: weekly aggregation by model — always populated.
+    /// The frontend buckets and filters client-side.
+    pub weekly_by_model: Vec<WeeklyModelRow>,
+}
+
+/// One entry in the `weekly_by_model` array of `/api/data`.
+///
+/// Aggregated across all providers for `(week, model)`.
+/// `week` is a `"YYYY-WW"` ISO calendar-week label.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct WeeklyModelRow {
+    pub week: String,
+    pub model: String,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_creation_tokens: i64,
+    pub reasoning_output_tokens: i64,
+    pub cost_nanos: i64,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

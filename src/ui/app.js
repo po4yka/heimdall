@@ -1107,6 +1107,11 @@
   var selectedRange = y3("30d");
   var selectedProvider = y3("both");
   var projectSearchQuery = y3("");
+  function readBucket() {
+    const p5 = new URLSearchParams(window.location.search).get("bucket");
+    return ["day", "week"].includes(p5) ? p5 : "day";
+  }
+  var selectedBucket = y3(readBucket());
   var lastFilteredSessions = y3([]);
   var lastByProject = y3([]);
   var metaText = y3("");
@@ -1313,6 +1318,8 @@
 
   // src/ui/components/FilterBar.tsx
   var RANGES = ["7d", "30d", "90d", "all"];
+  var BUCKETS = ["day", "week"];
+  var BUCKET_LABEL = { day: "DAY", week: "WEEK" };
   var PROVIDERS = ["both", "claude", "codex"];
   var PROVIDER_LABEL = {
     both: "Both",
@@ -1353,6 +1360,11 @@
     };
     const setRange = (range) => {
       selectedRange.value = range;
+      onURLUpdate();
+      onFilterChange();
+    };
+    const setBucket = (bucket) => {
+      selectedBucket.value = bucket;
       onURLUpdate();
       onFilterChange();
     };
@@ -1405,6 +1417,19 @@
           children: range
         },
         range
+      )) }),
+      /* @__PURE__ */ u2("div", { class: "filter-sep" }),
+      /* @__PURE__ */ u2("div", { class: "filter-label", children: "Bucket" }),
+      /* @__PURE__ */ u2("div", { class: "range-group", role: "group", "aria-label": "Chart bucket", children: BUCKETS.map((bucket) => /* @__PURE__ */ u2(
+        "button",
+        {
+          class: `range-btn${selectedBucket.value === bucket ? " active" : ""}`,
+          type: "button",
+          "data-bucket": bucket,
+          onClick: () => setBucket(bucket),
+          children: BUCKET_LABEL[bucket]
+        },
+        bucket
       )) }),
       hasCodexData && /* @__PURE__ */ u2(S, { children: [
         /* @__PURE__ */ u2("div", { class: "filter-sep" }),
@@ -6356,6 +6381,50 @@
     return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-daily" });
   }
 
+  // src/ui/components/WeeklyChart.tsx
+  function WeeklyChart({ weekly }) {
+    if (!weekly?.length) {
+      return /* @__PURE__ */ u2("div", { style: { padding: "24px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: "12px" }, children: "No weekly data available." });
+    }
+    const base = industrialChartOptions("bar");
+    const options = {
+      ...base,
+      chart: { ...base.chart, type: "bar", stacked: true },
+      series: [
+        { name: "Input", data: weekly.map((w5) => w5.input) },
+        { name: "Output", data: weekly.map((w5) => w5.output) },
+        { name: "Cached Input", data: weekly.map((w5) => w5.cache_read) },
+        { name: "Cache Creation", data: weekly.map((w5) => w5.cache_creation) }
+      ],
+      colors: tokenSeriesColors(),
+      fill: { type: "solid" },
+      plotOptions: { bar: { columnWidth: "70%", borderRadius: 0 } },
+      xaxis: {
+        ...base.xaxis,
+        categories: weekly.map((w5) => w5.week),
+        labels: { ...base.xaxis.labels, rotate: -45, maxHeight: 60 },
+        tickAmount: Math.min(weekly.length, 26)
+      },
+      yaxis: {
+        ...base.yaxis,
+        labels: { ...base.yaxis.labels, formatter: (v4) => fmt(v4) }
+      },
+      tooltip: {
+        ...base.tooltip,
+        y: { formatter: (v4) => fmt(v4) + " tokens" },
+        custom: ({ dataPointIndex }) => {
+          const w5 = weekly[dataPointIndex];
+          if (!w5) return "";
+          const total = w5.input + w5.output + w5.cache_read + w5.cache_creation;
+          const costUsd = w5.cost_nanos / 1e9;
+          const costStr = costUsd < 1e-4 ? "<$0.0001" : "$" + costUsd.toFixed(4);
+          return '<div style="padding:8px 12px;font-family:var(--font-mono);font-size:12px;background:var(--color-bg-secondary);border:1px solid var(--color-border)"><div style="margin-bottom:4px;font-weight:600">' + w5.week + "</div><div>Input: " + fmt(w5.input) + "</div><div>Output: " + fmt(w5.output) + "</div><div>Cached Input: " + fmt(w5.cache_read) + "</div><div>Cache Creation: " + fmt(w5.cache_creation) + '</div><div style="margin-top:4px;border-top:1px solid var(--color-border);padding-top:4px">Total: ' + fmt(total) + " tokens</div><div>Cost: " + costStr + "</div></div>";
+        }
+      }
+    };
+    return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-weekly" });
+  }
+
   // src/ui/components/ModelChart.tsx
   function ModelChart({ byModel }) {
     if (!byModel.length) return null;
@@ -6527,12 +6596,55 @@
     if (!isDefaultModelSelection(allModels)) params.set("models", Array.from(selectedModels.value).join(","));
     if (projectSearchQuery.value) params.set("project", projectSearchQuery.value);
     if (versionDonutMetric.value !== "cost") params.set("version_metric", versionDonutMetric.value);
+    if (selectedBucket.value !== "day") params.set("bucket", selectedBucket.value);
     const search = params.toString() ? "?" + params.toString() : "";
     history.replaceState(null, "", window.location.pathname + search);
   }
   function matchesProjectSearch(project) {
     if (!projectSearchQuery.value) return true;
     return project.toLowerCase().includes(projectSearchQuery.value);
+  }
+  function weekLabelToWeekStart(label) {
+    const [yearStr, weekStr] = label.split("-");
+    const year = parseInt(yearStr, 10);
+    const week = parseInt(weekStr, 10);
+    if (!Number.isFinite(year) || !Number.isFinite(week)) return /* @__PURE__ */ new Date(NaN);
+    const jan1 = new Date(Date.UTC(year, 0, 1));
+    if (week === 0) return jan1;
+    const jan1Dow = jan1.getUTCDay();
+    const daysToFirstMon = (8 - jan1Dow) % 7 || 7;
+    const firstMondayUtc = new Date(Date.UTC(year, 0, 1 + daysToFirstMon));
+    return new Date(firstMondayUtc.getTime() + (week - 1) * 7 * 86400 * 1e3);
+  }
+  function buildWeeklyAgg(range) {
+    const rows = rawData.value?.weekly_by_model ?? [];
+    if (!rows.length) return [];
+    const cutoff = getRangeCutoff(range);
+    const weekMap = {};
+    for (const r4 of rows) {
+      if (cutoff) {
+        const weekStart = weekLabelToWeekStart(r4.week);
+        if (isNaN(weekStart.getTime())) continue;
+        const weekStartStr = weekStart.toISOString().slice(0, 10);
+        if (weekStartStr < cutoff) continue;
+      }
+      const w5 = weekMap[r4.week] ?? (weekMap[r4.week] = {
+        week: r4.week,
+        input: 0,
+        output: 0,
+        cache_read: 0,
+        cache_creation: 0,
+        reasoning_output: 0,
+        cost_nanos: 0
+      });
+      w5.input += r4.input_tokens;
+      w5.output += r4.output_tokens;
+      w5.cache_read += r4.cache_read_tokens;
+      w5.cache_creation += r4.cache_creation_tokens;
+      w5.reasoning_output += r4.reasoning_output_tokens;
+      w5.cost_nanos += r4.cost_nanos;
+    }
+    return Object.values(weekMap).sort((a4, b4) => a4.week.localeCompare(b4.week));
   }
   function buildAggregations(filteredDaily, filteredSessions) {
     const dailyMap = {};
@@ -6699,7 +6811,11 @@
     );
     const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } = buildAggregations(filteredDaily, filteredSessions);
     const providerLabel = selectedProvider.value === "both" ? "" : ` (${selectedProvider.value})`;
-    $2("daily-chart-title").textContent = "Daily Token Usage - " + RANGE_LABELS[selectedRange.value] + providerLabel;
+    const bucketIsWeek = selectedBucket.value === "week";
+    const chartTitleEl = $2("daily-chart-title");
+    if (chartTitleEl) {
+      chartTitleEl.textContent = (bucketIsWeek ? "Weekly Token Usage - " : "Daily Token Usage - ") + RANGE_LABELS[selectedRange.value] + providerLabel;
+    }
     R(
       /* @__PURE__ */ u2(
         StatsCards,
@@ -6716,7 +6832,12 @@
     );
     renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
     renderOpenAiReconciliation(rawData.value.openai_reconciliation);
-    R(/* @__PURE__ */ u2(DailyChart, { daily }), $2("chart-daily"));
+    if (bucketIsWeek) {
+      const weekly = buildWeeklyAgg(selectedRange.value);
+      R(/* @__PURE__ */ u2(WeeklyChart, { weekly }), $2("chart-daily"));
+    } else {
+      R(/* @__PURE__ */ u2(DailyChart, { daily }), $2("chart-daily"));
+    }
     R(/* @__PURE__ */ u2(ModelChart, { byModel }), $2("chart-model"));
     R(/* @__PURE__ */ u2(ProjectChart, { byProject }), $2("chart-project"));
     lastFilteredSessions.value = filteredSessions;
@@ -7063,6 +7184,10 @@
   if (globalStatusMount) {
     R(/* @__PURE__ */ u2(InlineStatus, { placement: "global" }), globalStatusMount);
   }
+  window.addEventListener("popstate", () => {
+    selectedBucket.value = readBucket();
+    if (rawData.value) applyFilter();
+  });
   loadData();
   setInterval(loadData, 3e4);
   loadUsageWindows();

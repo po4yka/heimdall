@@ -1503,4 +1503,122 @@ mod tests {
         // quota field must be absent when token_limit is not set.
         assert!(b.get("quota").is_none());
     }
+
+    // ── Phase 3: weekly_by_model in /api/data ─────────────────────────────────
+
+    fn make_assistant_ts(
+        session_id: &str,
+        ts: &str,
+        input: i64,
+        output: i64,
+        msg_id: &str,
+    ) -> String {
+        let msg = serde_json::json!({
+            "model": "claude-sonnet-4-6",
+            "usage": {
+                "input_tokens": input,
+                "output_tokens": output,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+            "content": [],
+            "id": msg_id,
+        });
+        serde_json::json!({
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": ts,
+            "cwd": "/home/user/project",
+            "message": msg,
+        })
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn api_data_weekly_by_model_present_and_ordered() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects").join("user").join("proj");
+        std::fs::create_dir_all(&projects).unwrap();
+
+        // Seed turns in two different weeks.
+        let filepath = projects.join("weekly_sess.jsonl");
+        let mut f = std::fs::File::create(&filepath).unwrap();
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({"type":"user","sessionId":"s_weekly","timestamp":"2026-04-06T09:00:00Z","cwd":"/home"})
+        )
+        .unwrap();
+        // Week 1: Apr 6
+        writeln!(
+            f,
+            "{}",
+            make_assistant_ts("s_weekly", "2026-04-06T10:00:00Z", 1000, 500, "wm-1")
+        )
+        .unwrap();
+        // Week 2: Apr 13 (next Mon-week)
+        writeln!(
+            f,
+            "{}",
+            make_assistant_ts("s_weekly", "2026-04-13T10:00:00Z", 2000, 800, "wm-2")
+        )
+        .unwrap();
+
+        let db_path = tmp.path().join("weekly.db");
+        let parent = tmp.path().join("projects");
+        scanner::scan(Some(vec![parent.clone()]), &db_path, false).unwrap();
+
+        let app = test_app(db_path, parent);
+        let req = Request::builder()
+            .uri("/api/data")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        // weekly_by_model must be present.
+        let wbm = json
+            .get("weekly_by_model")
+            .expect("weekly_by_model field missing");
+        assert!(wbm.is_array(), "weekly_by_model must be an array");
+        let arr = wbm.as_array().unwrap();
+
+        // Must have at least one entry (from the seeded turns).
+        assert!(
+            !arr.is_empty(),
+            "weekly_by_model should not be empty after seeding turns"
+        );
+
+        // Entries must have expected fields.
+        let entry = &arr[0];
+        assert!(entry.get("week").is_some(), "entry.week missing");
+        assert!(entry.get("model").is_some(), "entry.model missing");
+        assert!(
+            entry.get("input_tokens").is_some(),
+            "entry.input_tokens missing"
+        );
+        assert!(
+            entry.get("output_tokens").is_some(),
+            "entry.output_tokens missing"
+        );
+        assert!(
+            entry.get("cost_nanos").is_some(),
+            "entry.cost_nanos missing"
+        );
+
+        // Entries must be ordered week ASC.
+        let weeks: Vec<&str> = arr
+            .iter()
+            .filter_map(|e| e.get("week").and_then(|w| w.as_str()))
+            .collect();
+        let mut sorted_weeks = weeks.clone();
+        sorted_weeks.sort();
+        assert_eq!(
+            weeks, sorted_weeks,
+            "weekly_by_model must be sorted by week ASC"
+        );
+    }
 }

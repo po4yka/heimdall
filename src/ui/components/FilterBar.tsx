@@ -3,12 +3,15 @@ import {
   selectedModels,
   selectedRange,
   selectedProvider,
+  selectedBucket,
   projectSearchQuery,
   type ProviderFilter,
 } from '../state/store';
-import type { RangeKey } from '../state/types';
+import type { RangeKey, BucketKey } from '../state/types';
 
 const RANGES: RangeKey[] = ['7d', '30d', '90d', 'all'];
+const BUCKETS: BucketKey[] = ['day', 'week'];
+const BUCKET_LABEL: Record<BucketKey, string> = { day: 'DAY', week: 'WEEK' };
 const PROVIDERS: ProviderFilter[] = ['both', 'claude', 'codex'];
 const PROVIDER_LABEL: Record<ProviderFilter, string> = {
   both: 'Both',
@@ -60,6 +63,12 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
 
   const setRange = (range: RangeKey) => {
     selectedRange.value = range;
+    onURLUpdate();
+    onFilterChange();
+  };
+
+  const setBucket = (bucket: BucketKey) => {
+    selectedBucket.value = bucket;
     onURLUpdate();
     onFilterChange();
   };
@@ -119,6 +128,21 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
             onClick={() => setRange(range)}
           >
             {range}
+          </button>
+        ))}
+      </div>
+      <div class="filter-sep"></div>
+      <div class="filter-label">Bucket</div>
+      <div class="range-group" role="group" aria-label="Chart bucket">
+        {BUCKETS.map(bucket => (
+          <button
+            key={bucket}
+            class={`range-btn${selectedBucket.value === bucket ? ' active' : ''}`}
+            type="button"
+            data-bucket={bucket}
+            onClick={() => setBucket(bucket)}
+          >
+            {BUCKET_LABEL[bucket]}
           </button>
         ))}
       </div>

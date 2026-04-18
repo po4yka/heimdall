@@ -211,6 +211,7 @@ export interface DashboardData {
   git_branch_summary: BranchSummary[];
   version_summary: VersionSummary[];
   daily_by_project: DailyProjectRow[];
+  weekly_by_model: WeeklyModelRow[];
   openai_reconciliation: OpenAiReconciliation | null;
   generated_at: string;
   /** Phase 21: cache-token breakdown and derived hit-rate metric. */
@@ -281,6 +282,28 @@ export interface StatCard {
 
 export type SortDir = 'asc' | 'desc';
 export type RangeKey = '7d' | '30d' | '90d' | 'all';
+export type BucketKey = 'day' | 'week';
+
+export interface WeeklyModelRow {
+  week: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  reasoning_output_tokens: number;
+  cost_nanos: number;
+}
+
+export interface WeeklyAgg {
+  week: string;
+  input: number;
+  output: number;
+  cache_read: number;
+  cache_creation: number;
+  reasoning_output: number;
+  cost_nanos: number;
+}
 
 // ── Phase 21: Cache Efficiency ──────────────────────────────────────────────
 

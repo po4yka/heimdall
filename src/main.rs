@@ -144,6 +144,21 @@ enum Commands {
         #[arg(long, value_parser = parse_token_limit)]
         token_limit: Option<TokenLimit>,
     },
+    /// Aggregated usage by ISO calendar week
+    Weekly {
+        /// Path to SQLite DB file
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Week start day (sunday|monday|tuesday|wednesday|thursday|friday|saturday)
+        #[arg(long, default_value = "monday", value_parser = parse_weekday)]
+        start_of_week: chrono::Weekday,
+        /// Emit JSON instead of a human-readable table
+        #[arg(long)]
+        json: bool,
+        /// Include per-model breakdown sub-rows under each week
+        #[arg(long)]
+        breakdown: bool,
+    },
 }
 
 /// Token quota specification for `--token-limit`.
@@ -165,6 +180,35 @@ fn parse_token_limit(s: &str) -> Result<TokenLimit, String> {
         Err(_) => Err(format!(
             "invalid token-limit value '{s}': expected a positive integer or \"max\""
         )),
+    }
+}
+
+/// Parse a weekday name (case-insensitive) into a `chrono::Weekday`.
+fn parse_weekday(s: &str) -> Result<chrono::Weekday, String> {
+    match s.to_ascii_lowercase().as_str() {
+        "monday" | "mon" => Ok(chrono::Weekday::Mon),
+        "tuesday" | "tue" => Ok(chrono::Weekday::Tue),
+        "wednesday" | "wed" => Ok(chrono::Weekday::Wed),
+        "thursday" | "thu" => Ok(chrono::Weekday::Thu),
+        "friday" | "fri" => Ok(chrono::Weekday::Fri),
+        "saturday" | "sat" => Ok(chrono::Weekday::Sat),
+        "sunday" | "sun" => Ok(chrono::Weekday::Sun),
+        _ => Err(format!(
+            "unknown weekday '{s}': expected sunday|monday|tuesday|wednesday|thursday|friday|saturday"
+        )),
+    }
+}
+
+/// Map a `chrono::Weekday` to the 0=Sunday … 6=Saturday encoding used by `TzParams`.
+fn weekday_to_u8(day: chrono::Weekday) -> u8 {
+    match day {
+        chrono::Weekday::Sun => 0,
+        chrono::Weekday::Mon => 1,
+        chrono::Weekday::Tue => 2,
+        chrono::Weekday::Wed => 3,
+        chrono::Weekday::Thu => 4,
+        chrono::Weekday::Fri => 5,
+        chrono::Weekday::Sat => 6,
     }
 }
 
@@ -404,6 +448,15 @@ fn main() -> Result<()> {
         } => {
             let db = default_db(db_path);
             cmd_blocks(&db, session_length, active, json, token_limit)?;
+        }
+        Commands::Weekly {
+            db_path,
+            start_of_week,
+            json,
+            breakdown,
+        } => {
+            let db = default_db(db_path);
+            cmd_weekly(&db, start_of_week, json, breakdown)?;
         }
     }
     Ok(())
@@ -1015,6 +1068,139 @@ fn cmd_today(db_path: &std::path::Path, json_output: bool) -> Result<()> {
     Ok(())
 }
 
+fn cmd_weekly(
+    db_path: &std::path::Path,
+    start_of_week: chrono::Weekday,
+    json_output: bool,
+    breakdown: bool,
+) -> Result<()> {
+    if !db_path.exists() {
+        anyhow::bail!("Database not found. Run: claude-usage-tracker scan");
+    }
+    let tz = claude_usage_tracker::tz::TzParams {
+        tz_offset_min: None,
+        week_starts_on: Some(weekday_to_u8(start_of_week)),
+    };
+    let conn = scanner::db::open_db(db_path)?;
+    let rows = scanner::db::sum_by_week(&conn, tz)?;
+
+    // Group by week.
+    let weeks: Vec<String> = rows
+        .iter()
+        .map(|r| r.week.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let mut by_week: std::collections::HashMap<String, Vec<&scanner::db::WeekRow>> =
+        std::collections::HashMap::new();
+    for r in &rows {
+        by_week.entry(r.week.clone()).or_default().push(r);
+    }
+
+    let sow_str = format!("{}", start_of_week).to_lowercase();
+
+    if json_output {
+        let weeks_json: Vec<serde_json::Value> = weeks
+            .iter()
+            .map(|week| {
+                let week_rows = by_week.get(week).cloned().unwrap_or_default();
+                let total_cost_nanos: i64 = week_rows.iter().map(|r| r.cost_nanos).sum();
+                let total_input: i64 = week_rows.iter().map(|r| r.input_tokens).sum();
+                let total_output: i64 = week_rows.iter().map(|r| r.output_tokens).sum();
+
+                // Aggregate by provider.
+                let mut prov_map: std::collections::HashMap<String, (i64, i64, i64)> =
+                    std::collections::HashMap::new();
+                for r in &week_rows {
+                    let e = prov_map.entry(r.provider.clone()).or_default();
+                    e.0 += r.input_tokens + r.output_tokens;
+                    e.1 += r.turns;
+                    e.2 += r.cost_nanos;
+                }
+                let by_provider: Vec<serde_json::Value> = {
+                    let mut pv: Vec<_> = prov_map.into_iter().collect();
+                    pv.sort_by(|a, b| b.1.0.cmp(&a.1.0));
+                    pv.iter()
+                        .map(|(prov, (tokens, turns, cost))| {
+                            serde_json::json!({
+                                "provider": prov,
+                                "turns": turns,
+                                "tokens": tokens,
+                                "estimated_cost": *cost as f64 / 1_000_000_000.0,
+                            })
+                        })
+                        .collect()
+                };
+
+                let models: Vec<serde_json::Value> = week_rows
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "model": r.model,
+                            "provider": r.provider,
+                            "turns": r.turns,
+                            "input_tokens": r.input_tokens,
+                            "output_tokens": r.output_tokens,
+                            "cache_read_tokens": r.cache_read_tokens,
+                            "cache_creation_tokens": r.cache_creation_tokens,
+                            "reasoning_output_tokens": r.reasoning_output_tokens,
+                            "estimated_cost": r.cost_nanos as f64 / 1_000_000_000.0,
+                        })
+                    })
+                    .collect();
+
+                serde_json::json!({
+                    "week": week,
+                    "models": models,
+                    "by_provider": by_provider,
+                    "total_input_tokens": total_input,
+                    "total_output_tokens": total_output,
+                    "total_estimated_cost": total_cost_nanos as f64 / 1_000_000_000.0,
+                })
+            })
+            .collect();
+
+        let out = serde_json::json!({
+            "start_of_week": sow_str,
+            "weeks": weeks_json,
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else {
+        println!("Weekly usage summary (start-of-week: {})\n", sow_str);
+        for week in &weeks {
+            let week_rows = by_week.get(week).cloned().unwrap_or_default();
+            let total_cost_nanos: i64 = week_rows.iter().map(|r| r.cost_nanos).sum();
+            let total_input: i64 = week_rows.iter().map(|r| r.input_tokens).sum();
+            let total_output: i64 = week_rows.iter().map(|r| r.output_tokens).sum();
+            let total_turns: i64 = week_rows.iter().map(|r| r.turns).sum();
+
+            println!(
+                "Week {}  turns={}  in={}  out={}  cost={}",
+                week,
+                pricing::fmt_tokens(total_turns),
+                pricing::fmt_tokens(total_input),
+                pricing::fmt_tokens(total_output),
+                pricing::fmt_cost(total_cost_nanos as f64 / 1_000_000_000.0)
+            );
+
+            if breakdown {
+                for r in &week_rows {
+                    println!(
+                        "  \u{2514}\u{2500} {:<40}  in={}  out={}  cost={}",
+                        r.model,
+                        pricing::fmt_tokens(r.input_tokens),
+                        pricing::fmt_tokens(r.output_tokens),
+                        pricing::fmt_cost(r.cost_nanos as f64 / 1_000_000_000.0)
+                    );
+                }
+            }
+        }
+        println!();
+    }
+
+    Ok(())
+}
+
 fn cmd_stats(db_path: &std::path::Path, json_output: bool, display_currency: &str) -> Result<()> {
     if !db_path.exists() {
         anyhow::bail!("Database not found. Run: claude-usage-tracker scan");
@@ -1591,6 +1777,8 @@ fn cmd_blocks(
 mod tests {
     use super::TokenLimit;
     use super::parse_token_limit;
+    use super::parse_weekday;
+    use super::weekday_to_u8;
 
     #[test]
     fn parse_token_limit_max_lowercase() {
@@ -1635,5 +1823,46 @@ mod tests {
             parse_token_limit("mAx"),
             Ok(TokenLimit::HistoricalMax)
         ));
+    }
+
+    // ── parse_weekday tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn parse_weekday_full_names() {
+        assert_eq!(parse_weekday("monday").unwrap(), chrono::Weekday::Mon);
+        assert_eq!(parse_weekday("tuesday").unwrap(), chrono::Weekday::Tue);
+        assert_eq!(parse_weekday("wednesday").unwrap(), chrono::Weekday::Wed);
+        assert_eq!(parse_weekday("thursday").unwrap(), chrono::Weekday::Thu);
+        assert_eq!(parse_weekday("friday").unwrap(), chrono::Weekday::Fri);
+        assert_eq!(parse_weekday("saturday").unwrap(), chrono::Weekday::Sat);
+        assert_eq!(parse_weekday("sunday").unwrap(), chrono::Weekday::Sun);
+    }
+
+    #[test]
+    fn parse_weekday_short_names() {
+        assert_eq!(parse_weekday("mon").unwrap(), chrono::Weekday::Mon);
+        assert_eq!(parse_weekday("fri").unwrap(), chrono::Weekday::Fri);
+        assert_eq!(parse_weekday("sun").unwrap(), chrono::Weekday::Sun);
+    }
+
+    #[test]
+    fn parse_weekday_case_insensitive() {
+        assert_eq!(parse_weekday("MONDAY").unwrap(), chrono::Weekday::Mon);
+        assert_eq!(parse_weekday("Friday").unwrap(), chrono::Weekday::Fri);
+        assert_eq!(parse_weekday("SUN").unwrap(), chrono::Weekday::Sun);
+    }
+
+    #[test]
+    fn parse_weekday_rejects_bogus() {
+        assert!(parse_weekday("weekday").is_err());
+        assert!(parse_weekday("").is_err());
+        assert!(parse_weekday("0").is_err());
+    }
+
+    #[test]
+    fn weekday_to_u8_mapping() {
+        assert_eq!(weekday_to_u8(chrono::Weekday::Sun), 0);
+        assert_eq!(weekday_to_u8(chrono::Weekday::Mon), 1);
+        assert_eq!(weekday_to_u8(chrono::Weekday::Sat), 6);
     }
 }

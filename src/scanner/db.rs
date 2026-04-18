@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::models::{
     BillingModeSummary, BranchSummary, ConfidenceSummary, DailyModelRow, DailyProjectRow,
     DashboardData, EntrypointSummary, HourlyRow, McpServerSummary, ProviderSummary,
-    ServiceTierSummary, SessionRow, ToolEvent, ToolSummary, Turn, VersionSummary,
+    ServiceTierSummary, SessionRow, ToolEvent, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
 use crate::scanner::parser::{classify_tool, raw_session_id};
 use crate::tz::TzParams;
@@ -984,6 +984,93 @@ pub fn recompute_session_totals(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// ── Phase 3: Weekly aggregation ──────────────────────────────────────────────
+
+/// One row from `sum_by_week`: aggregated token + cost totals for a single
+/// (calendar week, provider, model) bucket.
+///
+/// `week` is a `"YYYY-WW"` label produced by SQLite's `strftime('%W', ...)`.
+/// See [`crate::tz::TzParams::sql_week_expr`] for bucketing semantics.
+#[derive(Debug, Clone)]
+pub struct WeekRow {
+    pub week: String,
+    pub provider: String,
+    pub model: String,
+    pub turns: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_creation_tokens: i64,
+    pub reasoning_output_tokens: i64,
+    pub cost_nanos: i64,
+}
+
+/// Aggregate turn data grouped by `(calendar week, provider, model)`.
+///
+/// Results are ordered by week ASC, then by total tokens DESC (model).
+/// The week label is `"YYYY-WW"` as computed by
+/// [`TzParams::sql_week_expr`].
+pub fn sum_by_week(conn: &Connection, tz: TzParams) -> Result<Vec<WeekRow>> {
+    let week_expr = tz.sql_week_expr("timestamp");
+    let sql = format!(
+        "SELECT {week_expr} as week,
+                provider,
+                COALESCE(model, 'unknown') as model,
+                COUNT(*) as turns,
+                COALESCE(SUM(input_tokens), 0) as input_tokens,
+                COALESCE(SUM(output_tokens), 0) as output_tokens,
+                COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
+                COALESCE(SUM(cache_creation_tokens), 0) as cache_creation_tokens,
+                COALESCE(SUM(reasoning_output_tokens), 0) as reasoning_output_tokens,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
+         FROM turns
+         GROUP BY week, provider, model
+         ORDER BY week ASC, (input_tokens + output_tokens) DESC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+
+    let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<WeekRow> {
+        Ok(WeekRow {
+            week: row.get(0)?,
+            provider: row.get(1)?,
+            model: row.get(2)?,
+            turns: row.get(3)?,
+            input_tokens: row.get(4)?,
+            output_tokens: row.get(5)?,
+            cache_read_tokens: row.get(6)?,
+            cache_creation_tokens: row.get(7)?,
+            reasoning_output_tokens: row.get(8)?,
+            cost_nanos: row.get(9)?,
+        })
+    };
+
+    let rows: Vec<WeekRow> = if let Some(offset_param) = tz.offset_sql_param() {
+        stmt.query_map([offset_param], map_row)?
+            .enumerate()
+            .filter_map(|(idx, r)| match r {
+                Ok(val) => Some(val),
+                Err(e) => {
+                    warn!("sum_by_week: failed to parse row at index {idx}: {e}");
+                    None
+                }
+            })
+            .collect()
+    } else {
+        stmt.query_map([], map_row)?
+            .enumerate()
+            .filter_map(|(idx, r)| match r {
+                Ok(val) => Some(val),
+                Err(e) => {
+                    warn!("sum_by_week: failed to parse row at index {idx}: {e}");
+                    None
+                }
+            })
+            .collect()
+    };
+
+    Ok(rows)
+}
+
 pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardData> {
     let mut stmt = conn.prepare(
         "SELECT COALESCE(model, 'unknown') as model
@@ -1597,6 +1684,32 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
 
     let generated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
+    // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
+    // summing across providers so the frontend gets a single series per model/week.
+    let weekly_by_model: Vec<WeeklyModelRow> = {
+        let raw = sum_by_week(conn, tz)?;
+        let mut map: std::collections::HashMap<(String, String), WeeklyModelRow> =
+            std::collections::HashMap::new();
+        for r in raw {
+            let entry = map
+                .entry((r.week.clone(), r.model.clone()))
+                .or_insert_with(|| WeeklyModelRow {
+                    week: r.week.clone(),
+                    model: r.model.clone(),
+                    ..Default::default()
+                });
+            entry.input_tokens += r.input_tokens;
+            entry.output_tokens += r.output_tokens;
+            entry.cache_read_tokens += r.cache_read_tokens;
+            entry.cache_creation_tokens += r.cache_creation_tokens;
+            entry.reasoning_output_tokens += r.reasoning_output_tokens;
+            entry.cost_nanos += r.cost_nanos;
+        }
+        let mut rows: Vec<WeeklyModelRow> = map.into_values().collect();
+        rows.sort_by(|a, b| a.week.cmp(&b.week).then(b.cost_nanos.cmp(&a.cost_nanos)));
+        rows
+    };
+
     Ok(DashboardData {
         all_models,
         provider_breakdown,
@@ -1616,6 +1729,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         openai_reconciliation: None,
         generated_at,
         cache_efficiency,
+        weekly_by_model,
     })
 }
 
@@ -3130,5 +3244,144 @@ mod tests {
         // The exact value depends on token breakdown; we just assert the larger
         // block wins over any degenerate case.
         assert!(max >= 500, "max block tokens should be at least 500");
+    }
+
+    // ── Phase 3: sum_by_week tests ────────────────────────────────────────────
+
+    fn insert_turn_ts(
+        conn: &Connection,
+        ts: &str,
+        model: &str,
+        input: i64,
+        output: i64,
+        cost: i64,
+    ) {
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, timestamp, model, input_tokens, output_tokens,
+                               cache_read_tokens, cache_creation_tokens, reasoning_output_tokens,
+                               estimated_cost_nanos, message_id, source_path, pricing_version,
+                               pricing_model, billing_mode, cost_confidence, category)
+             VALUES ('s1', 'claude', ?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, '', '', '', 'estimated_local', 'low', '')",
+            rusqlite::params![ts, model, input, output, cost, format!("{ts}-{model}")],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn sum_by_week_basic_grouping() {
+        let conn = test_conn();
+        // Two turns in the same week, one in the next.
+        insert_turn_ts(
+            &conn,
+            "2027-01-04T10:00:00Z",
+            "claude-3-5-sonnet",
+            100,
+            50,
+            1000,
+        );
+        insert_turn_ts(
+            &conn,
+            "2027-01-05T10:00:00Z",
+            "claude-3-5-sonnet",
+            200,
+            80,
+            2000,
+        );
+        insert_turn_ts(
+            &conn,
+            "2027-01-11T10:00:00Z",
+            "claude-3-5-sonnet",
+            50,
+            20,
+            500,
+        );
+
+        let tz = TzParams {
+            tz_offset_min: None,
+            week_starts_on: Some(1),
+        }; // Monday
+        let rows = sum_by_week(&conn, tz).unwrap();
+
+        // Should produce 2 distinct week buckets.
+        assert_eq!(rows.len(), 2, "expected 2 week buckets");
+
+        // First bucket: 2027-W01 (Jan 4–10)
+        assert_eq!(rows[0].input_tokens, 300);
+        assert_eq!(rows[0].output_tokens, 130);
+        assert_eq!(rows[0].cost_nanos, 3000);
+        assert_eq!(rows[0].turns, 2);
+
+        // Second bucket: 2027-W02 (Jan 11–17)
+        assert_eq!(rows[1].input_tokens, 50);
+        assert_eq!(rows[1].turns, 1);
+    }
+
+    #[test]
+    fn sum_by_week_year_end_boundary() {
+        let conn = test_conn();
+        // Turns straddling the 2027/2028 year boundary with Monday-start weeks.
+        //
+        // SQLite strftime('%Y-%W', ...) where %W is the Monday-anchored week number:
+        //   2027-12-28 (Tuesday)  → week 52 of 2027 → "2027-52"
+        //   2027-12-31 (Friday)   → week 52 of 2027 → "2027-52"
+        //   2028-01-03 (Monday)   → first full week of 2028 → "2028-01"
+        //     (%W returns "00" for days before the first Monday of the year;
+        //      Jan 3 2028 IS a Monday so it opens week 01.)
+        insert_turn_ts(&conn, "2027-12-28T10:00:00Z", "model-a", 100, 50, 1000);
+        insert_turn_ts(&conn, "2027-12-31T10:00:00Z", "model-a", 100, 50, 1000);
+        insert_turn_ts(&conn, "2028-01-03T10:00:00Z", "model-a", 200, 80, 2000);
+
+        let tz = TzParams {
+            tz_offset_min: None,
+            week_starts_on: Some(1), // Monday
+        };
+        let rows = sum_by_week(&conn, tz).unwrap();
+
+        // Collect distinct week labels from the result.
+        let actual_weeks: std::collections::BTreeSet<String> =
+            rows.iter().map(|r| r.week.clone()).collect();
+
+        // Exactly the 3 expected week labels must be present (2027-52 twice → 1 distinct,
+        // plus 2028-01 → 2 distinct total).
+        let expected_weeks: std::collections::BTreeSet<String> = ["2027-52", "2028-01"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            actual_weeks, expected_weeks,
+            "expected distinct week labels {:?}, got {:?}",
+            expected_weeks, actual_weeks
+        );
+
+        // The 2027 week(s) come before the 2028 week(s) — lexicographic sort works
+        // because both year and week are zero-padded.
+        let first_week = &rows[0].week;
+        let last_week = &rows[rows.len() - 1].week;
+        assert!(
+            first_week < last_week,
+            "weeks should be ordered ascending: {first_week} < {last_week}"
+        );
+
+        // The 2028-01 bucket has exactly the Jan 3 turn (200 input tokens).
+        let jan_input: i64 = rows
+            .iter()
+            .filter(|r| r.week == "2028-01")
+            .map(|r| r.input_tokens)
+            .sum();
+        assert_eq!(
+            jan_input, 200,
+            "2028-01 bucket should contain exactly 200 input tokens"
+        );
+
+        // The 2027-52 bucket accumulates both Dec 28 and Dec 31 turns (100 + 100 = 200).
+        let dec_input: i64 = rows
+            .iter()
+            .filter(|r| r.week == "2027-52")
+            .map(|r| r.input_tokens)
+            .sum();
+        assert_eq!(
+            dec_input, 200,
+            "2027-52 bucket should contain 200 input tokens (two turns)"
+        );
     }
 }

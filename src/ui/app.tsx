@@ -23,6 +23,7 @@ import { SessionsTable } from './components/SessionsTable';
 import { ModelCostTable } from './components/ModelCostTable';
 import { ProjectCostTable } from './components/ProjectCostTable';
 import { DailyChart } from './components/DailyChart';
+import { WeeklyChart } from './components/WeeklyChart';
 import { ModelChart } from './components/ModelChart';
 import { ProjectChart } from './components/ProjectChart';
 
@@ -39,6 +40,7 @@ import type {
   DashboardData,
   DailyModelRow,
   DailyAgg,
+  WeeklyAgg,
   ModelAgg,
   ProjectAgg,
   Totals,
@@ -54,6 +56,8 @@ import {
   selectedModels,
   selectedRange,
   selectedProvider,
+  selectedBucket,
+  readBucket,
   projectSearchQuery,
   lastFilteredSessions,
   lastByProject,
@@ -137,6 +141,7 @@ function updateURL(): void {
   if (!isDefaultModelSelection(allModels)) params.set('models', Array.from(selectedModels.value).join(','));
   if (projectSearchQuery.value) params.set('project', projectSearchQuery.value);
   if (versionDonutMetric.value !== 'cost') params.set('version_metric', versionDonutMetric.value);
+  if (selectedBucket.value !== 'day') params.set('bucket', selectedBucket.value);
   const search = params.toString() ? '?' + params.toString() : '';
   history.replaceState(null, '', window.location.pathname + search);
 }
@@ -144,6 +149,61 @@ function updateURL(): void {
 function matchesProjectSearch(project: string): boolean {
   if (!projectSearchQuery.value) return true;
   return project.toLowerCase().includes(projectSearchQuery.value);
+}
+
+// ── SQLite %W week range filter ──────────────────────────────────────
+// NOTE: SQLite strftime('%W') semantics — week 00 is the partial Jan week
+// before the first Monday. This helper must stay in sync with Rust's
+// sql_week_expr.
+//
+// SQLite %W rules (differ from ISO 8601 %V):
+//   - Week 00 = days before the first Monday of the year.
+//   - Week 01 = starts on the first Monday of the year.
+//   - No week 53 (unlike ISO %V).
+function weekLabelToWeekStart(label: string): Date {
+  const [yearStr, weekStr] = label.split('-');
+  const year = parseInt(yearStr!, 10);
+  const week = parseInt(weekStr!, 10);
+  if (!Number.isFinite(year) || !Number.isFinite(week)) return new Date(NaN);
+  const jan1 = new Date(Date.UTC(year, 0, 1));
+  if (week === 0) return jan1;
+  const jan1Dow = jan1.getUTCDay();              // 0=Sun..6=Sat
+  const daysToFirstMon = (8 - jan1Dow) % 7 || 7; // 1..7
+  const firstMondayUtc = new Date(Date.UTC(year, 0, 1 + daysToFirstMon));
+  return new Date(firstMondayUtc.getTime() + (week - 1) * 7 * 86400 * 1000);
+}
+
+function buildWeeklyAgg(range: RangeKey): WeeklyAgg[] {
+  const rows = rawData.value?.weekly_by_model ?? [];
+  if (!rows.length) return [];
+
+  const cutoff = getRangeCutoff(range);
+
+  const weekMap: Record<string, WeeklyAgg> = {};
+  for (const r of rows) {
+    if (cutoff) {
+      const weekStart = weekLabelToWeekStart(r.week);
+      if (isNaN(weekStart.getTime())) continue;
+      const weekStartStr = weekStart.toISOString().slice(0, 10);
+      if (weekStartStr < cutoff) continue;
+    }
+    const w = weekMap[r.week] ?? (weekMap[r.week] = {
+      week: r.week,
+      input: 0,
+      output: 0,
+      cache_read: 0,
+      cache_creation: 0,
+      reasoning_output: 0,
+      cost_nanos: 0,
+    });
+    w.input += r.input_tokens;
+    w.output += r.output_tokens;
+    w.cache_read += r.cache_read_tokens;
+    w.cache_creation += r.cache_creation_tokens;
+    w.reasoning_output += r.reasoning_output_tokens;
+    w.cost_nanos += r.cost_nanos;
+  }
+  return Object.values(weekMap).sort((a, b) => a.week.localeCompare(b.week));
 }
 
 // ── Aggregations ─────────────────────────────────────────────────────
@@ -330,7 +390,12 @@ function applyFilter(): void {
     buildAggregations(filteredDaily, filteredSessions);
 
   const providerLabel = selectedProvider.value === 'both' ? '' : ` (${selectedProvider.value})`;
-  $('daily-chart-title').textContent = 'Daily Token Usage - ' + RANGE_LABELS[selectedRange.value] + providerLabel;
+  const bucketIsWeek = selectedBucket.value === 'week';
+  const chartTitleEl = $('daily-chart-title');
+  if (chartTitleEl) {
+    chartTitleEl.textContent = (bucketIsWeek ? 'Weekly Token Usage - ' : 'Daily Token Usage - ') +
+      RANGE_LABELS[selectedRange.value] + providerLabel;
+  }
 
   render(
     <StatsCards
@@ -345,7 +410,13 @@ function applyFilter(): void {
   );
   renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
   renderOpenAiReconciliation(rawData.value.openai_reconciliation);
-  render(<DailyChart daily={daily} />, $('chart-daily'));
+
+  if (bucketIsWeek) {
+    const weekly = buildWeeklyAgg(selectedRange.value);
+    render(<WeeklyChart weekly={weekly} />, $('chart-daily'));
+  } else {
+    render(<DailyChart daily={daily} />, $('chart-daily'));
+  }
   render(<ModelChart byModel={byModel} />, $('chart-model'));
   render(<ProjectChart byProject={byProject} />, $('chart-project'));
 
@@ -769,6 +840,12 @@ if (globalStatusMount) {
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────
+// Restore URL-persisted signals on browser Back/Forward navigation.
+window.addEventListener('popstate', () => {
+  selectedBucket.value = readBucket();
+  if (rawData.value) applyFilter();
+});
+
 loadData();
 setInterval(loadData, 30000);
 loadUsageWindows();
