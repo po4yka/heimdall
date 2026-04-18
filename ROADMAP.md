@@ -206,7 +206,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 6 -- `optimize` Waste Detector
+## Phase 6 -- `optimize` Waste Detector **[~]** (3 of 5 detectors landed)
 
 **Motivation:** Highest-value differentiator from Codeburn. Users learn what to delete/fix to spend less next session.
 
@@ -360,7 +360,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 12 -- Tool-Event Cost Attribution
+## Phase 12 -- Tool-Event Cost Attribution **[x]**
 
 **Motivation:** Third-Eye's single most valuable data-model innovation. Every API call today is attributed to a session and model but not to the specific *tool invocations* inside it. Splitting `cost_nanos / tool_event_count` across each tool event unlocks queries Heimdall currently cannot answer: "which MCP server costs most", "which files cost most to edit", "which bash commands cost most time-money". This is also the prerequisite data model that makes Phase 6's `optimize` detectors tractable.
 
@@ -442,7 +442,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 15 -- Cross-Platform Scheduler Subcommand
+## Phase 15 -- Cross-Platform Scheduler Subcommand **[x]**
 
 **Motivation:** Users currently run `claude-usage-tracker scan` manually or build their own cron entry. A single command that installs a platform-native scheduled job is a killer DX affordance.
 
