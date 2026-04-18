@@ -571,7 +571,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 20 -- File-Watcher Auto-Refresh + Usage-Limits Source
+## Phase 20 -- File-Watcher Auto-Refresh + Usage-Limits Source **[x]**
 
 **Motivation:** Two live-update patterns from Guardian that compose naturally. The 30-second dashboard polling loop gets replaced by a file watcher on `~/.claude/`, and a new data source (`*-usage-limits` files) adds a rate-window signal that works without OAuth credentials.
 
