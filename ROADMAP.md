@@ -396,7 +396,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 13 -- 7×24 Activity Heatmap + Active-Period Averaging
+## Phase 13 -- 7×24 Activity Heatmap + Active-Period Averaging **[x]**
 
 **Motivation:** Two small analytical upgrades from Third-Eye with disproportionate UX impact. The heatmap answers "when do I code" at a glance (the day/hour cell visual is distinctive and screenshot-worthy). Active-period averaging fixes a silent measurement bug: dividing cost by 30 calendar days when the user only worked 12 of them underreports real daily cost.
 
