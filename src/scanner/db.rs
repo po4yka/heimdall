@@ -416,11 +416,26 @@ pub fn compute_tool_events_for_turn(turn: &Turn, project: &str) -> Vec<ToolEvent
     let remainder = total % n as i64;
     let ts_epoch = parse_ts_epoch(&turn.timestamp);
 
+    // Build a lookup from tool_use_id -> extracted_arg (file path or command).
+    // tool_inputs is populated by the Claude parser; other providers leave it empty.
+    let input_map: std::collections::HashMap<&str, &str> = turn
+        .tool_inputs
+        .iter()
+        .map(|(id, arg)| (id.as_str(), arg.as_str()))
+        .collect();
+
     turn.tool_use_ids
         .iter()
         .enumerate()
         .map(|(i, (tool_use_id, tool_name))| {
-            let (kind, value) = classify_tool_event(tool_name);
+            let (kind, default_value) = classify_tool_event(tool_name);
+            // Use the extracted argument when available and non-empty.
+            // Fall back to the default (tool name) for legacy rows or providers that
+            // do not populate tool_inputs.
+            let value = match input_map.get(tool_use_id.as_str()) {
+                Some(&arg) if !arg.is_empty() => arg.to_string(),
+                _ => default_value,
+            };
             let cost_nanos = if i == 0 {
                 cost_per + remainder
             } else {
@@ -2715,5 +2730,82 @@ mod tests {
             .unwrap();
         assert_eq!(te_sum, turns_sum);
         assert_eq!(te_sum, 1500);
+    }
+
+    // -----------------------------------------------------------------------
+    // Deliverable 1: tool-argument capture in compute_tool_events_for_turn
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_tool_events_file_path_from_tool_inputs_edit() {
+        // A Turn with tool_inputs populated should produce a tool_event whose
+        // value is the extracted file path, not the raw tool name.
+        let turn = Turn {
+            session_id: "claude:s1".into(),
+            provider: "claude".into(),
+            timestamp: "2026-04-08T10:00:00Z".into(),
+            estimated_cost_nanos: 600,
+            source_path: "/tmp/test.jsonl".into(),
+            tool_use_ids: vec![("call-1".into(), "Edit".into())],
+            tool_inputs: vec![("call-1".into(), "/some/file.rs".into())],
+            ..Default::default()
+        };
+        let events = compute_tool_events_for_turn(&turn, "proj");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].kind, "file");
+        assert_eq!(events[0].value, "/some/file.rs");
+    }
+
+    #[test]
+    fn test_tool_events_bash_command_from_tool_inputs() {
+        // A Turn with Bash tool_inputs should produce kind="bash" with command text.
+        let turn = Turn {
+            session_id: "claude:s1".into(),
+            provider: "claude".into(),
+            timestamp: "2026-04-08T10:00:00Z".into(),
+            estimated_cost_nanos: 400,
+            source_path: "/tmp/test.jsonl".into(),
+            tool_use_ids: vec![("call-1".into(), "Bash".into())],
+            tool_inputs: vec![("call-1".into(), "cargo test --all".into())],
+            ..Default::default()
+        };
+        let events = compute_tool_events_for_turn(&turn, "proj");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].kind, "bash");
+        assert_eq!(events[0].value, "cargo test --all");
+    }
+
+    #[test]
+    fn test_tool_events_legacy_row_falls_back_to_tool_name() {
+        // When tool_inputs is empty (legacy / other providers), value = tool name.
+        let turn = Turn {
+            session_id: "claude:s1".into(),
+            provider: "claude".into(),
+            estimated_cost_nanos: 200,
+            tool_use_ids: vec![("call-1".into(), "Edit".into())],
+            tool_inputs: vec![], // no inputs — legacy behaviour
+            ..Default::default()
+        };
+        let events = compute_tool_events_for_turn(&turn, "proj");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].kind, "file");
+        assert_eq!(events[0].value, "Edit");
+    }
+
+    #[test]
+    fn test_tool_events_empty_arg_falls_back_to_tool_name() {
+        // When tool_inputs has an entry but arg is empty, fall back to tool name.
+        let turn = Turn {
+            session_id: "claude:s1".into(),
+            provider: "claude".into(),
+            estimated_cost_nanos: 200,
+            tool_use_ids: vec![("call-1".into(), "Read".into())],
+            tool_inputs: vec![("call-1".into(), String::new())],
+            ..Default::default()
+        };
+        let events = compute_tool_events_for_turn(&turn, "proj");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].kind, "file");
+        assert_eq!(events[0].value, "Read");
     }
 }

@@ -394,6 +394,7 @@ fn extract_turn_from_value(
         category: String::new(),
         all_tools: Vec::new(),
         tool_use_ids: Vec::new(),
+        tool_inputs: Vec::new(),
     })
 }
 

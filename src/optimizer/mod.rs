@@ -1,26 +1,23 @@
-//! ROADMAP Phase 6 (partial) -- `optimize` waste detector framework.
+//! ROADMAP Phase 6 (complete) -- `optimize` waste detector framework.
 //!
-//! Implements three starter detectors:
+//! Implements all five detectors:
 //!   - `ClaudeMdBloatDetector`  (`claude_md.rs`) -- CLAUDE.md token cost × session count
 //!   - `UnusedMcpDetector`      (`mcp.rs`)        -- MCP servers configured but never invoked
 //!   - `GhostAgentDetector`     (`agents.rs`)     -- agent .md files never referenced in turns
+//!   - `RereadDetector`         (`reread.rs`)     -- same file read ≥3× per session
+//!   - `BashNoiseDetector`      (`bash.rs`)       -- trivial shell commands repeated ≥5× per session
 //!
-//! Two detectors from the full spec are deferred because their required data is not yet
-//! captured in the current data model:
-//!   - `RereadDetector`  (same file read >2× per session) -- needs per-file tool-event rows
-//!     with the actual file path, which Phase 12 tool_events rows do store as `value` for
-//!     `kind = 'file'`, but the scanner does not yet populate them reliably enough for
-//!     a production detector. Trivial to add once the data is stable.
-//!   - `BashNoiseDetector` (repeated trivial commands) -- needs bash command text, which is
-//!     similarly deferred until Phase 12 populates `kind = 'bash'` rows with command text.
-//!
-//! The framework (`Detector` trait + `run_optimize`) makes adding those two a one-file
-//! addition with no changes to this module.
+//! The `RereadDetector` and `BashNoiseDetector` require tool-argument data in `tool_events.value`.
+//! The scanner now populates `value` with the actual file path (for file tools) or the command
+//! text (for Bash).  Legacy DB rows where `value` equals the tool name are automatically skipped
+//! by both detectors so no false-positive findings are produced on old data.
 
 pub mod agents;
+pub mod bash;
 pub mod claude_md;
 pub mod grade;
 pub mod mcp;
+pub mod reread;
 
 use std::path::Path;
 
@@ -115,6 +112,8 @@ pub fn run_optimize_with_overrides(
         Box::new(agents::GhostAgentDetector::new(
             agents_dir_path.map(Path::to_path_buf),
         )),
+        Box::new(reread::RereadDetector::new()),
+        Box::new(bash::BashNoiseDetector::new()),
     ];
 
     let mut findings = Vec::new();

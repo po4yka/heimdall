@@ -392,6 +392,48 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 })
                 .unwrap_or_default();
 
+            // Extract the single most-relevant argument per tool invocation.
+            // File tools: `file_path` argument.
+            // Bash: first 120 chars of `command` (truncated with `…`).
+            // Everything else: empty string (caller falls back to tool name).
+            let tool_inputs: Vec<(String, String)> = content_arr
+                .map(|arr| {
+                    arr.iter()
+                        .filter(|item| {
+                            item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
+                        })
+                        .filter_map(|item| {
+                            let id = item.get("id").and_then(|v| v.as_str())?.to_string();
+                            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                            let input = item.get("input");
+                            let arg = match name {
+                                "Edit" | "Write" | "MultiEdit" | "NotebookEdit" | "Read" => input
+                                    .and_then(|inp| inp.get("file_path"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string(),
+                                "Bash" => {
+                                    let cmd = input
+                                        .and_then(|inp| inp.get("command"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    // Truncate to 120 chars; append ellipsis if truncated.
+                                    const MAX_CMD: usize = 120;
+                                    if cmd.len() > MAX_CMD {
+                                        let truncated = &cmd[..MAX_CMD];
+                                        format!("{truncated}\u{2026}")
+                                    } else {
+                                        cmd.to_string()
+                                    }
+                                }
+                                _ => String::new(),
+                            };
+                            Some((id, arg))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
             let service_tier = usage
                 .get("service_tier")
                 .and_then(|v| v.as_str())
@@ -438,6 +480,7 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 category,
                 all_tools,
                 tool_use_ids,
+                tool_inputs,
             };
             let estimate = pricing::estimate_cost(
                 &turn.model,
@@ -996,5 +1039,174 @@ mod tests {
         assert_eq!(result.session_metas.len(), 1);
         assert_eq!(result.session_metas[0].provider, PROVIDER_XCODE);
         assert_eq!(result.session_metas[0].session_id, "xcode:s1");
+    }
+
+    // -----------------------------------------------------------------------
+    // Deliverable 1: tool-argument capture in tool_inputs
+    // -----------------------------------------------------------------------
+
+    fn make_assistant_with_tool_use(
+        session_id: &str,
+        tool_use_id: &str,
+        tool_name: &str,
+        tool_input: serde_json::Value,
+    ) -> String {
+        serde_json::json!({
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": "2026-04-08T10:00:00Z",
+            "cwd": "/home/user/project",
+            "message": {
+                "model": "claude-sonnet-4-6",
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                },
+                "content": [{
+                    "type": "tool_use",
+                    "id": tool_use_id,
+                    "name": tool_name,
+                    "input": tool_input,
+                }],
+            }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn test_tool_inputs_edit_captures_file_path() {
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "test.jsonl",
+            &[make_assistant_with_tool_use(
+                "s1",
+                "call-1",
+                "Edit",
+                serde_json::json!({ "file_path": "/src/main.rs", "old_string": "a", "new_string": "b" }),
+            )],
+        );
+        let result = parse_claude_jsonl_file(&path, 0);
+        assert_eq!(result.turns.len(), 1);
+        let turn = &result.turns[0];
+        assert_eq!(turn.tool_inputs.len(), 1);
+        assert_eq!(turn.tool_inputs[0].0, "call-1");
+        assert_eq!(turn.tool_inputs[0].1, "/src/main.rs");
+    }
+
+    #[test]
+    fn test_tool_inputs_read_captures_file_path() {
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "test.jsonl",
+            &[make_assistant_with_tool_use(
+                "s1",
+                "call-r",
+                "Read",
+                serde_json::json!({ "file_path": "/abs/path.rs" }),
+            )],
+        );
+        let result = parse_claude_jsonl_file(&path, 0);
+        assert_eq!(result.turns[0].tool_inputs[0].1, "/abs/path.rs");
+    }
+
+    #[test]
+    fn test_tool_inputs_bash_truncates_long_command() {
+        let long_cmd = "x".repeat(200);
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "test.jsonl",
+            &[make_assistant_with_tool_use(
+                "s1",
+                "call-b",
+                "Bash",
+                serde_json::json!({ "command": long_cmd }),
+            )],
+        );
+        let result = parse_claude_jsonl_file(&path, 0);
+        let arg = &result.turns[0].tool_inputs[0].1;
+        // Should be truncated to 120 chars + ellipsis.
+        assert!(
+            arg.ends_with('\u{2026}'),
+            "expected trailing ellipsis: {arg}"
+        );
+        // char count: 120 + 1 ellipsis = 121
+        assert_eq!(arg.chars().count(), 121);
+    }
+
+    #[test]
+    fn test_tool_inputs_bash_short_command_no_truncation() {
+        let cmd = "cargo test";
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "test.jsonl",
+            &[make_assistant_with_tool_use(
+                "s1",
+                "call-b",
+                "Bash",
+                serde_json::json!({ "command": cmd }),
+            )],
+        );
+        let result = parse_claude_jsonl_file(&path, 0);
+        assert_eq!(result.turns[0].tool_inputs[0].1, "cargo test");
+    }
+
+    #[test]
+    fn test_tool_inputs_two_edits_same_file_across_turns() {
+        // Two separate assistant turns each editing the same file_path.
+        // The tool_events table would have 2 rows with the same value.
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "test.jsonl",
+            &[
+                make_assistant_with_tool_use(
+                    "s1",
+                    "call-e1",
+                    "Edit",
+                    serde_json::json!({ "file_path": "/src/lib.rs", "old_string": "a", "new_string": "b" }),
+                ),
+                make_assistant_with_tool_use(
+                    "s1",
+                    "call-e2",
+                    "Edit",
+                    serde_json::json!({ "file_path": "/src/lib.rs", "old_string": "c", "new_string": "d" }),
+                ),
+            ],
+        );
+        let result = parse_claude_jsonl_file(&path, 0);
+        // Two turns (different content blocks = different turns here since no message_id dedup).
+        // Both should have tool_inputs pointing to /src/lib.rs.
+        let all_file_args: Vec<&str> = result
+            .turns
+            .iter()
+            .flat_map(|t| t.tool_inputs.iter())
+            .map(|(_, arg)| arg.as_str())
+            .collect();
+        assert_eq!(all_file_args.len(), 2);
+        assert!(all_file_args.iter().all(|&p| p == "/src/lib.rs"));
+    }
+
+    #[test]
+    fn test_tool_inputs_non_file_tool_produces_empty_arg() {
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "test.jsonl",
+            &[make_assistant_with_tool_use(
+                "s1",
+                "call-w",
+                "WebSearch",
+                serde_json::json!({ "query": "rust async" }),
+            )],
+        );
+        let result = parse_claude_jsonl_file(&path, 0);
+        // tool_inputs entry for WebSearch should be empty string.
+        assert_eq!(result.turns[0].tool_inputs[0].1, "");
     }
 }

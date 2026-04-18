@@ -206,7 +206,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 6 -- `optimize` Waste Detector **[~]** (3 of 5 detectors landed)
+## Phase 6 -- `optimize` Waste Detector **[x]**
 
 **Motivation:** Highest-value differentiator from Codeburn. Users learn what to delete/fix to spend less next session.
 

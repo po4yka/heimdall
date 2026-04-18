@@ -61,6 +61,13 @@ pub struct Turn {
     pub all_tools: Vec<String>,
     /// Pairs of (tool_use_id, tool_name) from content blocks (transient, not persisted to turns table).
     pub tool_use_ids: Vec<(String, String)>,
+    /// Pairs of (tool_use_id, extracted_arg_text) extracted from tool `input` blocks.
+    /// For file tools (Edit/Write/MultiEdit/NotebookEdit/Read): the `file_path` argument.
+    /// For Bash: first 120 chars of the `command` argument (truncated with trailing `…`).
+    /// For all other tools: empty string (use tool name from tool_use_ids instead).
+    /// Transient — not persisted to the DB turns table.
+    #[allow(dead_code)]
+    pub tool_inputs: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Default)]

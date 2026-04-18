@@ -375,6 +375,7 @@ fn parse_chat_blob(blob: &serde_json::Value, workspace_hash: &str, turns: &mut V
                 category: String::new(),
                 all_tools: Vec::new(),
                 tool_use_ids: Vec::new(),
+                tool_inputs: Vec::new(),
             });
         }
     }
