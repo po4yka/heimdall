@@ -316,7 +316,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 10 -- UI Palette Migration (Industrial Design)
+## Phase 10 -- UI Palette Migration (Industrial Design) **[x]**
 
 **Motivation:** Pre-existing gap called out in `CLAUDE.md:183`. `src/ui/` still uses the legacy indigo/Inter palette while the rest of the design system specifies industrial monochrome (OLED dark + warm-off-white light).
 

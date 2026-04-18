@@ -180,4 +180,3 @@ When editing dashboard files (`src/ui/`), follow the design skill at `.claude/sk
 - Dark (OLED `#000`) and light (warm off-white `#F5F5F5`) both first-class via CSS variables
 - XSS protection: all dynamic text through `esc()` in `src/ui/lib/format.ts`
 - Recompile after changes: `npm run build:ui`
-- Note: existing `src/ui/` still uses the legacy indigo/Inter palette; align during the next UI refactor
