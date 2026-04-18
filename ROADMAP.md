@@ -337,7 +337,7 @@ When porting, prefer reading the source file directly over reimplementing from m
 
 ---
 
-## Phase 11 -- Release Automation
+## Phase 11 -- Release Automation **[x]**
 
 **Motivation:** No binary distribution today. Users `cargo install --git` or build from source.
 
