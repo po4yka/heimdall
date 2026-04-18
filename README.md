@@ -77,14 +77,23 @@ Reads local transcripts written by every supported tool, then presents an intera
 
 - **Upstream provider health** -- polls `status.claude.com` and `status.openai.com` on every `/api/agent-status` request (cached 60 s). Displays an **Agent Status** card in the dashboard alongside rate-window cards.
 - **Dashboard card** -- two rows (Claude, OpenAI/Codex); monochrome dot at three opacity levels; red only on `major`/`critical`. Expand/collapse per-component table and active incident list. URL-persistent via `?agent_status_expanded=1`.
+- **Rolling uptime** -- 30-day and 7-day uptime percentages per component, computed from Heimdall's own history (no external scraping). Requires ≥10 samples in the window before a value appears; `under_maintenance` counts as not-up for SLA-style semantics.
 - **Webhook alerts** -- fires `agent_status_degraded` / `agent_status_restored` on severity-threshold crossings. Alert floor is **Major** (minor degradations render on the dashboard but do not page).
 - **ETag support** -- conditional GET (`If-None-Match`) for Claude so unchanged status returns 304 with no body. OpenAI two-call flow polls cold.
+
+### Community signal (opt-in, via StatusGator)
+
+- **Crowdsourced leading indicator** -- polls StatusGator's free-tier API v3 for Downdetector-adjacent community reports on Claude and OpenAI services. Off by default; opt in with `[status_aggregator] enabled = true` and a `STATUSGATOR_API_KEY` env var.
+- **Clearly labeled as crowdsourced** -- renders as a separate "COMMUNITY SIGNAL (VIA STATUSGATOR)" section inside the `Agent Status` card's expanded view so users don't confuse it with official infrastructure telemetry.
+- **Divergence-only webhook** -- `community_signal_spike` fires ONLY when the crowd reports a spike AND the official `status.*.com` indicator is still `none`/`minor`. Captures the leading-indicator value without duplicating the existing `agent_status_degraded` webhook once the official page catches up.
+- **Trait-based backend** -- `StatusAggregatorBackend` trait in place; StatusGator is the only backend in v1; IsDown is future-pluggable without touching call sites.
+- **Legal/ToS alignment** -- Heimdall deliberately does NOT scrape Downdetector (their Fair Use ToS prohibits it) and does NOT use their $2,083/mo Enterprise API. StatusGator legitimately aggregates the same crowd signal and exposes a free-tier documented API.
 
 ### Extensibility
 
 - **Config file** -- `~/.claude/usage-tracker.toml` for all settings. Dual-path resolver adds `$HEIMDALL_CONFIG` and `~/.config/heimdall/config.toml`.
 - **Custom pricing overrides** -- per-model rate customization in config.
-- **Webhook notifications** -- POST to URL on session depletion, cost threshold, or agent status transition.
+- **Webhook notifications** -- POST to URL on session depletion, cost threshold, agent status transition, or community-signal spike divergence.
 - **JSON API** -- all dashboard data available via REST endpoints, incl. SSE stream.
 - **Provider plugin pattern** -- add a new scanner provider in a single file under `src/scanner/providers/`; see [AGENTS.md](AGENTS.md).
 - **Detector plugin pattern** -- add a waste detector in a single file under `src/optimizer/`.
@@ -286,6 +295,17 @@ refresh_interval = 60    # seconds between polls
 claude_enabled = true
 openai_enabled = true
 alert_min_severity = "major"  # "minor" | "major" | "critical"
+
+# Community signal via StatusGator — OFF by default.
+# Opt in by setting enabled=true and exporting STATUSGATOR_API_KEY in your shell.
+[status_aggregator]
+enabled = false
+provider = "statusgator"                    # trait-based; future backends pluggable
+api_key_env = "STATUSGATOR_API_KEY"         # env var name; never store the key in TOML
+refresh_interval = 300                      # seconds; 5-min cadence is friendly to the free tier
+claude_services = ["claude-ai", "claude"]   # StatusGator service slugs
+openai_services = ["openai", "chatgpt"]
+spike_webhook = true                        # fire `community_signal_spike` on leading-indicator
 ```
 
 ## Data Sources
@@ -330,7 +350,8 @@ Automatically discovers sessions from:
 | GET | `/api/data?tz_offset_min=N&week_starts_on=N` | Timezone-aware bucketing for day-grouped metrics |
 | GET | `/api/heatmap?period=<period>&tz_offset_min=N` | 7×24 cell grid + active-period averaging summary |
 | GET | `/api/usage-windows` | Real-time rate windows, budget, identity (cached 60s) |
-| GET | `/api/agent-status` | Upstream provider health: Claude (status.claude.com) + OpenAI (status.openai.com). Cached `refresh_interval` seconds; ETag conditional GET for Claude. Returns `AgentStatusSnapshot` JSON. |
+| GET | `/api/agent-status` | Upstream provider health: Claude (status.claude.com) + OpenAI (status.openai.com). Cached `refresh_interval` seconds; ETag conditional GET for Claude. Returns `AgentStatusSnapshot` JSON with rolling uptime. |
+| GET | `/api/community-signal` | StatusGator-backed crowdsourced leading indicator. Returns `{"enabled": false}` when off; full `CommunitySignal` JSON when on. |
 | POST | `/api/rescan` | Atomic full rescan |
 | GET | `/api/stream` | Server-Sent Events broadcasting `scan_completed` from the file-watcher |
 | GET | `/api/health` | Health check |
@@ -353,6 +374,9 @@ src/
   db.rs                -- TTY-guarded `db reset` command
   webhooks.rs          -- Webhook notification system
   openai.rs            -- OpenAI organization usage reconciliation client
+  agent_status/        -- Upstream provider health (status.claude.com + status.openai.com)
+                          with rolling uptime computed from agent_status_history
+  status_aggregator/   -- StatusGator community signal (opt-in, off by default)
   oauth/               -- Claude OAuth (credentials, refresh, API, models)
   scanner/
     classifier.rs      -- 13-category task classifier
@@ -375,7 +399,7 @@ See [CLAUDE.md](CLAUDE.md) for the expanded architecture tree and [AGENTS.md](AG
 
 ```bash
 cargo build                      # build both binaries
-cargo test                       # full suite (538+ tests across 4 suites)
+cargo test                       # full suite (616+ tests across 4 suites)
 cargo clippy -- -D warnings      # lint
 cargo fmt --check                # format check
 ./node_modules/.bin/tsc --noEmit # TypeScript type check
