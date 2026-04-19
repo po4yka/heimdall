@@ -102,6 +102,8 @@ mod tests {
             entry_count: 1,
             first_timestamp: now,
             last_timestamp: now,
+            is_gap: false,
+            kind: "block",
         }
     }
 

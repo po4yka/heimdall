@@ -42,6 +42,10 @@ pub struct BillingBlock {
     pub first_timestamp: DateTime<Utc>,
     /// Timestamp of the last turn actually in this block.
     pub last_timestamp: DateTime<Utc>,
+    /// True when this is a synthetic gap pseudo-row (no real activity).
+    pub is_gap: bool,
+    /// "block" for real activity blocks, "gap" for synthetic gap rows.
+    pub kind: &'static str,
 }
 
 /// Instantaneous burn rate for an active block.
@@ -124,6 +128,8 @@ pub fn identify_blocks_with_now(
                 entry_count: block_count,
                 first_timestamp: first_ts,
                 last_timestamp: last_ts,
+                is_gap: false,
+                kind: "block",
             });
 
             // Open new block anchored on this turn.
@@ -165,10 +171,55 @@ pub fn identify_blocks_with_now(
             entry_count: block_count,
             first_timestamp: first_ts,
             last_timestamp: last_ts,
+            is_gap: false,
+            kind: "block",
         });
     }
 
     blocks
+}
+
+/// Same as `identify_blocks_with_now` but optionally inserts synthetic gap
+/// pseudo-rows between activity blocks separated by more than `session_hours`.
+pub fn identify_blocks_with_gaps(
+    turns: &[TurnForBlocks],
+    session_hours: f64,
+    now: DateTime<Utc>,
+    include_gaps: bool,
+) -> Vec<BillingBlock> {
+    let mut blocks = identify_blocks_with_now(turns, session_hours, now);
+
+    if !include_gaps || blocks.len() < 2 {
+        return blocks;
+    }
+
+    let mut with_gaps: Vec<BillingBlock> = Vec::with_capacity(blocks.len() * 2);
+
+    for i in 0..blocks.len() - 1 {
+        with_gaps.push(blocks[i].clone());
+        let gap_duration = blocks[i + 1].start - blocks[i].end;
+        if gap_duration > Duration::zero() {
+            with_gaps.push(BillingBlock {
+                start: blocks[i].end,
+                end: blocks[i + 1].start,
+                first_timestamp: blocks[i].end,
+                last_timestamp: blocks[i + 1].start,
+                tokens: TokenBreakdown::default(),
+                cost_nanos: 0,
+                models: vec![],
+                is_active: false,
+                entry_count: 0,
+                is_gap: true,
+                kind: "gap",
+            });
+        }
+    }
+    // Push the last block.
+    if let Some(last) = blocks.pop() {
+        with_gaps.push(last);
+    }
+
+    with_gaps
 }
 
 /// Calculate burn rate for an active block.
@@ -418,6 +469,8 @@ mod tests {
             entry_count: 2,
             first_timestamp: now,
             last_timestamp: now,
+            is_gap: false,
+            kind: "block",
         };
         // elapsed = last - first = 0 → None
         assert!(calculate_burn_rate(&block, now).is_none());
@@ -495,6 +548,8 @@ mod tests {
             entry_count: 2,
             first_timestamp: start,
             last_timestamp: start + Duration::minutes(30),
+            is_gap: false,
+            kind: "block",
         };
         let rate = BurnRate {
             tokens_per_min: 100.0,
@@ -503,6 +558,94 @@ mod tests {
         let proj = project_block_usage(&block, Some(rate), now);
         assert_eq!(proj.projected_cost_nanos, block.cost_nanos);
         assert_eq!(proj.projected_tokens, block.tokens.total() as u64);
+    }
+
+    // ── gap insertion ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn gap_inserted_between_blocks_10h_apart_session_5h() {
+        let now = ts("2026-01-02T20:00:00Z");
+        let t0 = ts("2026-01-01T09:00:00Z");
+        let t1 = ts("2026-01-01T19:00:00Z"); // 10h later > 5h session → separate blocks
+        let blocks = identify_blocks_with_gaps(
+            &[
+                turn(t0, "sonnet", 100, 50, 1_000),
+                turn(t1, "sonnet", 200, 80, 2_000),
+            ],
+            5.0,
+            now,
+            true,
+        );
+        // Expect: block, gap, block = 3 entries.
+        assert_eq!(blocks.len(), 3, "expected block + gap + block");
+        assert!(!blocks[0].is_gap, "first entry must be a real block");
+        assert!(blocks[1].is_gap, "middle entry must be a gap");
+        assert_eq!(blocks[1].kind, "gap");
+        assert_eq!(blocks[1].cost_nanos, 0);
+        assert_eq!(blocks[1].entry_count, 0);
+        assert!(!blocks[2].is_gap, "last entry must be a real block");
+    }
+
+    #[test]
+    fn no_gap_when_blocks_only_4h_apart_session_5h() {
+        // Two turns that create 2 blocks; gap between blocks < session_hours → no gap inserted.
+        // t0 at 09:00, block ends at 14:00. t1 at 14:00 (exactly at boundary) starts block 2
+        // ending at 19:00. Gap between block1.end(14:00) and block2.start(14:00) = 0 → no gap.
+        let now = ts("2026-01-01T20:00:00Z");
+        let t0 = ts("2026-01-01T09:00:00Z");
+        let t1 = ts("2026-01-01T14:00:00Z"); // exactly at block boundary → new block
+        let blocks = identify_blocks_with_gaps(
+            &[
+                turn(t0, "sonnet", 100, 50, 1_000),
+                turn(t1, "sonnet", 200, 80, 2_000),
+            ],
+            5.0,
+            now,
+            true,
+        );
+        // Gap between blocks = 0s which is <= session_dur → no gap row.
+        assert_eq!(blocks.len(), 2, "no gap row when blocks are adjacent");
+        assert!(blocks.iter().all(|b| !b.is_gap));
+    }
+
+    #[test]
+    fn single_block_with_gaps_enabled_returns_one_entry() {
+        let now = ts("2026-01-01T12:00:00Z");
+        let t0 = ts("2026-01-01T09:00:00Z");
+        let blocks =
+            identify_blocks_with_gaps(&[turn(t0, "sonnet", 100, 50, 1_000)], 5.0, now, true);
+        assert_eq!(blocks.len(), 1);
+        assert!(!blocks[0].is_gap);
+    }
+
+    #[test]
+    fn empty_turns_with_gaps_enabled_returns_empty() {
+        let now = ts("2026-01-01T12:00:00Z");
+        let blocks = identify_blocks_with_gaps(&[], 5.0, now, true);
+        assert!(blocks.is_empty());
+    }
+
+    #[test]
+    fn gap_block_json_has_kind_and_is_gap_fields() {
+        let now = ts("2026-01-02T20:00:00Z");
+        let t0 = ts("2026-01-01T09:00:00Z");
+        let t1 = ts("2026-01-01T19:00:00Z"); // 10h apart → gap
+        let blocks = identify_blocks_with_gaps(
+            &[
+                turn(t0, "sonnet", 100, 50, 1_000),
+                turn(t1, "sonnet", 200, 80, 2_000),
+            ],
+            5.0,
+            now,
+            true,
+        );
+        assert_eq!(blocks.len(), 3);
+        let gap = &blocks[1];
+        let v = serde_json::to_value(gap).expect("serialization must not fail");
+        assert_eq!(v["is_gap"], serde_json::json!(true));
+        assert_eq!(v["kind"], serde_json::json!("gap"));
+        assert_eq!(v["cost_nanos"], serde_json::json!(0));
+        assert_eq!(v["entry_count"], serde_json::json!(0));
     }
 
     // ── unsorted input ────────────────────────────────────────────────────────

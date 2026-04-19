@@ -483,7 +483,9 @@ pub async fn api_stream(State(state): State<Arc<AppState>>) -> impl axum::respon
 pub async fn api_billing_blocks(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
-    use crate::analytics::blocks::{calculate_burn_rate, identify_blocks, project_block_usage};
+    use crate::analytics::blocks::{
+        calculate_burn_rate, identify_blocks_with_gaps, project_block_usage,
+    };
     use crate::analytics::burn_rate::{self as br, BurnRateConfig};
     use crate::analytics::quota::compute_quota;
 
@@ -496,12 +498,16 @@ pub async fn api_billing_blocks(
         db::init_db(&conn)?;
 
         let turns = db::load_all_turns(&conn)?;
-        let blocks = identify_blocks(&turns, session_hours);
+        let now = chrono::Utc::now();
+        let blocks = identify_blocks_with_gaps(&turns, session_hours, now, true);
         // Compute historical max directly from the already-loaded blocks vec —
         // avoids a redundant full-table scan via historical_max_block_tokens.
-        let historical_max_tokens = blocks.iter().map(|b| b.tokens.total()).max().unwrap_or(0);
-
-        let now = chrono::Utc::now();
+        let historical_max_tokens = blocks
+            .iter()
+            .filter(|b| !b.is_gap)
+            .map(|b| b.tokens.total())
+            .max()
+            .unwrap_or(0);
 
         let json_blocks: Vec<Value> = blocks
             .iter()
@@ -522,6 +528,8 @@ pub async fn api_billing_blocks(
                     "cost_nanos": b.cost_nanos,
                     "models": b.models,
                     "is_active": b.is_active,
+                    "is_gap": b.is_gap,
+                    "kind": b.kind,
                     "entry_count": b.entry_count,
                 });
                 if b.is_active {

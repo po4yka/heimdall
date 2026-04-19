@@ -185,6 +185,9 @@ enum Commands {
         /// jq-style filter applied to the JSON output (implies --json)
         #[arg(long, value_name = "FILTER")]
         jq: Option<String>,
+        /// Suppress gap rows between activity blocks (shown by default)
+        #[arg(long)]
+        no_gaps: bool,
     },
     /// Aggregated usage by ISO calendar week
     Weekly {
@@ -691,6 +694,7 @@ fn main() -> Result<()> {
             json,
             token_limit,
             jq,
+            no_gaps,
         } => {
             let db = default_db(db_path);
             // Resolution order: CLI flag > provider-specific config > flat config > 5.0.
@@ -714,7 +718,15 @@ fn main() -> Result<()> {
             } else {
                 cfg_blocks_session_length
             };
-            cmd_blocks(&db, session_hours, active, json, token_limit, jq.as_deref())?;
+            cmd_blocks(
+                &db,
+                session_hours,
+                active,
+                json,
+                token_limit,
+                jq.as_deref(),
+                !no_gaps,
+            )?;
         }
         Commands::Weekly {
             db_path,
@@ -2284,8 +2296,9 @@ fn cmd_blocks(
     json_output: bool,
     token_limit: Option<TokenLimit>,
     jq: Option<&str>,
+    include_gaps: bool,
 ) -> anyhow::Result<()> {
-    use analytics::blocks::{calculate_burn_rate, identify_blocks, project_block_usage};
+    use analytics::blocks::{calculate_burn_rate, identify_blocks_with_gaps, project_block_usage};
     use analytics::quota::compute_quota;
 
     anyhow::ensure!(
@@ -2295,7 +2308,8 @@ fn cmd_blocks(
 
     let conn = scanner::db::open_db(db_path)?;
     let turns = scanner::db::load_all_turns(&conn)?;
-    let mut blocks = identify_blocks(&turns, session_hours);
+    let now = chrono::Utc::now();
+    let mut blocks = identify_blocks_with_gaps(&turns, session_hours, now, include_gaps);
 
     // Resolve the token limit once before rendering.
     let resolved_limit: Option<i64> = match &token_limit {
@@ -2312,7 +2326,6 @@ fn cmd_blocks(
     }
 
     if json_output || jq.is_some() {
-        let now = chrono::Utc::now();
         let json_blocks: Vec<serde_json::Value> = blocks
             .iter()
             .map(|b| {
@@ -2333,6 +2346,8 @@ fn cmd_blocks(
                     "estimated_cost": b.cost_nanos as f64 / 1_000_000_000.0,
                     "models": b.models,
                     "is_active": b.is_active,
+                    "is_gap": b.is_gap,
+                    "kind": b.kind,
                     "entry_count": b.entry_count,
                 });
                 if b.is_active {
@@ -2375,6 +2390,7 @@ fn cmd_blocks(
     }
 
     let col_w = 24usize;
+    let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
     println!();
     println!("BLOCKS (session_length={session_hours:.1}h)");
     println!("{}", "-".repeat(120));
@@ -2384,9 +2400,20 @@ fn cmd_blocks(
     );
     println!("{}", "-".repeat(120));
 
-    let now = chrono::Utc::now();
-
     for block in &blocks {
+        if block.is_gap {
+            let gap_dur = block.end - block.start;
+            let gap_h = gap_dur.num_hours();
+            let gap_m = gap_dur.num_minutes() - gap_h * 60;
+            let line = format!("  ({}h {}m gap)", gap_h, gap_m);
+            if is_tty {
+                println!("\x1b[2m{line}\x1b[0m");
+            } else {
+                println!("{line}");
+            }
+            continue;
+        }
+
         let elapsed = now - block.start;
         let elapsed_h = elapsed.num_hours();
         let elapsed_m = elapsed.num_minutes() % 60;
