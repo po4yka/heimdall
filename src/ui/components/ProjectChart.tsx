@@ -10,42 +10,51 @@ export function ProjectChart({ byProject }: { byProject: ProjectAgg[] }) {
   const base = industrialChartOptions('bar');
   const colors = tokenSeriesColors();
   // Collapse Input + Output into a single Total-tokens series. The
-  // per-type breakdown already lives in ProjectCostTable below; a single
-  // bar makes the first-fold "which project is biggest?" answerable at a
-  // glance and sidesteps the near-invisible Output stripe.
+  // per-type breakdown already lives in ProjectCostTable below.
   const totals = top.map(p => p.input + p.output);
-  // Log scale on the value axis rescues tail bars (projects <3M were
-  // rendering as hairlines next to a ~145M leader). ApexCharts uses the
-  // `yaxis.logarithmic` option for horizontal bars' value axis.
-  const hasValidLog = totals.every(v => v > 0);
+  // ApexCharts' logarithmic option does not apply to the value axis of a
+  // horizontal bar (vue-apexcharts#300). Instead, render each bar as its
+  // share of the maximum (0–100%), which rescues tail bars that would be
+  // hairlines under a linear scale. The raw token count stays in the
+  // tooltip so users do not lose absolute magnitudes.
+  const maxTotal = totals.reduce((m, v) => (v > m ? v : m), 0);
+  const shares = totals.map(v => (maxTotal > 0 ? (v / maxTotal) * 100 : 0));
+
   const options = {
     ...base,
     chart: { ...base.chart, type: 'bar' },
-    series: [{ name: 'Total tokens', data: totals }],
+    series: [{ name: 'Share of top', data: shares }],
     colors: [colors[0]],
     fill: { type: 'solid' },
     plotOptions: { bar: { horizontal: true, barHeight: '60%', borderRadius: 0 } },
     xaxis: {
       ...base.xaxis,
       categories: top.map(p => truncateMid(p.display_name || p.project, 18, 8)),
+      min: 0,
+      max: 100,
+      tickAmount: 4,
       labels: {
         ...base.xaxis.labels,
-        formatter: (v: number) => fmt(v),
+        formatter: (v: number) => `${Math.round(v)}%`,
         hideOverlappingLabels: true,
       },
-      tickAmount: 4,
     },
     yaxis: {
       ...base.yaxis,
       labels: { ...base.yaxis.labels, maxWidth: 120 },
-      ...(hasValidLog ? { logarithmic: true, logBase: 10, forceNiceScale: false } : {}),
     },
-    // Anchor the tooltip to the plot's top-left with negative offset so it
-    // cannot cover the card's "TOP PROJECTS" title on hover.
+    // Anchor the tooltip to the plot's bottom-left so it cannot cover the
+    // card's "TOP PROJECTS" title during hover.
     tooltip: {
       ...base.tooltip,
-      fixed: { enabled: true, position: 'topLeft', offsetX: 0, offsetY: -8 },
-      y: { formatter: (v: number) => fmt(v) + ' tokens' },
+      fixed: { enabled: true, position: 'bottomLeft', offsetX: 0, offsetY: 0 },
+      y: {
+        // Display the raw token count per project regardless of bar scale.
+        formatter: (_v: number, opts: any) => {
+          const raw = totals[opts?.dataPointIndex ?? 0] ?? 0;
+          return fmt(raw) + ' tokens';
+        },
+      },
     },
   };
 
