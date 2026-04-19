@@ -130,6 +130,22 @@ Most subcommands accept a shared `--jq=<filter>` flag, `--locale=<BCP-47>`, `--c
 - **Provider plugin pattern** – add a new scanner provider in a single file under `src/scanner/providers/`; see [AGENTS.md](AGENTS.md).
 - **Detector plugin pattern** – add a waste detector in a single file under `src/optimizer/`.
 
+### Codex project assets
+
+The repository now ships Codex-native project assets for contributors who use Codex:
+
+- **Custom subagents** live in `.codex/agents/`:
+  - `heimdall_explorer` for read-only codebase mapping
+  - `heimdall_reviewer` for read-only regression review
+  - `heimdall_provider_worker` for scanner/provider implementation
+  - `heimdall_dashboard_worker` for dashboard implementation
+- **Repo-scoped skills** live in `.agents/skills/`:
+  - `heimdall-scanner-provider` for new or changed providers
+  - `heimdall-schema-evolution` for additive schema/data-flow changes
+  - `heimdall-dashboard` for `src/ui/` work and committed UI artifacts
+
+These were added to match current Codex guidance: keep skills narrow and task-specific, and keep subagents focused and opinionated rather than general-purpose.
+
 ## Install
 
 ### Prebuilt binary (recommended)
