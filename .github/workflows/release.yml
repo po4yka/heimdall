@@ -126,7 +126,7 @@ jobs:
           fi
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           files: |
             ${{ env.ARCHIVE_NAME }}
@@ -216,7 +216,7 @@ jobs:
           echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
 
       - name: Upload universal tarball to release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           files: |
             ${{ env.ARCHIVE_NAME }}
@@ -243,6 +243,6 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Upload SHA256SUMS.txt to release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
           files: SHA256SUMS.txt
