@@ -159,7 +159,7 @@ mod mcp_tests {
     // ── Tool list test ────────────────────────────────────────────────────────
 
     #[tokio::test]
-    async fn tools_list_returns_nine_tools() {
+    async fn tools_list_returns_ten_tools() {
         let (_dir, db_path) = seed_db();
         let (mut w, mut r) = connect_server(db_path).await;
         do_initialize(&mut w, &mut r).await;
@@ -177,11 +177,15 @@ mod mcp_tests {
         let v = read_line(&mut r).await;
 
         let tools = v["result"]["tools"].as_array().expect("tools array");
-        assert_eq!(tools.len(), 9, "expected 9 tools, got: {}", tools.len());
+        assert_eq!(tools.len(), 10, "expected 10 tools, got: {}", tools.len());
 
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert!(names.contains(&"heimdall_today"), "missing heimdall_today");
         assert!(names.contains(&"heimdall_stats"), "missing heimdall_stats");
+        assert!(
+            names.contains(&"heimdall_cost_reconciliation"),
+            "missing heimdall_cost_reconciliation"
+        );
         assert!(
             names.contains(&"heimdall_weekly"),
             "missing heimdall_weekly"
@@ -426,5 +430,79 @@ mod mcp_tests {
             data.get("enabled").is_some(),
             "response must contain 'enabled' field"
         );
+    }
+
+    // ── heimdall_cost_reconciliation ──────────────────────────────────────────
+
+    /// Empty DB → { "enabled": false }.
+    #[tokio::test]
+    async fn heimdall_cost_reconciliation_empty_db_returns_disabled() {
+        let (_dir, db_path) = seed_db();
+        let (mut w, mut r) = connect_server(db_path).await;
+        do_initialize(&mut w, &mut r).await;
+
+        let resp = call_tool(
+            &mut w,
+            &mut r,
+            11,
+            "heimdall_cost_reconciliation",
+            serde_json::json!({}),
+        )
+        .await;
+        assert!(resp["error"].is_null(), "tool error: {:?}", resp["error"]);
+
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        let data: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(
+            data["enabled"],
+            serde_json::json!(false),
+            "empty DB should return enabled:false"
+        );
+    }
+
+    /// Seeded DB with a live event → full shape with enabled:true.
+    #[tokio::test]
+    async fn heimdall_cost_reconciliation_seeded_db_returns_full_shape() {
+        use crate::scanner::db::{init_db, open_db};
+
+        let (dir, db_path) = seed_db_with_data();
+        // Seed a live_event with hook_reported_cost_nanos.
+        {
+            let conn = open_db(&db_path).unwrap();
+            init_db(&conn).unwrap();
+            conn.execute(
+                "INSERT OR IGNORE INTO live_events
+                    (dedup_key, received_at, session_id, tool_name,
+                     cost_usd_nanos, input_tokens, output_tokens, raw_json,
+                     hook_reported_cost_nanos)
+                 VALUES ('mcp_k1', datetime('now'), 'claude:test-session', 'Bash',
+                         140000000, 100, 50, '{}', 140000000)",
+                [],
+            )
+            .unwrap();
+        }
+        let _ = dir; // keep tempdir alive
+
+        let (mut w, mut r) = connect_server(db_path).await;
+        do_initialize(&mut w, &mut r).await;
+
+        let resp = call_tool(
+            &mut w,
+            &mut r,
+            12,
+            "heimdall_cost_reconciliation",
+            serde_json::json!({ "period": "month" }),
+        )
+        .await;
+        assert!(resp["error"].is_null(), "tool error: {:?}", resp["error"]);
+
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        let data: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(data["enabled"], serde_json::json!(true));
+        assert_eq!(data["period"].as_str(), Some("month"));
+        assert!(data["hook_total_nanos"].is_number(), "hook_total_nanos missing");
+        assert!(data["local_total_nanos"].is_number(), "local_total_nanos missing");
+        assert!(data["divergence_pct"].is_number(), "divergence_pct missing");
+        assert!(data["breakdown"].is_array(), "breakdown must be array");
     }
 }

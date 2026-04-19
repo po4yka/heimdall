@@ -48,6 +48,12 @@ pub struct BlocksInput {
     pub session_length_hours: Option<f64>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CostReconciliationInput {
+    /// Rolling period: day | week | month (default: month).
+    pub period: Option<String>,
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn json_ok(v: serde_json::Value) -> String {
@@ -219,6 +225,27 @@ impl HeimdallMcpServer {
     async fn heimdall_quota(&self, _params: Parameters<EmptyInput>) -> String {
         let db = self.db_path.clone();
         match tokio::task::spawn_blocking(move || query_quota(&db)).await {
+            Ok(Ok(v)) => json_ok(v),
+            Ok(Err(e)) => json_err(e),
+            Err(e) => json_err(e),
+        }
+    }
+
+    /// Return hook-reported vs. local-estimate cost reconciliation for a rolling period.
+    #[tool(
+        description = "Return hook-reported vs. local-estimate cost reconciliation (day|week|month)"
+    )]
+    async fn heimdall_cost_reconciliation(
+        &self,
+        params: Parameters<CostReconciliationInput>,
+    ) -> String {
+        let db = self.db_path.clone();
+        let period = params
+            .0
+            .period
+            .clone()
+            .unwrap_or_else(|| "month".to_string());
+        match tokio::task::spawn_blocking(move || query_cost_reconciliation(&db, &period)).await {
             Ok(Ok(v)) => json_ok(v),
             Ok(Err(e)) => json_err(e),
             Err(e) => json_err(e),
@@ -628,6 +655,101 @@ fn query_context_window(db_path: &Path) -> Result<serde_json::Value> {
             Ok(v)
         }
     }
+}
+
+fn query_cost_reconciliation(db_path: &Path, period: &str) -> Result<serde_json::Value> {
+    let conn = open_conn(db_path)?;
+
+    // Check whether any hook costs exist.
+    let hook_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM live_events WHERE hook_reported_cost_nanos IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
+    if hook_count == 0 {
+        return Ok(serde_json::json!({ "enabled": false }));
+    }
+
+    let days_back: i64 = match period {
+        "day" => 1,
+        "week" => 7,
+        _ => 30,
+    };
+
+    let now = chrono::Utc::now();
+    let cutoff = (now - chrono::Duration::days(days_back)).to_rfc3339();
+
+    let mut hook_by_day: std::collections::HashMap<String, i64> =
+        std::collections::HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT date(received_at) AS day,
+                    COALESCE(SUM(hook_reported_cost_nanos), 0) AS nanos
+             FROM live_events
+             WHERE hook_reported_cost_nanos IS NOT NULL
+               AND received_at >= ?1
+             GROUP BY day ORDER BY day",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![cutoff], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
+        for row in rows {
+            let (day, nanos) = row?;
+            hook_by_day.insert(day, nanos);
+        }
+    }
+
+    let mut local_by_day: std::collections::HashMap<String, i64> =
+        std::collections::HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT date(timestamp) AS day,
+                    COALESCE(SUM(estimated_cost_nanos), 0) AS nanos
+             FROM turns
+             WHERE timestamp >= ?1
+             GROUP BY day ORDER BY day",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![cutoff], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
+        for row in rows {
+            let (day, nanos) = row?;
+            local_by_day.insert(day, nanos);
+        }
+    }
+
+    let mut all_days: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    all_days.extend(hook_by_day.keys().cloned());
+    all_days.extend(local_by_day.keys().cloned());
+
+    let breakdown: Vec<serde_json::Value> = all_days
+        .iter()
+        .map(|day| {
+            let hook_nanos = hook_by_day.get(day).copied().unwrap_or(0);
+            let local_nanos = local_by_day.get(day).copied().unwrap_or(0);
+            serde_json::json!({ "day": day, "hook_nanos": hook_nanos, "local_nanos": local_nanos })
+        })
+        .collect();
+
+    let hook_total_nanos: i64 = hook_by_day.values().sum();
+    let local_total_nanos: i64 = local_by_day.values().sum();
+    let divergence_pct = if local_total_nanos > 0 {
+        (hook_total_nanos - local_total_nanos) as f64 / local_total_nanos as f64
+    } else {
+        0.0
+    };
+
+    Ok(serde_json::json!({
+        "enabled": true,
+        "period": period,
+        "hook_total_nanos": hook_total_nanos,
+        "local_total_nanos": local_total_nanos,
+        "divergence_pct": divergence_pct,
+        "breakdown": breakdown,
+    }))
 }
 
 fn query_quota(db_path: &Path) -> Result<serde_json::Value> {

@@ -3,7 +3,7 @@ use crate::analytics::burn_rate::{self, BurnRateConfig, BurnRateTier};
 use crate::analytics::quota::Severity;
 use crate::pricing::{fmt_cost, fmt_tokens};
 use crate::statusline::VisualBurnRate;
-use crate::statusline::compute::ComputedStats;
+use crate::statusline::compute::{ComputedStats, CostSource};
 
 /// Options controlling how the status line is rendered.
 pub struct RenderOpts {
@@ -11,6 +11,8 @@ pub struct RenderOpts {
     pub context_medium_threshold: f64,
     pub burn_rate: BurnRateConfig,
     pub visual_burn_rate: VisualBurnRate,
+    /// Phase 8: determines whether to render dual cost sources.
+    pub cost_source: CostSource,
 }
 
 impl Default for RenderOpts {
@@ -20,6 +22,7 @@ impl Default for RenderOpts {
             context_medium_threshold: 0.8,
             burn_rate: BurnRateConfig::default(),
             visual_burn_rate: VisualBurnRate::Bracket,
+            cost_source: CostSource::Auto,
         }
     }
 }
@@ -58,6 +61,7 @@ pub fn render_status_line_with_thresholds(
             context_medium_threshold,
             burn_rate: BurnRateConfig::default(),
             visual_burn_rate: VisualBurnRate::Off,
+            cost_source: CostSource::Auto,
         },
     )
 }
@@ -77,8 +81,11 @@ pub fn render_status_line_with_opts(stats: &ComputedStats, opts: &RenderOpts) ->
         &stats.model
     };
 
-    let session = fmt_cost(stats.session_cost_nanos as f64 / 1_000_000_000.0);
     let today = fmt_cost(stats.today_cost_nanos as f64 / 1_000_000_000.0);
+
+    // Phase 8: build session cost segment — dual in Both mode, single otherwise.
+    let (session_segment, drift_warn) =
+        build_session_segment(stats, opts.cost_source);
 
     let mut parts: Vec<String> = Vec::new();
     parts.push(model.to_string());
@@ -87,7 +94,12 @@ pub fn render_status_line_with_opts(stats: &ComputedStats, opts: &RenderOpts) ->
         Some(block) => {
             let block_cost = fmt_cost(block.cost_nanos as f64 / 1_000_000_000.0);
             let remaining = format_remaining(block.block_end);
-            let cost_segment = format!("{} / {} / {} ({})", session, today, block_cost, remaining);
+            let mut cost_segment =
+                format!("{} / {} / {} ({})", session_segment, today, block_cost, remaining);
+            if let Some(warn) = &drift_warn {
+                cost_segment.push(' ');
+                cost_segment.push_str(warn);
+            }
             parts.push(cost_segment);
 
             if let Some(burn) = block.burn_rate {
@@ -102,7 +114,12 @@ pub fn render_status_line_with_opts(stats: &ComputedStats, opts: &RenderOpts) ->
             }
         }
         None => {
-            parts.push(format!("{} / {}", session, today));
+            let mut seg = format!("{} / {}", session_segment, today);
+            if let Some(warn) = &drift_warn {
+                seg.push(' ');
+                seg.push_str(warn);
+            }
+            parts.push(seg);
         }
     }
 
@@ -126,6 +143,46 @@ pub fn render_status_line_with_opts(stats: &ComputedStats, opts: &RenderOpts) ->
     }
 
     parts.join(" | ")
+}
+
+/// Build the session-cost text segment and an optional drift-warning string.
+///
+/// Returns `(session_text, Some("[WARN: cost drift]"))` when `Both` mode is
+/// active, both values are present, and divergence exceeds 10%.
+/// Returns `(session_text, None)` in all other cases.
+fn build_session_segment(
+    stats: &ComputedStats,
+    cost_source: CostSource,
+) -> (String, Option<String>) {
+    if cost_source == CostSource::Both
+        && let Some(hook_nanos) = stats.hook_session_cost_nanos
+    {
+        let local_nanos = stats.local_session_cost_nanos;
+        let hook_str = fmt_cost(hook_nanos as f64 / 1_000_000_000.0);
+        let local_str = fmt_cost(local_nanos as f64 / 1_000_000_000.0);
+        let segment = format!("({} hook / {} local)", hook_str, local_str);
+
+        // Divergence check: skip entirely when local is below the noise floor
+        // ($0.001 = 1_000_000 nanos). A zero or near-zero local with any hook
+        // cost would produce a vacuously huge divergence ratio and false WARNs.
+        const LOCAL_NOISE_FLOOR_NANOS: i64 = 1_000_000; // $0.001
+        let warn = if local_nanos >= LOCAL_NOISE_FLOOR_NANOS {
+            let denom = local_nanos as f64;
+            let divergence = ((hook_nanos - local_nanos).abs() as f64) / denom;
+            if divergence > 0.10 {
+                Some("[WARN: cost drift]".to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        return (segment, warn);
+        // Both mode but hook absent → fall through to single-value render
+    }
+    // Auto / Local / Hook — or Both with no hook data
+    let session = fmt_cost(stats.session_cost_nanos as f64 / 1_000_000_000.0);
+    (session, None)
 }
 
 /// Return the tier indicator string for the given style.
@@ -194,6 +251,8 @@ mod tests {
     fn base_stats() -> ComputedStats {
         ComputedStats {
             model: "claude-sonnet-4-6".to_string(),
+            local_session_cost_nanos: 120_000_000,
+            hook_session_cost_nanos: None,
             session_cost_nanos: 120_000_000, // $0.12
             today_cost_nanos: 2_340_000_000, // $2.34
             active_block: None,
@@ -403,6 +462,7 @@ mod tests {
             context_medium_threshold: 0.8,
             burn_rate: BurnRateConfig::default(),
             visual_burn_rate: style,
+            cost_source: CostSource::Auto,
         }
     }
 
@@ -446,5 +506,132 @@ mod tests {
         assert!(!line.contains("[CRIT]"), "unexpected [CRIT]: {}", line);
         // Burn rate $/hr is still present.
         assert!(line.contains("/hr"), "expected /hr: {}", line);
+    }
+
+    // ── Phase 8: Both mode render tests ──────────────────────────────────────
+
+    fn both_opts() -> RenderOpts {
+        RenderOpts {
+            cost_source: CostSource::Both,
+            visual_burn_rate: VisualBurnRate::Off,
+            ..RenderOpts::default()
+        }
+    }
+
+    fn stats_with_dual(hook_nanos: Option<i64>, local_nanos: i64) -> ComputedStats {
+        ComputedStats {
+            model: "claude-sonnet-4-6".to_string(),
+            local_session_cost_nanos: local_nanos,
+            hook_session_cost_nanos: hook_nanos,
+            // effective = hook when present else local
+            session_cost_nanos: hook_nanos.unwrap_or(local_nanos),
+            today_cost_nanos: 2_340_000_000,
+            active_block: None,
+            context_tokens: None,
+            context_size: None,
+        }
+    }
+
+    /// Both mode, both values present, divergence < 10% — no WARN.
+    #[test]
+    fn both_mode_both_present_no_drift() {
+        // hook=$0.12, local=$0.125 → ~4% divergence
+        let stats = stats_with_dual(Some(120_000_000), 125_000_000);
+        let line = render_status_line_with_opts(&stats, &both_opts());
+        assert!(line.contains("hook"), "expected 'hook': {}", line);
+        assert!(line.contains("local"), "expected 'local': {}", line);
+        assert!(
+            !line.contains("[WARN: cost drift]"),
+            "unexpected drift WARN: {}",
+            line
+        );
+    }
+
+    /// Both mode, both values present, divergence > 10% — WARN appears.
+    #[test]
+    fn both_mode_both_present_with_drift() {
+        // hook=$0.14, local=$0.10 → 40% divergence; local above noise floor
+        let stats = stats_with_dual(Some(140_000_000), 100_000_000);
+        let line = render_status_line_with_opts(&stats, &both_opts());
+        assert!(line.contains("hook"), "expected 'hook': {}", line);
+        assert!(line.contains("local"), "expected 'local': {}", line);
+        assert!(
+            line.contains("[WARN: cost drift]"),
+            "expected drift WARN: {}",
+            line
+        );
+    }
+
+    /// Both mode, hook absent — falls back to single-value rendering (no "hook/local").
+    #[test]
+    fn both_mode_hook_absent_falls_back_to_single() {
+        let stats = stats_with_dual(None, 120_000_000);
+        let line = render_status_line_with_opts(&stats, &both_opts());
+        assert!(!line.contains("hook"), "unexpected 'hook': {}", line);
+        assert!(!line.contains("local"), "unexpected 'local': {}", line);
+        // Renders the local cost as single value
+        assert!(line.contains("$0.1200"), "expected $0.1200: {}", line);
+    }
+
+    /// Both mode, hook has cost but local=0 (below noise floor) — no WARN.
+    #[test]
+    fn both_mode_empty_local_no_warn() {
+        // hook=$0.10 (100_000_000 nanos), local=0 → below noise floor → skip drift check
+        let stats = stats_with_dual(Some(100_000_000), 0);
+        let line = render_status_line_with_opts(&stats, &both_opts());
+        assert!(line.contains("hook"), "expected 'hook': {}", line);
+        assert!(line.contains("local"), "expected 'local': {}", line);
+        assert!(
+            !line.contains("[WARN: cost drift]"),
+            "must NOT warn when local is below noise floor: {}",
+            line
+        );
+    }
+
+    /// Both mode, exact 10% divergence — no WARN (threshold is strictly > 10%).
+    #[test]
+    fn both_mode_exactly_10_pct_no_drift_warn() {
+        // hook=110, local=100 → exactly 10%
+        let stats = stats_with_dual(Some(110_000_000), 100_000_000);
+        let line = render_status_line_with_opts(&stats, &both_opts());
+        assert!(
+            !line.contains("[WARN: cost drift]"),
+            "no WARN at exactly 10%: {}",
+            line
+        );
+    }
+
+    /// Hook mode — uses hook cost as single value, no "hook/local" labels.
+    #[test]
+    fn hook_mode_single_value() {
+        let opts = RenderOpts {
+            cost_source: CostSource::Hook,
+            visual_burn_rate: VisualBurnRate::Off,
+            ..RenderOpts::default()
+        };
+        let stats = stats_with_dual(Some(120_000_000), 999_000_000);
+        let line = render_status_line_with_opts(&stats, &opts);
+        assert!(!line.contains("hook"), "unexpected 'hook': {}", line);
+        assert!(!line.contains("local"), "unexpected 'local': {}", line);
+        // session_cost_nanos=120_000_000 (set by compute; here we simulate)
+        // The stats_with_dual helper sets session_cost_nanos=hook when present.
+        assert!(line.contains("$0.1200"), "expected $0.1200: {}", line);
+    }
+
+    /// Local mode — uses local cost as single value.
+    #[test]
+    fn local_mode_single_value() {
+        let opts = RenderOpts {
+            cost_source: CostSource::Local,
+            visual_burn_rate: VisualBurnRate::Off,
+            ..RenderOpts::default()
+        };
+        // session_cost_nanos mirrors local in Local mode
+        let mut stats = stats_with_dual(Some(999_000_000), 120_000_000);
+        stats.session_cost_nanos = stats.local_session_cost_nanos; // simulate Local mode
+        let line = render_status_line_with_opts(&stats, &opts);
+        assert!(!line.contains("hook"), "unexpected 'hook': {}", line);
+        assert!(!line.contains("local"), "unexpected 'local': {}", line);
+        assert!(line.contains("$0.1200"), "expected $0.1200: {}", line);
     }
 }

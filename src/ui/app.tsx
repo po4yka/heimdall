@@ -26,6 +26,7 @@ import { DailyChart } from './components/DailyChart';
 import { WeeklyChart } from './components/WeeklyChart';
 import { ModelChart } from './components/ModelChart';
 import { ProjectChart } from './components/ProjectChart';
+import { CostReconciliationPanel } from './components/CostReconciliationPanel';
 
 import type {
   UsageWindowsResponse,
@@ -50,11 +51,13 @@ import type {
   CommunitySignal,
   BillingBlocksResponse,
   ContextWindowResponse,
+  CostReconciliationResponse,
 } from './state/types';
 import {
   rawData,
   billingBlocksData,
   contextWindowData,
+  costReconciliationData,
   selectedModels,
   selectedRange,
   selectedProvider,
@@ -96,6 +99,7 @@ let loadCommunitySignalInFlight = false;
 let lastCommunitySignal: CommunitySignal | null = null;
 let loadBillingBlocksInFlight = false;
 let loadContextWindowInFlight = false;
+let loadCostReconciliationInFlight = false;
 
 // ── URL persistence ──────────────────────────────────────────────────
 function getRangeCutoff(range: RangeKey): string | null {
@@ -765,6 +769,39 @@ async function loadContextWindow(): Promise<void> {
   }
 }
 
+// ── Phase 8: Cost reconciliation fetch ──────────────────────────────
+async function loadCostReconciliation(): Promise<void> {
+  if (loadCostReconciliationInFlight) return;
+  loadCostReconciliationInFlight = true;
+  try {
+    const resp = await fetch('/api/cost-reconciliation?period=month');
+    if (!resp.ok) {
+      costReconciliationData.value = null;
+      return;
+    }
+    const data: CostReconciliationResponse = await resp.json();
+    costReconciliationData.value = data;
+    renderCostReconciliation();
+  } catch {
+    costReconciliationData.value = null;
+  } finally {
+    loadCostReconciliationInFlight = false;
+  }
+}
+
+function renderCostReconciliation(): void {
+  const container = $('cost-reconciliation');
+  if (!container) return;
+  const data = costReconciliationData.value;
+  if (!data || !data.enabled) {
+    container.style.display = 'none';
+    render(null, container);
+    return;
+  }
+  container.style.display = '';
+  render(<CostReconciliationPanel data={data} />, container);
+}
+
 // ── Phase 13: Heatmap fetch ──────────────────────────────────────────
 // Fetches the 7x24 heatmap from /api/heatmap, threading the client
 // timezone offset so dow/hour bucketing respects local time.
@@ -884,3 +921,5 @@ loadBillingBlocks();
 setInterval(loadBillingBlocks, 30000);
 loadContextWindow();
 setInterval(loadContextWindow, 30000);
+loadCostReconciliation();
+setInterval(loadCostReconciliation, 30000);

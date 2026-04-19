@@ -630,6 +630,158 @@ pub async fn api_context_window(
     Ok(Json(value))
 }
 
+/// `GET /api/cost-reconciliation?period=<day|week|month>`
+///
+/// Returns hook-reported vs. local-estimate cost totals by day for the
+/// requested rolling period. When no hook costs have ever been recorded,
+/// returns `{ "enabled": false }`.
+///
+/// Full response shape:
+/// ```json
+/// {
+///   "enabled": true,
+///   "period": "month",
+///   "hook_total_nanos": 12345000000,
+///   "local_total_nanos": 14567000000,
+///   "divergence_pct": 0.15,
+///   "breakdown": [
+///     { "day": "2026-04-01", "hook_nanos": 5000000000, "local_nanos": 6000000000 },
+///     ...
+///   ]
+/// }
+/// ```
+pub async fn api_cost_reconciliation(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<CostReconciliationParams>,
+) -> Result<Json<Value>, StatusCode> {
+    let _db_guard = state.db_lock.lock().await;
+    let db_path = state.db_path.clone();
+    let period = params.period.clone();
+
+    let value = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+
+        // Check if any hook costs exist at all.
+        let hook_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM live_events WHERE hook_reported_cost_nanos IS NOT NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        if hook_count == 0 {
+            return Ok(serde_json::json!({ "enabled": false }));
+        }
+
+        // Determine rolling period bounds (last N days including today).
+        let days_back: i64 = match period.as_str() {
+            "day" => 1,
+            "week" => 7,
+            _ => 30, // "month" default
+        };
+
+        let now = chrono::Utc::now();
+        let cutoff = (now - chrono::Duration::days(days_back)).to_rfc3339();
+
+        // Sum hook_reported_cost_nanos by date from live_events.
+        let mut hook_by_day: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT date(received_at) AS day,
+                        COALESCE(SUM(hook_reported_cost_nanos), 0) AS nanos
+                 FROM live_events
+                 WHERE hook_reported_cost_nanos IS NOT NULL
+                   AND received_at >= ?1
+                 GROUP BY day
+                 ORDER BY day",
+            )?;
+            let rows = stmt.query_map(rusqlite::params![cutoff], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })?;
+            for row in rows {
+                let (day, nanos) = row?;
+                hook_by_day.insert(day, nanos);
+            }
+        }
+
+        // Sum estimated_cost_nanos by date from turns.
+        let mut local_by_day: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT date(timestamp) AS day,
+                        COALESCE(SUM(estimated_cost_nanos), 0) AS nanos
+                 FROM turns
+                 WHERE timestamp >= ?1
+                 GROUP BY day
+                 ORDER BY day",
+            )?;
+            let rows = stmt.query_map(rusqlite::params![cutoff], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })?;
+            for row in rows {
+                let (day, nanos) = row?;
+                local_by_day.insert(day, nanos);
+            }
+        }
+
+        // Build unified day list (union of both maps).
+        let mut all_days: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        all_days.extend(hook_by_day.keys().cloned());
+        all_days.extend(local_by_day.keys().cloned());
+
+        let breakdown: Vec<Value> = all_days
+            .iter()
+            .map(|day| {
+                let hook_nanos = hook_by_day.get(day).copied().unwrap_or(0);
+                let local_nanos = local_by_day.get(day).copied().unwrap_or(0);
+                serde_json::json!({
+                    "day": day,
+                    "hook_nanos": hook_nanos,
+                    "local_nanos": local_nanos,
+                })
+            })
+            .collect();
+
+        let hook_total_nanos: i64 = hook_by_day.values().sum();
+        let local_total_nanos: i64 = local_by_day.values().sum();
+
+        let divergence_pct = if local_total_nanos > 0 {
+            (hook_total_nanos - local_total_nanos) as f64 / local_total_nanos as f64
+        } else {
+            0.0
+        };
+
+        Ok(serde_json::json!({
+            "enabled": true,
+            "period": period,
+            "hook_total_nanos": hook_total_nanos,
+            "local_total_nanos": local_total_nanos,
+            "divergence_pct": divergence_pct,
+            "breakdown": breakdown,
+        }))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(value))
+}
+
+#[derive(serde::Deserialize, Default)]
+pub struct CostReconciliationParams {
+    /// day | week | month
+    #[serde(default = "default_reconciliation_period")]
+    pub period: String,
+}
+
+fn default_reconciliation_period() -> String {
+    "month".to_string()
+}
+
 fn sqlite_sidecar_paths(path: &std::path::Path) -> [PathBuf; 2] {
     [
         PathBuf::from(format!("{}-wal", path.to_string_lossy())),

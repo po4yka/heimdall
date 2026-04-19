@@ -42,6 +42,16 @@ impl CostSource {
 #[derive(Debug, Clone)]
 pub struct ComputedStats {
     pub model: String,
+    /// Local (DB-computed) session cost in nanos.
+    pub local_session_cost_nanos: i64,
+    /// Hook-reported session cost in nanos. `None` when the hook payload
+    /// contained no cost field (so render can distinguish "hook said $0"
+    /// from "hook was absent").
+    pub hook_session_cost_nanos: Option<i64>,
+    /// Convenience accessor: the single cost value to use for rendering
+    /// when NOT in `Both` mode.  Equal to `local_session_cost_nanos` for
+    /// `Local` mode; `hook_session_cost_nanos.unwrap_or(local)` for
+    /// `Auto`/`Hook`; same for `Both` (caller picks).
     pub session_cost_nanos: i64,
     pub today_cost_nanos: i64,
     pub active_block: Option<ActiveBlockInfo>,
@@ -74,8 +84,27 @@ pub fn compute(
 
     let now = Utc::now();
 
-    // ── Session cost ──────────────────────────────────────────────────────────
-    let session_cost_nanos = query_session_cost(&conn, &input.session_id, cost_source, input)?;
+    // ── Hook cost (from payload) ───────────────────────────────────────────────
+    let hook_nanos_opt: Option<i64> = input
+        .cost
+        .as_ref()
+        .map(|c| (c.total_cost_usd * 1_000_000_000.0).round().max(0.0) as i64);
+
+    // ── Local (DB) session cost ───────────────────────────────────────────────
+    let local_session_cost_nanos =
+        query_session_cost_from_db(&conn, &input.session_id).unwrap_or(0);
+
+    // ── Effective session cost (single value used by Auto/Local/Hook modes) ───
+    let session_cost_nanos = match cost_source {
+        CostSource::Hook => hook_nanos_opt.unwrap_or(0),
+        CostSource::Local => local_session_cost_nanos,
+        CostSource::Auto | CostSource::Both => {
+            hook_nanos_opt.unwrap_or(local_session_cost_nanos)
+        }
+    };
+
+    // ── Phase 8: hook_session_cost_nanos (None when hook had no cost) ─────────
+    let hook_session_cost_nanos = hook_nanos_opt;
 
     // ── Today cost ────────────────────────────────────────────────────────────
     let today_cost_nanos = query_today_cost(&conn, now)?;
@@ -90,6 +119,8 @@ pub fn compute(
 
     Ok(ComputedStats {
         model: input.model.clone().unwrap_or_else(|| "unknown".to_string()),
+        local_session_cost_nanos,
+        hook_session_cost_nanos,
         session_cost_nanos,
         today_cost_nanos,
         active_block,
@@ -101,53 +132,31 @@ pub fn compute(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn zeroed_stats(input: &HookInput, cost_source: CostSource) -> ComputedStats {
-    let hook_cost = input
+    let hook_nanos_opt: Option<i64> = input
         .cost
         .as_ref()
-        .map(|c| (c.total_cost_usd * 1_000_000_000.0) as i64)
-        .unwrap_or(0);
+        .map(|c| (c.total_cost_usd * 1_000_000_000.0).round().max(0.0) as i64);
+    let local_session_cost_nanos: i64 = 0;
     let session_cost_nanos = match cost_source {
-        CostSource::Hook | CostSource::Auto | CostSource::Both => hook_cost,
-        CostSource::Local => 0,
+        CostSource::Hook => hook_nanos_opt.unwrap_or(0),
+        CostSource::Local => local_session_cost_nanos,
+        CostSource::Auto | CostSource::Both => {
+            hook_nanos_opt.unwrap_or(local_session_cost_nanos)
+        }
     };
     let cw = context_window::resolve(input);
     let context_tokens = cw.map(|c| c.total_input_tokens);
     let context_size = cw.map(|c| c.context_window_size);
     ComputedStats {
         model: input.model.clone().unwrap_or_else(|| "unknown".to_string()),
+        local_session_cost_nanos,
+        hook_session_cost_nanos: hook_nanos_opt,
         session_cost_nanos,
         today_cost_nanos: 0,
         active_block: None,
         context_tokens,
         context_size,
     }
-}
-
-fn query_session_cost(
-    conn: &rusqlite::Connection,
-    raw_session_id: &str,
-    cost_source: CostSource,
-    input: &HookInput,
-) -> Result<i64> {
-    // If hook cost is preferred and available, use it directly.
-    let hook_nanos = input
-        .cost
-        .as_ref()
-        .map(|c| (c.total_cost_usd * 1_000_000_000.0) as i64);
-
-    match cost_source {
-        CostSource::Hook => return Ok(hook_nanos.unwrap_or(0)),
-        CostSource::Auto | CostSource::Both => {
-            if let Some(n) = hook_nanos {
-                return Ok(n);
-            }
-        }
-        CostSource::Local => {}
-    }
-
-    // Fall back to DB: try raw id, then "claude:<id>".
-    let db_nanos = query_session_cost_from_db(conn, raw_session_id)?;
-    Ok(db_nanos)
 }
 
 fn query_session_cost_from_db(conn: &rusqlite::Connection, raw_session_id: &str) -> Result<i64> {
@@ -390,5 +399,65 @@ mod tests {
     fn parse_cost_source_rejects_bogus() {
         assert!(CostSource::parse("bogus").is_err());
         assert!(CostSource::parse("").is_err());
+    }
+
+    // ── Phase 8: dual cost-source reconciliation ──────────────────────────────
+
+    #[test]
+    fn both_mode_populates_hook_and_local() {
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        seed_turn(&conn, "ses-both", 80_000_000, "2026-01-01T10:00:00Z");
+        drop(conn);
+
+        let input = make_input("ses-both", Some(0.14)); // hook says $0.14
+        let stats = compute(&db_path, &input, CostSource::Both).unwrap();
+
+        // local from DB
+        assert_eq!(stats.local_session_cost_nanos, 80_000_000);
+        // hook from payload
+        assert_eq!(stats.hook_session_cost_nanos, Some(140_000_000));
+        // effective = hook (Both prefers hook when present)
+        assert_eq!(stats.session_cost_nanos, 140_000_000);
+    }
+
+    #[test]
+    fn both_mode_no_hook_falls_back_to_local() {
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        seed_turn(&conn, "ses-nohhok", 60_000_000, "2026-01-01T10:00:00Z");
+        drop(conn);
+
+        let input = HookInput {
+            session_id: "ses-nohhok".to_string(),
+            transcript_path: "/tmp/t.jsonl".to_string(),
+            model: None,
+            cost: None,
+            context_window: None,
+        };
+        let stats = compute(&db_path, &input, CostSource::Both).unwrap();
+        assert_eq!(stats.local_session_cost_nanos, 60_000_000);
+        assert_eq!(stats.hook_session_cost_nanos, None);
+        // effective = local (hook absent)
+        assert_eq!(stats.session_cost_nanos, 60_000_000);
+    }
+
+    #[test]
+    fn hook_mode_uses_hook_ignores_db() {
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        seed_turn(&conn, "ses-hook", 999_000_000, "2026-01-01T10:00:00Z");
+        drop(conn);
+
+        let input = make_input("ses-hook", Some(0.05));
+        let stats = compute(&db_path, &input, CostSource::Hook).unwrap();
+        assert_eq!(stats.session_cost_nanos, 50_000_000);
+        assert_eq!(stats.hook_session_cost_nanos, Some(50_000_000));
     }
 }

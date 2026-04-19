@@ -1104,6 +1104,7 @@
   var rawData = y3(null);
   var billingBlocksData = y3(null);
   var contextWindowData = y3(null);
+  var costReconciliationData = y3(null);
   var selectedModels = y3(/* @__PURE__ */ new Set());
   var selectedRange = y3("30d");
   var selectedProvider = y3("both");
@@ -6587,6 +6588,132 @@
     return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-project" });
   }
 
+  // src/ui/components/CostReconciliationPanel.tsx
+  function CostReconciliationPanel({ data }) {
+    if (!data || !data.enabled) return null;
+    if (data.hook_total_nanos == null || data.local_total_nanos == null) return null;
+    const hookUsd = data.hook_total_nanos / 1e9;
+    const localUsd = data.local_total_nanos / 1e9;
+    const divergence = data.divergence_pct ?? 0;
+    const divergencePctSigned = divergence * 100;
+    const divergencePctAbs = Math.abs(divergencePctSigned);
+    const isWarn = divergencePctAbs > 10;
+    return /* @__PURE__ */ u2("div", { class: "card card-flat", style: { gridColumn: "1 / -1" }, children: [
+      /* @__PURE__ */ u2("div", { style: { marginBottom: "16px" }, children: [
+        /* @__PURE__ */ u2("span", { style: {
+          fontFamily: "var(--font-mono)",
+          fontSize: "11px",
+          fontWeight: 400,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "var(--text-secondary)"
+        }, children: "COST RECONCILIATION" }),
+        data.period && /* @__PURE__ */ u2("span", { style: {
+          fontFamily: "var(--font-mono)",
+          fontSize: "11px",
+          color: "var(--text-disabled)",
+          marginLeft: "8px"
+        }, children: [
+          "(",
+          data.period,
+          ")"
+        ] })
+      ] }),
+      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "32px", flexWrap: "wrap", marginBottom: "20px" }, children: [
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--text-secondary)",
+            marginBottom: "8px"
+          }, children: "HOOK-REPORTED" }),
+          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "24px" }, children: fmtCost(hookUsd) })
+        ] }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--text-secondary)",
+            marginBottom: "8px"
+          }, children: "LOCAL ESTIMATE" }),
+          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "24px" }, children: fmtCost(localUsd) })
+        ] }),
+        /* @__PURE__ */ u2("div", { children: [
+          /* @__PURE__ */ u2("div", { style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--text-secondary)",
+            marginBottom: "8px"
+          }, children: "DIVERGENCE" }),
+          /* @__PURE__ */ u2(
+            "div",
+            {
+              class: "stat-value",
+              style: { fontSize: "24px", color: isWarn ? "var(--accent)" : void 0 },
+              children: [
+                divergencePctSigned >= 0 ? "+" : "",
+                divergencePctSigned.toFixed(1),
+                "%",
+                isWarn && /* @__PURE__ */ u2("span", { style: {
+                  display: "inline-block",
+                  marginLeft: "8px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11px",
+                  fontWeight: 400,
+                  letterSpacing: "0.06em",
+                  padding: "2px 8px",
+                  border: "1px solid var(--accent)",
+                  borderRadius: "4px",
+                  color: "var(--accent)",
+                  verticalAlign: "middle"
+                }, children: "[DRIFT]" })
+              ]
+            }
+          )
+        ] })
+      ] }),
+      data.breakdown && data.breakdown.length > 0 && /* @__PURE__ */ u2("div", { style: { overflowX: "auto" }, children: /* @__PURE__ */ u2("table", { children: [
+        /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { children: [
+          /* @__PURE__ */ u2("th", { children: "DAY" }),
+          /* @__PURE__ */ u2("th", { style: { textAlign: "right" }, children: "HOOK" }),
+          /* @__PURE__ */ u2("th", { style: { textAlign: "right" }, children: "LOCAL" }),
+          /* @__PURE__ */ u2("th", { style: { textAlign: "right" }, children: "\u0394" })
+        ] }) }),
+        /* @__PURE__ */ u2("tbody", { children: data.breakdown.slice().reverse().slice(0, 30).map((r4) => {
+          const h5 = r4.hook_nanos / 1e9;
+          const l5 = r4.local_nanos / 1e9;
+          const delta = h5 - l5;
+          const rowWarn = l5 > 1e-9 && Math.abs(delta) / l5 > 0.1;
+          return /* @__PURE__ */ u2("tr", { children: [
+            /* @__PURE__ */ u2("td", { class: "num", children: r4.day }),
+            /* @__PURE__ */ u2("td", { class: "num", style: { textAlign: "right" }, children: fmtCost(h5) }),
+            /* @__PURE__ */ u2("td", { class: "num", style: { textAlign: "right" }, children: fmtCost(l5) }),
+            /* @__PURE__ */ u2(
+              "td",
+              {
+                class: "num",
+                style: {
+                  textAlign: "right",
+                  color: rowWarn ? "var(--accent)" : "var(--text-secondary)"
+                },
+                children: [
+                  delta >= 0 ? "+" : "",
+                  fmtCost(delta)
+                ]
+              }
+            )
+          ] }, r4.day);
+        }) })
+      ] }) })
+    ] });
+  }
+
   // src/ui/lib/csv.ts
   function csvField(val) {
     const s4 = String(val);
@@ -6646,6 +6773,7 @@
   var lastCommunitySignal = null;
   var loadBillingBlocksInFlight = false;
   var loadContextWindowInFlight = false;
+  var loadCostReconciliationInFlight = false;
   function getRangeCutoff(range) {
     if (range === "all") return null;
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
@@ -7219,6 +7347,36 @@
       loadContextWindowInFlight = false;
     }
   }
+  async function loadCostReconciliation() {
+    if (loadCostReconciliationInFlight) return;
+    loadCostReconciliationInFlight = true;
+    try {
+      const resp = await fetch("/api/cost-reconciliation?period=month");
+      if (!resp.ok) {
+        costReconciliationData.value = null;
+        return;
+      }
+      const data = await resp.json();
+      costReconciliationData.value = data;
+      renderCostReconciliation();
+    } catch {
+      costReconciliationData.value = null;
+    } finally {
+      loadCostReconciliationInFlight = false;
+    }
+  }
+  function renderCostReconciliation() {
+    const container = $2("cost-reconciliation");
+    if (!container) return;
+    const data = costReconciliationData.value;
+    if (!data || !data.enabled) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(CostReconciliationPanel, { data }), container);
+  }
   async function loadHeatmap(period = "month") {
     if (loadHeatmapInFlight) return;
     loadHeatmapInFlight = true;
@@ -7311,6 +7469,8 @@
   setInterval(loadBillingBlocks, 3e4);
   loadContextWindow();
   setInterval(loadContextWindow, 3e4);
+  loadCostReconciliation();
+  setInterval(loadCostReconciliation, 3e4);
 })();
 /*! Bundled license information:
 

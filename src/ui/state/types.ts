@@ -453,6 +453,23 @@ export interface ContextWindowResponse {
   captured_at?: string;
 }
 
+// ── Phase 8: Cost Reconciliation ────────────────────────────────────────────
+
+export interface CostReconciliationBreakdownRow {
+  day: string;
+  hook_nanos: number;
+  local_nanos: number;
+}
+
+export interface CostReconciliationResponse {
+  enabled: boolean;
+  period?: 'day' | 'week' | 'month';
+  hook_total_nanos?: number;
+  local_total_nanos?: number;
+  divergence_pct?: number;
+  breakdown?: CostReconciliationBreakdownRow[];
+}
+
 // ── Phase 13: Activity Heatmap ───────────────────────────────────────────────
 
 export interface HeatmapCell {

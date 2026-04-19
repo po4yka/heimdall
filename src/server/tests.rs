@@ -123,6 +123,10 @@ mod tests {
                 "/api/context-window",
                 get(crate::server::api::api_context_window),
             )
+            .route(
+                "/api/cost-reconciliation",
+                get(crate::server::api::api_cost_reconciliation),
+            )
             .with_state(state)
     }
 
@@ -1704,5 +1708,90 @@ mod tests {
             "55% fill should be warn"
         );
         assert!(data.get("captured_at").is_some(), "captured_at missing");
+    }
+
+    // ── Phase 8: /api/cost-reconciliation tests ───────────────────────────────
+
+    /// Empty DB (no hook events) → { "enabled": false }.
+    #[tokio::test]
+    async fn test_cost_reconciliation_empty_db() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/cost-reconciliation")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(data["enabled"], serde_json::json!(false));
+    }
+
+    /// Seeded DB with hook events and turns → full reconciliation shape.
+    #[tokio::test]
+    async fn test_cost_reconciliation_seeded_db() {
+        use crate::scanner::db::{init_db, open_db};
+
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+
+        // Seed a live_event with hook_reported_cost_nanos.
+        {
+            let conn = open_db(&db_path).unwrap();
+            init_db(&conn).unwrap();
+            conn.execute(
+                "INSERT OR IGNORE INTO live_events
+                    (dedup_key, received_at, session_id, tool_name,
+                     cost_usd_nanos, input_tokens, output_tokens, raw_json,
+                     hook_reported_cost_nanos)
+                 VALUES ('k1', datetime('now'), 'ses1', 'Bash',
+                         140000000, 100, 50, '{}', 140000000)",
+                [],
+            )
+            .unwrap();
+        }
+
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/cost-reconciliation?period=month")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(data["enabled"], serde_json::json!(true));
+        assert_eq!(data["period"].as_str(), Some("month"));
+        assert!(
+            data["hook_total_nanos"].as_i64().unwrap_or(0) > 0,
+            "hook_total_nanos should be > 0"
+        );
+        assert!(
+            data["local_total_nanos"].is_number(),
+            "local_total_nanos missing"
+        );
+        assert!(data["divergence_pct"].is_number(), "divergence_pct missing");
+        let breakdown = data["breakdown"].as_array().expect("breakdown must be array");
+        assert!(!breakdown.is_empty(), "breakdown should be non-empty");
+        // Each entry must have day, hook_nanos, local_nanos.
+        let first = &breakdown[0];
+        assert!(first["day"].is_string(), "day missing");
+        assert!(first["hook_nanos"].is_number(), "hook_nanos missing");
+        assert!(first["local_nanos"].is_number(), "local_nanos missing");
     }
 }

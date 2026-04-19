@@ -149,6 +149,7 @@ fn run_inner(opts: &StatuslineOpts) -> anyhow::Result<String> {
             moderate_max: opts.burn_rate_moderate_max,
         },
         visual_burn_rate: opts.visual_burn_rate,
+        cost_source: opts.cost_source,
     };
     let line = render_status_line_with_opts(&stats, &render_opts);
 

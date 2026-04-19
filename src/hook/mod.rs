@@ -81,8 +81,9 @@ fn ingest_event(json: &str) -> Result<()> {
         "INSERT OR IGNORE INTO live_events
             (dedup_key, received_at, session_id, tool_name,
              cost_usd_nanos, input_tokens, output_tokens, raw_json,
-             context_input_tokens, context_window_size)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             context_input_tokens, context_window_size,
+             hook_reported_cost_nanos)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         rusqlite::params![
             event.dedup_key,
             event.received_at,
@@ -94,6 +95,7 @@ fn ingest_event(json: &str) -> Result<()> {
             event.raw_json,
             event.context_input_tokens,
             event.context_window_size,
+            event.hook_reported_cost_nanos,
         ],
     )?;
 
@@ -205,17 +207,18 @@ mod tests {
         unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
 
         let conn = open_db(&db_path).unwrap();
-        let (session_id, tool_name, cost_nanos): (String, String, i64) = conn
-            .query_row(
-                "SELECT session_id, tool_name, cost_usd_nanos FROM live_events LIMIT 1",
+        let (session_id, tool_name, cost_nanos, hook_reported): (String, String, i64, Option<i64>) =
+            conn.query_row(
+                "SELECT session_id, tool_name, cost_usd_nanos, hook_reported_cost_nanos FROM live_events LIMIT 1",
                 [],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .unwrap();
 
         assert_eq!(session_id, "test-session");
         assert_eq!(tool_name, "Read");
         assert_eq!(cost_nanos, 500_000); // 0.0005 USD * 1e9
+        assert_eq!(hook_reported, Some(500_000)); // hook_reported_cost_nanos = 500_000 nanos
     }
 
     /// Phase 5: context_window fields in hook payload are persisted to DB.
@@ -269,6 +272,101 @@ mod tests {
 
         assert_eq!(ctx_tokens, Some(45231));
         assert_eq!(ctx_size, Some(200_000));
+    }
+
+    /// Phase 8: cost-bearing payload persists hook_reported_cost_nanos.
+    #[test]
+    fn ingest_event_persists_hook_reported_cost_nanos() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("hook_cost_test.db");
+
+        {
+            let conn = open_db(&db_path).unwrap();
+            init_db(&conn).unwrap();
+        }
+
+        let cfg_path = dir.path().join("config.toml");
+        std::fs::write(
+            &cfg_path,
+            format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
+        )
+        .unwrap();
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+
+        // Payload with cost object shape
+        let json = r#"{
+            "session_id": "cost-session",
+            "tool_name": "Bash",
+            "tool_use_id": "tu_cost1",
+            "hook_input": {
+                "cost": { "total_cost_usd": 0.14 },
+                "usage": { "input_tokens": 100, "output_tokens": 50 }
+            }
+        }"#;
+
+        ingest_event(json).unwrap();
+
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+
+        let conn = open_db(&db_path).unwrap();
+        let hook_nanos: Option<i64> = conn
+            .query_row(
+                "SELECT hook_reported_cost_nanos FROM live_events LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hook_nanos, Some(140_000_000)); // 0.14 USD * 1e9
+    }
+
+    /// Phase 8: cost-less payload leaves hook_reported_cost_nanos NULL.
+    #[test]
+    fn ingest_event_cost_absent_leaves_hook_column_null() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("hook_null_test.db");
+
+        {
+            let conn = open_db(&db_path).unwrap();
+            init_db(&conn).unwrap();
+        }
+
+        let cfg_path = dir.path().join("config.toml");
+        std::fs::write(
+            &cfg_path,
+            format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
+        )
+        .unwrap();
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+
+        // Payload with NO cost field
+        let json = r#"{
+            "session_id": "no-cost-session",
+            "tool_name": "Read",
+            "tool_use_id": "tu_nocost1",
+            "hook_input": {
+                "usage": { "input_tokens": 100, "output_tokens": 50 }
+            }
+        }"#;
+
+        ingest_event(json).unwrap();
+
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+
+        let conn = open_db(&db_path).unwrap();
+        let hook_nanos: Option<i64> = conn
+            .query_row(
+                "SELECT hook_reported_cost_nanos FROM live_events LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(hook_nanos, None);
     }
 
     #[test]

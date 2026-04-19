@@ -33,6 +33,9 @@ pub struct LiveEvent {
     /// Phase 5: context-window fields (NULL when absent in payload).
     pub context_input_tokens: Option<i64>,
     pub context_window_size: Option<i64>,
+    /// Phase 8: hook-reported cost nanos. Some when cost was present in
+    /// payload, None when absent (so the DB column stays NULL).
+    pub hook_reported_cost_nanos: Option<i64>,
 }
 
 // ── Internal deserialization types ──────────────────────────────────────────
@@ -47,7 +50,8 @@ struct HookPayload {
 
 #[derive(Deserialize, Default)]
 struct HookInput {
-    cost: Option<CostBlock>,
+    #[serde(default, deserialize_with = "deserialize_cost_field")]
+    cost: Option<f64>,
     usage: Option<UsageBlock>,
     context_window: Option<ContextWindowBlock>,
 }
@@ -59,14 +63,31 @@ struct ContextWindowBlock {
 }
 
 #[derive(Deserialize, Default)]
-struct CostBlock {
-    total_cost_usd: Option<f64>,
-}
-
-#[derive(Deserialize, Default)]
 struct UsageBlock {
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
+}
+
+/// Deserialize the `cost` field: accepts either a bare number OR an object
+/// `{ "total_cost_usd": ... }`. Returns `None` when absent or unrecognised.
+fn deserialize_cost_field<'de, D>(deserializer: D) -> std::result::Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let v = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match v {
+        None => Ok(None),
+        Some(serde_json::Value::Number(n)) => Ok(Some(n.as_f64().unwrap_or(0.0))),
+        Some(serde_json::Value::Object(map)) => {
+            let usd = map.get("total_cost_usd").and_then(|v| v.as_f64());
+            match usd {
+                Some(n) => Ok(Some(n)),
+                None => Ok(None),
+            }
+        }
+        _ => Ok(None),
+    }
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -78,13 +99,16 @@ struct UsageBlock {
 pub fn parse_hook_payload(json: &str, received_at: &str) -> Option<LiveEvent> {
     let payload: HookPayload = serde_json::from_str(json).ok()?;
 
-    let cost_usd_nanos = payload
+    // hook_input.cost is now Option<f64> (already decoded from bare number OR object)
+    let hook_cost_usd: Option<f64> = payload
         .hook_input
         .as_ref()
-        .and_then(|hi| hi.cost.as_ref())
-        .and_then(|c| c.total_cost_usd)
-        .map(usd_to_nanos)
-        .unwrap_or(0);
+        .and_then(|hi| hi.cost);
+
+    let cost_usd_nanos = hook_cost_usd.map(usd_to_nanos).unwrap_or(0);
+
+    // Phase 8: persist the raw hook cost separately (None = column stays NULL).
+    let hook_reported_cost_nanos = hook_cost_usd.map(usd_to_nanos);
 
     let input_tokens = payload
         .hook_input
@@ -129,6 +153,7 @@ pub fn parse_hook_payload(json: &str, received_at: &str) -> Option<LiveEvent> {
         raw_json: json.to_string(),
         context_input_tokens,
         context_window_size,
+        hook_reported_cost_nanos,
     })
 }
 
@@ -262,5 +287,55 @@ mod tests {
         let event = parse_hook_payload(json, "ts").expect("should parse");
         assert!(event.context_input_tokens.is_none());
         assert!(event.context_window_size.is_none());
+    }
+
+    // ── Phase 8: hook_reported_cost_nanos tests ──────────────────────────────
+
+    /// Cost object shape → hook_reported_cost_nanos is Some.
+    #[test]
+    fn parse_cost_object_gives_hook_reported_cost_nanos() {
+        let json = r#"{
+            "session_id": "s1",
+            "tool_use_id": "tu1",
+            "hook_input": { "cost": { "total_cost_usd": 0.14 } }
+        }"#;
+        let event = parse_hook_payload(json, "ts").expect("should parse");
+        assert_eq!(event.hook_reported_cost_nanos, Some(140_000_000));
+        assert_eq!(event.cost_usd_nanos, 140_000_000);
+    }
+
+    /// Bare-number cost shape → hook_reported_cost_nanos is Some.
+    #[test]
+    fn parse_bare_number_cost_gives_hook_reported_cost_nanos() {
+        let json = r#"{
+            "session_id": "s1",
+            "tool_use_id": "tu2",
+            "hook_input": { "cost": 0.05 }
+        }"#;
+        let event = parse_hook_payload(json, "ts").expect("should parse");
+        assert_eq!(event.hook_reported_cost_nanos, Some(50_000_000));
+        assert_eq!(event.cost_usd_nanos, 50_000_000);
+    }
+
+    /// `{ "total_cost_usd": null }` → hook_reported_cost_nanos is None (not Some(0)).
+    #[test]
+    fn parse_cost_object_with_null_total_cost_usd_gives_none() {
+        let json = r#"{
+            "session_id": "s1",
+            "tool_use_id": "tu_null",
+            "hook_input": { "cost": { "total_cost_usd": null } }
+        }"#;
+        let event = parse_hook_payload(json, "ts").expect("should parse");
+        assert_eq!(event.hook_reported_cost_nanos, None);
+        assert_eq!(event.cost_usd_nanos, 0);
+    }
+
+    /// No cost field → hook_reported_cost_nanos is None.
+    #[test]
+    fn parse_absent_cost_gives_hook_reported_cost_nanos_none() {
+        let json = r#"{"session_id": "s1", "tool_use_id": "tu3", "hook_input": {}}"#;
+        let event = parse_hook_payload(json, "ts").expect("should parse");
+        assert_eq!(event.hook_reported_cost_nanos, None);
+        assert_eq!(event.cost_usd_nanos, 0);
     }
 }
