@@ -10,12 +10,10 @@ import type { Totals, StatCard, DailyAgg, CacheEfficiency, BillingBlocksResponse
 interface StatsCardsProps {
   totals: Totals;
   daily?: DailyAgg[] | undefined;
-  /** Active-period average: days with non-zero spend. From /api/heatmap. */
+  /** Active-period average: days with non-zero spend in the current filter. */
   activeDays?: number | undefined;
-  /** Total cost nanos for the heatmap period (matches activeDays). */
-  heatmapTotalNanos?: number | undefined;
-  /** Total calendar days in the heatmap period (for tooltip). */
-  calendarDays?: number | undefined;
+  /** Total cost nanos across the active-day calculation input. */
+  activeDayTotalCostNanos?: number | undefined;
   /** Phase 21: cache-efficiency aggregate from /api/data. */
   cacheEfficiency?: CacheEfficiency | undefined;
   /** Phase 2: billing blocks data from /api/billing-blocks. */
@@ -24,7 +22,15 @@ interface StatsCardsProps {
   contextWindow?: ContextWindowResponse | null;
 }
 
-export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency, billingBlocks, contextWindow }: StatsCardsProps) {
+export function StatsCards({
+  totals,
+  daily,
+  activeDays,
+  activeDayTotalCostNanos,
+  cacheEfficiency,
+  billingBlocks,
+  contextWindow,
+}: StatsCardsProps) {
   const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
 
   // Active-period average: divide total by active days.
@@ -32,7 +38,7 @@ export function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cache
   const avgPerActiveDay: string = (() => {
     if (activeDays === undefined || activeDays === null) return '--';
     if (activeDays === 0) return '--';
-    const totalUsd = (heatmapTotalNanos ?? 0) / 1_000_000_000;
+    const totalUsd = (activeDayTotalCostNanos ?? 0) / 1_000_000_000;
     return fmtCost(totalUsd / activeDays);
   })();
 

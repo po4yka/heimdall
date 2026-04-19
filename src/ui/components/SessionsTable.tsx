@@ -138,7 +138,8 @@ function useSessionColumns(showCredits: boolean): ColumnDef<SessionRow, any>[] {
         accessorKey: 'cache_hit_ratio',
         header: 'Cache %',
         cell: (info: any) => {
-          const v = info.getValue() as number;
+          const v = info.getValue() as number | null | undefined;
+          if (v == null || !Number.isFinite(v)) return <span class="num">--</span>;
           return <span class="num">{(v * 100).toFixed(0)}%</span>;
         },
       },

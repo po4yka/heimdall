@@ -1506,6 +1506,9 @@
     if (n3 == null) return "\u2014";
     return n3.toFixed(2);
   }
+  function esc(s4) {
+    return s4.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
 
   // src/ui/components/SegmentedProgressBar.tsx
   function resolveStatus(pct, status) {
@@ -2024,20 +2027,6 @@
   function ApexChart({ options, id }) {
     const ref = A2(null);
     const chartRef = A2(null);
-    const themeMode2 = options.theme?.mode ?? "";
-    const optionsKey = T2(() => {
-      const s4 = options.series;
-      const type = options.chart?.type ?? "";
-      if (Array.isArray(s4)) {
-        const parts = s4.map((ss) => {
-          const d5 = ss.data;
-          if (!d5 || !d5.length) return "0";
-          return `${d5.length}:${d5[0]}:${d5[d5.length - 1]}`;
-        });
-        return `${type}-${themeMode2}-${parts.join(",")}`;
-      }
-      return `${type}-${themeMode2}-${s4?.length ?? 0}`;
-    }, [options, themeMode2]);
     y2(() => {
       if (chartRef.current) chartRef.current.destroy();
       if (!ref.current || !options) {
@@ -2062,7 +2051,7 @@
         chartRef.current?.destroy();
         chartRef.current = null;
       };
-    }, [optionsKey]);
+    }, [id, options]);
     return /* @__PURE__ */ u2("div", { ref, id, style: { width: "100%", height: "100%" } });
   }
 
@@ -2432,12 +2421,20 @@
   }
 
   // src/ui/components/StatsCards.tsx
-  function StatsCards({ totals, daily, activeDays, heatmapTotalNanos, cacheEfficiency, billingBlocks, contextWindow }) {
+  function StatsCards({
+    totals,
+    daily,
+    activeDays,
+    activeDayTotalCostNanos,
+    cacheEfficiency,
+    billingBlocks,
+    contextWindow
+  }) {
     const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
     const avgPerActiveDay = (() => {
       if (activeDays === void 0 || activeDays === null) return "--";
       if (activeDays === 0) return "--";
-      const totalUsd = (heatmapTotalNanos ?? 0) / 1e9;
+      const totalUsd = (activeDayTotalCostNanos ?? 0) / 1e9;
       return fmtCost(totalUsd / activeDays);
     })();
     const activeDayTooltip = activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `Averaged over ${activeDays} day${activeDays === 1 ? "" : "s"} with non-zero spend` : "No spend in selected period";
@@ -5848,7 +5845,7 @@
         custom: ({ seriesIndex }) => {
           const r4 = normalized[seriesIndex];
           if (!r4) return "";
-          const label = r4.version;
+          const label = esc(r4.version);
           const cost = fmtCost(r4.cost);
           const calls = fmt(r4.turns);
           const tokens = fmt(r4.tokens);
@@ -6184,6 +6181,7 @@
           header: "Cache %",
           cell: (info) => {
             const v4 = info.getValue();
+            if (v4 == null || !Number.isFinite(v4)) return /* @__PURE__ */ u2("span", { class: "num", children: "--" });
             return /* @__PURE__ */ u2("span", { class: "num", children: [
               (v4 * 100).toFixed(0),
               "%"
@@ -6557,7 +6555,7 @@
           const total = w5.input + w5.output + w5.cache_read + w5.cache_creation;
           const costUsd = w5.cost_nanos / 1e9;
           const costStr = costUsd < 1e-4 ? "<$0.0001" : "$" + costUsd.toFixed(4);
-          return '<div style="padding:8px 12px;font-family:var(--font-mono);font-size:12px;background:var(--color-bg-secondary);border:1px solid var(--color-border)"><div style="margin-bottom:4px;font-weight:600">' + w5.week + "</div><div>Input: " + fmt(w5.input) + "</div><div>Output: " + fmt(w5.output) + "</div><div>Cached Input: " + fmt(w5.cache_read) + "</div><div>Cache Creation: " + fmt(w5.cache_creation) + '</div><div style="margin-top:4px;border-top:1px solid var(--color-border);padding-top:4px">Total: ' + fmt(total) + " tokens</div><div>Cost: " + costStr + "</div></div>";
+          return '<div style="padding:8px 12px;font-family:var(--font-mono);font-size:12px;background:var(--color-bg-secondary);border:1px solid var(--color-border)"><div style="margin-bottom:4px;font-weight:600">' + esc(w5.week) + "</div><div>Input: " + fmt(w5.input) + "</div><div>Output: " + fmt(w5.output) + "</div><div>Cached Input: " + fmt(w5.cache_read) + "</div><div>Cache Creation: " + fmt(w5.cache_creation) + '</div><div style="margin-top:4px;border-top:1px solid var(--color-border);padding-top:4px">Total: ' + fmt(total) + " tokens</div><div>Cost: " + costStr + "</div></div>";
         }
       }
     };
@@ -6834,19 +6832,24 @@
   var loadDataInFlight = false;
   var loadUsageWindowsInFlight = false;
   var loadHeatmapInFlight = false;
-  var lastHeatmapData = null;
   var loadAgentStatusInFlight = false;
   var loadCommunitySignalInFlight = false;
   var lastCommunitySignal = null;
   var loadBillingBlocksInFlight = false;
   var loadContextWindowInFlight = false;
   var loadCostReconciliationInFlight = false;
+  function formatLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
   function getRangeCutoff(range) {
     if (range === "all") return null;
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
     const d5 = /* @__PURE__ */ new Date();
     d5.setDate(d5.getDate() - days);
-    return d5.toISOString().slice(0, 10);
+    return formatLocalDate(d5);
   }
   function readURLRange() {
     const p5 = new URLSearchParams(window.location.search).get("range");
@@ -6898,7 +6901,7 @@
     const jan1 = new Date(Date.UTC(year, 0, 1));
     if (week === 0) return jan1;
     const jan1Dow = jan1.getUTCDay();
-    const daysToFirstMon = (8 - jan1Dow) % 7 || 7;
+    const daysToFirstMon = (8 - jan1Dow) % 7;
     const firstMondayUtc = new Date(Date.UTC(year, 0, 1 + daysToFirstMon));
     return new Date(firstMondayUtc.getTime() + (week - 1) * 7 * 86400 * 1e3);
   }
@@ -6908,6 +6911,7 @@
     const cutoff = getRangeCutoff(range);
     const weekMap = {};
     for (const r4 of rows) {
+      if (!selectedModels.value.has(r4.model)) continue;
       if (cutoff) {
         const weekStart = weekLabelToWeekStart(r4.week);
         if (isNaN(weekStart.getTime())) continue;
@@ -6941,13 +6945,15 @@
         output: 0,
         cache_read: 0,
         cache_creation: 0,
-        reasoning_output: 0
+        reasoning_output: 0,
+        cost: 0
       });
       d5.input += r4.input;
       d5.output += r4.output;
       d5.cache_read += r4.cache_read;
       d5.cache_creation += r4.cache_creation;
       d5.reasoning_output += r4.reasoning_output;
+      d5.cost += r4.cost;
     }
     const daily = Object.values(dailyMap).sort((a4, b4) => a4.day.localeCompare(b4.day));
     const modelMap = {};
@@ -7107,6 +7113,10 @@
     const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } = buildAggregations(filteredDaily, filteredSessions);
     const providerLabel = selectedProvider.value === "both" ? "" : ` (${selectedProvider.value})`;
     const bucketIsWeek = selectedBucket.value === "week";
+    const activeDays = daily.filter((day) => day.cost > 0).length;
+    const activeDayCostNanos = Math.round(
+      daily.reduce((sum2, day) => sum2 + day.cost, 0) * 1e9
+    );
     const chartTitleEl = $2("daily-chart-title");
     if (chartTitleEl) {
       chartTitleEl.textContent = (bucketIsWeek ? "Weekly Token Usage - " : "Daily Token Usage - ") + RANGE_LABELS[selectedRange.value] + providerLabel;
@@ -7117,8 +7127,8 @@
         {
           totals,
           daily,
-          activeDays: lastHeatmapData?.active_days,
-          heatmapTotalNanos: lastHeatmapData?.total_cost_nanos,
+          activeDays,
+          activeDayTotalCostNanos: activeDayCostNanos,
           cacheEfficiency: rawData.value?.cache_efficiency,
           billingBlocks: billingBlocksData.value,
           contextWindow: contextWindowData.value
@@ -7326,7 +7336,6 @@
     R(/* @__PURE__ */ u2(HourlyChart, { data }), container);
   }
   function renderActivityHeatmap(data) {
-    lastHeatmapData = data;
     const container = $2("activity-heatmap");
     if (!container) return;
     if (!data) {
@@ -7336,7 +7345,6 @@
     }
     container.style.display = "";
     R(/* @__PURE__ */ u2(ActivityHeatmap, { data }), container);
-    if (rawData.value) applyFilter();
   }
   async function loadUsageWindows() {
     if (loadUsageWindowsInFlight) return;

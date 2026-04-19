@@ -93,7 +93,6 @@ let previousSessionPercent: number | null = null;
 let loadDataInFlight = false;
 let loadUsageWindowsInFlight = false;
 let loadHeatmapInFlight = false;
-let lastHeatmapData: HeatmapData | null = null;
 let loadAgentStatusInFlight = false;
 let loadCommunitySignalInFlight = false;
 let lastCommunitySignal: CommunitySignal | null = null;
@@ -102,12 +101,19 @@ let loadContextWindowInFlight = false;
 let loadCostReconciliationInFlight = false;
 
 // ── URL persistence ──────────────────────────────────────────────────
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function getRangeCutoff(range: RangeKey): string | null {
   if (range === 'all') return null;
   const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
 }
 
 function readURLRange(): RangeKey {
@@ -178,7 +184,7 @@ function weekLabelToWeekStart(label: string): Date {
   const jan1 = new Date(Date.UTC(year, 0, 1));
   if (week === 0) return jan1;
   const jan1Dow = jan1.getUTCDay();              // 0=Sun..6=Sat
-  const daysToFirstMon = (8 - jan1Dow) % 7 || 7; // 1..7
+  const daysToFirstMon = (8 - jan1Dow) % 7;      // 0..6
   const firstMondayUtc = new Date(Date.UTC(year, 0, 1 + daysToFirstMon));
   return new Date(firstMondayUtc.getTime() + (week - 1) * 7 * 86400 * 1000);
 }
@@ -191,6 +197,11 @@ function buildWeeklyAgg(range: RangeKey): WeeklyAgg[] {
 
   const weekMap: Record<string, WeeklyAgg> = {};
   for (const r of rows) {
+    // Apply the model filter so the weekly chart stays consistent with
+    // the rest of the dashboard when the user narrows to a single model.
+    // (Provider cannot be filtered here — weekly_by_model is aggregated
+    // across providers on the server.)
+    if (!selectedModels.value.has(r.model)) continue;
     if (cutoff) {
       const weekStart = weekLabelToWeekStart(r.week);
       if (isNaN(weekStart.getTime())) continue;
@@ -227,12 +238,14 @@ function buildAggregations(filteredDaily: DailyModelRow[], filteredSessions: typ
       cache_read: 0,
       cache_creation: 0,
       reasoning_output: 0,
+      cost: 0,
     });
     d.input += r.input;
     d.output += r.output;
     d.cache_read += r.cache_read;
     d.cache_creation += r.cache_creation;
     d.reasoning_output += r.reasoning_output;
+    d.cost += r.cost;
   }
   const daily = Object.values(dailyMap).sort((a, b) => a.day.localeCompare(b.day));
 
@@ -414,6 +427,10 @@ function applyFilter(): void {
 
   const providerLabel = selectedProvider.value === 'both' ? '' : ` (${selectedProvider.value})`;
   const bucketIsWeek = selectedBucket.value === 'week';
+  const activeDays = daily.filter(day => day.cost > 0).length;
+  const activeDayCostNanos = Math.round(
+    daily.reduce((sum, day) => sum + day.cost, 0) * 1_000_000_000
+  );
   const chartTitleEl = $('daily-chart-title');
   if (chartTitleEl) {
     chartTitleEl.textContent = (bucketIsWeek ? 'Weekly Token Usage - ' : 'Daily Token Usage - ') +
@@ -424,8 +441,8 @@ function applyFilter(): void {
     <StatsCards
       totals={totals}
       daily={daily}
-      activeDays={lastHeatmapData?.active_days}
-      heatmapTotalNanos={lastHeatmapData?.total_cost_nanos}
+      activeDays={activeDays}
+      activeDayTotalCostNanos={activeDayCostNanos}
       cacheEfficiency={rawData.value?.cache_efficiency}
       billingBlocks={billingBlocksData.value}
       contextWindow={contextWindowData.value}
@@ -664,7 +681,6 @@ function renderHourlyChart(data: HourlyRow[]): void {
 }
 
 function renderActivityHeatmap(data: HeatmapData | null): void {
-  lastHeatmapData = data;
   const container = $('activity-heatmap');
   if (!container) return;
   if (!data) {
@@ -674,8 +690,6 @@ function renderActivityHeatmap(data: HeatmapData | null): void {
   }
   container.style.display = '';
   render(<ActivityHeatmap data={data} />, container);
-  // Re-render StatsCards so the active-period avg reflects fresh heatmap data.
-  if (rawData.value) applyFilter();
 }
 
 async function loadUsageWindows(): Promise<void> {

@@ -1,6 +1,6 @@
 import { ApexChart } from './ApexChart';
 import { industrialChartOptions, modelSeriesColors, cssVar } from '../lib/charts';
-import { fmt, fmtCost } from '../lib/format';
+import { esc, fmt, fmtCost } from '../lib/format';
 import type { VersionSummary } from '../state/types';
 import type { VersionMetric } from '../state/store';
 
@@ -89,7 +89,7 @@ export function VersionDonut({ rows, metric, onMetricChange }: VersionDonutProps
       custom: ({ seriesIndex }: { seriesIndex: number }) => {
         const r = normalized[seriesIndex];
         if (!r) return '';
-        const label = r.version;
+        const label = esc(r.version);
         const cost = fmtCost(r.cost);
         const calls = fmt(r.turns);
         const tokens = fmt(r.tokens);

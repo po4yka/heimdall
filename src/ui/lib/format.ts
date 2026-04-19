@@ -40,3 +40,16 @@ export function fmtCredits(n: number | null | undefined): string {
   if (n == null) return '\u2014';
   return n.toFixed(2);
 }
+
+/** HTML-escape a dynamic string before inserting into an innerHTML-style
+ *  string. Use for every server-supplied value that lands inside a
+ *  string-concatenated HTML fragment (e.g. ApexCharts `custom` tooltip
+ *  builders). Covers the five XML predefined entities. */
+export function esc(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}

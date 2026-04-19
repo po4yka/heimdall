@@ -1,6 +1,6 @@
 import { ApexChart } from './ApexChart';
 import { industrialChartOptions, tokenSeriesColors } from '../lib/charts';
-import { fmt } from '../lib/format';
+import { fmt, esc } from '../lib/format';
 import type { WeeklyAgg } from '../state/types';
 
 export function WeeklyChart({ weekly }: { weekly: WeeklyAgg[] }) {
@@ -46,7 +46,7 @@ export function WeeklyChart({ weekly }: { weekly: WeeklyAgg[] }) {
         const costStr = costUsd < 0.0001 ? '<$0.0001' : '$' + costUsd.toFixed(4);
         return (
           '<div style="padding:8px 12px;font-family:var(--font-mono);font-size:12px;background:var(--color-bg-secondary);border:1px solid var(--color-border)">' +
-          '<div style="margin-bottom:4px;font-weight:600">' + w.week + '</div>' +
+          '<div style="margin-bottom:4px;font-weight:600">' + esc(w.week) + '</div>' +
           '<div>Input: ' + fmt(w.input) + '</div>' +
           '<div>Output: ' + fmt(w.output) + '</div>' +
           '<div>Cached Input: ' + fmt(w.cache_read) + '</div>' +

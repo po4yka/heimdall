@@ -236,6 +236,7 @@ export interface DailyAgg {
   cache_read: number;
   cache_creation: number;
   reasoning_output: number;
+  cost: number;
 }
 
 export interface ModelAgg {
