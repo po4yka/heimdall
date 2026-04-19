@@ -1,15 +1,13 @@
 import { ApexChart } from './ApexChart';
-import { industrialChartOptions, modelSeriesColors, cssVar } from '../lib/charts';
-import { fmt } from '../lib/format';
+import { industrialChartOptions, cssVar, withAlpha } from '../lib/charts';
+import { fmt, truncateMid } from '../lib/format';
 import type { ModelAgg } from '../state/types';
 
 export function ModelChart({ byModel }: { byModel: ModelAgg[] }) {
   if (!byModel.length) return null;
 
   // Collapse the long tail into an "Other" slice so the legend stays short
-  // enough to leave room for the donut in a 240px-tall chart card. Without
-  // this, 10+ models crowd the bottom legend and squeeze the donut to
-  // ~60x95px.
+  // enough to leave room for the donut in a 240px-tall chart card.
   const sorted = [...byModel].sort((a, b) => (b.input + b.output) - (a.input + a.output));
   const TOP_N = 4;
   const top = sorted.slice(0, TOP_N);
@@ -24,14 +22,40 @@ export function ModelChart({ byModel }: { byModel: ModelAgg[] }) {
     }
   }
 
+  // Token-opacity ladder keeps the donut monochrome (industrial canvas
+  // rule) while giving every slice a distinguishable grey. The previous
+  // categorical palette collapsed to near-pure-black when one model
+  // dominated ~80% of tokens because slice #0 used --text-display raw.
+  const OPACITY_LADDER = [1.0, 0.55, 0.4, 0.28, 0.18];
+  const sliceColors = labels.map((_, i) =>
+    withAlpha('--text-display', OPACITY_LADDER[Math.min(i, OPACITY_LADDER.length - 1)] ?? 0.18),
+  );
+
   const base = industrialChartOptions('donut');
   const options = {
     ...base,
     chart: { ...base.chart, type: 'donut' },
     series,
     labels,
-    colors: modelSeriesColors(labels.length),
+    colors: sliceColors,
     stroke: { width: 2, colors: [cssVar('--surface')] },
+    // Filter-based hover cue preserves the donut's colour palette. Without
+    // this, ApexCharts swaps the total label's colour to the hovered slice
+    // (see apexcharts/apexcharts.js#3264).
+    states: { hover: { filter: { type: 'lighten', value: 0.12 } } },
+    legend: {
+      ...base.legend,
+      itemMargin: { horizontal: 10, vertical: 2 },
+      onItemHover: { highlightDataSeries: false },
+      formatter: (label: string) => truncateMid(label, 18, 6),
+    },
+    // Anchor the tooltip to the bottom-right of the plot so it never
+    // covers the card's "BY MODEL" title on hover.
+    tooltip: {
+      ...base.tooltip,
+      fixed: { enabled: true, position: 'bottomRight', offsetX: 0, offsetY: 0 },
+      y: { formatter: (v: number) => fmt(v) + ' tokens' },
+    },
     plotOptions: {
       pie: {
         donut: {
@@ -40,6 +64,8 @@ export function ModelChart({ byModel }: { byModel: ModelAgg[] }) {
             show: true,
             total: {
               show: true,
+              // Keep the resting TOTAL visible while a slice is hovered.
+              showAlways: true,
               label: 'TOTAL',
               fontFamily: 'var(--font-mono), "Space Mono", monospace',
               fontSize: '11px',
@@ -56,13 +82,12 @@ export function ModelChart({ byModel }: { byModel: ModelAgg[] }) {
             name: {
               fontFamily: 'var(--font-mono), "Space Mono", monospace',
               fontSize: '11px',
-              color: cssVar('--text-secondary'),
+              color: cssVar('--text-display'),
             },
           },
         },
       },
     },
-    tooltip: { ...base.tooltip, y: { formatter: (v: number) => fmt(v) + ' tokens' } },
   };
 
   return <ApexChart options={options} id="chart-model" />;
