@@ -308,14 +308,18 @@ function buildAggregations(filteredDaily: DailyModelRow[], filteredSessions: typ
   }
   const byProject = Object.values(projMap).sort((a, b) => (b.input + b.output) - (a.input + a.output));
 
+  // Derive totals from filteredSessions so the stat cards stay consistent
+  // with the project filter. daily_by_model has no project dimension, so
+  // summing byModel would leak tokens from other projects when a user
+  // narrows the dashboard to a single project.
   const totals: Totals = {
     sessions: filteredSessions.length,
-    turns: byModel.reduce((s, m) => s + m.turns, 0),
-    input: byModel.reduce((s, m) => s + m.input, 0),
-    output: byModel.reduce((s, m) => s + m.output, 0),
-    cache_read: byModel.reduce((s, m) => s + m.cache_read, 0),
-    cache_creation: byModel.reduce((s, m) => s + m.cache_creation, 0),
-    reasoning_output: byModel.reduce((s, m) => s + m.reasoning_output, 0),
+    turns: filteredSessions.reduce((s, sess) => s + sess.turns, 0),
+    input: filteredSessions.reduce((s, sess) => s + sess.input, 0),
+    output: filteredSessions.reduce((s, sess) => s + sess.output, 0),
+    cache_read: filteredSessions.reduce((s, sess) => s + sess.cache_read, 0),
+    cache_creation: filteredSessions.reduce((s, sess) => s + sess.cache_creation, 0),
+    reasoning_output: filteredSessions.reduce((s, sess) => s + sess.reasoning_output, 0),
     cost: filteredSessions.reduce((s, sess) => s + sess.cost, 0),
   };
 

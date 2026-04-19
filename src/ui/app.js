@@ -7020,12 +7020,12 @@
     const byProject = Object.values(projMap).sort((a4, b4) => b4.input + b4.output - (a4.input + a4.output));
     const totals = {
       sessions: filteredSessions.length,
-      turns: byModel.reduce((s4, m4) => s4 + m4.turns, 0),
-      input: byModel.reduce((s4, m4) => s4 + m4.input, 0),
-      output: byModel.reduce((s4, m4) => s4 + m4.output, 0),
-      cache_read: byModel.reduce((s4, m4) => s4 + m4.cache_read, 0),
-      cache_creation: byModel.reduce((s4, m4) => s4 + m4.cache_creation, 0),
-      reasoning_output: byModel.reduce((s4, m4) => s4 + m4.reasoning_output, 0),
+      turns: filteredSessions.reduce((s4, sess) => s4 + sess.turns, 0),
+      input: filteredSessions.reduce((s4, sess) => s4 + sess.input, 0),
+      output: filteredSessions.reduce((s4, sess) => s4 + sess.output, 0),
+      cache_read: filteredSessions.reduce((s4, sess) => s4 + sess.cache_read, 0),
+      cache_creation: filteredSessions.reduce((s4, sess) => s4 + sess.cache_creation, 0),
+      reasoning_output: filteredSessions.reduce((s4, sess) => s4 + sess.reasoning_output, 0),
       cost: filteredSessions.reduce((s4, sess) => s4 + sess.cost, 0)
     };
     const confidenceBreakdown = Object.entries(
