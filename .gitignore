@@ -4,5 +4,8 @@
 *.db-wal
 *.db-shm
 node_modules/
+.desloppify/
+.agents/skills/desloppify/
+scorecard.png
 .omc/
 .claude/scheduled_tasks.lock

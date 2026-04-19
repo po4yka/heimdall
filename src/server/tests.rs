@@ -770,14 +770,16 @@ mod tests {
             crate::scanner::db::init_db(&conn).unwrap();
             let run_id = crate::scanner::db::insert_claude_usage_run(
                 &conn,
-                "success",
-                Some(0),
-                "stdout",
-                "",
-                "print_slash_command",
-                "today",
-                "v1",
-                None,
+                &crate::scanner::db::ClaudeUsageRunInsert {
+                    status: "success",
+                    exit_code: Some(0),
+                    stdout_raw: "stdout",
+                    stderr_raw: "",
+                    invocation_mode: "print_slash_command",
+                    period: "today",
+                    parser_version: "v1",
+                    error_summary: None,
+                },
             )
             .unwrap();
             crate::scanner::db::insert_claude_usage_factors(
@@ -2000,8 +2002,8 @@ mod tests {
 
         let mut agg_cfg = AggregatorConfig::default();
         agg_cfg.enabled = true;
-        // api_key_env points at a var that is definitely not set in CI.
-        agg_cfg.api_key_env = "HEIMDALL_TEST_NONEXISTENT_SG_KEY".into();
+        // key_env_var points at a var that is definitely not set in CI.
+        agg_cfg.key_env_var = "HEIMDALL_TEST_NONEXISTENT_SG_KEY".into();
 
         let state = Arc::new(crate::server::api::AppState {
             db_path,

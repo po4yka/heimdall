@@ -143,7 +143,7 @@ fn run_inner_with_input(
 
     // 4. Compute stats.
     let db_path = resolve_db_path(opts.db_path.as_deref());
-    let stats = compute(&db_path, &input, opts.cost_source)?;
+    let stats = compute(&db_path, input, opts.cost_source)?;
 
     // 5. Render.
     let render_opts = crate::statusline::render::RenderOpts {

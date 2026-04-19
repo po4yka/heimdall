@@ -2032,17 +2032,18 @@ pub fn get_rate_window_history(
     Ok(rows)
 }
 
-pub fn insert_claude_usage_run(
-    conn: &Connection,
-    status: &str,
-    exit_code: Option<i32>,
-    stdout_raw: &str,
-    stderr_raw: &str,
-    invocation_mode: &str,
-    period: &str,
-    parser_version: &str,
-    error_summary: Option<&str>,
-) -> Result<i64> {
+pub struct ClaudeUsageRunInsert<'a> {
+    pub status: &'a str,
+    pub exit_code: Option<i32>,
+    pub stdout_raw: &'a str,
+    pub stderr_raw: &'a str,
+    pub invocation_mode: &'a str,
+    pub period: &'a str,
+    pub parser_version: &'a str,
+    pub error_summary: Option<&'a str>,
+}
+
+pub fn insert_claude_usage_run(conn: &Connection, run: &ClaudeUsageRunInsert<'_>) -> Result<i64> {
     let captured_at = chrono::Utc::now().to_rfc3339();
     conn.execute(
         "INSERT INTO claude_usage_runs
@@ -2050,14 +2051,14 @@ pub fn insert_claude_usage_run(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE(?9, ''))",
         rusqlite::params![
             captured_at,
-            status,
-            exit_code,
-            stdout_raw,
-            stderr_raw,
-            invocation_mode,
-            period,
-            parser_version,
-            error_summary,
+            run.status,
+            run.exit_code,
+            run.stdout_raw,
+            run.stderr_raw,
+            run.invocation_mode,
+            run.period,
+            run.parser_version,
+            run.error_summary,
         ],
     )?;
     Ok(conn.last_insert_rowid())
@@ -3226,14 +3227,16 @@ mod tests {
         let conn = test_conn();
         let run_id = insert_claude_usage_run(
             &conn,
-            "success",
-            Some(0),
-            "stdout",
-            "",
-            "print_slash_command",
-            "today",
-            "v1",
-            None,
+            &ClaudeUsageRunInsert {
+                status: "success",
+                exit_code: Some(0),
+                stdout_raw: "stdout",
+                stderr_raw: "",
+                invocation_mode: "print_slash_command",
+                period: "today",
+                parser_version: "v1",
+                error_summary: None,
+            },
         )
         .unwrap();
         insert_claude_usage_factors(
@@ -3265,14 +3268,16 @@ mod tests {
 
         insert_claude_usage_run(
             &conn,
-            "failed",
-            Some(1),
-            "/usage isn't available in this environment.",
-            "",
-            "print_slash_command",
-            "today",
-            "v1",
-            Some("/usage isn't available in this environment."),
+            &ClaudeUsageRunInsert {
+                status: "failed",
+                exit_code: Some(1),
+                stdout_raw: "/usage isn't available in this environment.",
+                stderr_raw: "",
+                invocation_mode: "print_slash_command",
+                period: "today",
+                parser_version: "v1",
+                error_summary: Some("/usage isn't available in this environment."),
+            },
         )
         .unwrap();
 

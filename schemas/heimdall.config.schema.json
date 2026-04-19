@@ -133,7 +133,7 @@
       "description": "Optional community-signal aggregator (opt-in, off by default).",
       "$ref": "#/$defs/AggregatorConfig",
       "default": {
-        "api_key_env": "STATUSGATOR_API_KEY",
+        "key_env_var": "STATUSGATOR_API_KEY",
         "claude_services": [
           "claude-ai",
           "claude"
@@ -208,7 +208,7 @@
       "description": "Configuration for the optional community-signal aggregator (opt-in feature).\n\nTOML section: `[status_aggregator]`\nFeature is **off by default** (`enabled = false`).",
       "type": "object",
       "properties": {
-        "api_key_env": {
+        "key_env_var": {
           "description": "Environment variable that holds the API key (key never stored in TOML).",
           "type": "string",
           "default": "STATUSGATOR_API_KEY"

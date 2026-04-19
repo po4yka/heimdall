@@ -109,7 +109,8 @@ fn resolve_db_path() -> PathBuf {
 }
 
 /// Read all of stdin with a hard timeout.
-/// Returns `None` on timeout or read error; `Some(String)` on success.
+/// Returns `None` on timeout, read error, or empty stdin; `Some(String)` on
+/// non-empty successful reads.
 fn read_stdin_with_timeout(timeout: Duration) -> Option<String> {
     let (tx, rx) = mpsc::channel::<String>();
 

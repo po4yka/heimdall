@@ -125,14 +125,14 @@ pub fn from_transcript(path: &Path) -> Result<ContextWindow> {
     })
 }
 
-/// Combined resolver: prefer hook data, fall back to transcript, return `None`
-/// if neither yields data.
-pub fn resolve(input: &HookInput) -> Option<ContextWindow> {
+/// Combined resolver: prefer hook data, fall back to transcript, and preserve
+/// transcript failures for callers that want to surface them.
+pub fn resolve(input: &HookInput) -> Result<Option<ContextWindow>> {
     if let Some(cw) = from_hook(input) {
-        return Some(cw);
+        return Ok(Some(cw));
     }
     let path = Path::new(&input.transcript_path);
-    from_transcript(path).ok()
+    from_transcript(path).map(Some)
 }
 
 // ── Model size table ──────────────────────────────────────────────────────────
@@ -293,6 +293,40 @@ mod tests {
         writeln!(f, "{}", assistant_line(2000, 0, 0, "claude-sonnet-4-6")).unwrap();
         let cw = from_transcript(f.path()).expect("should fall through to valid line");
         assert_eq!(cw.total_input_tokens, 2000);
+    }
+
+    #[test]
+    fn resolve_prefers_hook_without_touching_transcript() {
+        let input = HookInput {
+            session_id: "s1".to_string(),
+            transcript_path: "/nonexistent/path/transcript.jsonl".to_string(),
+            model: Some("claude-sonnet-4-6".to_string()),
+            cost: None,
+            context_window: Some(HookCW {
+                total_input_tokens: Some(500),
+                context_window_size: Some(200_000),
+            }),
+        };
+        let cw = resolve(&input).expect("hook path should not fail");
+        assert_eq!(
+            cw,
+            Some(ContextWindow {
+                total_input_tokens: 500,
+                context_window_size: 200_000,
+            })
+        );
+    }
+
+    #[test]
+    fn resolve_returns_transcript_error() {
+        let input = HookInput {
+            session_id: "s1".to_string(),
+            transcript_path: "/nonexistent/path/transcript.jsonl".to_string(),
+            model: Some("claude-sonnet-4-6".to_string()),
+            cost: None,
+            context_window: None,
+        };
+        assert!(resolve(&input).is_err());
     }
 
     // ── context_size_for_model ────────────────────────────────────────────────

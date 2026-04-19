@@ -240,49 +240,13 @@ pub fn builtin_catalog() -> HashMap<String, ModelPricing> {
         .collect()
 }
 
-/// Look up pricing for a model.
-/// Checks config overrides first, then built-in table (exact, prefix, substring fallback).
+/// Look up pricing for a model across overrides, built-ins, heuristic
+/// fallbacks, and the LiteLLM cache.
 #[allow(dead_code)]
 pub fn get_pricing(model: &str) -> Option<&ModelPricing> {
-    if model.is_empty() {
-        return None;
+    match lookup_pricing(model)? {
+        PricingLookup::Borrowed { pricing, .. } => Some(pricing),
     }
-    if let Some(p) = get_override(model) {
-        return Some(p);
-    }
-    for (name, pricing) in PRICING_TABLE {
-        if *name == model {
-            return Some(pricing);
-        }
-    }
-    for (name, pricing) in PRICING_TABLE {
-        if model.starts_with(name) {
-            return Some(pricing);
-        }
-    }
-    let lower = model.to_lowercase();
-    if lower.contains("opus") {
-        return get_builtin("claude-opus-4-6");
-    }
-    if lower.contains("sonnet") {
-        return get_builtin("claude-sonnet-4-6");
-    }
-    if lower.contains("haiku") {
-        return get_builtin("claude-haiku-4-5");
-    }
-    if lower.contains("gpt-5.4-mini") {
-        return get_builtin("gpt-5.4-mini");
-    }
-    if lower.contains("gpt-5.4-nano") {
-        return get_builtin("gpt-5.4-nano");
-    }
-    if lower.contains("gpt-5.4") {
-        return get_builtin("gpt-5.4");
-    }
-    if lower.contains("codex") {
-        return get_builtin("gpt-5.3-codex");
-    }
-    None
 }
 
 enum PricingLookup<'a> {
@@ -479,10 +443,10 @@ fn get_builtin(model: &str) -> Option<&'static ModelPricing> {
         .map(|(_, p)| p)
 }
 
-/// Returns true if this model has pricing (built-in or override).
+/// Returns true if this model resolves to any available pricing source.
 #[allow(dead_code)]
 pub fn is_billable(model: &str) -> bool {
-    get_pricing(model).is_some()
+    lookup_pricing(model).is_some()
 }
 
 /// Calculate cost in nanos (1 dollar = 1_000_000_000 nanos) for the given token counts.

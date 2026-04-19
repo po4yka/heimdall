@@ -1841,16 +1841,13 @@ fn parse_anthropic_release_notes(
     source: &OfficialContentSourceDef,
     text: &str,
 ) -> Vec<ReleaseNoteSnapshot> {
-    let Ok(re) = Regex::new(
-        r"(?P<date>[A-Za-z]+ \d{1,2}(?:st|nd|rd|th), \d{4}) (?P<body>.*?)(?=(?:[A-Za-z]+ \d{1,2}(?:st|nd|rd|th), \d{4})|$)",
-    ) else {
+    let Ok(date_re) = Regex::new(r"[A-Za-z]+ \d{1,2}(?:st|nd|rd|th), \d{4}") else {
         return Vec::new();
     };
-    re.captures_iter(text)
+    split_release_note_sections(text, &date_re)
+        .into_iter()
         .take(20)
-        .filter_map(|caps| {
-            let date = caps.name("date")?.as_str().to_string();
-            let body = caps.name("body")?.as_str().trim().to_string();
+        .filter_map(|(date, body)| {
             if body.is_empty() {
                 return None;
             }
@@ -1875,17 +1872,14 @@ fn parse_openai_release_notes(
     source: &OfficialContentSourceDef,
     text: &str,
 ) -> Vec<ReleaseNoteSnapshot> {
-    let Ok(re) = Regex::new(
-        r"(?P<date>Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (?P<day>\d{1,2}) (?P<body>.*?)(?=(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}|$)",
-    ) else {
+    let Ok(date_re) = Regex::new(r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}")
+    else {
         return Vec::new();
     };
-    re.captures_iter(text)
+    split_release_note_sections(text, &date_re)
+        .into_iter()
         .take(20)
-        .filter_map(|caps| {
-            let month = caps.name("date")?.as_str();
-            let day = caps.name("day")?.as_str();
-            let body = caps.name("body")?.as_str().trim().to_string();
+        .filter_map(|(date, body)| {
             if body.is_empty() {
                 return None;
             }
@@ -1893,10 +1887,10 @@ fn parse_openai_release_notes(
             Some(ReleaseNoteSnapshot {
                 source_slug: source.slug.to_string(),
                 provider: source.provider.to_string(),
-                snapshot_id: sha256_hex(&format!("{month}-{day}:{title}")),
+                snapshot_id: sha256_hex(&format!("{date}:{title}")),
                 title: title.clone(),
                 url: source.url.to_string(),
-                published_at: Some(format!("{month} {day}")),
+                published_at: Some(date),
                 kind: classify_release_note_kind(&body),
                 summary: truncate_for_summary(&body),
                 affected_models: extract_affected_models(&body),
@@ -1904,6 +1898,21 @@ fn parse_openai_release_notes(
             })
         })
         .collect()
+}
+
+fn split_release_note_sections(text: &str, date_re: &Regex) -> Vec<(String, String)> {
+    let matches: Vec<_> = date_re.find_iter(text).collect();
+    let mut sections = Vec::with_capacity(matches.len());
+    for (idx, found) in matches.iter().enumerate() {
+        let body_start = found.end();
+        let body_end = matches.get(idx + 1).map_or(text.len(), |next| next.start());
+        let body = text[body_start..body_end].trim().to_string();
+        if body.is_empty() {
+            continue;
+        }
+        sections.push((found.as_str().to_string(), body));
+    }
+    sections
 }
 
 fn sync_status_source(

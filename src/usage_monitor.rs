@@ -69,14 +69,16 @@ pub fn capture_snapshot(options: &CaptureOptions) -> Result<CaptureResult> {
 
     let run_id = db::insert_claude_usage_run(
         &conn,
-        persisted.status,
-        persisted.exit_code,
-        &persisted.stdout_raw,
-        &persisted.stderr_raw,
-        INVOCATION_MODE,
-        PERIOD_TODAY,
-        PARSER_VERSION,
-        persisted.error_summary.as_deref(),
+        &db::ClaudeUsageRunInsert {
+            status: persisted.status,
+            exit_code: persisted.exit_code,
+            stdout_raw: &persisted.stdout_raw,
+            stderr_raw: &persisted.stderr_raw,
+            invocation_mode: INVOCATION_MODE,
+            period: PERIOD_TODAY,
+            parser_version: PARSER_VERSION,
+            error_summary: persisted.error_summary.as_deref(),
+        },
     )?;
     if persisted.status == STATUS_SUCCESS && !persisted.factors.is_empty() {
         db::insert_claude_usage_factors(&conn, run_id, &persisted.factors)?;

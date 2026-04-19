@@ -15,12 +15,12 @@ const REQUEST_TIMEOUT_SECS: u64 = 5;
 
 impl StatusAggregatorBackend for StatusGatorBackend {
     fn fetch(&self, config: &AggregatorConfig) -> CommunitySignal {
-        let api_key = match std::env::var(&config.api_key_env) {
+        let api_key = match std::env::var(&config.key_env_var) {
             Ok(k) if !k.trim().is_empty() => k.trim().to_owned(),
             _ => {
                 warn!(
                     "StatusGator: env var '{}' not set or empty; returning Unknown signals",
-                    config.api_key_env
+                    config.key_env_var
                 );
                 return build_unknown_signal(config);
             }
@@ -61,7 +61,7 @@ fn fetch_live_from_base(
     let claude_slugs = config.claude_services.clone();
     let openai_slugs = config.openai_services.clone();
     let api_key_owned = api_key.to_owned();
-    let api_key_env = config.api_key_env.clone();
+    let key_env_var = config.key_env_var.clone();
 
     rt.block_on(async move {
         let client = match reqwest::Client::builder()
@@ -75,7 +75,7 @@ fn fetch_live_from_base(
             Ok(c) => c,
             Err(e) => {
                 warn!("StatusGator: failed to build HTTP client: {}", e);
-                let detail = format!("set {} to enable community signal", api_key_env);
+                let detail = format!("set {} to enable community signal", key_env_var);
                 return build_unknown_signal_from_slugs(&claude_slugs, &openai_slugs, &detail);
             }
         };
@@ -273,7 +273,7 @@ fn unknown_signal(slug: &str, source_url: &str, reason: &str) -> ServiceSignal {
 }
 
 fn build_unknown_signal(config: &AggregatorConfig) -> CommunitySignal {
-    let detail = format!("set {} to enable community signal", config.api_key_env);
+    let detail = format!("set {} to enable community signal", config.key_env_var);
     build_unknown_signal_from_slugs(&config.claude_services, &config.openai_services, &detail)
 }
 
@@ -342,7 +342,7 @@ mod tests {
         AggregatorConfig {
             enabled: true,
             provider: "statusgator".to_owned(),
-            api_key_env: "HEIMDALL_STATUSGATOR_TEST_API_KEY".to_owned(),
+            key_env_var: "HEIMDALL_STATUSGATOR_TEST_API_KEY".to_owned(),
             refresh_interval: 300,
             claude_services: vec!["claude-ai".to_owned()],
             openai_services: vec!["openai".to_owned()],
@@ -507,7 +507,7 @@ mod tests {
         let _env_guard = env_lock().lock().expect("env lock should succeed");
         let config = test_config();
         unsafe {
-            std::env::remove_var(&config.api_key_env);
+            std::env::remove_var(&config.key_env_var);
         }
 
         let signal = StatusGatorBackend.fetch(&config);

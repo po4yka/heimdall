@@ -111,7 +111,14 @@ pub fn compute(
     let active_block = query_active_block(&conn, now)?;
 
     // ── Context window ────────────────────────────────────────────────────────
-    let cw = context_window::resolve(input);
+    let cw = context_window::resolve(input).unwrap_or_else(|error| {
+        tracing::debug!(
+            %error,
+            transcript_path = %input.transcript_path,
+            "statusline context window transcript fallback failed"
+        );
+        None
+    });
     let context_tokens = cw.map(|c| c.total_input_tokens);
     let context_size = cw.map(|c| c.context_window_size);
 
@@ -140,7 +147,14 @@ fn zeroed_stats(input: &HookInput, cost_source: CostSource) -> ComputedStats {
         CostSource::Local => local_session_cost_nanos,
         CostSource::Auto | CostSource::Both => hook_nanos_opt.unwrap_or(local_session_cost_nanos),
     };
-    let cw = context_window::resolve(input);
+    let cw = context_window::resolve(input).unwrap_or_else(|error| {
+        tracing::debug!(
+            %error,
+            transcript_path = %input.transcript_path,
+            "statusline context window transcript fallback failed"
+        );
+        None
+    });
     let context_tokens = cw.map(|c| c.total_input_tokens);
     let context_size = cw.map(|c| c.context_window_size);
     ComputedStats {

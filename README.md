@@ -479,7 +479,7 @@ alert_min_severity = "major"
 [status_aggregator]
 enabled = false
 provider = "statusgator"
-api_key_env = "STATUSGATOR_API_KEY"
+key_env_var = "STATUSGATOR_API_KEY"
 refresh_interval = 300
 claude_services = ["claude-ai", "claude"]
 openai_services = ["openai", "chatgpt"]
