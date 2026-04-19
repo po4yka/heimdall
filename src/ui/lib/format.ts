@@ -53,3 +53,13 @@ export function esc(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+/** Middle-ellipsis truncation for paths or identifiers that carry meaning
+ *  at both ends (e.g., `GitRep/bite-size-reader` → `GitRep/…e-reader`).
+ *  Unlike suffix ellipsis this preserves the owner scope plus the terminal
+ *  segment, which is how most users visually match project names. */
+export function truncateMid(s: string, max: number, tailChars: number = 8): string {
+  if (s.length <= max) return s;
+  const head = Math.max(0, max - tailChars - 1);
+  return s.slice(0, head) + '\u2026' + s.slice(-tailChars);
+}
