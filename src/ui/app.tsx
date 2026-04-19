@@ -692,7 +692,9 @@ async function loadUsageWindows(): Promise<void> {
 function renderAgentStatus(snapshot: AgentStatusSnapshot): void {
   const container = $('agent-status');
   if (!container) return;
-  container.style.display = '';
+  // Must be 'grid' to activate the grid-template-columns set inline; empty
+  // string resets to <div>'s default of 'block' and the card overflows.
+  container.style.display = 'grid';
   render(<AgentStatusCard snapshot={snapshot} communitySignal={lastCommunitySignal} />, container);
 }
 
