@@ -1,4 +1,4 @@
-# DESIGN.md -- Claude Usage Tracker
+# DESIGN.md – Claude Usage Tracker
 
 A data-dense analytics dashboard for Claude Code usage tracking. Monochromatic industrial design: OLED dark + warm-off-white light, type-driven hierarchy, one surgical red accent reserved for urgent/destructive states. Every pixel earns its place by showing data. The canonical source of truth is `.claude/skills/industrial-design/SKILL.md`; this file mirrors the product-specific decisions that layer on top of the skill.
 
@@ -9,9 +9,9 @@ A data-dense analytics dashboard for Claude Code usage tracking. Monochromatic i
 | Attribute | Value |
 |-----------|-------|
 | Mood | Instrument panel in a dark room / printed technical manual in light mode |
-| Density | 7/10 -- data dashboard, not marketing page |
-| Motion | 2/10 -- hover transitions only (150-250ms `cubic-bezier(0.25,0.1,0.25,1)`), no scroll or entrance animations, no spring/bounce |
-| Variance | 3/10 -- uniform card grid, left-aligned tables, predictable layout; break pattern in exactly one place per screen |
+| Density | 7/10 – data dashboard, not marketing page |
+| Motion | 2/10 – hover transitions only (150-250ms `cubic-bezier(0.25,0.1,0.25,1)`), no scroll or entrance animations, no spring/bounce |
+| Variance | 3/10 – uniform card grid, left-aligned tables, predictable layout; break pattern in exactly one place per screen |
 | Philosophy | Subtract, don't add. Structure is ornament. Monochrome is the canvas; color is an event. Type does the heavy lifting. Both dark and light modes are first-class. |
 
 **Anti-patterns (never use):**
@@ -52,7 +52,7 @@ All colors must be declared as CSS variables. Never hardcode hex. The full table
 | `--accent-subtle` | `rgba(215,25,33,0.15)` | Accent tint backgrounds (sparingly) |
 | `--success` | `#4A9E5C` | Confirmed, completed, cost/usage within healthy range |
 | `--warning` | `#D4A843` | Caution, moderate-usage, cache-creation tokens |
-| `--error` | `#D71921` | Shares accent red -- errors ARE the accent moment |
+| `--error` | `#D71921` | Shares accent red – errors ARE the accent moment |
 | `--interactive` | `#5B9BF6` | Tappable text: links, picker values. Not for buttons. |
 
 ### Light Theme
@@ -73,7 +73,7 @@ All colors must be declared as CSS variables. Never hardcode hex. The full table
 **Identical across modes:** accent red, status colors (`--success`, `--warning`, `--accent`/`--error`), ALL-CAPS labels, fonts, type scale, spacing, component shapes.
 
 ### Color Rules
-- Never hardcode hex -- always `var(--token-name)`.
+- Never hardcode hex – always `var(--token-name)`.
 - `--accent` is a signal, not decoration. Max **one** `--accent` element per screen as UI (the "break the pattern" moment), unless encoding data status on a value.
 - `--success` / `--warning` / `--accent` as status colors are exempt from the one-accent rule when encoding data values. Apply the color to the **value itself**, not labels or row backgrounds. Labels stay `--text-secondary`.
 - Trend arrows inherit value color.
@@ -147,7 +147,7 @@ For model-distribution donuts or categorical series that genuinely need distinct
 - Background: `var(--surface)`, 1px solid `var(--border)`, radius: `12-16px`
 - Padding: `16-24px`
 - No shadows at rest, no shadows on hover. Depth = border + background step only.
-- Never box the most important element on a screen -- let it float on `--black`.
+- Never box the most important element on a screen – let it float on `--black`.
 
 ### Data Tables
 - Full-width, collapsed borders
@@ -172,11 +172,11 @@ For model-distribution donuts or categorical series that genuinely need distinct
 Per components.md §2. Four variants: Primary (white fill, black text, pill), Secondary (transparent, border, pill), Ghost (transparent, no border), Destructive (transparent, red border, red text, pill). All Space Mono 13px ALL CAPS, `0.06em` letter-spacing, `12px 24px` padding, min-height `44px`.
 
 ### Progress Bars (Rate Windows)
-- Prefer **segmented progress bars** (§11 in components.md) -- signature visualization. Discrete square-ended blocks with 2px gaps.
+- Prefer **segmented progress bars** (§11 in components.md) – signature visualization. Discrete square-ended blocks with 2px gaps.
 - Label + value above in Space Mono. Bar below.
 - Empty segments: `--border`. Filled segments: `--text-display` (neutral), `--success` (<70%), `--warning` (70-90%), `--accent` (>=90% or overflow).
 - Heights: hero 16-20px, standard 8-12px, compact 4-6px.
-- Always pair with numeric readout -- bar = proportion, number = precision.
+- Always pair with numeric readout – bar = proportion, number = precision.
 
 ### Inline Status (replaces toasts)
 - No toast popups. Status appears inline near the trigger.
@@ -212,8 +212,8 @@ Spacing communicates relationship. If reaching for a divider, try more spacing f
 ### Grid System
 - Bento grid: `max-width: 1400px`, centered, 4 columns
 - Column spans: `.bento-2`, `.bento-3`, `.bento-full`
-- Gap: `16px` uniform (was 12px -- loosened to align with `--space-md` rhythm)
-- Stats row: `auto-fit` with `minmax(200px, 1fr)` -- fluid column count
+- Gap: `16px` uniform (was 12px – loosened to align with `--space-md` rhythm)
+- Stats row: `auto-fit` with `minmax(200px, 1fr)` – fluid column count
 
 ### Page Structure
 ```
@@ -230,7 +230,7 @@ Header (sticky, 48px, flat -- no frosted glass, no shadow)
 
 ### Whitespace Philosophy
 - Confidence through emptiness. Resist filling space.
-- Cards are the primary spatial unit -- no free-floating text outside cards.
+- Cards are the primary spatial unit – no free-floating text outside cards.
 - Header is compact (48px) because it's always visible (sticky).
 - Asymmetry > symmetry. Prefer large-left/small-right; top-heavy; edge-anchored.
 
@@ -240,9 +240,9 @@ Header (sticky, 48px, flat -- no frosted glass, no shadow)
 
 | Surface | Treatment |
 |---------|-----------|
-| Page canvas | `var(--black)` -- deepest layer |
-| Filter bar | `var(--surface)` -- one step up, no blur |
-| Header | `var(--surface)` -- flat, 1px `--border-visible` bottom. No frosted glass. |
+| Page canvas | `var(--black)` – deepest layer |
+| Filter bar | `var(--surface)` – one step up, no blur |
+| Header | `var(--surface)` – flat, 1px `--border-visible` bottom. No frosted glass. |
 | Cards | `var(--surface)` + `1px solid var(--border)`. No elevation shadow. |
 | Card hover | Border brightens to `--border-visible`. No translate, no shadow. |
 | Tables | Inside cards, no additional elevation |
@@ -262,7 +262,7 @@ No frosted glass. No backdrop-filter. The palette already does the work; blur wo
 - Use CSS variables for every color value
 - Put numbers, costs, labels, and table cells in Space Mono with `font-feature-settings: "tnum"`
 - Use Space Mono ALL CAPS for all system labels (stat labels, table headers, filter labels, chart titles, section titles)
-- Use a plain `border: 1px solid var(--border)` on cards -- clean and stable
+- Use a plain `border: 1px solid var(--border)` on cards – clean and stable
 - Make tables sortable with `--text-display` border-bottom on the active sort column
 - Support both light and dark themes (toggle via `data-theme` attribute)
 - Keep chart heights consistent: 240px standard, 300px for the daily chart
@@ -340,7 +340,7 @@ Max width:     1400px
 > Wrap in a card with Space Mono 11px ALL CAPS `--text-secondary` title. Chart container: 240px height (standard) or 300px (hero/daily). ApexCharts options: `background: 'transparent'`, `toolbar: { show: false }`, `fontFamily: 'var(--font-mono)'`, `animations: { enabled: false }`, `legend: { show: false }`. Colors: `--text-display` primary, `--text-display` at 60/30% opacity for secondary series. Use `--accent` for a single over-limit / urgent series only. Grid: horizontal lines in `--border` color. Destroy and recreate (or `updateOptions`) on theme toggle.
 
 **"Add a new filter control"**
-> Place inside the filter bar. Group label: Space Mono 11px ALL CAPS `--text-secondary`. Chips: `1px solid --border-visible`, transparent bg, Space Mono 12px ALL CAPS, `4px 12px` padding, pill radius. Active chip: invert -- `--text-display` border + text (no fill change). Range buttons: segmented control with `1px solid --border-visible` container; active segment = `--text-display` background + `--black` text; transition 200ms ease-out. No inset shadows.
+> Place inside the filter bar. Group label: Space Mono 11px ALL CAPS `--text-secondary`. Chips: `1px solid --border-visible`, transparent bg, Space Mono 12px ALL CAPS, `4px 12px` padding, pill radius. Active chip: invert – `--text-display` border + text (no fill change). Range buttons: segmented control with `1px solid --border-visible` container; active segment = `--text-display` background + `--black` text; transition 200ms ease-out. No inset shadows.
 
 **"Add an inline status message"**
 > Replace any toast with inline status text near the trigger: Space Mono `--caption` ALL CAPS, format `[SAVED]` (`--success`), `[ERROR: message]` (`--accent`), `[LOADING...]` (`--text-secondary`). 150ms opacity fade in/out. Auto-dismiss after 4 seconds or on next action.

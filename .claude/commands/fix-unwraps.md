@@ -12,7 +12,7 @@ For each `.unwrap()` found:
 2. **In a function not returning `Result`**: Evaluate:
    - Can the function signature change to return `Result`? If so, change it and propagate
    - Is `.unwrap_or_default()` or `.unwrap_or_else(|| ...)` appropriate?
-   - Is the unwrap truly infallible? (e.g., `Regex::new` with a constant pattern, `OnceLock::get()` after guaranteed init) -- add a comment: `// SAFETY: <reason>`
+   - Is the unwrap truly infallible? (e.g., `Regex::new` with a constant pattern, `OnceLock::get()` after guaranteed init) – add a comment: `// SAFETY: <reason>`
 3. **`.expect("message")`**: These are acceptable if the message explains why it can't fail. Leave them.
 
 ## Process

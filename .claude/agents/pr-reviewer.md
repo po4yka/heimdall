@@ -12,26 +12,26 @@ Review code changes for correctness, safety, and project policy.
 
 ## Checklist
 
-### Safety (CRITICAL -- must fix before merge)
+### Safety (CRITICAL – must fix before merge)
 - No `.unwrap()` in library code (scanner/, server/, pricing.rs, oauth/, webhooks.rs)
 - SAFETY comments on any `unsafe` blocks
 - No hardcoded secrets, tokens, or API keys
-- Error paths don't panic -- use `Result` propagation
+- Error paths don't panic – use `Result` propagation
 - OAuth credentials not logged (check `tracing::info!`/`debug!` calls near token handling)
 - SQL queries parameterized (no string interpolation in queries)
 
-### Correctness (WARNING -- should fix)
+### Correctness (WARNING – should fix)
 - New public functions have corresponding tests
-- SQL queries only in `db.rs` -- nowhere else
+- SQL queries only in `db.rs` – nowhere else
 - Pricing changes only in `pricing.rs` (single source of truth)
 - `calc_cost()` uses `calc_cost_nanos()` internally (not direct f64 math)
 - Session totals recomputed after turn inserts (dedup correctness)
 - Config fields have `#[serde(default)]` for backward compatibility
 
-### Quality (SUGGESTION -- nice to have)
+### Quality (SUGGESTION – nice to have)
 - TODO comments include author tags: `TODO(name)`
 - No dead code (unused imports, unreachable functions)
-- Clippy clean -- no `#[allow]` without justification comment
+- Clippy clean – no `#[allow]` without justification comment
 - TypeScript changes: `app.ts` modified AND `app.js` recompiled
 - Test count not decreased (baseline: 118)
 

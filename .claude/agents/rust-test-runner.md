@@ -38,14 +38,14 @@ cargo test -- --nocapture 2>&1
 
 When tests fail:
 
-1. **Read the failure output** -- identify test name, expected vs actual values
+1. **Read the failure output** – identify test name, expected vs actual values
 2. **Classify the failure**:
    - Compilation error → fix the code, not the test
    - Assertion failure → compare expected vs actual, check if test or code is wrong
    - Timeout → check for deadlocks or infinite loops
    - Flaky → run the test 3 times; if it passes sometimes, investigate race conditions
-3. **Check recent changes** -- `git diff` to see what changed
-4. **Fix and re-run** -- make the minimal fix, run only the affected test first
+3. **Check recent changes** – `git diff` to see what changed
+4. **Fix and re-run** – make the minimal fix, run only the affected test first
 
 ## Coverage Baseline
 

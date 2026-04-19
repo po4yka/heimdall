@@ -1808,7 +1808,7 @@ fn cmd_stats(db_path: &std::path::Path) -> Result<()> {
 
 - [ ] **Step 2: Verify it compiles and runs**
 
-Run: `cargo build && cargo run -- --help`
+Run: `cargo build && cargo run – --help`
 Expected: Shows CLI help text with all subcommands.
 
 - [ ] **Step 3: Commit**
@@ -1829,7 +1829,7 @@ Expected: All tests pass.
 
 - [ ] **Step 2: Run clippy**
 
-Run: `cargo clippy -- -D warnings`
+Run: `cargo clippy – -D warnings`
 Expected: No warnings.
 
 - [ ] **Step 3: Run fmt check**
@@ -1839,9 +1839,9 @@ Expected: No formatting issues.
 
 - [ ] **Step 4: Test with real data (if available)**
 
-Run: `cargo run -- scan`
-Run: `cargo run -- today`
-Run: `cargo run -- stats`
+Run: `cargo run – scan`
+Run: `cargo run – today`
+Run: `cargo run – stats`
 Expected: Scans ~/.claude/projects/ and shows results.
 
 - [ ] **Step 5: Final commit**

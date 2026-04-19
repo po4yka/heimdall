@@ -1,11 +1,11 @@
-# Heimdall (`claude-usage-tracker`) -- Development Guide
+# Heimdall (`claude-usage-tracker`) – Development Guide
 
 ## Project
 
 Local AI session observability for Claude Code, Codex, Cursor, OpenCode, Pi, Copilot, Xcode CodingAssistant, and Cowork. Two Rust binaries share one crate:
 
-- `claude-usage-tracker` -- CLI + embedded web dashboard.
-- `heimdall-hook` -- lightweight stdin-driven hook binary for real-time PreToolUse ingest.
+- `claude-usage-tracker` – CLI + embedded web dashboard.
+- `heimdall-hook` – lightweight stdin-driven hook binary for real-time PreToolUse ingest.
 
 ## Build & Run
 

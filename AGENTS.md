@@ -1,11 +1,11 @@
-# Heimdall (`claude-usage-tracker`) -- Development Guide
+# Heimdall (`claude-usage-tracker`) – Development Guide
 
 ## Project
 
 Local AI session observability for Claude Code, Codex, and adjacent tooling. Two Rust binaries share one crate:
 
-- `claude-usage-tracker` -- CLI + embedded web dashboard.
-- `heimdall-hook` -- lightweight stdin-driven hook binary for real-time PreToolUse ingest.
+- `claude-usage-tracker` – CLI + embedded web dashboard.
+- `heimdall-hook` – lightweight stdin-driven hook binary for real-time PreToolUse ingest.
 
 Persistent storage is a single SQLite database. UI is Preact + Tailwind v4 compiled to a single JS/CSS bundle via esbuild; both compiled artifacts live in git so `cargo build` never requires Node.js.
 
@@ -280,7 +280,7 @@ Steps:
 2. Implement `name()` returning a stable slug like `"foo"`. This slug is stored in `turns.provider` and `sessions.provider` and surfaces in the dashboard's Provider filter.
 3. Implement `discover_sessions()` by walking the appropriate filesystem path and returning one `SessionSource` per session file.
 4. Implement `parse()` — either delegate to `parser::parse_claude_jsonl_file` if the format is Claude-compatible (the dispatcher does the retag) or write a dedicated parser in the provider module.
-5. Register the provider in `src/scanner/providers/mod.rs` inside `pub fn all()`. Platform-gate via `#[cfg(target_os = "...")]` on the `push` call only -- never on the whole function.
+5. Register the provider in `src/scanner/providers/mod.rs` inside `pub fn all()`. Platform-gate via `#[cfg(target_os = "...")]` on the `push` call only – never on the whole function.
 6. Tests go in `src/scanner/tests.rs`. Minimum coverage: `name()` returns the expected slug, and a fixture-based parse test asserts returned `Turn`s carry the provider tag.
 
 The explicit `--projects-dir` CLI override routes through `provider_for_dir()` in `src/scanner/mod.rs` — update that helper if the new provider needs path-based detection from that override surface.
@@ -302,11 +302,11 @@ pub trait Detector {
 }
 ```
 
-Register in `optimizer/mod.rs::run_optimize_with_overrides`. Severity thresholds and monthly-waste estimates are detector-specific -- document the formula inline. Grades fold via `grade::compute_grade`.
+Register in `optimizer/mod.rs::run_optimize_with_overrides`. Severity thresholds and monthly-waste estimates are detector-specific – document the formula inline. Grades fold via `grade::compute_grade`.
 
 ### Changing the database schema
 
-Always use additive migrations (ALTER TABLE ADD COLUMN). Check for column existence with `has_column` before adding. Never drop columns or tables in migrations -- only in full rescan. If you introduce a new default for existing rows, add an idempotent `UPDATE ... WHERE column IS NULL OR column = ''` after the ADD COLUMN. Covers both freshly-created DBs and mid-upgrade ones.
+Always use additive migrations (ALTER TABLE ADD COLUMN). Check for column existence with `has_column` before adding. Never drop columns or tables in migrations – only in full rescan. If you introduce a new default for existing rows, add an idempotent `UPDATE ... WHERE column IS NULL OR column = ''` after the ADD COLUMN. Covers both freshly-created DBs and mid-upgrade ones.
 
 ### Config file changes
 

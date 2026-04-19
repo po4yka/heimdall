@@ -1,4 +1,4 @@
-# Claude Usage Tracker -- Technical Specification
+# Claude Usage Tracker – Technical Specification
 
 ## Overview
 
@@ -63,7 +63,7 @@ Each line is a JSON object with a `type` field:
 
 ### Streaming Deduplication
 
-Claude Code logs multiple JSONL records per API response (streaming chunks), all sharing the same `message.id`. **Last record per message.id wins** -- it contains the final usage tallies.
+Claude Code logs multiple JSONL records per API response (streaming chunks), all sharing the same `message.id`. **Last record per message.id wins** – it contains the final usage tallies.
 
 Records without a `message.id` are kept as-is (legacy format).
 
@@ -235,14 +235,14 @@ Options:
 
 ### Components
 
-1. **Summary cards** -- sessions, turns, tokens (in/out/cache), estimated cost
-2. **Daily token chart** -- stacked bar (input/output/cache_read/cache_creation)
-3. **Model distribution** -- doughnut chart
-4. **Top projects** -- horizontal bar chart
-5. **Cost by model table** -- sortable columns
-6. **Sessions table** -- sortable, with CSV export
-7. **Cost by project table** -- sortable, with CSV export
-8. **Rescan button** -- triggers full DB rebuild
+1. **Summary cards** – sessions, turns, tokens (in/out/cache), estimated cost
+2. **Daily token chart** – stacked bar (input/output/cache_read/cache_creation)
+3. **Model distribution** – doughnut chart
+4. **Top projects** – horizontal bar chart
+5. **Cost by model table** – sortable columns
+6. **Sessions table** – sortable, with CSV export
+7. **Cost by project table** – sortable, with CSV export
+8. **Rescan button** – triggers full DB rebuild
 
 ### Charting
 
