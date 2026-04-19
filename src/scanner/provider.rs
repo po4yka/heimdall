@@ -16,11 +16,10 @@ pub struct SessionSource {
 
 /// Per-source-type plug-in contract. Registered in `providers::all()`.
 ///
-/// `scan()` uses `discover_sessions()` to enumerate per-provider files
-/// and then dispatches parsing through `parser::parse_jsonl_file`. The
-/// `parse()` method on this trait is a contract placeholder for a future
-/// refactor that lifts parsing fully behind the trait — keeping it here
-/// documents the intended provider shape without forcing the lift today.
+/// `scan()` uses `discover_sessions()` to enumerate per-provider files and then
+/// routes them through the parser dispatcher. Providers with custom backends
+/// (SQLite / mixed-format) are parsed via this trait method; JSONL-backed
+/// providers still reuse the shared parser helpers.
 #[allow(dead_code)]
 pub trait Provider: Send + Sync {
     fn name(&self) -> &'static str;

@@ -269,6 +269,7 @@ fn parse_cursor_db(path: &Path, workspace_hash: &str) -> Vec<Turn> {
     }
 
     let mut turns = Vec::new();
+    let source_path = path.to_string_lossy().to_string();
 
     // Query each known chat-data key.
     for key in [CHAT_DATA_KEY] {
@@ -290,7 +291,7 @@ fn parse_cursor_db(path: &Path, workspace_hash: &str) -> Vec<Turn> {
             }
         };
 
-        parse_chat_blob(&blob, workspace_hash, &mut turns);
+        parse_chat_blob(&blob, workspace_hash, &source_path, &mut turns);
     }
 
     turns
@@ -302,7 +303,12 @@ fn parse_cursor_db(path: &Path, workspace_hash: &str) -> Vec<Turn> {
 /// ```json
 /// { "tabs": [ { "tabId": "...", "bubbles": [ { "type": "ai", ... } ] } ] }
 /// ```
-fn parse_chat_blob(blob: &serde_json::Value, workspace_hash: &str, turns: &mut Vec<Turn>) {
+fn parse_chat_blob(
+    blob: &serde_json::Value,
+    workspace_hash: &str,
+    source_path: &str,
+    turns: &mut Vec<Turn>,
+) {
     let tabs = match blob.get("tabs").and_then(|v| v.as_array()) {
         Some(t) => t,
         None => return,
@@ -366,7 +372,7 @@ fn parse_chat_blob(blob: &serde_json::Value, workspace_hash: &str, turns: &mut V
                 inference_geo: None,
                 is_subagent: false,
                 agent_id: None,
-                source_path: String::new(),
+                source_path: source_path.to_string(),
                 version: None,
                 pricing_version: estimate.pricing_version,
                 pricing_model: estimate.pricing_model,

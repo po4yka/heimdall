@@ -7,6 +7,8 @@ use tracing::warn;
 use crate::models::{Session, SessionMeta, Turn};
 use crate::pricing;
 use crate::scanner::cowork::{is_cowork_session_path, resolve_cowork_label};
+use crate::scanner::provider::Provider;
+use crate::scanner::providers::cursor::PROVIDER_CURSOR;
 
 pub const PROVIDER_CLAUDE: &str = "claude";
 pub const PROVIDER_CODEX: &str = "codex";
@@ -118,14 +120,87 @@ pub fn parse_jsonl_file(provider: &str, filepath: &Path, skip_lines: i64) -> Par
     }
 }
 
-/// Wrap a `Vec<Turn>` from the Pi provider into a `ParseResult`.
-fn parse_pi_result(turns: Vec<crate::models::Turn>, filepath: &Path) -> ParseResult {
-    use crate::models::SessionMeta;
-    use std::collections::HashMap;
+/// Parse any registered provider source into the scanner's common `ParseResult`.
+///
+/// JSONL/JSON-backed providers reuse the existing dispatcher. Providers with
+/// custom backends (SQLite or best-effort JSON probes) are wrapped into the
+/// same shape the scan pipeline expects so they participate in normal ingest.
+pub fn parse_source_file(provider: &str, filepath: &Path, skip_lines: i64) -> ParseResult {
+    match provider {
+        PROVIDER_CURSOR => parse_provider_turns_result(
+            provider,
+            crate::scanner::providers::cursor::CursorProvider::new()
+                .parse(filepath)
+                .unwrap_or_else(|e| {
+                    warn!(
+                        "cursor: provider parse failed for {}: {}",
+                        filepath.display(),
+                        e
+                    );
+                    Vec::new()
+                }),
+            filepath,
+            None,
+        ),
+        PROVIDER_OPENCODE => parse_provider_turns_result(
+            provider,
+            crate::scanner::providers::opencode::OpenCodeProvider::new()
+                .parse(filepath)
+                .unwrap_or_else(|e| {
+                    warn!(
+                        "opencode: provider parse failed for {}: {}",
+                        filepath.display(),
+                        e
+                    );
+                    Vec::new()
+                }),
+            filepath,
+            None,
+        ),
+        PROVIDER_COPILOT => parse_provider_turns_result(
+            provider,
+            crate::scanner::providers::copilot::CopilotProvider::new()
+                .parse(filepath)
+                .unwrap_or_else(|e| {
+                    warn!(
+                        "copilot: provider parse failed for {}: {}",
+                        filepath.display(),
+                        e
+                    );
+                    Vec::new()
+                }),
+            filepath,
+            None,
+        ),
+        _ => parse_jsonl_file(provider, filepath, skip_lines),
+    }
+}
 
-    // Build minimal session metas from the turns.
+fn parse_provider_turns_result(
+    provider: &str,
+    turns: Vec<Turn>,
+    filepath: &Path,
+    line_count: Option<i64>,
+) -> ParseResult {
+    ParseResult {
+        session_metas: session_metas_from_turns(provider, &turns),
+        turns,
+        line_count: line_count.unwrap_or(turns_len_fallback(filepath)),
+        session_titles: HashMap::new(),
+        tool_results: HashMap::new(),
+    }
+}
+
+fn turns_len_fallback(filepath: &Path) -> i64 {
+    std::fs::metadata(filepath)
+        .ok()
+        .map(|m| m.len() as i64)
+        .unwrap_or(0)
+}
+
+fn session_metas_from_turns(provider: &str, turns: &[Turn]) -> Vec<SessionMeta> {
     let mut metas: HashMap<String, SessionMeta> = HashMap::new();
-    for t in &turns {
+    for t in turns {
         metas
             .entry(t.session_id.clone())
             .and_modify(|m| {
@@ -137,11 +212,14 @@ fn parse_pi_result(turns: Vec<crate::models::Turn>, filepath: &Path) -> ParseRes
                         m.last_timestamp.clone_from(&t.timestamp);
                     }
                 }
+                if m.model.is_none() && !t.model.is_empty() {
+                    m.model = Some(t.model.clone());
+                }
             })
             .or_insert_with(|| SessionMeta {
                 session_id: t.session_id.clone(),
-                provider: PROVIDER_PI.into(),
-                project_name: "unknown".into(),
+                provider: provider.into(),
+                project_name: project_name_from_cwd(&t.cwd),
                 project_slug: String::new(),
                 first_timestamp: t.timestamp.clone(),
                 last_timestamp: t.timestamp.clone(),
@@ -154,22 +232,18 @@ fn parse_pi_result(turns: Vec<crate::models::Turn>, filepath: &Path) -> ParseRes
                 entrypoint: String::new(),
             });
     }
+    metas.into_values().collect()
+}
 
-    // line_count: best-effort count of JSONL lines (recount from file).
+/// Wrap a `Vec<Turn>` from the Pi provider into a `ParseResult`.
+fn parse_pi_result(turns: Vec<crate::models::Turn>, filepath: &Path) -> ParseResult {
     let line_count = std::fs::File::open(filepath)
         .map(|f| {
             use std::io::BufRead;
             std::io::BufReader::new(f).lines().count() as i64
         })
         .unwrap_or(0);
-
-    ParseResult {
-        session_metas: metas.into_values().collect(),
-        turns,
-        line_count,
-        session_titles: HashMap::new(),
-        tool_results: HashMap::new(),
-    }
+    parse_provider_turns_result(PROVIDER_PI, turns, filepath, Some(line_count))
 }
 
 /// Wrap a `Vec<Turn>` from the Amp provider into a `ParseResult`.
@@ -177,50 +251,10 @@ fn parse_pi_result(turns: Vec<crate::models::Turn>, filepath: &Path) -> ParseRes
 /// Each Amp thread file (`.json`) maps to one session.  Session metas are
 /// built from the turns in the same way as Pi.
 fn parse_amp_result(turns: Vec<crate::models::Turn>, _filepath: &Path) -> ParseResult {
-    use crate::models::SessionMeta;
-    use std::collections::HashMap;
-
-    let mut metas: HashMap<String, SessionMeta> = HashMap::new();
-    for t in &turns {
-        metas
-            .entry(t.session_id.clone())
-            .and_modify(|m| {
-                if !t.timestamp.is_empty() {
-                    if m.first_timestamp.is_empty() || t.timestamp < m.first_timestamp {
-                        m.first_timestamp.clone_from(&t.timestamp);
-                    }
-                    if m.last_timestamp.is_empty() || t.timestamp > m.last_timestamp {
-                        m.last_timestamp.clone_from(&t.timestamp);
-                    }
-                }
-            })
-            .or_insert_with(|| SessionMeta {
-                session_id: t.session_id.clone(),
-                provider: PROVIDER_AMP.into(),
-                project_name: "unknown".into(),
-                project_slug: String::new(),
-                first_timestamp: t.timestamp.clone(),
-                last_timestamp: t.timestamp.clone(),
-                git_branch: String::new(),
-                model: if t.model.is_empty() {
-                    None
-                } else {
-                    Some(t.model.clone())
-                },
-                entrypoint: String::new(),
-            });
-    }
-
     // Use turns.len() as the incremental-scan guard: if events are added to the
     // thread file, the count grows and triggers reprocessing on the next scan.
     let line_count = turns.len() as i64;
-    ParseResult {
-        session_metas: metas.into_values().collect(),
-        turns,
-        line_count,
-        session_titles: HashMap::new(),
-        tool_results: HashMap::new(),
-    }
+    parse_provider_turns_result(PROVIDER_AMP, turns, Path::new(""), Some(line_count))
 }
 
 /// Rewrite a Claude-parsed result so it carries the Xcode provider tag on
@@ -1280,6 +1314,123 @@ mod tests {
         let result = parse_claude_jsonl_file(&path, 0);
         // tool_inputs entry for WebSearch should be empty string.
         assert_eq!(result.turns[0].tool_inputs[0].1, "");
+    }
+
+    #[test]
+    fn parse_source_file_wraps_copilot_provider_results() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("copilot.json");
+        std::fs::write(
+            &path,
+            serde_json::json!([{
+                "id": "cop-1",
+                "model": "gpt-5.4",
+                "timestamp": "2026-04-18T10:00:00Z",
+                "usage": {
+                    "input_tokens": 120,
+                    "output_tokens": 45
+                }
+            }])
+            .to_string(),
+        )
+        .unwrap();
+
+        let result = parse_source_file(
+            crate::scanner::providers::copilot::PROVIDER_COPILOT,
+            &path,
+            0,
+        );
+        assert_eq!(result.turns.len(), 1);
+        assert_eq!(result.session_metas.len(), 1);
+        assert_eq!(result.turns[0].provider, "copilot");
+        assert_eq!(result.turns[0].source_path, path.to_string_lossy());
+    }
+
+    #[test]
+    fn parse_source_file_wraps_cursor_provider_results() {
+        let dir = TempDir::new().unwrap();
+        let hash_dir = dir.path().join("cafebabe1234");
+        std::fs::create_dir_all(&hash_dir).unwrap();
+        let db_path = hash_dir.join("state.vscdb");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch("CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+            .unwrap();
+        let chat_json = serde_json::json!({
+            "tabs": [{
+                "tabId": "tab-1",
+                "bubbles": [{
+                    "type": "ai",
+                    "modelType": "claude-3-5-sonnet",
+                    "requestId": "req-1",
+                    "timingInfo": { "clientStartTime": 1712570400000_i64 },
+                    "tokenCount": {
+                        "promptTokens": 100,
+                        "generationTokens": 50
+                    }
+                }]
+            }]
+        });
+        conn.execute(
+            "INSERT INTO ItemTable (key, value) VALUES (?1, ?2)",
+            rusqlite::params![
+                "workbench.panel.aichat.view.aichat.chatdata",
+                chat_json.to_string()
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let result = parse_source_file(
+            crate::scanner::providers::cursor::PROVIDER_CURSOR,
+            &db_path,
+            0,
+        );
+        assert_eq!(result.turns.len(), 1);
+        assert_eq!(result.session_metas.len(), 1);
+        assert_eq!(result.turns[0].provider, "cursor");
+        assert_eq!(result.turns[0].source_path, db_path.to_string_lossy());
+    }
+
+    #[test]
+    fn parse_source_file_wraps_opencode_provider_results() {
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("chat.sqlite");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE messages (
+                session_id TEXT,
+                message_id TEXT,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                model TEXT,
+                timestamp TEXT
+            );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages
+                (session_id, message_id, input_tokens, output_tokens, model, timestamp)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                "sess-1",
+                "msg-1",
+                64_i64,
+                32_i64,
+                "claude-sonnet-4-6",
+                "2026-04-18T10:00:00Z",
+            ],
+        )
+        .unwrap();
+        drop(conn);
+
+        let result = parse_source_file(
+            crate::scanner::providers::opencode::PROVIDER_OPENCODE,
+            &db_path,
+            0,
+        );
+        assert_eq!(result.turns.len(), 1);
+        assert_eq!(result.session_metas.len(), 1);
+        assert_eq!(result.turns[0].provider, "opencode");
     }
 
     // -----------------------------------------------------------------------

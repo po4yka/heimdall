@@ -173,6 +173,7 @@ pub async fn api_rescan(State(state): State<Arc<AppState>>) -> Result<Json<Value
         cleanup_sqlite_files(&temp_path)?;
         let scan_result = scanner::scan(projects_dirs, &temp_path, false)?;
         if temp_path.exists() {
+            preserve_runtime_history(&temp_path, &db_path)?;
             replace_sqlite_files(&temp_path, &db_path)?;
         }
         Ok(scan_result)
@@ -845,6 +846,69 @@ fn replace_sqlite_files(
             std::fs::rename(src, dst)?;
         }
     }
+    Ok(())
+}
+
+fn preserve_runtime_history(
+    temp_path: &std::path::Path,
+    db_path: &std::path::Path,
+) -> anyhow::Result<()> {
+    if !db_path.exists() {
+        return Ok(());
+    }
+
+    let conn = db::open_db(temp_path)?;
+    db::init_db(&conn)?;
+
+    conn.execute(
+        "ATTACH DATABASE ?1 AS live_db",
+        [db_path.to_string_lossy().as_ref()],
+    )?;
+
+    conn.execute_batch(
+        "INSERT OR IGNORE INTO live_events
+             (dedup_key, received_at, session_id, tool_name, cost_usd_nanos,
+              input_tokens, output_tokens, raw_json, context_input_tokens,
+              context_window_size, hook_reported_cost_nanos)
+         SELECT dedup_key, received_at, session_id, tool_name, cost_usd_nanos,
+                input_tokens, output_tokens, raw_json, context_input_tokens,
+                context_window_size, hook_reported_cost_nanos
+         FROM live_db.live_events;
+
+         INSERT OR IGNORE INTO agent_status_history
+             (ts_epoch, provider, component_id, component_name, status)
+         SELECT ts_epoch, provider, component_id, component_name, status
+         FROM live_db.agent_status_history;",
+    )?;
+
+    conn.execute(
+        "INSERT INTO rate_window_history
+             (timestamp, window_type, used_percent, resets_at, source_kind, source_path)
+         SELECT lr.timestamp,
+                lr.window_type,
+                lr.used_percent,
+                lr.resets_at,
+                COALESCE(lr.source_kind, 'oauth'),
+                COALESCE(lr.source_path, '')
+         FROM live_db.rate_window_history lr
+         WHERE COALESCE(lr.source_kind, 'oauth') = 'oauth'
+           AND NOT EXISTS (
+               SELECT 1
+               FROM rate_window_history cur
+               WHERE cur.timestamp = lr.timestamp
+                 AND cur.window_type = lr.window_type
+                 AND ABS(cur.used_percent - lr.used_percent) < 0.000001
+                 AND (
+                     (cur.resets_at IS NULL AND lr.resets_at IS NULL)
+                     OR cur.resets_at = lr.resets_at
+                 )
+                 AND cur.source_kind = COALESCE(lr.source_kind, 'oauth')
+                 AND cur.source_path = COALESCE(lr.source_path, '')
+           )",
+        [],
+    )?;
+
+    conn.execute_batch("DETACH DATABASE live_db;")?;
     Ok(())
 }
 

@@ -25,7 +25,7 @@ use db::{
     open_db, recompute_session_totals, sync_session_titles, upsert_processed_file, upsert_sessions,
 };
 use parser::{
-    PROVIDER_CLAUDE, PROVIDER_CODEX, PROVIDER_XCODE, aggregate_sessions, parse_jsonl_file,
+    PROVIDER_CLAUDE, PROVIDER_CODEX, PROVIDER_XCODE, aggregate_sessions, parse_source_file,
 };
 use usage_limits::{discover_usage_limits_files, insert_usage_limits_snapshot, parse_usage_limits};
 
@@ -151,7 +151,7 @@ pub fn scan(
             any_changes = true;
         }
 
-        let parsed = parse_jsonl_file(provider, filepath, 0);
+        let parsed = parse_source_file(provider, filepath, 0);
 
         if !parsed.turns.is_empty() || !parsed.session_metas.is_empty() {
             let sessions = aggregate_sessions(&parsed.session_metas, &parsed.turns);

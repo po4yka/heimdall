@@ -154,6 +154,93 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_api_rescan_preserves_runtime_history_tables() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+
+        {
+            let conn = crate::scanner::db::open_db(&db_path).unwrap();
+            crate::scanner::db::init_db(&conn).unwrap();
+            conn.execute(
+                "INSERT OR IGNORE INTO live_events
+                    (dedup_key, received_at, session_id, tool_name, cost_usd_nanos,
+                     input_tokens, output_tokens, raw_json, context_input_tokens,
+                     context_window_size, hook_reported_cost_nanos)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                rusqlite::params![
+                    "sess-1:tool-1",
+                    "2026-04-08T10:05:00Z",
+                    "sess-1",
+                    "Read",
+                    1234_i64,
+                    10_i64,
+                    5_i64,
+                    "{}",
+                    77_i64,
+                    200_000_i64,
+                    1234_i64,
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT OR IGNORE INTO agent_status_history
+                    (ts_epoch, provider, component_id, component_name, status)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![1_712_570_400_i64, "claude", "cid-1", "API", "major_outage"],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO rate_window_history
+                    (timestamp, window_type, used_percent, resets_at, source_kind, source_path)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    "2026-04-08T10:05:00Z",
+                    "session",
+                    91.5_f64,
+                    "2026-04-08T11:00:00Z",
+                    "oauth",
+                    "",
+                ],
+            )
+            .unwrap();
+        }
+
+        let app = test_app(db_path.clone(), projects);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/rescan")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let conn = crate::scanner::db::open_db(&db_path).unwrap();
+        let live_events: i64 = conn
+            .query_row("SELECT COUNT(*) FROM live_events", [], |r| r.get(0))
+            .unwrap();
+        let agent_history: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_status_history", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        let oauth_windows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM rate_window_history WHERE source_kind = 'oauth'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        assert_eq!(live_events, 1);
+        assert_eq!(agent_history, 1);
+        assert_eq!(oauth_windows, 1);
+    }
+
+    #[tokio::test]
     async fn test_api_data_returns_json() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
