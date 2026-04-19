@@ -41,19 +41,22 @@ export function ModelChart({ byModel }: { byModel: ModelAgg[] }) {
     stroke: { width: 2, colors: [cssVar('--surface')] },
     // Filter-based hover cue preserves the donut's colour palette. Without
     // this, ApexCharts swaps the total label's colour to the hovered slice
-    // (see apexcharts/apexcharts.js#3264).
-    states: { hover: { filter: { type: 'lighten', value: 0.12 } } },
+    // (see apexcharts/apexcharts.js#3264). The filter is deliberately
+    // gentle — on dark themes the low-opacity tail slices are near-black
+    // and a stronger lighten produces distracting white flashes.
+    states: { hover: { filter: { type: 'lighten', value: 0.06 } } },
     legend: {
       ...base.legend,
       itemMargin: { horizontal: 10, vertical: 2 },
       onItemHover: { highlightDataSeries: false },
       formatter: (label: string) => truncateMid(label, 18, 6),
     },
-    // Anchor the tooltip to the bottom-right of the plot so it never
-    // covers the card's "BY MODEL" title on hover.
+    // Anchor the tooltip below the ring via bottomLeft so it never covers
+    // the card's "BY MODEL" title. bottomRight would push the tooltip past
+    // the card's right edge where overflow:hidden would clip it.
     tooltip: {
       ...base.tooltip,
-      fixed: { enabled: true, position: 'bottomRight', offsetX: 0, offsetY: 0 },
+      fixed: { enabled: true, position: 'bottomLeft', offsetX: 0, offsetY: 0 },
       y: { formatter: (v: number) => fmt(v) + ' tokens' },
     },
     plotOptions: {
