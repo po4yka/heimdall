@@ -2042,11 +2042,25 @@
     y2(() => {
       if (chartRef.current) chartRef.current.destroy();
       prevThemeRef.current = themeMode2;
-      if (ref.current && options) {
-        chartRef.current = new ApexCharts(ref.current, options);
-        chartRef.current.render();
+      if (!ref.current || !options) {
+        return () => {
+          chartRef.current?.destroy();
+          chartRef.current = null;
+        };
       }
+      let cancelled = false;
+      const raf = requestAnimationFrame(() => {
+        if (cancelled || !ref.current) return;
+        const parent = ref.current.parentElement;
+        let h5 = parent?.clientHeight ?? 0;
+        if (h5 <= 0) h5 = parent?.classList.contains("tall") ? 300 : 240;
+        const opts = { ...options, chart: { ...options.chart, height: h5 } };
+        chartRef.current = new ApexCharts(ref.current, opts);
+        chartRef.current.render();
+      });
       return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
         chartRef.current?.destroy();
         chartRef.current = null;
       };
@@ -2480,7 +2494,7 @@
     const subPctOutput = totalOutput > 0 ? summary.subagent_output / totalOutput * 100 : 0;
     return /* @__PURE__ */ u2("div", { class: "table-card", children: [
       /* @__PURE__ */ u2("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: /* @__PURE__ */ u2("div", { class: "section-title", style: { padding: "0" }, children: "Subagent Breakdown" }) }),
-      /* @__PURE__ */ u2("div", { style: "display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px", children: [
+      /* @__PURE__ */ u2("div", { style: "display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:12px 20px 20px", children: [
         /* @__PURE__ */ u2("div", { children: [
           /* @__PURE__ */ u2("div", { class: "stat-label", children: "Turns" }),
           /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
@@ -7341,7 +7355,7 @@
   function renderAgentStatus(snapshot) {
     const container = $2("agent-status");
     if (!container) return;
-    container.style.display = "";
+    container.style.display = "grid";
     R(/* @__PURE__ */ u2(AgentStatusCard, { snapshot, communitySignal: lastCommunitySignal }), container);
   }
   async function loadAgentStatus() {
