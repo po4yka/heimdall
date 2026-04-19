@@ -76,6 +76,8 @@ export interface SessionRow {
   session_id: string;
   provider: string;
   project: string;
+  /** Human-readable alias for project. Equals project when no alias configured. */
+  display_name: string;
   last: string;
   last_date: string;
   duration_min: number;
@@ -150,6 +152,8 @@ export interface DailyProjectRow {
   day: string;
   provider: string;
   project: string;
+  /** Human-readable alias for project. Equals project when no alias configured. */
+  display_name: string;
   input: number;
   output: number;
   reasoning_output: number;
@@ -250,6 +254,8 @@ export interface ModelAgg {
 export interface ProjectAgg {
   provider?: string;
   project: string;
+  /** Human-readable alias for project. Equals project when no alias configured. */
+  display_name: string;
   input: number;
   output: number;
   cache_read: number;

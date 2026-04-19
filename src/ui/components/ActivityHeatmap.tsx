@@ -1,3 +1,6 @@
+// TODO Phase-11: spec ambiguity — heatmap currently has no per-project breakdown.
+// The heatmap aggregates by hour/day across all projects; tooltip enhancement
+// is deferred until the per-project heatmap requirement is clarified.
 import { withAlpha } from '../lib/charts';
 import { fmtCost } from '../lib/format';
 import type { HeatmapData } from '../state/types';

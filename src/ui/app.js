@@ -6070,7 +6070,12 @@
           id: "project",
           accessorKey: "project",
           header: "Project",
-          enableSorting: false
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            const label = row.display_name || row.project;
+            return /* @__PURE__ */ u2("span", { title: row.project, children: label });
+          }
         },
         {
           id: "provider",
@@ -6385,7 +6390,12 @@
           id: "project",
           accessorKey: "project",
           header: "Project",
-          enableSorting: false
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            const label = row.display_name || row.project;
+            return /* @__PURE__ */ u2("span", { title: row.project, children: label });
+          }
         },
         {
           id: "sessions",
@@ -6576,7 +6586,10 @@
       plotOptions: { bar: { horizontal: true, barHeight: "60%", borderRadius: 0 } },
       xaxis: {
         ...base.xaxis,
-        categories: top.map((p5) => p5.project.length > 22 ? "\u2026" + p5.project.slice(-20) : p5.project),
+        categories: top.map((p5) => {
+          const n3 = p5.display_name || p5.project;
+          return n3.length > 22 ? "\u2026" + n3.slice(-20) : n3;
+        }),
         labels: { ...base.xaxis.labels, formatter: (v4) => fmt(v4) }
       },
       yaxis: {
@@ -6816,9 +6829,12 @@
     const search = params.toString() ? "?" + params.toString() : "";
     history.replaceState(null, "", window.location.pathname + search);
   }
-  function matchesProjectSearch(project) {
+  function matchesProjectSearch(project, displayName) {
     if (!projectSearchQuery.value) return true;
-    return project.toLowerCase().includes(projectSearchQuery.value);
+    const q3 = projectSearchQuery.value;
+    if (project.toLowerCase().includes(q3)) return true;
+    if (displayName && displayName.toLowerCase().includes(q3)) return true;
+    return false;
   }
   function weekLabelToWeekStart(label) {
     const [yearStr, weekStr] = label.split("-");
@@ -6920,6 +6936,7 @@
     for (const s4 of filteredSessions) {
       const p5 = projMap[s4.project] ?? (projMap[s4.project] = {
         project: s4.project,
+        display_name: s4.display_name || s4.project,
         input: 0,
         output: 0,
         cache_read: 0,
@@ -7023,7 +7040,7 @@
       (r4) => selectedModels.value.has(r4.model) && (!cutoff || r4.day >= cutoff) && matchesProvider(r4)
     );
     const filteredSessions = rawData.value.sessions_all.filter(
-      (s4) => selectedModels.value.has(s4.model) && (!cutoff || s4.last_date >= cutoff) && matchesProjectSearch(s4.project) && matchesProvider(s4)
+      (s4) => selectedModels.value.has(s4.model) && (!cutoff || s4.last_date >= cutoff) && matchesProjectSearch(s4.project, s4.display_name) && matchesProvider(s4)
     );
     const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } = buildAggregations(filteredDaily, filteredSessions);
     const providerLabel = selectedProvider.value === "both" ? "" : ` (${selectedProvider.value})`;

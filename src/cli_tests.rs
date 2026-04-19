@@ -51,7 +51,7 @@ mod tests {
         db::init_db(&conn).unwrap();
         drop(conn);
         // Should not panic
-        crate::cmd_today(&db_path, false, None).unwrap();
+        crate::cmd_today(&db_path, false, None, &std::collections::HashMap::new()).unwrap();
     }
 
     #[test]
@@ -59,7 +59,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let (db_path, _) = setup_test_db(&tmp);
         // JSON mode should not panic (output goes to stdout)
-        crate::cmd_today(&db_path, true, None).unwrap();
+        crate::cmd_today(&db_path, true, None, &std::collections::HashMap::new()).unwrap();
     }
 
     #[test]
@@ -70,14 +70,28 @@ mod tests {
         db::init_db(&conn).unwrap();
         drop(conn);
         // Should not panic on empty DB
-        crate::cmd_stats(&db_path, false, "USD", None).unwrap();
+        crate::cmd_stats(
+            &db_path,
+            false,
+            "USD",
+            None,
+            &std::collections::HashMap::new(),
+        )
+        .unwrap();
     }
 
     #[test]
     fn test_cmd_stats_json() {
         let tmp = TempDir::new().unwrap();
         let (db_path, _) = setup_test_db(&tmp);
-        crate::cmd_stats(&db_path, true, "USD", None).unwrap();
+        crate::cmd_stats(
+            &db_path,
+            true,
+            "USD",
+            None,
+            &std::collections::HashMap::new(),
+        )
+        .unwrap();
     }
 
     // ── pricing refresh integration tests (no network) ───────────────────────
@@ -179,5 +193,84 @@ mod tests {
         let est = estimate_cost("gemini-2.5-flash", 1_000_000, 0, 0, 0);
         assert_eq!(est.estimated_cost_nanos, 0);
         assert_eq!(est.cost_confidence, COST_CONFIDENCE_LOW);
+    }
+
+    // ── Phase 11: parse_project_alias + merge precedence ────────────────────
+
+    #[test]
+    fn test_parse_project_alias_valid() {
+        let result = crate::parse_project_alias("-Users-foo=My Project");
+        assert!(result.is_ok());
+        let (k, v) = result.unwrap();
+        assert_eq!(k, "-Users-foo");
+        assert_eq!(v, "My Project");
+    }
+
+    #[test]
+    fn test_parse_project_alias_whitespace_trimmed() {
+        let result = crate::parse_project_alias("  slug  =  Name  ");
+        assert!(result.is_ok());
+        let (k, v) = result.unwrap();
+        assert_eq!(k, "slug");
+        assert_eq!(v, "Name");
+    }
+
+    #[test]
+    fn test_parse_project_alias_invalid_no_equals() {
+        let result = crate::parse_project_alias("no-equals-sign");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cli_alias_overrides_config_alias() {
+        // Construct a Config with a config-level alias.
+        let mut cfg: crate::config::Config = Default::default();
+        cfg.project_aliases
+            .insert("foo".to_string(), "Config Name".to_string());
+
+        // CLI args that override the same key.
+        let cli_overrides: Vec<(String, String)> =
+            vec![("foo".to_string(), "CLI Name".to_string())];
+
+        // Apply the same merge loop used in main.rs.
+        let mut map = cfg.project_aliases.clone();
+        for (k, v) in cli_overrides {
+            map.insert(k, v);
+        }
+
+        // CLI value wins.
+        assert_eq!(map.get("foo"), Some(&"CLI Name".to_string()));
+    }
+
+    #[test]
+    fn test_parse_project_alias_empty_key_rejected() {
+        let result = crate::parse_project_alias("=SomeName");
+        assert!(result.is_err());
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("key is empty"),
+            "expected key-empty message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_parse_project_alias_empty_value_rejected() {
+        let result = crate::parse_project_alias("slug=");
+        assert!(result.is_err());
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("value is empty"),
+            "expected value-empty message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_parse_project_alias_value_with_equals() {
+        // A value containing '=' should be accepted: only the first '=' is the separator.
+        let result = crate::parse_project_alias("slug=a=b");
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result);
+        let (k, v) = result.unwrap();
+        assert_eq!(k, "slug");
+        assert_eq!(v, "a=b");
     }
 }

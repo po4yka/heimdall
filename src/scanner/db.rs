@@ -1292,6 +1292,10 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 project: row
                     .get::<_, Option<String>>(2)?
                     .unwrap_or_else(|| "unknown".into()),
+                // display_name defaults to the raw project slug; resolved to alias at serve time.
+                display_name: row
+                    .get::<_, Option<String>>(2)?
+                    .unwrap_or_else(|| "unknown".into()),
                 last: last_ts
                     .chars()
                     .take(16)
@@ -1600,6 +1604,8 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
             Ok(DailyProjectRow {
                 day: day.clone(),
                 provider: provider.clone(),
+                // display_name defaults to the raw slug; resolved to alias at serve time.
+                display_name: project.clone(),
                 project: project.clone(),
                 input: row.get(3)?,
                 output: row.get(4)?,

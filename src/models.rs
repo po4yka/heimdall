@@ -296,6 +296,8 @@ pub struct DailyProjectRow {
     pub day: String,
     pub provider: String,
     pub project: String,
+    /// Human-readable alias for `project`.  Equals `project` when no alias is configured.
+    pub display_name: String,
     pub input: i64,
     pub output: i64,
     pub reasoning_output: i64,
@@ -358,6 +360,8 @@ pub struct SessionRow {
     pub session_id: String,
     pub provider: String,
     pub project: String,
+    /// Human-readable alias for `project`.  Equals `project` when no alias is configured.
+    pub display_name: String,
     pub last: String,
     pub last_date: String,
     pub duration_min: f64,

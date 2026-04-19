@@ -21,7 +21,7 @@ export function ProjectChart({ byProject }: { byProject: ProjectAgg[] }) {
     plotOptions: { bar: { horizontal: true, barHeight: '60%', borderRadius: 0 } },
     xaxis: {
       ...base.xaxis,
-      categories: top.map(p => p.project.length > 22 ? '\u2026' + p.project.slice(-20) : p.project),
+      categories: top.map(p => { const n = p.display_name || p.project; return n.length > 22 ? '\u2026' + n.slice(-20) : n; }),
       labels: { ...base.xaxis.labels, formatter: (v: number) => fmt(v) },
     },
     yaxis: {

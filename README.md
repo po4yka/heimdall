@@ -354,6 +354,26 @@ openai_services = ["openai", "chatgpt"]
 spike_webhook = true                        # fire `community_signal_spike` on leading-indicator
 ```
 
+### Project aliases
+
+Map mangled Claude Code project slugs to human-readable names. Aliases apply
+to CLI tables, dashboard labels, and CSV export — storage keeps the raw slug
+for scriptability.
+
+```toml
+[project_aliases]
+"-Users-po4yka-GitRep-heimdall" = "Heimdall"
+"-Users-po4yka-GitRep-ccusage" = "ccusage"
+```
+
+CLI override (repeatable, wins over config):
+
+```
+heimdall today --project-alias="-Users-po4yka-GitRep-heimdall=Heimdall"
+heimdall stats --project-alias="-Users-po4yka-GitRep-heimdall=Heimdall" \
+               --project-alias="-Users-po4yka-GitRep-ccusage=ccusage"
+```
+
 ## Data Sources
 
 Automatically discovers sessions from:

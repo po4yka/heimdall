@@ -6,6 +6,7 @@
 //!
 //! Storage stays in integer nanos; floats are derived for display only.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -101,7 +102,10 @@ fn period_bounds(period: ExportPeriod, today: NaiveDate) -> Option<(NaiveDate, N
 pub struct ExportRow {
     pub date: String,
     pub provider: String,
+    /// Raw project slug — canonical, scriptable, never aliased.
     pub project: String,
+    /// Human-readable alias for `project`.  Equals `project` when no alias is configured.
+    pub project_display_name: String,
     pub model: String,
     pub input_tokens: i64,
     pub output_tokens: i64,
@@ -122,6 +126,8 @@ pub struct ExportOptions {
     /// Optional jq filter applied to each row's JSON representation.
     /// When set, only JSON and JSONL outputs are produced (CSV is unaffected).
     pub jq: Option<String>,
+    /// Map of raw project slug → display name.  Applied to `project_display_name` column.
+    pub project_aliases: HashMap<String, String>,
 }
 
 pub fn run_export(db_path: &Path, opts: &ExportOptions) -> Result<usize> {
@@ -139,6 +145,7 @@ pub fn run_export(db_path: &Path, opts: &ExportOptions) -> Result<usize> {
         today,
         opts.provider.as_deref(),
         opts.project.as_deref(),
+        &opts.project_aliases,
     )?;
 
     if let Some(filter) = &opts.jq {
@@ -204,6 +211,7 @@ fn query_rows(
     today: NaiveDate,
     provider: Option<&str>,
     project: Option<&str>,
+    aliases: &HashMap<String, String>,
 ) -> Result<Vec<ExportRow>> {
     let bounds = period_bounds(period, today);
 
@@ -243,21 +251,56 @@ fn query_rows(
     let rows = stmt
         .query_map(rusqlite::params_from_iter(params.iter()), |row| {
             let cost_nanos: i64 = row.get(8)?;
-            Ok(ExportRow {
-                date: row.get(0)?,
-                provider: row.get(1)?,
-                project: row.get(2)?,
-                model: row.get(3)?,
-                input_tokens: row.get(4)?,
-                output_tokens: row.get(5)?,
-                cache_read: row.get(6)?,
-                cache_write: row.get(7)?,
-                cost_usd_nanos: cost_nanos,
-                cost_usd_display: cost_nanos as f64 / 1_000_000_000.0,
-            })
+            let project: String = row.get(2)?;
+            Ok((
+                project,
+                cost_nanos,
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i64>(7)?,
+            ))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows)
+
+    let result = rows
+        .into_iter()
+        .map(
+            |(
+                project,
+                cost_nanos,
+                date,
+                provider,
+                model,
+                input_tokens,
+                output_tokens,
+                cache_read,
+                cache_write,
+            )| {
+                let project_display_name = aliases
+                    .get(&project)
+                    .cloned()
+                    .unwrap_or_else(|| project.clone());
+                ExportRow {
+                    date,
+                    provider,
+                    project_display_name,
+                    project,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    cache_read,
+                    cache_write,
+                    cost_usd_nanos: cost_nanos,
+                    cost_usd_display: cost_nanos as f64 / 1_000_000_000.0,
+                }
+            },
+        )
+        .collect();
+    Ok(result)
 }
 
 fn write_rows(rows: &[ExportRow], format: ExportFormat, output: &Path) -> Result<()> {
@@ -304,6 +347,7 @@ mod tests {
             date: date.into(),
             provider: provider.into(),
             project: "user/proj".into(),
+            project_display_name: "user/proj".into(),
             model: "claude-sonnet-4-6".into(),
             input_tokens: 100,
             output_tokens: 50,
@@ -449,7 +493,8 @@ mod tests {
 
         let conn = open_db(&db).unwrap();
         let today = NaiveDate::from_ymd_opt(2026, 4, 17).unwrap();
-        let rows = query_rows(&conn, ExportPeriod::All, today, None, None).unwrap();
+        let rows =
+            query_rows(&conn, ExportPeriod::All, today, None, None, &HashMap::new()).unwrap();
 
         // Two logical buckets: (2026-04-16, codex, beta, gpt-5) and
         // (2026-04-17, claude, alpha, claude-sonnet-4-6) with the two
@@ -475,7 +520,15 @@ mod tests {
 
         let conn = open_db(&db).unwrap();
         let today = NaiveDate::from_ymd_opt(2026, 4, 17).unwrap();
-        let rows = query_rows(&conn, ExportPeriod::All, today, Some("codex"), None).unwrap();
+        let rows = query_rows(
+            &conn,
+            ExportPeriod::All,
+            today,
+            Some("codex"),
+            None,
+            &HashMap::new(),
+        )
+        .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].provider, "codex");
     }
@@ -488,7 +541,15 @@ mod tests {
 
         let conn = open_db(&db).unwrap();
         let today = NaiveDate::from_ymd_opt(2026, 4, 17).unwrap();
-        let rows = query_rows(&conn, ExportPeriod::Today, today, None, None).unwrap();
+        let rows = query_rows(
+            &conn,
+            ExportPeriod::Today,
+            today,
+            None,
+            None,
+            &HashMap::new(),
+        )
+        .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].date, "2026-04-17");
     }
@@ -507,6 +568,7 @@ mod tests {
             provider: None,
             project: None,
             jq: None,
+            project_aliases: HashMap::new(),
         };
         let n = run_export(&db, &opts).unwrap();
         assert_eq!(n, 2);
@@ -527,6 +589,7 @@ mod tests {
             provider: None,
             project: None,
             jq: None,
+            project_aliases: HashMap::new(),
         };
         assert!(run_export(&db, &opts).is_err());
     }
@@ -571,6 +634,7 @@ mod tests {
             provider: None,
             project: None,
             jq: Some(".model".to_string()),
+            project_aliases: HashMap::new(),
         };
         let n = run_export(&db, &opts).unwrap();
         assert_eq!(n, 2);
@@ -601,6 +665,7 @@ mod tests {
             provider: None,
             project: None,
             jq: Some(".nonexistent_field".to_string()),
+            project_aliases: HashMap::new(),
         };
         let n = run_export(&db, &opts).unwrap();
         assert_eq!(n, 2);
@@ -612,5 +677,47 @@ mod tests {
         for line in &lines {
             assert_eq!(*line, "null", "expected null output, got {line}");
         }
+    }
+
+    // ── Phase 11: project_display_name in export ─────────────────────────────
+
+    #[test]
+    fn csv_export_with_aliases_populates_project_display_name() {
+        let dir = TempDir::new().unwrap();
+        let db = dir.path().join("t.db");
+        seed_db(&db);
+        let out = dir.path().join("out.csv");
+
+        let mut aliases = HashMap::new();
+        aliases.insert("user/alpha".to_string(), "Alpha Project".to_string());
+
+        let opts = ExportOptions {
+            format: ExportFormat::Csv,
+            period: ExportPeriod::All,
+            output: out.clone(),
+            provider: None,
+            project: None,
+            jq: None,
+            project_aliases: aliases,
+        };
+        let n = run_export(&db, &opts).unwrap();
+        assert_eq!(n, 2);
+
+        let text = std::fs::read_to_string(&out).unwrap();
+        // project_display_name column must be present
+        assert!(
+            text.contains("project_display_name"),
+            "csv should have project_display_name header: {text}"
+        );
+        // aliased row: user/alpha → Alpha Project
+        assert!(
+            text.contains("Alpha Project"),
+            "csv should contain alias 'Alpha Project': {text}"
+        );
+        // non-aliased row: user/beta stays as-is
+        assert!(
+            text.contains("user/beta"),
+            "csv should contain raw slug for non-aliased project: {text}"
+        );
     }
 }

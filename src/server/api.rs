@@ -52,6 +52,8 @@ pub struct AppState {
     pub aggregator_cache: RwLock<Option<(Instant, CommunitySignal)>>,
     /// Token quota for the /api/billing-blocks endpoint (from config [blocks.token_limit]).
     pub blocks_token_limit: Option<i64>,
+    /// Phase 11: project slug -> display name map, populated once at startup.
+    pub project_aliases: std::collections::HashMap<String, String>,
 }
 
 pub async fn api_data(
@@ -83,6 +85,24 @@ pub async fn api_data(
     }
 
     maybe_send_cost_threshold_webhook(&state, &result).await;
+
+    // Phase 11: apply project aliases — resolve display_name on every row.
+    // Aliases are pre-loaded into AppState at startup; no per-request disk read.
+    let aliases = &state.project_aliases;
+    for row in &mut result.daily_by_project {
+        row.display_name = aliases
+            .get(&row.project)
+            .map(|s| s.as_str())
+            .unwrap_or(&row.project)
+            .to_string();
+    }
+    for row in &mut result.sessions_all {
+        row.display_name = aliases
+            .get(&row.project)
+            .map(|s| s.as_str())
+            .unwrap_or(&row.project)
+            .to_string();
+    }
 
     let value = serde_json::to_value(result).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(value))

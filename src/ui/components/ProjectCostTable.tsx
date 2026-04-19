@@ -2,6 +2,7 @@ import { useMemo } from 'preact/hooks';
 import { type ColumnDef, type SortingState } from '@tanstack/table-core';
 import { fmt, fmtCost } from '../lib/format';
 import type { ProjectAgg } from '../state/types';
+
 import { DataTable } from './DataTable';
 
 const defaultSort: SortingState = [{ id: 'cost', desc: true }];
@@ -14,6 +15,11 @@ function useProjectColumns(): ColumnDef<ProjectAgg, any>[] {
         accessorKey: 'project',
         header: 'Project',
         enableSorting: false,
+        cell: (info: any) => {
+          const row = info.row.original as ProjectAgg;
+          const label = row.display_name || row.project;
+          return <span title={row.project}>{label}</span>;
+        },
       },
       {
         id: 'sessions',

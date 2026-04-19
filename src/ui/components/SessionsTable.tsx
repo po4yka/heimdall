@@ -30,6 +30,11 @@ function useSessionColumns(): ColumnDef<SessionRow, any>[] {
         accessorKey: 'project',
         header: 'Project',
         enableSorting: false,
+        cell: (info: any) => {
+          const row = info.row.original as SessionRow;
+          const label = row.display_name || row.project;
+          return <span title={row.project}>{label}</span>;
+        },
       },
       {
         id: 'provider',

@@ -36,6 +36,8 @@ pub struct ServeOptions {
     pub aggregator_config: AggregatorConfig,
     /// Token quota for the billing-blocks dashboard endpoint (from config [blocks.token_limit]).
     pub blocks_token_limit: Option<i64>,
+    /// Phase 11: project slug -> display name map, populated once from config at startup.
+    pub project_aliases: std::collections::HashMap<String, String>,
 }
 
 pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
@@ -63,6 +65,7 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         aggregator_config: options.aggregator_config,
         aggregator_cache: RwLock::new(None),
         blocks_token_limit: options.blocks_token_limit,
+        project_aliases: options.project_aliases,
     });
 
     // Phase 20: start file-watcher if --watch was requested.

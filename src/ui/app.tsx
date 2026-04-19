@@ -153,9 +153,12 @@ function updateURL(): void {
   history.replaceState(null, '', window.location.pathname + search);
 }
 
-function matchesProjectSearch(project: string): boolean {
+function matchesProjectSearch(project: string, displayName?: string): boolean {
   if (!projectSearchQuery.value) return true;
-  return project.toLowerCase().includes(projectSearchQuery.value);
+  const q = projectSearchQuery.value;
+  if (project.toLowerCase().includes(q)) return true;
+  if (displayName && displayName.toLowerCase().includes(q)) return true;
+  return false;
 }
 
 // ── SQLite %W week range filter ──────────────────────────────────────
@@ -276,6 +279,7 @@ function buildAggregations(filteredDaily: DailyModelRow[], filteredSessions: typ
   for (const s of filteredSessions) {
     const p = projMap[s.project] ?? (projMap[s.project] = {
       project: s.project,
+      display_name: s.display_name || s.project,
       input: 0,
       output: 0,
       cache_read: 0,
@@ -391,7 +395,7 @@ function applyFilter(): void {
   );
 
   const filteredSessions = rawData.value.sessions_all.filter(s =>
-    selectedModels.value.has(s.model) && (!cutoff || s.last_date >= cutoff) && matchesProjectSearch(s.project) && matchesProvider(s)
+    selectedModels.value.has(s.model) && (!cutoff || s.last_date >= cutoff) && matchesProjectSearch(s.project, s.display_name) && matchesProvider(s)
   );
   const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } =
     buildAggregations(filteredDaily, filteredSessions);

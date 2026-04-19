@@ -52,6 +52,10 @@ enum Commands {
         /// jq-style filter applied to the JSON output (implies --json)
         #[arg(long, value_name = "FILTER")]
         jq: Option<String>,
+        /// Map a project slug to a human-readable name (repeatable).
+        /// Format: "slug=Display Name". Merges into / overrides config's [project_aliases].
+        #[arg(long = "project-alias", value_parser = parse_project_alias)]
+        project_aliases: Vec<(String, String)>,
     },
     /// Show all-time statistics
     Stats {
@@ -63,6 +67,10 @@ enum Commands {
         /// jq-style filter applied to the JSON output (implies --json)
         #[arg(long, value_name = "FILTER")]
         jq: Option<String>,
+        /// Map a project slug to a human-readable name (repeatable).
+        /// Format: "slug=Display Name". Merges into / overrides config's [project_aliases].
+        #[arg(long = "project-alias", value_parser = parse_project_alias)]
+        project_aliases: Vec<(String, String)>,
     },
     /// Scan + start web dashboard
     Dashboard {
@@ -100,6 +108,10 @@ enum Commands {
         /// jq-style filter applied to each JSON/JSONL record (implies --format=json/jsonl)
         #[arg(long, value_name = "FILTER")]
         jq: Option<String>,
+        /// Map a project slug to a human-readable name (repeatable).
+        /// Format: "slug=Display Name". Merges into / overrides config's [project_aliases].
+        #[arg(long = "project-alias", value_parser = parse_project_alias)]
+        project_aliases: Vec<(String, String)>,
     },
     /// Print SwiftBar-formatted menubar widget showing today's cost
     Menubar {
@@ -180,6 +192,10 @@ enum Commands {
         /// jq-style filter applied to the JSON output (implies --json)
         #[arg(long, value_name = "FILTER")]
         jq: Option<String>,
+        /// Map a project slug to a human-readable name (repeatable).
+        /// Format: "slug=Display Name". Merges into / overrides config's [project_aliases].
+        #[arg(long = "project-alias", value_parser = parse_project_alias)]
+        project_aliases: Vec<(String, String)>,
     },
     /// Emit a Claude Code status line from the PostToolUse hook JSON on stdin
     Statusline {
@@ -290,6 +306,22 @@ enum StatuslineHookAction {
     Uninstall,
     /// Show whether the statusLine entry is present
     Status,
+}
+
+/// Parse a `slug=Display Name` pair for `--project-alias`.
+pub(crate) fn parse_project_alias(s: &str) -> Result<(String, String), String> {
+    let (k, v) = s
+        .split_once('=')
+        .ok_or_else(|| format!("expected 'slug=Display Name', got: {s}"))?;
+    let k = k.trim().to_string();
+    let v = v.trim().to_string();
+    if k.is_empty() {
+        return Err(format!("project alias key is empty in: {s}"));
+    }
+    if v.is_empty() {
+        return Err(format!("project alias value is empty in: {s}"));
+    }
+    Ok((k, v))
 }
 
 fn parse_cost_source(s: &str) -> Result<statusline::StatuslineCostSource, String> {
@@ -441,6 +473,7 @@ fn main() -> Result<()> {
     let cfg_statusline_medium = resolved_statusline.context_medium_threshold;
     let cfg_burn_rate_normal_max = resolved_statusline.burn_rate_normal_max;
     let cfg_burn_rate_moderate_max = resolved_statusline.burn_rate_moderate_max;
+    let cfg_project_aliases = cfg.project_aliases.clone();
 
     let default_db = |cli_db: Option<PathBuf>| -> PathBuf {
         cli_db
@@ -468,13 +501,31 @@ fn main() -> Result<()> {
             let dirs = default_dirs(projects_dir);
             scanner::scan(dirs, &db, true)?;
         }
-        Commands::Today { db_path, json, jq } => {
+        Commands::Today {
+            db_path,
+            json,
+            jq,
+            project_aliases,
+        } => {
             let db = default_db(db_path);
-            cmd_today(&db, json, jq.as_deref())?;
+            let mut aliases = cfg_project_aliases.clone();
+            for (k, v) in project_aliases {
+                aliases.insert(k, v);
+            }
+            cmd_today(&db, json, jq.as_deref(), &aliases)?;
         }
-        Commands::Stats { db_path, json, jq } => {
+        Commands::Stats {
+            db_path,
+            json,
+            jq,
+            project_aliases,
+        } => {
             let db = default_db(db_path);
-            cmd_stats(&db, json, &cfg_display_currency, jq.as_deref())?;
+            let mut aliases = cfg_project_aliases.clone();
+            for (k, v) in project_aliases {
+                aliases.insert(k, v);
+            }
+            cmd_stats(&db, json, &cfg_display_currency, jq.as_deref(), &aliases)?;
         }
         Commands::Dashboard {
             projects_dir,
@@ -519,6 +570,7 @@ fn main() -> Result<()> {
                 agent_status_config: cfg_agent_status,
                 aggregator_config: cfg_aggregator,
                 blocks_token_limit: cfg_blocks_token_limit,
+                project_aliases: cfg_project_aliases.clone(),
             }))?;
         }
         Commands::Export {
@@ -529,8 +581,13 @@ fn main() -> Result<()> {
             provider,
             project,
             jq,
+            project_aliases,
         } => {
             let db = default_db(db_path);
+            let mut aliases = cfg_project_aliases.clone();
+            for (k, v) in project_aliases {
+                aliases.insert(k, v);
+            }
             let opts = export::ExportOptions {
                 format: format.parse()?,
                 period: period.parse()?,
@@ -538,6 +595,7 @@ fn main() -> Result<()> {
                 provider,
                 project,
                 jq,
+                project_aliases: aliases,
             };
             let n = export::run_export(&db, &opts)?;
             // When writing to stdout (`-`), suppress the status message so it
@@ -612,9 +670,14 @@ fn main() -> Result<()> {
             json,
             breakdown,
             jq,
+            project_aliases,
         } => {
             let db = default_db(db_path);
-            cmd_weekly(&db, start_of_week, json, breakdown, jq.as_deref())?;
+            let mut aliases = cfg_project_aliases.clone();
+            for (k, v) in project_aliases {
+                aliases.insert(k, v);
+            }
+            cmd_weekly(&db, start_of_week, json, breakdown, jq.as_deref(), &aliases)?;
         }
         Commands::Statusline {
             refresh_interval,
@@ -1154,7 +1217,12 @@ type StatsModelRow = (
 );
 type ProviderRollup = (i64, i64, i64, i64, i64, i64, i64);
 
-fn cmd_today(db_path: &std::path::Path, json_output: bool, jq: Option<&str>) -> Result<()> {
+pub(crate) fn cmd_today(
+    db_path: &std::path::Path,
+    json_output: bool,
+    jq: Option<&str>,
+    _aliases: &HashMap<String, String>,
+) -> Result<()> {
     if !db_path.exists() {
         anyhow::bail!("Database not found. Run: claude-usage-tracker scan");
     }
@@ -1432,6 +1500,7 @@ fn cmd_weekly(
     json_output: bool,
     breakdown: bool,
     jq: Option<&str>,
+    _aliases: &HashMap<String, String>,
 ) -> Result<()> {
     if !db_path.exists() {
         anyhow::bail!("Database not found. Run: claude-usage-tracker scan");
@@ -1564,11 +1633,12 @@ fn cmd_weekly(
     Ok(())
 }
 
-fn cmd_stats(
+pub(crate) fn cmd_stats(
     db_path: &std::path::Path,
     json_output: bool,
     display_currency: &str,
     jq: Option<&str>,
+    _aliases: &HashMap<String, String>,
 ) -> Result<()> {
     if !db_path.exists() {
         anyhow::bail!("Database not found. Run: claude-usage-tracker scan");

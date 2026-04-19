@@ -94,6 +94,7 @@ mod tests {
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
             blocks_token_limit: None,
+            project_aliases: std::collections::HashMap::new(),
         });
         let html = assets::render_dashboard();
 
@@ -1056,6 +1057,7 @@ mod tests {
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
             blocks_token_limit: None,
+            project_aliases: std::collections::HashMap::new(),
         });
 
         let html = assets::render_dashboard();
@@ -1246,6 +1248,7 @@ mod tests {
             aggregator_config: agg_cfg,
             aggregator_cache: tokio::sync::RwLock::new(None),
             blocks_token_limit: None,
+            project_aliases: std::collections::HashMap::new(),
         });
 
         let html = crate::server::assets::render_dashboard();
@@ -1340,6 +1343,7 @@ mod tests {
                 cached_signal,
             ))),
             blocks_token_limit: None,
+            project_aliases: std::collections::HashMap::new(),
         });
 
         let html = crate::server::assets::render_dashboard();
@@ -1400,6 +1404,7 @@ mod tests {
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
             blocks_token_limit: token_limit,
+            project_aliases: std::collections::HashMap::new(),
         });
         let html = assets::render_dashboard();
         Router::new()

@@ -82,15 +82,35 @@ pub struct Config {
     /// JSON Schema URL for IDE autocomplete.  Ignored at runtime.
     /// Skipped when `None` during serialisation so `config show --format=toml`
     /// does not emit a bare `"$schema"` quoted key.
-    #[serde(
-        rename = "$schema",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "$schema", default, skip_serializing_if = "Option::is_none")]
     pub schema: Option<String>,
+
+    /// Map of raw project slug (e.g., `-Users-foo-proj`) to a human-readable
+    /// display name (e.g., `My Project`).  Purely cosmetic — storage always
+    /// keeps the raw slug as canonical.
+    ///
+    /// TOML example:
+    /// ```toml
+    /// [project_aliases]
+    /// "-Users-po4yka-GitRep-heimdall" = "Heimdall"
+    /// ```
+    #[serde(default)]
+    #[schemars(
+        description = "Map of raw project slug (e.g., '-Users-foo-proj') to a human-readable display name"
+    )]
+    pub project_aliases: HashMap<String, String>,
 }
 
 impl Config {
+    /// Resolve the display name for a project slug.
+    /// Returns the alias if set, otherwise the slug unchanged.
+    pub fn display_name_for<'a>(&'a self, slug: &'a str) -> &'a str {
+        self.project_aliases
+            .get(slug)
+            .map(|s| s.as_str())
+            .unwrap_or(slug)
+    }
+
     /// Return the effective `BlocksConfig`, merging flat `blocks` with any
     /// `commands.blocks` override.  `commands.blocks.*` wins for each field
     /// that is `Some`.
@@ -1135,5 +1155,85 @@ spike_webhook = false
             props.contains_key("commands"),
             "schema must have 'commands'"
         );
+    }
+
+    // ── Phase 11: project_aliases ────────────────────────────────────────────
+
+    #[test]
+    fn test_project_aliases_toml_parses() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(
+            f,
+            "[project_aliases]\n\"-Users-po4yka-GitRep-heimdall\" = \"Heimdall\"\n\"-Users-po4yka-GitRep-ccusage\" = \"ccusage\"\n"
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.project_aliases.len(), 2);
+        assert_eq!(
+            config
+                .project_aliases
+                .get("-Users-po4yka-GitRep-heimdall")
+                .map(|s| s.as_str()),
+            Some("Heimdall")
+        );
+        assert_eq!(
+            config
+                .project_aliases
+                .get("-Users-po4yka-GitRep-ccusage")
+                .map(|s| s.as_str()),
+            Some("ccusage")
+        );
+    }
+
+    #[test]
+    fn test_project_aliases_json_parses() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.json");
+        std::fs::write(
+            &path,
+            r#"{"project_aliases": {"-Users-po4yka-GitRep-heimdall": "Heimdall"}}"#,
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(
+            config
+                .project_aliases
+                .get("-Users-po4yka-GitRep-heimdall")
+                .map(|s| s.as_str()),
+            Some("Heimdall")
+        );
+    }
+
+    #[test]
+    fn test_project_aliases_missing_returns_empty_map() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(f, "port = 3000\n").unwrap();
+        let config = load_config_from(&path);
+        assert!(config.project_aliases.is_empty());
+    }
+
+    #[test]
+    fn test_display_name_for_known_slug() {
+        let mut config = Config::default();
+        config
+            .project_aliases
+            .insert("-Users-foo-bar".to_string(), "My Project".to_string());
+        assert_eq!(config.display_name_for("-Users-foo-bar"), "My Project");
+    }
+
+    #[test]
+    fn test_display_name_for_unknown_slug() {
+        let config = Config::default();
+        assert_eq!(config.display_name_for("-Users-foo-bar"), "-Users-foo-bar");
+    }
+
+    #[test]
+    fn test_display_name_for_empty_map() {
+        let config = Config::default();
+        assert_eq!(config.display_name_for("any-slug"), "any-slug");
     }
 }
