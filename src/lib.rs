@@ -21,6 +21,7 @@ pub mod mcp;
 pub mod menubar;
 pub mod models;
 pub mod oauth;
+pub mod official_pricing;
 pub mod openai;
 pub mod optimizer;
 pub mod pricing;

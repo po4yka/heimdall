@@ -5,11 +5,12 @@ use tracing::warn;
 use std::collections::HashMap;
 
 use crate::models::{
-    BillingModeSummary, BranchSummary, ClaudeUsageFactor, ClaudeUsageResponse,
-    ClaudeUsageRunMeta, ClaudeUsageSnapshot, ConfidenceSummary, DailyModelRow, DailyProjectRow,
-    DashboardData, EntrypointSummary, HourlyRow, McpServerSummary, ProviderSummary,
-    ServiceTierSummary, SessionRow, ToolEvent, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
+    BillingModeSummary, BranchSummary, ClaudeUsageFactor, ClaudeUsageResponse, ClaudeUsageRunMeta,
+    ClaudeUsageSnapshot, ConfidenceSummary, DailyModelRow, DailyProjectRow, DashboardData,
+    EntrypointSummary, HourlyRow, McpServerSummary, ProviderSummary, ServiceTierSummary,
+    SessionRow, ToolEvent, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
+use crate::official_pricing::{OfficialModelPricing, PricingSyncRun, StoredPricingModel};
 use crate::scanner::parser::{classify_tool, raw_session_id};
 use crate::tz::TzParams;
 
@@ -119,6 +120,40 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_cuf_run_order
             ON claude_usage_factors(run_id, display_order);",
+    )?;
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS pricing_sync_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fetched_at TEXT NOT NULL,
+            source_slug TEXT NOT NULL,
+            source_url TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            status TEXT NOT NULL,
+            raw_body TEXT NOT NULL DEFAULT '',
+            error_text TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_psr_source_fetched
+            ON pricing_sync_runs(source_slug, fetched_at DESC);
+
+        CREATE TABLE IF NOT EXISTS pricing_sync_models (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            source_slug TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            model_id TEXT NOT NULL,
+            model_label TEXT NOT NULL,
+            input_usd_per_mtok REAL NOT NULL,
+            cache_write_usd_per_mtok REAL NOT NULL,
+            cache_read_usd_per_mtok REAL NOT NULL,
+            output_usd_per_mtok REAL NOT NULL,
+            threshold_tokens INTEGER,
+            input_above_threshold REAL,
+            output_above_threshold REAL,
+            notes TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_psm_source_model_run
+            ON pricing_sync_models(source_slug, model_id, run_id DESC);",
     )?;
 
     // Migration: add subagent columns if upgrading from older schema
@@ -1874,6 +1909,208 @@ pub fn insert_claude_usage_run(
     Ok(conn.last_insert_rowid())
 }
 
+pub fn insert_pricing_sync_run(conn: &Connection, run: &PricingSyncRun) -> Result<i64> {
+    conn.execute(
+        "INSERT INTO pricing_sync_runs
+            (fetched_at, source_slug, source_url, provider, status, raw_body, error_text)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        rusqlite::params![
+            run.fetched_at,
+            run.source_slug,
+            run.source_url,
+            run.provider,
+            run.status,
+            run.raw_body,
+            run.error_text,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn insert_pricing_sync_models(
+    conn: &Connection,
+    run_id: i64,
+    models: &[OfficialModelPricing],
+) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "INSERT INTO pricing_sync_models
+            (run_id, source_slug, provider, model_id, model_label,
+             input_usd_per_mtok, cache_write_usd_per_mtok, cache_read_usd_per_mtok, output_usd_per_mtok,
+             threshold_tokens, input_above_threshold, output_above_threshold, notes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+    )?;
+    for model in models {
+        stmt.execute(rusqlite::params![
+            run_id,
+            model.source_slug,
+            model.provider,
+            model.model_id,
+            model.model_label,
+            model.input_usd_per_mtok,
+            model.cache_write_usd_per_mtok,
+            model.cache_read_usd_per_mtok,
+            model.output_usd_per_mtok,
+            model.threshold_tokens,
+            model.input_above_threshold,
+            model.output_above_threshold,
+            model.notes,
+        ])?;
+    }
+    Ok(())
+}
+
+pub fn load_latest_pricing_models(conn: &Connection) -> Result<Vec<StoredPricingModel>> {
+    let mut stmt = conn.prepare(
+        "SELECT m.run_id, m.source_slug, m.provider, m.model_id, m.model_label,
+                m.input_usd_per_mtok, m.cache_write_usd_per_mtok, m.cache_read_usd_per_mtok,
+                m.output_usd_per_mtok, m.threshold_tokens, m.input_above_threshold,
+                m.output_above_threshold, m.notes
+         FROM pricing_sync_models m
+         JOIN (
+            SELECT source_slug, MAX(id) AS run_id
+            FROM pricing_sync_runs
+            WHERE status = 'success'
+            GROUP BY source_slug
+         ) latest
+           ON latest.source_slug = m.source_slug AND latest.run_id = m.run_id
+         ORDER BY m.source_slug, m.model_id",
+    )?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(StoredPricingModel {
+                run_id: row.get(0)?,
+                source_slug: row.get(1)?,
+                provider: row.get(2)?,
+                model_id: row.get(3)?,
+                model_label: row.get(4)?,
+                input_usd_per_mtok: row.get(5)?,
+                cache_write_usd_per_mtok: row.get(6)?,
+                cache_read_usd_per_mtok: row.get(7)?,
+                output_usd_per_mtok: row.get(8)?,
+                threshold_tokens: row.get(9)?,
+                input_above_threshold: row.get(10)?,
+                output_above_threshold: row.get(11)?,
+                notes: row.get(12)?,
+            })
+        })?
+        .filter_map(|row| row.ok())
+        .collect::<Vec<_>>();
+    Ok(rows)
+}
+
+pub fn count_sessions(conn: &Connection) -> Result<usize> {
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))?;
+    Ok(count as usize)
+}
+
+pub fn reprice_turns_with_catalog(
+    conn: &Connection,
+    catalog: &HashMap<String, crate::pricing::ModelPricing>,
+    pricing_version: &str,
+) -> Result<usize> {
+    type RepriceRow = (
+        i64,
+        String,
+        i64,
+        i64,
+        i64,
+        i64,
+        String,
+        String,
+        i64,
+        String,
+        String,
+        String,
+    );
+
+    let mut select = conn.prepare(
+        "SELECT id, model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+                provider, billing_mode, estimated_cost_nanos, pricing_version, pricing_model, cost_confidence
+         FROM turns",
+    )?;
+    let rows: Vec<RepriceRow> = select
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+                row.get(9)?,
+                row.get(10)?,
+                row.get(11)?,
+            ))
+        })?
+        .filter_map(|row| row.ok())
+        .collect();
+
+    let mut update = conn.prepare(
+        "UPDATE turns
+         SET estimated_cost_nanos = ?1,
+             pricing_version = ?2,
+             pricing_model = ?3,
+             billing_mode = ?4,
+             cost_confidence = ?5
+         WHERE id = ?6",
+    )?;
+
+    let mut changed = 0_usize;
+    for (
+        id,
+        model,
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_creation_tokens,
+        provider,
+        billing_mode,
+        previous_cost,
+        previous_version,
+        previous_pricing_model,
+        previous_confidence,
+    ) in rows
+    {
+        let estimate = crate::pricing::estimate_cost_with_catalog(
+            &model,
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+            catalog,
+            pricing_version,
+        );
+        let billing_mode = if billing_mode.is_empty() {
+            default_billing_mode(&provider)
+        } else {
+            billing_mode
+        };
+
+        if previous_cost != estimate.estimated_cost_nanos
+            || previous_version != estimate.pricing_version
+            || previous_pricing_model != estimate.pricing_model
+            || previous_confidence != estimate.cost_confidence
+        {
+            update.execute(rusqlite::params![
+                estimate.estimated_cost_nanos,
+                estimate.pricing_version,
+                estimate.pricing_model,
+                billing_mode,
+                estimate.cost_confidence,
+                id,
+            ])?;
+            changed += 1;
+        }
+    }
+
+    recompute_session_totals(conn)?;
+    Ok(changed)
+}
+
 pub fn insert_claude_usage_factors(
     conn: &Connection,
     run_id: i64,
@@ -2355,6 +2592,7 @@ pub fn load_all_turns(conn: &Connection) -> Result<Vec<crate::analytics::blocks:
 mod tests {
     use super::*;
     use crate::models::Turn;
+    use crate::official_pricing::{OfficialModelPricing, PricingSyncRun};
     use crate::pricing;
     use std::collections::HashMap;
 
@@ -2383,6 +2621,118 @@ mod tests {
     fn test_init_db_idempotent() {
         let conn = test_conn();
         init_db(&conn).unwrap();
+    }
+
+    #[test]
+    fn test_init_db_creates_pricing_sync_tables() {
+        let conn = test_conn();
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(tables.contains(&"pricing_sync_runs".into()));
+        assert!(tables.contains(&"pricing_sync_models".into()));
+    }
+
+    #[test]
+    fn test_insert_and_load_latest_pricing_models() {
+        let conn = test_conn();
+        let run_id = insert_pricing_sync_run(
+            &conn,
+            &PricingSyncRun {
+                fetched_at: "2026-04-19T10:00:00Z".into(),
+                source_slug: "openai_api_docs".into(),
+                source_url: "https://developers.openai.com/api/docs/pricing".into(),
+                provider: "openai".into(),
+                status: "success".into(),
+                raw_body: "<html></html>".into(),
+                error_text: String::new(),
+            },
+        )
+        .unwrap();
+        insert_pricing_sync_models(
+            &conn,
+            run_id,
+            &[OfficialModelPricing {
+                source_slug: "openai_api_docs".into(),
+                provider: "openai".into(),
+                model_id: "gpt-5.4".into(),
+                model_label: "gpt-5.4".into(),
+                input_usd_per_mtok: 2.5,
+                cache_write_usd_per_mtok: 2.5,
+                cache_read_usd_per_mtok: 0.25,
+                output_usd_per_mtok: 15.0,
+                threshold_tokens: Some(270_000),
+                input_above_threshold: Some(5.0),
+                output_above_threshold: Some(22.5),
+                notes: String::new(),
+            }],
+        )
+        .unwrap();
+
+        let rows = load_latest_pricing_models(&conn).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].model_id, "gpt-5.4");
+        assert_eq!(rows[0].threshold_tokens, Some(270_000));
+    }
+
+    #[test]
+    fn test_reprice_turns_with_catalog_updates_costs_and_version() {
+        let conn = test_conn();
+        let turns = vec![Turn {
+            session_id: "claude:s1".into(),
+            provider: "claude".into(),
+            timestamp: "2026-04-08T10:00:00Z".into(),
+            model: "claude-sonnet-4-6".into(),
+            input_tokens: 1_000_000,
+            output_tokens: 0,
+            message_id: "msg-1".into(),
+            pricing_version: "static@old".into(),
+            pricing_model: "claude-sonnet-4-6".into(),
+            cost_confidence: "high".into(),
+            estimated_cost_nanos: 3_000_000_000,
+            ..Default::default()
+        }];
+        insert_turns(&conn, &turns).unwrap();
+        upsert_sessions(
+            &conn,
+            &[crate::models::Session {
+                session_id: "claude:s1".into(),
+                provider: "claude".into(),
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+
+        let mut catalog = pricing::builtin_catalog();
+        catalog.insert(
+            "claude-sonnet-4-6".into(),
+            crate::pricing::ModelPricing {
+                input: 4.0,
+                output: 15.0,
+                cache_write: 5.0,
+                cache_read: 0.4,
+                threshold_tokens: None,
+                input_above_threshold: None,
+                output_above_threshold: None,
+            },
+        );
+
+        let changed = reprice_turns_with_catalog(&conn, &catalog, "official:test").unwrap();
+        assert_eq!(changed, 1);
+
+        let (cost, version): (i64, String) = conn
+            .query_row(
+                "SELECT estimated_cost_nanos, pricing_version FROM turns WHERE message_id = 'msg-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(cost, 4_000_000_000);
+        assert_eq!(version, "official:test");
     }
 
     #[test]

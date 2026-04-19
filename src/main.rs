@@ -10,6 +10,7 @@ use claude_usage_tracker::locale;
 #[cfg(feature = "mcp")]
 use claude_usage_tracker::mcp;
 use claude_usage_tracker::menubar;
+use claude_usage_tracker::official_pricing;
 use claude_usage_tracker::optimizer;
 use claude_usage_tracker::pricing;
 use claude_usage_tracker::scanner;
@@ -494,6 +495,25 @@ enum PricingAction {
         #[arg(long)]
         cache_path: Option<PathBuf>,
     },
+    /// Fetch official provider pricing sources, keep raw snapshots, and reprice turns on change
+    Sync {
+        /// Override the database path used to persist pricing history and repriced turns
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+    },
+    /// Install a platform-native scheduled official pricing sync job
+    Install {
+        /// How often to run: hourly or daily (default: daily)
+        #[arg(long, default_value = "daily")]
+        interval: String,
+        /// Override the database path used by the scheduled job
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+    },
+    /// Remove the scheduled pricing sync job
+    Uninstall,
+    /// Show the current pricing sync scheduler status
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -748,19 +768,8 @@ fn main() -> Result<()> {
             let output = menubar::run_menubar(&db)?;
             print!("{}", output);
         }
-        Commands::Pricing {
-            action: PricingAction::Refresh { cache_path },
-        } => {
-            let path = cache_path.unwrap_or_else(litellm::cache_path);
-            match litellm::run_refresh(&path) {
-                Ok((count, written)) => {
-                    println!("Fetched {} models, cached at {}", count, written.display());
-                }
-                Err(reason) => {
-                    eprintln!("Refresh failed: {}", reason);
-                    std::process::exit(1);
-                }
-            }
+        Commands::Pricing { action } => {
+            cmd_pricing(action, &default_db(None))?;
         }
         Commands::Scheduler { action } => {
             cmd_scheduler(action, &default_db(None))?;
@@ -1124,6 +1133,103 @@ fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Resul
             }
         },
     }
+    Ok(())
+}
+
+fn cmd_pricing(action: PricingAction, default_db: &std::path::Path) -> Result<()> {
+    use scheduler::{InstallStatus, Interval, PRICING_SYNC_JOB};
+    use std::str::FromStr;
+
+    match action {
+        PricingAction::Refresh { cache_path } => {
+            let path = cache_path.unwrap_or_else(litellm::cache_path);
+            match litellm::run_refresh(&path) {
+                Ok((count, written)) => {
+                    println!("Fetched {} models, cached at {}", count, written.display());
+                }
+                Err(reason) => {
+                    anyhow::bail!("Refresh failed: {}", reason);
+                }
+            }
+        }
+        PricingAction::Sync { db_path } => {
+            let db = db_path.unwrap_or_else(|| default_db.to_path_buf());
+            let conn = scanner::db::open_db(&db)?;
+            scanner::db::init_db(&conn)?;
+            let summary = official_pricing::sync_pricing(&conn)?;
+
+            println!(
+                "Pricing sync complete: {} / {} official sources parsed",
+                summary.successful_sources, summary.total_sources
+            );
+            if summary.changed_models.is_empty() {
+                println!("No effective catalog changes detected");
+            } else {
+                println!(
+                    "Detected {} pricing change(s): {}",
+                    summary.changed_models.len(),
+                    summary.changed_models.join(", ")
+                );
+                println!(
+                    "Repriced {} turn(s) across {} session(s)",
+                    summary.repriced_turns, summary.repriced_sessions
+                );
+                if let Some(version) = summary.pricing_version {
+                    println!("Applied pricing version: {}", version);
+                }
+            }
+        }
+        PricingAction::Install { interval, db_path } => {
+            let sched = scheduler::current_for(PRICING_SYNC_JOB);
+            let interval = Interval::from_str(&interval)?;
+            let bin_path = scheduler::resolve_bin_path()?;
+            let db = db_path.unwrap_or_else(|| default_db.to_path_buf());
+            sched.install(interval, &bin_path, &db)?;
+            match sched.status()? {
+                InstallStatus::Installed {
+                    next_run_hint,
+                    config_path,
+                } => {
+                    if let Some(path) = config_path {
+                        println!("Installed: {} ({})", next_run_hint, path.display());
+                    } else {
+                        println!("Installed: {}", next_run_hint);
+                    }
+                }
+                InstallStatus::NotInstalled => println!("Installed (status unknown)"),
+                InstallStatus::UnsupportedPlatform(plat) => {
+                    eprintln!("Unsupported platform: {}", plat);
+                    std::process::exit(1);
+                }
+            }
+        }
+        PricingAction::Uninstall => {
+            let sched = scheduler::current_for(PRICING_SYNC_JOB);
+            sched.uninstall()?;
+            println!("Uninstalled: scheduled pricing sync job removed");
+        }
+        PricingAction::Status => {
+            let sched = scheduler::current_for(PRICING_SYNC_JOB);
+            match sched.status()? {
+                InstallStatus::Installed {
+                    next_run_hint,
+                    config_path,
+                } => {
+                    if let Some(path) = config_path {
+                        println!("Installed: {} ({})", next_run_hint, path.display());
+                    } else {
+                        println!("Installed: {}", next_run_hint);
+                    }
+                }
+                InstallStatus::NotInstalled => println!("Not installed"),
+                InstallStatus::UnsupportedPlatform(plat) => {
+                    eprintln!("Unsupported platform: {}", plat);
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -2868,6 +2974,7 @@ mod tests {
 
     use super::Cli;
     use super::Commands;
+    use super::PricingAction;
     use super::TokenLimit;
     use super::UsageMonitorAction;
     use super::parse_token_limit;
@@ -2973,6 +3080,33 @@ mod tests {
                 action: UsageMonitorAction::Install { interval, db_path },
             } => {
                 assert_eq!(interval.as_deref(), Some("hourly"));
+                assert!(db_path.is_none());
+            }
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_pricing_sync() {
+        let cli = Cli::parse_from(["heimdall", "pricing", "sync"]);
+        match cli.command {
+            Commands::Pricing {
+                action: PricingAction::Sync { db_path },
+            } => {
+                assert!(db_path.is_none());
+            }
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_pricing_install_interval() {
+        let cli = Cli::parse_from(["heimdall", "pricing", "install", "--interval", "daily"]);
+        match cli.command {
+            Commands::Pricing {
+                action: PricingAction::Install { interval, db_path },
+            } => {
+                assert_eq!(interval, "daily");
                 assert!(db_path.is_none());
             }
             _ => panic!("unexpected command"),

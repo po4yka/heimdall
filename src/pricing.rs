@@ -10,7 +10,7 @@ pub const COST_CONFIDENCE_HIGH: &str = "high";
 pub const COST_CONFIDENCE_MEDIUM: &str = "medium";
 pub const COST_CONFIDENCE_LOW: &str = "low";
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ModelPricing {
     pub input: f64,
     pub output: f64,
@@ -233,6 +233,13 @@ const PRICING_TABLE: &[(&str, ModelPricing)] = &[
     ),
 ];
 
+pub fn builtin_catalog() -> HashMap<String, ModelPricing> {
+    PRICING_TABLE
+        .iter()
+        .map(|(name, pricing)| ((*name).to_string(), *pricing))
+        .collect()
+}
+
 /// Look up pricing for a model.
 /// Checks config overrides first, then built-in table (exact, prefix, substring fallback).
 #[allow(dead_code)]
@@ -381,6 +388,87 @@ fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
     }
 
     None
+}
+
+fn lookup_catalog_pricing<'a>(
+    model: &str,
+    catalog: &'a HashMap<String, ModelPricing>,
+) -> Option<PricingLookup<'a>> {
+    if model.is_empty() {
+        return None;
+    }
+
+    if let Some(pricing) = catalog.get(model) {
+        return Some(PricingLookup::Borrowed {
+            pricing,
+            pricing_model: model.to_string(),
+            cost_confidence: COST_CONFIDENCE_HIGH,
+        });
+    }
+
+    for (name, pricing) in catalog {
+        if model.starts_with(name) {
+            return Some(PricingLookup::Borrowed {
+                pricing,
+                pricing_model: name.clone(),
+                cost_confidence: COST_CONFIDENCE_HIGH,
+            });
+        }
+    }
+
+    let lower = model.to_lowercase();
+    let fallback = if lower.contains("opus") {
+        [
+            "claude-opus-4-7",
+            "claude-opus-4-6",
+            "claude-opus-4-5",
+            "claude-opus-4-1",
+        ]
+        .iter()
+        .find(|key| catalog.contains_key(**key))
+        .map(|key| (*key).to_string())
+    } else if lower.contains("sonnet") {
+        ["claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4"]
+            .iter()
+            .find(|key| catalog.contains_key(**key))
+            .map(|key| (*key).to_string())
+    } else if lower.contains("haiku") {
+        [
+            "claude-haiku-4-6",
+            "claude-haiku-4-5",
+            "claude-haiku-3-5",
+            "claude-haiku-3",
+        ]
+        .iter()
+        .find(|key| catalog.contains_key(**key))
+        .map(|key| (*key).to_string())
+    } else if lower.contains("gpt-5.4-mini") {
+        catalog
+            .contains_key("gpt-5.4-mini")
+            .then(|| "gpt-5.4-mini".to_string())
+    } else if lower.contains("gpt-5.4-nano") {
+        catalog
+            .contains_key("gpt-5.4-nano")
+            .then(|| "gpt-5.4-nano".to_string())
+    } else if lower.contains("gpt-5.4") {
+        catalog
+            .contains_key("gpt-5.4")
+            .then(|| "gpt-5.4".to_string())
+    } else if lower.contains("codex") {
+        ["gpt-5.3-codex"]
+            .iter()
+            .find(|key| catalog.contains_key(**key))
+            .map(|key| (*key).to_string())
+    } else {
+        None
+    }?;
+
+    let pricing = catalog.get(&fallback)?;
+    Some(PricingLookup::Borrowed {
+        pricing,
+        pricing_model: fallback,
+        cost_confidence: COST_CONFIDENCE_MEDIUM,
+    })
 }
 
 /// Look up only from built-in table (avoids infinite recursion in substring fallback).
@@ -612,6 +700,46 @@ pub fn estimate_cost(
             cache_creation,
         ),
         pricing_version: format!("{PRICING_VERSION}@{PRICING_VALID_FROM}"),
+        pricing_model,
+        cost_confidence: cost_confidence.to_string(),
+    }
+}
+
+pub fn estimate_cost_with_catalog(
+    model: &str,
+    input: i64,
+    output: i64,
+    cache_read: i64,
+    cache_creation: i64,
+    catalog: &HashMap<String, ModelPricing>,
+    pricing_version: &str,
+) -> CostEstimate {
+    let Some(lookup) = lookup_catalog_pricing(model, catalog) else {
+        return CostEstimate {
+            estimated_cost_nanos: 0,
+            pricing_version: pricing_version.to_string(),
+            pricing_model: String::new(),
+            cost_confidence: COST_CONFIDENCE_LOW.to_string(),
+        };
+    };
+
+    let (pricing, pricing_model, cost_confidence) = match lookup {
+        PricingLookup::Borrowed {
+            pricing,
+            pricing_model,
+            cost_confidence,
+        } => (*pricing, pricing_model, cost_confidence),
+    };
+
+    CostEstimate {
+        estimated_cost_nanos: calc_cost_nanos_with_pricing(
+            &pricing,
+            input,
+            output,
+            cache_read,
+            cache_creation,
+        ),
+        pricing_version: pricing_version.to_string(),
         pricing_model,
         cost_confidence: cost_confidence.to_string(),
     }

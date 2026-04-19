@@ -54,6 +54,15 @@ pub const USAGE_MONITOR_JOB: ScheduledJob = ScheduledJob {
     command: &["usage-monitor", "capture"],
 };
 
+pub const PRICING_SYNC_JOB: ScheduledJob = ScheduledJob {
+    slug: "pricing-sync",
+    launchd_label: "dev.heimdall.pricing-sync",
+    launchd_filename: "dev.heimdall.pricing-sync.plist",
+    cron_tag: "# heimdall-pricing-sync:v1",
+    windows_task_name: "HeimdallPricingSync",
+    command: &["pricing", "sync"],
+};
+
 // ── Common types ──────────────────────────────────────────────────────────────
 
 /// How often the scan job should run.
