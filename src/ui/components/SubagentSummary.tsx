@@ -14,7 +14,7 @@ export function SubagentSummary({ summary }: { summary: SubagentSummaryType }) {
       <div class="section-header" style={{ padding: '20px 20px 0' }}>
         <div class="section-title" style={{ padding: '0' }}>Subagent Breakdown</div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:12px 20px 20px">
         <div>
           <div class="stat-label">Turns</div>
           <div style="font-size:15px">Parent: <span class="num">{fmt(summary.parent_turns)}</span></div>
