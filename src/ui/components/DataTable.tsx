@@ -1,3 +1,4 @@
+import type { ComponentChild } from 'preact';
 import { useState, useRef, useEffect } from 'preact/hooks';
 import {
   createTable,
@@ -8,6 +9,7 @@ import {
   type SortingState,
   type PaginationState,
   type Table,
+  type TableState,
   type Header,
   type Cell,
   type VisibilityState,
@@ -16,7 +18,7 @@ import {
 import { isSectionCollapsed, setSectionCollapsed, syncDashboardUrl } from '../state/store';
 
 interface DataTableProps<T> {
-  columns: ColumnDef<T, any>[];
+  columns: ColumnDef<T, unknown>[];
   data: T[];
   title?: string;
   sectionKey?: string;
@@ -31,20 +33,20 @@ interface DataTableProps<T> {
   onColumnVisibilityChange?: (columnVisibility: VisibilityState) => void;
 }
 
-function renderCell<T>(cell: Cell<T, unknown>): any {
+function renderCell<T>(cell: Cell<T, unknown>): ComponentChild {
   const def = cell.column.columnDef.cell;
   if (typeof def === 'function') {
-    return def(cell.getContext());
+    return def(cell.getContext()) as ComponentChild;
   }
-  return cell.getValue();
+  return cell.getValue() as ComponentChild;
 }
 
-function renderHeader<T>(header: Header<T, unknown>): any {
+function renderHeader<T>(header: Header<T, unknown>): ComponentChild {
   const def = header.column.columnDef.header;
   if (typeof def === 'function') {
-    return def(header.getContext());
+    return def(header.getContext()) as ComponentChild;
   }
-  return def;
+  return (def ?? header.column.id) as ComponentChild;
 }
 
 function resolveUpdater<T>(updater: Updater<T>, prev: T): T {
@@ -117,10 +119,16 @@ export function DataTable<T>({
   };
 
   if (!tableRef.current) {
+    const tableState: Partial<TableState> = {
+      sorting,
+      pagination,
+      columnVisibility,
+      columnPinning: { left: [], right: [] },
+    };
     tableRef.current = createTable<T>({
       columns,
       data,
-      state: { sorting, pagination, columnVisibility, columnPinning: { left: [], right: [] } } as any,
+      state: tableState,
       onStateChange: () => {},
       onSortingChange: (updater) => {
         setSorting(prev => resolveUpdater(updater, prev));

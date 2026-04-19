@@ -122,12 +122,20 @@ export function ModelChart({
     chart: {
       ...base.chart,
       type: 'donut',
-      events: onSelectModel ? {
-        dataPointSelection: (_event: unknown, _ctx: unknown, config: { dataPointIndex: number }) => {
-          const row = rows[config.dataPointIndex];
-          if (row && !row.isOther) onSelectModel(row.label);
-        },
-      } : undefined,
+      ...(onSelectModel
+        ? {
+            events: {
+              dataPointSelection: (
+                _event: unknown,
+                _ctx: unknown,
+                config: { dataPointIndex: number }
+              ) => {
+                const row = rows[config.dataPointIndex];
+                if (row && !row.isOther) onSelectModel(row.label);
+              },
+            },
+          }
+        : {}),
     },
     series: rows.map(row => row.value),
     labels: rows.map(row => row.label),

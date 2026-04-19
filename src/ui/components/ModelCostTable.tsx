@@ -1,5 +1,9 @@
 import { useMemo } from 'preact/hooks';
-import { type ColumnDef, type SortingState } from '@tanstack/table-core';
+import {
+  type CellContext,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/table-core';
 import { fmt, fmtCost, anyHasCredits, fmtCredits } from '../lib/format';
 import type { ModelAgg } from '../state/types';
 import { DataTable } from './DataTable';
@@ -46,7 +50,7 @@ function useModelColumns(
   totalCacheWriteCost: number,
   showCredits: boolean,
   onSelectModel?: ((model: string) => void) | undefined,
-): ColumnDef<ModelAgg, any>[] {
+): ColumnDef<ModelAgg, unknown>[] {
   return useMemo(
     () => [
       {
@@ -54,7 +58,7 @@ function useModelColumns(
         accessorKey: 'model',
         header: 'Model',
         enableSorting: false,
-        cell: (info: any) => {
+        cell: (info: CellContext<ModelAgg, unknown>) => {
           const model = String(info.getValue());
           if (!onSelectModel) return <span class="model-tag">{model}</span>;
           return (
@@ -68,40 +72,50 @@ function useModelColumns(
         id: 'turns',
         accessorKey: 'turns',
         header: 'Turns',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<ModelAgg, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'input',
         accessorKey: 'input',
         header: 'Input',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<ModelAgg, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'output',
         accessorKey: 'output',
         header: 'Output',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<ModelAgg, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'cache_read',
         accessorKey: 'cache_read',
         header: 'Cached Input',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<ModelAgg, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'cache_creation',
         accessorKey: 'cache_creation',
         header: 'Cache Creation',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<ModelAgg, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'cost',
         accessorKey: 'cost',
         header: 'Est. Cost',
-        cell: (info: any) => {
+        cell: (info: CellContext<ModelAgg, unknown>) => {
           const row = info.row.original as ModelAgg;
           return row.is_billable ? (
-            <span class="cost">{fmtCost(info.getValue())}</span>
+            <span class="cost">{fmtCost(Number(info.getValue() ?? 0))}</span>
           ) : (
             <span class="cost-na">n/a</span>
           );
@@ -112,7 +126,7 @@ function useModelColumns(
         accessorFn: (row: ModelAgg) => row.cost,
         header: 'Share',
         enableSorting: false,
-        cell: (info: any) => {
+        cell: (info: CellContext<ModelAgg, unknown>) => {
           const row = info.row.original as ModelAgg;
           if (!row.is_billable || totalCost <= 0) {
             return <span class="cost-na">&mdash;</span>;
@@ -142,7 +156,7 @@ function useModelColumns(
         id: 'cache_read_cost',
         accessorFn: (row: ModelAgg) => row.cache_read_cost ?? 0,
         header: 'Cache Read',
-        cell: (info: any) => {
+        cell: (info: CellContext<ModelAgg, unknown>) => {
           const row = info.row.original as ModelAgg;
           if (!row.is_billable) return <span class="cost-na">&mdash;</span>;
           return (
@@ -159,7 +173,7 @@ function useModelColumns(
         id: 'cache_write_cost',
         accessorFn: (row: ModelAgg) => row.cache_write_cost ?? 0,
         header: 'Cache Write',
-        cell: (info: any) => {
+        cell: (info: CellContext<ModelAgg, unknown>) => {
           const row = info.row.original as ModelAgg;
           if (!row.is_billable) return <span class="cost-na">&mdash;</span>;
           return (
@@ -177,7 +191,7 @@ function useModelColumns(
         accessorFn: (row: ModelAgg) => row.credits ?? null,
         header: 'Credits',
         sortUndefined: 'last' as const,
-        cell: (info: any) => {
+        cell: (info: CellContext<ModelAgg, unknown>) => {
           const v = info.getValue() as number | null;
           return <span class="num">{fmtCredits(v)}</span>;
         },

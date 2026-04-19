@@ -257,70 +257,13 @@
     return n3.__v.__b - l5.__v.__b;
   }, H.__r = 0, f = Math.random().toString(8), c = "__d" + f, s = "__a" + f, a = /(PointerCapture)$|Capture$/i, h = 0, p = V(false), v = V(true), y = 0;
 
-  // node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js
-  var f2 = 0;
-  function u2(e4, t4, n3, o4, i4, u5) {
-    t4 || (t4 = {});
-    var a4, c4, p5 = t4;
-    if ("ref" in p5) for (c4 in p5 = {}, t4) "ref" == c4 ? a4 = t4[c4] : p5[c4] = t4[c4];
-    var l5 = { type: e4, props: p5, key: n3, ref: a4, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: --f2, __i: -1, __u: 0, __source: i4, __self: u5 };
-    if ("function" == typeof e4 && (a4 = e4.defaultProps)) for (c4 in a4) void 0 === p5[c4] && (p5[c4] = a4[c4]);
-    return l.vnode && l.vnode(l5), l5;
-  }
-
-  // src/ui/components/Footer.tsx
-  function Footer() {
-    return /* @__PURE__ */ u2("footer", { children: /* @__PURE__ */ u2("div", { class: "footer-content", children: [
-      /* @__PURE__ */ u2("p", { children: [
-        "Cost estimates based on Anthropic and OpenAI API pricing (",
-        /* @__PURE__ */ u2(
-          "a",
-          {
-            href: "https://docs.anthropic.com/en/docs/about-claude/pricing",
-            target: "_blank",
-            rel: "noopener noreferrer",
-            children: "Anthropic"
-          }
-        ),
-        " ",
-        "+",
-        " ",
-        /* @__PURE__ */ u2(
-          "a",
-          {
-            href: "https://developers.openai.com/api/docs/pricing",
-            target: "_blank",
-            rel: "noopener noreferrer",
-            children: "OpenAI"
-          }
-        ),
-        "). Local dashboard totals are estimates, not subscriber billing statements."
-      ] }),
-      /* @__PURE__ */ u2("p", { children: [
-        "GitHub:",
-        " ",
-        /* @__PURE__ */ u2(
-          "a",
-          {
-            href: "https://github.com/po4yka/claude-usage-tracker",
-            target: "_blank",
-            rel: "noopener noreferrer",
-            children: "po4yka/claude-usage-tracker"
-          }
-        ),
-        " ",
-        "\xB7 License: MIT"
-      ] })
-    ] }) });
-  }
-
   // node_modules/preact/hooks/dist/hooks.module.js
   var t2;
   var r2;
-  var u3;
+  var u2;
   var i2;
   var o2 = 0;
-  var f3 = [];
+  var f2 = [];
   var c2 = l;
   var e2 = c2.__b;
   var a2 = c2.__r;
@@ -384,7 +327,7 @@
     return C2(u5.__H, r4) && (u5.__ = n3(), u5.__H = r4, u5.__h = n3), u5.__;
   }
   function j2() {
-    for (var n3; n3 = f3.shift(); ) {
+    for (var n3; n3 = f2.shift(); ) {
       var t4 = n3.__H;
       if (n3.__P && t4) try {
         t4.__h.some(z2), t4.__h.some(B2), t4.__h = [];
@@ -400,15 +343,15 @@
   }, c2.__r = function(n3) {
     a2 && a2(n3), t2 = 0;
     var i4 = (r2 = n3.__c).__H;
-    i4 && (u3 === r2 ? (i4.__h = [], r2.__h = [], i4.__.some(function(n4) {
+    i4 && (u2 === r2 ? (i4.__h = [], r2.__h = [], i4.__.some(function(n4) {
       n4.__N && (n4.__ = n4.__N), n4.u = n4.__N = void 0;
-    })) : (i4.__h.some(z2), i4.__h.some(B2), i4.__h = [], t2 = 0)), u3 = r2;
+    })) : (i4.__h.some(z2), i4.__h.some(B2), i4.__h = [], t2 = 0)), u2 = r2;
   }, c2.diffed = function(n3) {
     v2 && v2(n3);
     var t4 = n3.__c;
-    t4 && t4.__H && (t4.__H.__h.length && (1 !== f3.push(t4) && i2 === c2.requestAnimationFrame || ((i2 = c2.requestAnimationFrame) || w2)(j2)), t4.__H.__.some(function(n4) {
+    t4 && t4.__H && (t4.__H.__h.length && (1 !== f2.push(t4) && i2 === c2.requestAnimationFrame || ((i2 = c2.requestAnimationFrame) || w2)(j2)), t4.__H.__.some(function(n4) {
       n4.u && (n4.__H = n4.u), n4.u = void 0;
-    })), u3 = r2 = null;
+    })), u2 = r2 = null;
   }, c2.__c = function(n3, t4) {
     t4.some(function(n4) {
       try {
@@ -456,42 +399,6 @@
     return "function" == typeof t4 ? t4(n3) : t4;
   }
 
-  // src/ui/lib/rescan.ts
-  function createTriggerRescan({
-    button,
-    fetchImpl,
-    loadData: loadData2,
-    showError,
-    setTimer,
-    logError = () => void 0
-  }) {
-    return async function triggerRescan() {
-      button.disabled = true;
-      button.textContent = "\u21BB Scanning\u2026";
-      try {
-        const resp = await fetchImpl("/api/rescan", { method: "POST" });
-        if (!resp.ok) {
-          showError(`Rescan failed: HTTP ${resp.status} ${resp.statusText}`);
-          button.textContent = "\u21BB Rescan (failed)";
-          return;
-        }
-        const data = await resp.json();
-        button.textContent = "\u21BB Rescan (" + data.new + " new, " + data.updated + " updated)";
-        await loadData2(true);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        showError("Rescan failed: " + msg);
-        button.textContent = "\u21BB Rescan (error)";
-        logError(error);
-      } finally {
-        setTimer(() => {
-          button.textContent = "\u21BB Rescan";
-          button.disabled = false;
-        }, 3e3);
-      }
-    };
-  }
-
   // node_modules/@preact/signals-core/dist/signals-core.module.js
   var i3 = /* @__PURE__ */ Symbol.for("preact-signals");
   function t3() {
@@ -531,7 +438,7 @@
   }
   function n2(i4) {
     if (s3 > 0) return i4();
-    e3 = ++u4;
+    e3 = ++u3;
     s3++;
     try {
       return i4();
@@ -549,11 +456,11 @@
       r3 = t4;
     }
   }
-  var f4;
+  var f3;
   var h3 = void 0;
   var s3 = 0;
   var v3 = 0;
-  var u4 = 0;
+  var u3 = 0;
   var e3 = 0;
   var c3 = void 0;
   var d3 = 0;
@@ -835,7 +742,7 @@
     this.u = void 0;
     this.f = 32;
     this.name = null == t4 ? void 0 : t4.name;
-    if (f4) f4.push(this);
+    if (f3) f3.push(this);
   }
   E2.prototype.c = function() {
     var i4 = this.S();
@@ -1265,202 +1172,42 @@
     history.replaceState(null, "", nextUrl);
   }
 
-  // src/ui/lib/status.ts
-  var timers = {};
-  function cancelTimer(placement) {
-    const t4 = timers[placement];
-    if (t4 != null) {
-      clearTimeout(t4);
-      delete timers[placement];
-    }
-  }
-  function setStatus(placement, kind, message, autoDismissMs) {
-    statusByPlacement.value = { ...statusByPlacement.value, [placement]: { kind, message } };
-    cancelTimer(placement);
-    if (autoDismissMs && autoDismissMs > 0) {
-      timers[placement] = window.setTimeout(() => clearStatus(placement), autoDismissMs);
-    }
-  }
-  function clearStatus(placement) {
-    statusByPlacement.value = { ...statusByPlacement.value, [placement]: null };
-    cancelTimer(placement);
+  // node_modules/preact/jsx-runtime/dist/jsxRuntime.module.js
+  var f4 = 0;
+  function u4(e4, t4, n3, o4, i4, u5) {
+    t4 || (t4 = {});
+    var a4, c4, p5 = t4;
+    if ("ref" in p5) for (c4 in p5 = {}, t4) "ref" == c4 ? a4 = t4[c4] : p5[c4] = t4[c4];
+    var l5 = { type: e4, props: p5, key: n3, ref: a4, __k: null, __: null, __b: 0, __e: null, __c: null, constructor: void 0, __v: --f4, __i: -1, __u: 0, __source: i4, __self: u5 };
+    if ("function" == typeof e4 && (a4 = e4.defaultProps)) for (c4 in a4) void 0 === p5[c4] && (p5[c4] = a4[c4]);
+    return l.vnode && l.vnode(l5), l5;
   }
 
-  // src/ui/components/InlineStatus.tsx
-  var LABEL_MAP = {
-    success: "OK",
-    error: "ERROR",
-    loading: "LOADING",
-    info: "INFO"
-  };
-  var COLOR_MAP = {
-    success: "var(--success)",
-    error: "var(--accent)",
-    loading: "var(--text-secondary)",
-    info: "var(--text-secondary)"
-  };
-  function InlineStatus({ placement, inline = false, dismissable = true }) {
-    const entry = statusByPlacement.value[placement];
-    if (!entry) return null;
-    const label = LABEL_MAP[entry.kind];
-    const color = COLOR_MAP[entry.kind];
-    const content = entry.message ? `[${label}: ${entry.message}]` : `[${label}]`;
-    const baseStyle = {
-      fontFamily: "var(--font-mono)",
-      fontSize: "11px",
-      letterSpacing: "0.08em",
-      textTransform: "uppercase",
-      color,
-      animation: "fadeUp 0.15s ease-out",
-      display: inline ? "inline-flex" : "flex",
-      alignItems: "center",
-      gap: "8px",
-      padding: inline ? "0" : "8px 16px",
-      border: inline ? "none" : `1px solid ${color}`,
-      borderRadius: inline ? "0" : "4px",
-      background: inline ? "transparent" : "var(--surface)"
-    };
-    return /* @__PURE__ */ u2("div", { role: entry.kind === "error" ? "alert" : "status", style: baseStyle, children: [
-      /* @__PURE__ */ u2("span", { children: content }),
-      dismissable && entry.kind !== "loading" && /* @__PURE__ */ u2(
+  // src/ui/components/DashboardTabs.tsx
+  var TABS = [
+    { key: "overview", label: "Overview", summary: "status, spend, sync" },
+    { key: "activity", label: "Activity", summary: "charts & timing" },
+    { key: "breakdowns", label: "Breakdowns", summary: "tools, branches, versions" },
+    { key: "tables", label: "Tables", summary: "sessions, models, projects" }
+  ];
+  function DashboardTabs({ onTabChange }) {
+    return /* @__PURE__ */ u4("nav", { id: "dashboard-tabs", "aria-label": "Dashboard sections", children: TABS.map((tab) => {
+      const active = activeDashboardTab.value === tab.key;
+      return /* @__PURE__ */ u4(
         "button",
         {
           type: "button",
-          onClick: () => clearStatus(placement),
-          "aria-label": "Dismiss",
-          style: {
-            background: "transparent",
-            border: "none",
-            color,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            fontSize: "inherit",
-            letterSpacing: "inherit",
-            padding: "0 4px",
-            opacity: 0.7
-          },
-          children: "[X]"
-        }
-      )
-    ] });
-  }
-
-  // src/ui/components/Header.tsx
-  function Header({ onDataReload, onThemeToggle }) {
-    const headerRef = A2(null);
-    const btnRef = A2(null);
-    const triggerRef = A2(null);
-    y2(() => {
-      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
-      if (!themeColorMeta) return;
-      themeColorMeta.setAttribute("content", themeMode.value === "light" ? "#F5F5F5" : "#000000");
-    }, [themeMode.value]);
-    y2(() => {
-      if (!headerRef.current) return;
-      const root = document.documentElement;
-      const updateOffset = () => {
-        if (!headerRef.current) return;
-        root.style.setProperty("--header-offset", `${Math.ceil(headerRef.current.getBoundingClientRect().height)}px`);
-      };
-      updateOffset();
-      const observer = new ResizeObserver(() => updateOffset());
-      observer.observe(headerRef.current);
-      window.addEventListener("resize", updateOffset);
-      return () => {
-        observer.disconnect();
-        window.removeEventListener("resize", updateOffset);
-      };
-    }, []);
-    y2(() => {
-      if (!btnRef.current) return;
-      const proxy = {
-        get disabled() {
-          return rescanDisabled.value;
+          class: `dashboard-tab${active ? " active" : ""}`,
+          "aria-pressed": active,
+          onClick: () => onTabChange(tab.key),
+          children: [
+            /* @__PURE__ */ u4("span", { class: "dashboard-tab-label", children: tab.label }),
+            /* @__PURE__ */ u4("span", { class: "dashboard-tab-summary", children: tab.summary })
+          ]
         },
-        set disabled(v4) {
-          rescanDisabled.value = v4;
-        },
-        get textContent() {
-          return rescanLabel.value;
-        },
-        set textContent(v4) {
-          rescanLabel.value = v4 ?? "";
-        }
-      };
-      triggerRef.current = createTriggerRescan({
-        button: proxy,
-        fetchImpl: (input, init) => fetch(input, init),
-        loadData: onDataReload,
-        showError: (msg) => setStatus("rescan", "error", msg, 6e3),
-        setTimer: (cb, ms) => window.setTimeout(cb, ms),
-        logError: (e4) => console.error(e4)
-      });
-    }, [onDataReload]);
-    const mode = themeMode.value;
-    const icon = mode === "dark" ? /* @__PURE__ */ u2("svg", { "aria-hidden": "true", focusable: "false", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: /* @__PURE__ */ u2("path", { d: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" }) }) : /* @__PURE__ */ u2("svg", { "aria-hidden": "true", focusable: "false", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: [
-      /* @__PURE__ */ u2("circle", { cx: "12", cy: "12", r: "5" }),
-      /* @__PURE__ */ u2("line", { x1: "12", y1: "1", x2: "12", y2: "3" }),
-      /* @__PURE__ */ u2("line", { x1: "12", y1: "21", x2: "12", y2: "23" }),
-      /* @__PURE__ */ u2("line", { x1: "4.22", y1: "4.22", x2: "5.64", y2: "5.64" }),
-      /* @__PURE__ */ u2("line", { x1: "18.36", y1: "18.36", x2: "19.78", y2: "19.78" }),
-      /* @__PURE__ */ u2("line", { x1: "1", y1: "12", x2: "3", y2: "12" }),
-      /* @__PURE__ */ u2("line", { x1: "21", y1: "12", x2: "23", y2: "12" }),
-      /* @__PURE__ */ u2("line", { x1: "4.22", y1: "19.78", x2: "5.64", y2: "18.36" }),
-      /* @__PURE__ */ u2("line", { x1: "18.36", y1: "5.64", x2: "19.78", y2: "4.22" })
-    ] });
-    return /* @__PURE__ */ u2("header", { ref: headerRef, children: [
-      /* @__PURE__ */ u2("h1", { children: [
-        /* @__PURE__ */ u2("span", { class: "accent", children: "Code" }),
-        " ",
-        "Usage",
-        planBadge.value && /* @__PURE__ */ u2(
-          "span",
-          {
-            "aria-live": "polite",
-            style: {
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              padding: "1px 8px",
-              borderRadius: "999px",
-              border: "1px solid var(--border-visible)",
-              color: "var(--text-secondary)",
-              verticalAlign: "middle",
-              marginLeft: "8px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase"
-            },
-            children: planBadge.value
-          }
-        )
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "meta", children: metaText.value }),
-      /* @__PURE__ */ u2("div", { class: "header-actions", children: [
-        /* @__PURE__ */ u2(
-          "button",
-          {
-            class: "theme-toggle",
-            type: "button",
-            onClick: onThemeToggle,
-            "aria-label": "Toggle theme",
-            children: icon
-          }
-        ),
-        /* @__PURE__ */ u2(
-          "button",
-          {
-            id: "rescan-btn",
-            ref: btnRef,
-            type: "button",
-            disabled: rescanDisabled.value,
-            onClick: () => triggerRef.current?.(),
-            "aria-label": "Rescan database",
-            children: rescanLabel.value
-          }
-        ),
-        /* @__PURE__ */ u2(InlineStatus, { placement: "rescan", inline: true }),
-        /* @__PURE__ */ u2(InlineStatus, { placement: "header-refresh", inline: true, dismissable: false })
-      ] })
-    ] });
+        tab.key
+      );
+    }) });
   }
 
   // src/ui/components/FilterBar.tsx
@@ -1547,7 +1294,7 @@
       modelSummary,
       projectSummary
     ].filter(Boolean).join(" \xB7 ");
-    return /* @__PURE__ */ u2(
+    return /* @__PURE__ */ u4(
       "div",
       {
         id: "filter-bar",
@@ -1555,12 +1302,12 @@
         "aria-label": "Filters",
         class: mobile_filters_expanded.value ? "expanded" : "collapsed",
         children: [
-          /* @__PURE__ */ u2("div", { class: "mobile-filter-header", children: [
-            /* @__PURE__ */ u2("div", { class: "mobile-filter-summary", "aria-live": "polite", children: [
-              /* @__PURE__ */ u2("span", { class: "mobile-filter-summary-label", children: "Filters" }),
-              /* @__PURE__ */ u2("span", { class: "mobile-filter-summary-text", children: filterSummary })
+          /* @__PURE__ */ u4("div", { class: "mobile-filter-header", children: [
+            /* @__PURE__ */ u4("div", { class: "mobile-filter-summary", "aria-live": "polite", children: [
+              /* @__PURE__ */ u4("span", { class: "mobile-filter-summary-label", children: "Filters" }),
+              /* @__PURE__ */ u4("span", { class: "mobile-filter-summary-text", children: filterSummary })
             ] }),
-            /* @__PURE__ */ u2(
+            /* @__PURE__ */ u4(
               "button",
               {
                 class: "mobile-filter-toggle",
@@ -1572,12 +1319,12 @@
               }
             )
           ] }),
-          /* @__PURE__ */ u2("div", { id: "filter-sections", class: "filter-sections", children: [
-            /* @__PURE__ */ u2("div", { class: "filter-label", children: "Models" }),
-            /* @__PURE__ */ u2("div", { id: "model-checkboxes", role: "group", "aria-label": "Model filters", children: sortedModels.map((model) => {
+          /* @__PURE__ */ u4("div", { id: "filter-sections", class: "filter-sections", children: [
+            /* @__PURE__ */ u4("div", { class: "filter-label", children: "Models" }),
+            /* @__PURE__ */ u4("div", { id: "model-checkboxes", role: "group", "aria-label": "Model filters", children: sortedModels.map((model) => {
               const checked = selectedModels.value.has(model);
-              return /* @__PURE__ */ u2("label", { class: `model-cb-label${checked ? " checked" : ""}`, "data-model": model, children: [
-                /* @__PURE__ */ u2(
+              return /* @__PURE__ */ u4("label", { class: `model-cb-label${checked ? " checked" : ""}`, "data-model": model, children: [
+                /* @__PURE__ */ u4(
                   "input",
                   {
                     type: "checkbox",
@@ -1587,14 +1334,14 @@
                     "aria-label": model
                   }
                 ),
-                /* @__PURE__ */ u2("span", { class: "model-cb-text", children: model })
+                /* @__PURE__ */ u4("span", { class: "model-cb-text", children: model })
               ] }, model);
             }) }),
-            /* @__PURE__ */ u2("button", { class: "filter-btn", type: "button", onClick: selectAll, children: "All" }),
-            /* @__PURE__ */ u2("button", { class: "filter-btn", type: "button", onClick: clearAll, children: "None" }),
-            /* @__PURE__ */ u2("div", { class: "filter-sep" }),
-            /* @__PURE__ */ u2("div", { class: "filter-label", children: "Range" }),
-            /* @__PURE__ */ u2("div", { class: "range-group", role: "group", "aria-label": "Date range", children: RANGES.map((range) => /* @__PURE__ */ u2(
+            /* @__PURE__ */ u4("button", { class: "filter-btn", type: "button", onClick: selectAll, children: "All" }),
+            /* @__PURE__ */ u4("button", { class: "filter-btn", type: "button", onClick: clearAll, children: "None" }),
+            /* @__PURE__ */ u4("div", { class: "filter-sep" }),
+            /* @__PURE__ */ u4("div", { class: "filter-label", children: "Range" }),
+            /* @__PURE__ */ u4("div", { class: "range-group", role: "group", "aria-label": "Date range", children: RANGES.map((range) => /* @__PURE__ */ u4(
               "button",
               {
                 class: `range-btn${selectedRange.value === range ? " active" : ""}`,
@@ -1605,9 +1352,9 @@
               },
               range
             )) }),
-            /* @__PURE__ */ u2("div", { class: "filter-sep" }),
-            /* @__PURE__ */ u2("div", { class: "filter-label", children: "Bucket" }),
-            /* @__PURE__ */ u2("div", { class: "range-group", role: "group", "aria-label": "Chart bucket", children: BUCKETS.map((bucket) => /* @__PURE__ */ u2(
+            /* @__PURE__ */ u4("div", { class: "filter-sep" }),
+            /* @__PURE__ */ u4("div", { class: "filter-label", children: "Bucket" }),
+            /* @__PURE__ */ u4("div", { class: "range-group", role: "group", "aria-label": "Chart bucket", children: BUCKETS.map((bucket) => /* @__PURE__ */ u4(
               "button",
               {
                 class: `range-btn${selectedBucket.value === bucket ? " active" : ""}`,
@@ -1618,10 +1365,10 @@
               },
               bucket
             )) }),
-            hasCodexData && /* @__PURE__ */ u2(S, { children: [
-              /* @__PURE__ */ u2("div", { class: "filter-sep" }),
-              /* @__PURE__ */ u2("div", { class: "filter-label", children: "Provider" }),
-              /* @__PURE__ */ u2("div", { class: "range-group", role: "group", "aria-label": "Provider", children: PROVIDERS.map((provider) => /* @__PURE__ */ u2(
+            hasCodexData && /* @__PURE__ */ u4(S, { children: [
+              /* @__PURE__ */ u4("div", { class: "filter-sep" }),
+              /* @__PURE__ */ u4("div", { class: "filter-label", children: "Provider" }),
+              /* @__PURE__ */ u4("div", { class: "range-group", role: "group", "aria-label": "Provider", children: PROVIDERS.map((provider) => /* @__PURE__ */ u4(
                 "button",
                 {
                   class: `range-btn${selectedProvider.value === provider ? " active" : ""}`,
@@ -1633,9 +1380,9 @@
                 provider
               )) })
             ] }),
-            /* @__PURE__ */ u2("div", { class: "filter-sep" }),
-            /* @__PURE__ */ u2("label", { for: "project-search", class: "filter-label", children: "Project" }),
-            /* @__PURE__ */ u2(
+            /* @__PURE__ */ u4("div", { class: "filter-sep" }),
+            /* @__PURE__ */ u4("label", { for: "project-search", class: "filter-label", children: "Project" }),
+            /* @__PURE__ */ u4(
               "input",
               {
                 type: "text",
@@ -1651,827 +1398,290 @@
                 class: "project-search-input"
               }
             ),
-            projectSearchQuery.value && /* @__PURE__ */ u2("button", { class: "filter-btn", id: "project-clear-btn", type: "button", onClick: clearSearch, children: "Clear" })
+            projectSearchQuery.value && /* @__PURE__ */ u4("button", { class: "filter-btn", id: "project-clear-btn", type: "button", onClick: clearSearch, children: "Clear" })
           ] })
         ]
       }
     );
   }
 
-  // src/ui/components/DashboardTabs.tsx
-  var TABS = [
-    { key: "overview", label: "Overview", summary: "status, spend, sync" },
-    { key: "activity", label: "Activity", summary: "charts & timing" },
-    { key: "breakdowns", label: "Breakdowns", summary: "tools, branches, versions" },
-    { key: "tables", label: "Tables", summary: "sessions, models, projects" }
-  ];
-  function DashboardTabs({ onTabChange }) {
-    return /* @__PURE__ */ u2("nav", { id: "dashboard-tabs", "aria-label": "Dashboard sections", children: TABS.map((tab) => {
-      const active = activeDashboardTab.value === tab.key;
-      return /* @__PURE__ */ u2(
+  // src/ui/components/Footer.tsx
+  function Footer() {
+    return /* @__PURE__ */ u4("footer", { children: /* @__PURE__ */ u4("div", { class: "footer-content", children: [
+      /* @__PURE__ */ u4("p", { children: [
+        "Cost estimates based on Anthropic and OpenAI API pricing (",
+        /* @__PURE__ */ u4(
+          "a",
+          {
+            href: "https://docs.anthropic.com/en/docs/about-claude/pricing",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            children: "Anthropic"
+          }
+        ),
+        " ",
+        "+",
+        " ",
+        /* @__PURE__ */ u4(
+          "a",
+          {
+            href: "https://developers.openai.com/api/docs/pricing",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            children: "OpenAI"
+          }
+        ),
+        "). Local dashboard totals are estimates, not subscriber billing statements."
+      ] }),
+      /* @__PURE__ */ u4("p", { children: [
+        "GitHub:",
+        " ",
+        /* @__PURE__ */ u4(
+          "a",
+          {
+            href: "https://github.com/po4yka/claude-usage-tracker",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            children: "po4yka/claude-usage-tracker"
+          }
+        ),
+        " ",
+        "\xB7 License: MIT"
+      ] })
+    ] }) });
+  }
+
+  // src/ui/lib/rescan.ts
+  function createTriggerRescan({
+    button,
+    fetchImpl,
+    loadData: loadData2,
+    showError,
+    setTimer,
+    logError = () => void 0
+  }) {
+    return async function triggerRescan() {
+      button.disabled = true;
+      button.textContent = "\u21BB Scanning\u2026";
+      try {
+        const resp = await fetchImpl("/api/rescan", { method: "POST" });
+        if (!resp.ok) {
+          showError(`Rescan failed: HTTP ${resp.status} ${resp.statusText}`);
+          button.textContent = "\u21BB Rescan (failed)";
+          return;
+        }
+        const data = await resp.json();
+        button.textContent = "\u21BB Rescan (" + data.new + " new, " + data.updated + " updated)";
+        await loadData2(true);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        showError("Rescan failed: " + msg);
+        button.textContent = "\u21BB Rescan (error)";
+        logError(error);
+      } finally {
+        setTimer(() => {
+          button.textContent = "\u21BB Rescan";
+          button.disabled = false;
+        }, 3e3);
+      }
+    };
+  }
+
+  // src/ui/lib/status.ts
+  var timers = {};
+  function cancelTimer(placement) {
+    const t4 = timers[placement];
+    if (t4 != null) {
+      clearTimeout(t4);
+      delete timers[placement];
+    }
+  }
+  function setStatus(placement, kind, message, autoDismissMs) {
+    statusByPlacement.value = { ...statusByPlacement.value, [placement]: { kind, message } };
+    cancelTimer(placement);
+    if (autoDismissMs && autoDismissMs > 0) {
+      timers[placement] = window.setTimeout(() => clearStatus(placement), autoDismissMs);
+    }
+  }
+  function clearStatus(placement) {
+    statusByPlacement.value = { ...statusByPlacement.value, [placement]: null };
+    cancelTimer(placement);
+  }
+
+  // src/ui/components/InlineStatus.tsx
+  var LABEL_MAP = {
+    success: "OK",
+    error: "ERROR",
+    loading: "LOADING",
+    info: "INFO"
+  };
+  var COLOR_MAP = {
+    success: "var(--success)",
+    error: "var(--accent)",
+    loading: "var(--text-secondary)",
+    info: "var(--text-secondary)"
+  };
+  function InlineStatus({ placement, inline = false, dismissable = true }) {
+    const entry = statusByPlacement.value[placement];
+    if (!entry) return null;
+    const label = LABEL_MAP[entry.kind];
+    const color = COLOR_MAP[entry.kind];
+    const content = entry.message ? `[${label}: ${entry.message}]` : `[${label}]`;
+    const baseStyle = {
+      fontFamily: "var(--font-mono)",
+      fontSize: "11px",
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      color,
+      animation: "fadeUp 0.15s ease-out",
+      display: inline ? "inline-flex" : "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: inline ? "0" : "8px 16px",
+      border: inline ? "none" : `1px solid ${color}`,
+      borderRadius: inline ? "0" : "4px",
+      background: inline ? "transparent" : "var(--surface)"
+    };
+    return /* @__PURE__ */ u4("div", { role: entry.kind === "error" ? "alert" : "status", style: baseStyle, children: [
+      /* @__PURE__ */ u4("span", { children: content }),
+      dismissable && entry.kind !== "loading" && /* @__PURE__ */ u4(
         "button",
         {
           type: "button",
-          class: `dashboard-tab${active ? " active" : ""}`,
-          "aria-pressed": active,
-          onClick: () => onTabChange(tab.key),
-          children: [
-            /* @__PURE__ */ u2("span", { class: "dashboard-tab-label", children: tab.label }),
-            /* @__PURE__ */ u2("span", { class: "dashboard-tab-summary", children: tab.summary })
-          ]
-        },
-        tab.key
-      );
-    }) });
-  }
-
-  // src/ui/lib/format.ts
-  function $2(id) {
-    return document.getElementById(id);
-  }
-  function fmt(n3) {
-    if (n3 >= 1e9) return (n3 / 1e9).toFixed(2) + "B";
-    if (n3 >= 1e6) return (n3 / 1e6).toFixed(2) + "M";
-    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
-    return n3.toLocaleString();
-  }
-  function fmtCost(c4) {
-    return "$" + c4.toFixed(4);
-  }
-  function fmtCostBig(c4) {
-    return "$" + c4.toFixed(2);
-  }
-  function fmtResetTime(minutes) {
-    if (minutes == null || minutes <= 0) return "now";
-    if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
-    if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
-    return minutes + "m";
-  }
-  function fmtRelativeTime(iso) {
-    if (!iso) return "never";
-    const ts = Date.parse(iso);
-    if (Number.isNaN(ts)) return iso;
-    const diffMs = Date.now() - ts;
-    if (diffMs <= 0) return "just now";
-    const minutes = Math.floor(diffMs / 6e4);
-    if (minutes < 1) return "just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  }
-  function anyHasCredits(rows) {
-    return rows.some((r4) => r4.credits != null);
-  }
-  function fmtCredits(n3) {
-    if (n3 == null) return "\u2014";
-    return n3.toFixed(2);
-  }
-  function esc(s4) {
-    return s4.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-  }
-  function truncateMid(s4, max2, tailChars = 8) {
-    const codepoints = Array.from(s4);
-    if (codepoints.length <= max2) return s4;
-    const safeTail = Math.min(tailChars, Math.max(0, max2 - 2));
-    const head = Math.max(0, max2 - safeTail - 1);
-    return codepoints.slice(0, head).join("") + "\u2026" + codepoints.slice(-safeTail).join("");
-  }
-
-  // src/ui/components/SegmentedProgressBar.tsx
-  function resolveStatus(pct, status) {
-    if (status === "neutral") return "var(--text-display)";
-    if (status === "success") return "var(--success)";
-    if (status === "warning") return "var(--warning)";
-    if (status === "accent") return "var(--accent)";
-    if (pct >= 90) return "var(--accent)";
-    if (pct >= 70) return "var(--warning)";
-    return "var(--success)";
-  }
-  function SegmentedProgressBar({
-    value,
-    max: max2,
-    segments = 20,
-    size = "standard",
-    status = "auto",
-    "aria-label": ariaLabel
-  }) {
-    const safeMax = max2 > 0 ? max2 : 1;
-    const ratio = value / safeMax;
-    const pct = Math.min(100, Math.max(0, ratio * 100));
-    const overflow = ratio > 1;
-    const filled = Math.round(pct / 100 * segments);
-    const fillColor = overflow ? "var(--accent)" : resolveStatus(pct, status);
-    const emptyColor = "var(--border)";
-    return /* @__PURE__ */ u2(
-      "div",
-      {
-        class: `segmented-bar segmented-bar--${size}`,
-        role: "progressbar",
-        "aria-label": ariaLabel,
-        "aria-valuenow": Math.round(pct),
-        "aria-valuemin": 0,
-        "aria-valuemax": 100,
-        children: Array.from({ length: segments }).map((_4, i4) => /* @__PURE__ */ u2(
-          "div",
-          {
-            class: "segmented-bar__segment",
-            style: { background: i4 < filled ? fillColor : emptyColor }
+          onClick: () => clearStatus(placement),
+          "aria-label": "Dismiss",
+          style: {
+            background: "transparent",
+            border: "none",
+            color,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: "inherit",
+            letterSpacing: "inherit",
+            padding: "0 4px",
+            opacity: 0.7
           },
-          i4
-        ))
-      }
-    );
-  }
-
-  // src/ui/components/RateWindowCard.tsx
-  function RateWindowCard({ label, window: window2 }) {
-    const pct = Math.min(100, window2.used_percent);
-    const resetText = window2.resets_in_minutes != null ? `Resets in ${fmtResetTime(window2.resets_in_minutes)}` : "";
-    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u2("div", { class: "stat-label", children: label }),
-      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "28px" }, children: [
-        pct.toFixed(1),
-        "%"
-      ] }),
-      /* @__PURE__ */ u2("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u2(
-        SegmentedProgressBar,
-        {
-          value: window2.used_percent,
-          max: 100,
-          size: "standard",
-          "aria-label": `${label} usage`
-        }
-      ) }),
-      resetText && /* @__PURE__ */ u2("div", { class: "stat-sub", children: resetText })
-    ] }) });
-  }
-  function BudgetCard({ used, limit, currency, utilization }) {
-    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u2("div", { class: "stat-label", children: "Monthly Budget" }),
-      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "24px" }, children: [
-        "$",
-        used.toFixed(2),
-        " / $",
-        limit.toFixed(2)
-      ] }),
-      /* @__PURE__ */ u2("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u2(
-        SegmentedProgressBar,
-        {
-          value: utilization,
-          max: 100,
-          size: "standard",
-          "aria-label": "Monthly budget usage"
-        }
-      ) }),
-      /* @__PURE__ */ u2("div", { class: "stat-sub", children: currency })
-    ] }) });
-  }
-  function RateWindowUnavailable({ error }) {
-    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u2("div", { class: "stat-label", children: "Rate Windows" }),
-      /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px", color: "var(--text-secondary)" }, children: "Unavailable" }),
-      /* @__PURE__ */ u2("div", { class: "stat-sub", children: error })
-    ] }) });
-  }
-
-  // src/ui/components/AgentStatusCard.tsx
-  function IndicatorDot({ indicator }) {
-    const isAlert = indicator === "major" || indicator === "critical";
-    const isMinor = indicator === "minor";
-    const color = isAlert ? "var(--accent)" : "var(--text-secondary)";
-    const opacity = isAlert ? 1 : isMinor ? 0.6 : 0.3;
-    return /* @__PURE__ */ u2(
-      "span",
-      {
-        "aria-hidden": "true",
-        style: {
-          display: "inline-block",
-          width: "10px",
-          height: "10px",
-          borderRadius: "50%",
-          backgroundColor: color,
-          opacity,
-          marginRight: "8px",
-          flexShrink: 0
-        }
-      }
-    );
-  }
-  function ProviderRow({ name, status, expanded }) {
-    if (!status) {
-      return /* @__PURE__ */ u2("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
-        /* @__PURE__ */ u2(IndicatorDot, { indicator: "none" }),
-        /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
-        /* @__PURE__ */ u2("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: "unavailable" })
-      ] });
-    }
-    const incidentCount = status.active_incidents.length;
-    return /* @__PURE__ */ u2("div", { children: [
-      /* @__PURE__ */ u2("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
-        /* @__PURE__ */ u2(IndicatorDot, { indicator: status.indicator }),
-        /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
-        /* @__PURE__ */ u2("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: status.description }),
-        incidentCount > 0 && /* @__PURE__ */ u2(
-          "span",
-          {
-            style: {
-              fontFamily: "var(--font-mono)",
-              fontSize: "11px",
-              color: status.indicator === "major" || status.indicator === "critical" ? "var(--accent)" : "var(--text-secondary)",
-              marginLeft: "8px"
-            },
-            children: [
-              "(",
-              incidentCount,
-              " active)"
-            ]
-          }
-        ),
-        /* @__PURE__ */ u2(
-          "a",
-          {
-            href: status.page_url,
-            target: "_blank",
-            rel: "noopener noreferrer",
-            style: {
-              color: "var(--text-secondary)",
-              fontSize: "11px",
-              marginLeft: "4px",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minWidth: "24px",
-              minHeight: "24px"
-            },
-            "aria-label": `${name} status page`,
-            children: "\u2197"
-          }
-        )
-      ] }),
-      expanded && /* @__PURE__ */ u2("div", { style: { paddingLeft: "18px", paddingBottom: "8px" }, children: [
-        status.components.length > 0 && /* @__PURE__ */ u2("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse", marginBottom: "8px" }, children: [
-          /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { style: { color: "var(--text-secondary)" }, children: [
-            /* @__PURE__ */ u2("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Component" }),
-            /* @__PURE__ */ u2("th", { style: { textAlign: "left", padding: "2px 0", fontWeight: 500 }, children: "Status" })
-          ] }) }),
-          /* @__PURE__ */ u2("tbody", { children: status.components.map((c4, i4) => {
-            const fmt2 = (v4) => v4 != null ? `${(v4 * 100).toFixed(2)}%` : "--";
-            const has30 = c4.uptime_30d != null;
-            const has7 = c4.uptime_7d != null;
-            const showUptime = has30 || has7;
-            return /* @__PURE__ */ u2(S, { children: [
-              /* @__PURE__ */ u2("tr", { children: [
-                /* @__PURE__ */ u2("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: c4.name }),
-                /* @__PURE__ */ u2("td", { style: { padding: "2px 0", color: "var(--text-secondary)" }, children: c4.status.replace(/_/g, " ") })
-              ] }, i4),
-              showUptime && /* @__PURE__ */ u2("tr", { children: /* @__PURE__ */ u2("td", { colSpan: 2, style: { padding: "0 0 4px 0" }, children: /* @__PURE__ */ u2("span", { style: {
-                fontFamily: "var(--font-mono)",
-                fontSize: "11px",
-                letterSpacing: "0.04em"
-              }, children: [
-                /* @__PURE__ */ u2("span", { style: { color: "var(--text-secondary)" }, children: "30D " }),
-                /* @__PURE__ */ u2("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_30d) }),
-                /* @__PURE__ */ u2("span", { style: { color: "var(--text-secondary)" }, children: " \xB7 7D " }),
-                /* @__PURE__ */ u2("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_7d) })
-              ] }) }) }, `${i4}-uptime`)
-            ] });
-          }) })
-        ] }),
-        status.active_incidents.map((inc, i4) => /* @__PURE__ */ u2(
-          "div",
-          {
-            style: {
-              fontSize: "12px",
-              color: "var(--text-secondary)",
-              marginBottom: "4px",
-              paddingLeft: "4px",
-              borderLeft: "2px solid var(--border)"
-            },
-            children: [
-              /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)" }, children: inc.shortlink ? /* @__PURE__ */ u2(
-                "a",
-                {
-                  href: inc.shortlink,
-                  target: "_blank",
-                  rel: "noopener noreferrer",
-                  style: { color: "inherit", textDecoration: "underline" },
-                  children: inc.name
-                }
-              ) : inc.name }),
-              " ",
-              /* @__PURE__ */ u2("span", { style: { opacity: 0.7 }, children: [
-                "[",
-                inc.impact,
-                "] ",
-                inc.status,
-                " \u2014 ",
-                inc.started_at.slice(0, 16).replace("T", " ")
-              ] })
-            ]
-          },
-          i4
-        ))
-      ] })
-    ] });
-  }
-  function signalLevelStyle(level) {
-    switch (level) {
-      case "spike":
-        return { label: "SPIKE", color: "var(--accent)" };
-      case "elevated":
-        return { label: "ELEVATED", color: "var(--text-primary)" };
-      case "normal":
-        return { label: "NORMAL", color: "var(--text-secondary)" };
-      default:
-        return { label: "UNKNOWN", color: "var(--text-secondary)" };
-    }
-  }
-  function CommunitySignalRow({ label, signals }) {
-    const first = signals[0];
-    if (!first) return null;
-    const levelOrder = ["spike", "elevated", "normal", "unknown"];
-    const worstLevel = levelOrder.find((l5) => signals.some((s4) => s4.level === l5)) ?? "unknown";
-    const { label: levelLabel, color } = signalLevelStyle(worstLevel);
-    return /* @__PURE__ */ u2("div", { style: { display: "flex", alignItems: "center", padding: "4px 0", gap: "8px" }, children: [
-      /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: label }),
-      /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", color }, children: levelLabel }),
-      /* @__PURE__ */ u2(
-        "a",
-        {
-          href: first.source_url,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          style: { color: "var(--text-secondary)", fontSize: "11px" },
-          "aria-label": `${label} community signal source`,
-          children: "\u2197"
+          children: "[X]"
         }
       )
     ] });
   }
-  function AgentStatusCard({ snapshot, communitySignal }) {
-    const expanded = agent_status_expanded.value;
-    const hasData = snapshot.claude != null || snapshot.openai != null;
-    return /* @__PURE__ */ u2("div", { class: "card stat-card", style: { minWidth: "300px" }, children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u2(
-        "div",
-        {
-          style: {
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "8px"
-          },
-          children: [
-            /* @__PURE__ */ u2("div", { class: "stat-label", children: "Agent Status" }),
-            hasData && /* @__PURE__ */ u2(
-              "button",
-              {
-                type: "button",
-                onClick: () => {
-                  agent_status_expanded.value = !expanded;
-                  syncDashboardUrl();
-                },
-                style: {
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "4px",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-secondary)",
-                  fontSize: "11px",
-                  fontFamily: "var(--font-mono)",
-                  minHeight: "32px",
-                  padding: "6px 8px"
-                },
-                "aria-expanded": expanded,
-                children: [
-                  /* @__PURE__ */ u2("span", { "aria-hidden": "true", children: expanded ? "\u25B2" : "\u25BC" }),
-                  /* @__PURE__ */ u2("span", { children: expanded ? "Collapse" : "Expand" })
-                ]
-              }
-            )
-          ]
+
+  // src/ui/components/Header.tsx
+  function Header({ onDataReload, onThemeToggle }) {
+    const headerRef = A2(null);
+    const btnRef = A2(null);
+    const triggerRef = A2(null);
+    y2(() => {
+      const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+      if (!themeColorMeta) return;
+      themeColorMeta.setAttribute("content", themeMode.value === "light" ? "#F5F5F5" : "#000000");
+    }, [themeMode.value]);
+    y2(() => {
+      if (!headerRef.current) return;
+      const root = document.documentElement;
+      const updateOffset = () => {
+        if (!headerRef.current) return;
+        root.style.setProperty("--header-offset", `${Math.ceil(headerRef.current.getBoundingClientRect().height)}px`);
+      };
+      updateOffset();
+      const observer = new ResizeObserver(() => updateOffset());
+      observer.observe(headerRef.current);
+      window.addEventListener("resize", updateOffset);
+      return () => {
+        observer.disconnect();
+        window.removeEventListener("resize", updateOffset);
+      };
+    }, []);
+    y2(() => {
+      if (!btnRef.current) return;
+      const proxy = {
+        get disabled() {
+          return rescanDisabled.value;
+        },
+        set disabled(v4) {
+          rescanDisabled.value = v4;
+        },
+        get textContent() {
+          return rescanLabel.value;
+        },
+        set textContent(v4) {
+          rescanLabel.value = v4 ?? "";
         }
-      ),
-      /* @__PURE__ */ u2(ProviderRow, { name: "Claude", status: snapshot.claude, expanded }),
-      /* @__PURE__ */ u2(ProviderRow, { name: "OpenAI / Codex", status: snapshot.openai, expanded }),
-      communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && /* @__PURE__ */ u2("div", { style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }, children: [
-        /* @__PURE__ */ u2("div", { style: { fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", marginBottom: "6px", letterSpacing: "0.06em" }, children: "COMMUNITY SIGNAL" }),
-        /* @__PURE__ */ u2(CommunitySignalRow, { label: "Claude", signals: communitySignal.claude }),
-        /* @__PURE__ */ u2(CommunitySignalRow, { label: "OpenAI", signals: communitySignal.openai }),
-        communitySignal.fetched_at && /* @__PURE__ */ u2("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "4px", fontFamily: "var(--font-mono)" }, children: [
-          "Crowd data ",
-          communitySignal.fetched_at.slice(0, 19).replace("T", " "),
-          " UTC"
-        ] })
+      };
+      triggerRef.current = createTriggerRescan({
+        button: proxy,
+        fetchImpl: (input, init) => fetch(input, init),
+        loadData: onDataReload,
+        showError: (msg) => setStatus("rescan", "error", msg, 6e3),
+        setTimer: (cb, ms) => window.setTimeout(cb, ms),
+        logError: (e4) => console.error(e4)
+      });
+    }, [onDataReload]);
+    const mode = themeMode.value;
+    const icon = mode === "dark" ? /* @__PURE__ */ u4("svg", { "aria-hidden": "true", focusable: "false", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: /* @__PURE__ */ u4("path", { d: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" }) }) : /* @__PURE__ */ u4("svg", { "aria-hidden": "true", focusable: "false", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: [
+      /* @__PURE__ */ u4("circle", { cx: "12", cy: "12", r: "5" }),
+      /* @__PURE__ */ u4("line", { x1: "12", y1: "1", x2: "12", y2: "3" }),
+      /* @__PURE__ */ u4("line", { x1: "12", y1: "21", x2: "12", y2: "23" }),
+      /* @__PURE__ */ u4("line", { x1: "4.22", y1: "4.22", x2: "5.64", y2: "5.64" }),
+      /* @__PURE__ */ u4("line", { x1: "18.36", y1: "18.36", x2: "19.78", y2: "19.78" }),
+      /* @__PURE__ */ u4("line", { x1: "1", y1: "12", x2: "3", y2: "12" }),
+      /* @__PURE__ */ u4("line", { x1: "21", y1: "12", x2: "23", y2: "12" }),
+      /* @__PURE__ */ u4("line", { x1: "4.22", y1: "19.78", x2: "5.64", y2: "18.36" }),
+      /* @__PURE__ */ u4("line", { x1: "18.36", y1: "5.64", x2: "19.78", y2: "4.22" })
+    ] });
+    return /* @__PURE__ */ u4("header", { ref: headerRef, children: [
+      /* @__PURE__ */ u4("h1", { children: [
+        /* @__PURE__ */ u4("span", { class: "accent", children: "Code" }),
+        " ",
+        "Usage",
+        planBadge.value && /* @__PURE__ */ u4(
+          "span",
+          {
+            "aria-live": "polite",
+            style: {
+              fontFamily: "var(--font-mono)",
+              fontSize: "10px",
+              padding: "1px 8px",
+              borderRadius: "999px",
+              border: "1px solid var(--border-visible)",
+              color: "var(--text-secondary)",
+              verticalAlign: "middle",
+              marginLeft: "8px",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase"
+            },
+            children: planBadge.value
+          }
+        )
       ] }),
-      snapshot.fetched_at && /* @__PURE__ */ u2("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "8px", fontFamily: "var(--font-mono)" }, children: [
-        "Refreshed ",
-        snapshot.fetched_at.slice(0, 19).replace("T", " "),
-        " UTC"
-      ] })
-    ] }) });
-  }
-
-  // src/ui/components/ClaudeUsagePanel.tsx
-  function statusColor(status) {
-    if (status === "failed") return "var(--accent)";
-    if (status === "unparsed") return "var(--warning)";
-    return "var(--text-secondary)";
-  }
-  function ClaudeUsagePanel({ data }) {
-    const snapshot = data.latest_snapshot ?? null;
-    const lastRun = data.last_run ?? null;
-    const lastSuccess = snapshot?.run.captured_at ?? null;
-    return /* @__PURE__ */ u2("div", { class: "card card-flat bento-full table-card", "aria-label": "Claude usage monitor", children: [
-      /* @__PURE__ */ u2(
-        "div",
-        {
-          style: {
-            display: "flex",
-            justifyContent: "space-between",
-            gap: "16px",
-            alignItems: "flex-start",
-            flexWrap: "wrap",
-            marginBottom: snapshot ? "18px" : "0"
-          },
-          children: [
-            /* @__PURE__ */ u2("div", { children: [
-              /* @__PURE__ */ u2("h2", { style: { marginBottom: "8px" }, children: "Claude /usage" }),
-              /* @__PURE__ */ u2("div", { class: "stat-sub", children: [
-                "Last success ",
-                fmtRelativeTime(lastSuccess),
-                lastRun ? ` \xB7 Last run ${fmtRelativeTime(lastRun.captured_at)}` : ""
-              ] })
-            ] }),
-            lastRun && /* @__PURE__ */ u2(
-              "div",
-              {
-                style: {
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "12px",
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: statusColor(lastRun.status)
-                },
-                children: [
-                  "[",
-                  lastRun.status,
-                  "]"
-                ]
-              }
-            )
-          ]
-        }
-      ),
-      !snapshot && /* @__PURE__ */ u2("div", { class: "stat-sub", children: lastRun?.error_summary || "No parsed Claude /usage snapshot has been captured yet." }),
-      snapshot && /* @__PURE__ */ u2("div", { style: { display: "grid", gap: "14px" }, children: [
-        snapshot.factors.map((factor) => /* @__PURE__ */ u2(
-          "div",
+      /* @__PURE__ */ u4("div", { class: "meta", children: metaText.value }),
+      /* @__PURE__ */ u4("div", { class: "header-actions", children: [
+        /* @__PURE__ */ u4(
+          "button",
           {
-            style: {
-              borderTop: "1px solid var(--border)",
-              paddingTop: "14px"
-            },
-            children: [
-              /* @__PURE__ */ u2(
-                "div",
-                {
-                  style: {
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "baseline",
-                    gap: "16px",
-                    marginBottom: "10px",
-                    flexWrap: "wrap"
-                  },
-                  children: [
-                    /* @__PURE__ */ u2("div", { style: { fontWeight: 500 }, children: factor.display_label }),
-                    /* @__PURE__ */ u2(
-                      "div",
-                      {
-                        style: {
-                          fontFamily: "var(--font-mono)",
-                          fontSize: "14px",
-                          whiteSpace: "nowrap"
-                        },
-                        children: [
-                          factor.percent.toFixed(1),
-                          "%"
-                        ]
-                      }
-                    )
-                  ]
-                }
-              ),
-              /* @__PURE__ */ u2(
-                SegmentedProgressBar,
-                {
-                  value: factor.percent,
-                  max: 100,
-                  size: "compact",
-                  "aria-label": `${factor.display_label} percent`
-                }
-              ),
-              factor.advice_text && /* @__PURE__ */ u2("div", { class: "stat-sub", style: { marginTop: "10px" }, children: factor.advice_text })
-            ]
-          },
-          factor.factor_key
-        )),
-        lastRun?.status !== "success" && lastRun?.error_summary && /* @__PURE__ */ u2("div", { class: "stat-sub", style: { marginTop: "4px" }, children: [
-          "Latest run note: ",
-          lastRun.error_summary
-        ] })
-      ] })
-    ] });
-  }
-
-  // src/ui/components/EstimationMeta.tsx
-  function EstimationMeta({
-    confidenceBreakdown,
-    billingModeBreakdown,
-    pricingVersions
-  }) {
-    return /* @__PURE__ */ u2(S, { children: [
-      /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Cost Confidence" }),
-        /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: confidenceBreakdown.length ? confidenceBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
-        /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Session mix in current filter" })
-      ] }) }),
-      /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Billing Mode" }),
-        /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: billingModeBreakdown.length ? billingModeBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
-        /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Local estimate vs subscriber-included sessions" })
-      ] }) }),
-      /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Pricing Snapshot" }),
-        /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: pricingVersions.length === 0 ? "n/a" : pricingVersions.length === 1 ? pricingVersions[0] : `mixed (${pricingVersions.length})` }),
-        /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Stored per-session pricing metadata" })
-      ] }) })
-    ] });
-  }
-
-  // src/ui/components/OfficialSyncPanel.tsx
-  function sourceVisible(provider, providerFilter) {
-    if (providerFilter === "both") return true;
-    if (provider === "frankfurter") return true;
-    if (providerFilter === "claude") return provider === "anthropic";
-    return provider === "openai";
-  }
-  function statusLabel(status) {
-    if (status === "success") return "OK";
-    if (status === "skipped") return "SKIP";
-    if (status === "parse_error") return "PARSE";
-    if (status === "fetch_error") return "FETCH";
-    return status.toUpperCase();
-  }
-  function statusColor2(status) {
-    if (status === "success") return "var(--text-primary)";
-    if (status === "skipped") return "var(--text-secondary)";
-    return "var(--accent)";
-  }
-  function formatTs(ts) {
-    if (!ts) return "n/a";
-    return ts.slice(0, 19).replace("T", " ");
-  }
-  function OfficialSyncPanel({ summary, providerFilter }) {
-    const expanded = official_sync_expanded.value;
-    const sources = summary.sources.filter((source) => sourceVisible(source.provider, providerFilter));
-    const recordCounts = summary.record_counts.filter((record) => {
-      if (providerFilter === "both") return true;
-      if (providerFilter === "claude") {
-        return !record.record_type.startsWith("usage_");
-      }
-      return true;
-    });
-    const successCount = sources.filter((source) => source.status === "success").length;
-    const errorCount = sources.filter(
-      (source) => source.status === "fetch_error" || source.status === "parse_error"
-    ).length;
-    const skippedCount = sources.filter((source) => source.status === "skipped").length;
-    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u2(
-        "div",
-        {
-          style: {
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "8px"
-          },
-          children: [
-            /* @__PURE__ */ u2("div", { class: "stat-label", children: "Official History" }),
-            summary.available && /* @__PURE__ */ u2(
-              "button",
-              {
-                onClick: () => {
-                  official_sync_expanded.value = !expanded;
-                  syncDashboardUrl();
-                },
-                style: {
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-secondary)",
-                  fontSize: "11px",
-                  fontFamily: "var(--font-mono)",
-                  padding: "2px 4px"
-                },
-                "aria-expanded": expanded,
-                "aria-label": "Toggle official history details",
-                children: expanded ? "\u25B2 collapse" : "\u25BC expand"
-              }
-            )
-          ]
-        }
-      ),
-      !summary.available ? /* @__PURE__ */ u2("div", { class: "muted", children: "No persisted official sync history yet" }) : /* @__PURE__ */ u2(S, { children: [
-        /* @__PURE__ */ u2(
-          "div",
-          {
-            style: {
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-              gap: "12px",
-              marginBottom: expanded ? "12px" : "0"
-            },
-            children: [
-              /* @__PURE__ */ u2("div", { children: [
-                /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: formatTs(summary.last_sync_at) }),
-                /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Latest sync" })
-              ] }),
-              /* @__PURE__ */ u2("div", { children: [
-                /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: [
-                  summary.total_runs,
-                  " / ",
-                  summary.total_records
-                ] }),
-                /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Runs / extracted records" })
-              ] }),
-              /* @__PURE__ */ u2("div", { children: [
-                /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "18px" }, children: [
-                  successCount,
-                  " / ",
-                  errorCount,
-                  " / ",
-                  skippedCount
-                ] }),
-                /* @__PURE__ */ u2("div", { class: "stat-sub", children: "OK / error / skipped sources" })
-              ] })
-            ]
+            class: "theme-toggle",
+            type: "button",
+            onClick: onThemeToggle,
+            "aria-label": "Toggle theme",
+            children: icon
           }
         ),
-        expanded && /* @__PURE__ */ u2("div", { style: { display: "grid", gap: "12px" }, children: [
-          /* @__PURE__ */ u2("div", { children: [
-            /* @__PURE__ */ u2(
-              "div",
-              {
-                style: {
-                  fontSize: "11px",
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--text-secondary)",
-                  marginBottom: "6px",
-                  letterSpacing: "0.06em"
-                },
-                children: "LATEST SOURCES"
-              }
-            ),
-            /* @__PURE__ */ u2("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse" }, children: [
-              /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { style: { color: "var(--text-secondary)" }, children: [
-                /* @__PURE__ */ u2("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Source" }),
-                /* @__PURE__ */ u2("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Kind" }),
-                /* @__PURE__ */ u2("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Status" }),
-                /* @__PURE__ */ u2("th", { style: { textAlign: "right", padding: "2px 0", fontWeight: 500 }, children: "Rows" })
-              ] }) }),
-              /* @__PURE__ */ u2("tbody", { children: sources.map((source) => /* @__PURE__ */ u2("tr", { children: [
-                /* @__PURE__ */ u2("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: source.source_slug }),
-                /* @__PURE__ */ u2("td", { style: { padding: "2px 8px 2px 0", color: "var(--text-secondary)" }, children: source.source_kind }),
-                /* @__PURE__ */ u2("td", { style: { padding: "2px 8px 2px 0", color: statusColor2(source.status), fontFamily: "var(--font-mono)" }, children: statusLabel(source.status) }),
-                /* @__PURE__ */ u2("td", { style: { padding: "2px 0", textAlign: "right", fontFamily: "var(--font-mono)" }, children: source.record_count.toLocaleString() })
-              ] }, source.source_slug)) })
-            ] })
-          ] }),
-          /* @__PURE__ */ u2("div", { children: [
-            /* @__PURE__ */ u2(
-              "div",
-              {
-                style: {
-                  fontSize: "11px",
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--text-secondary)",
-                  marginBottom: "6px",
-                  letterSpacing: "0.06em"
-                },
-                children: "RECORD TYPES"
-              }
-            ),
-            /* @__PURE__ */ u2("div", { style: { display: "flex", flexWrap: "wrap", gap: "8px" }, children: recordCounts.map((record) => /* @__PURE__ */ u2(
-              "div",
-              {
-                style: {
-                  border: "1px solid var(--border)",
-                  padding: "6px 8px",
-                  minWidth: "140px"
-                },
-                children: [
-                  /* @__PURE__ */ u2("div", { style: { fontFamily: "var(--font-mono)", fontSize: "12px" }, children: record.record_type }),
-                  /* @__PURE__ */ u2("div", { style: { fontSize: "11px", color: "var(--text-secondary)" }, children: [
-                    record.count.toLocaleString(),
-                    " rows"
-                  ] })
-                ]
-              },
-              record.record_type
-            )) })
-          ] }),
-          summary.latest_success_at && /* @__PURE__ */ u2(
-            "div",
-            {
-              style: {
-                fontSize: "10px",
-                color: "var(--text-secondary)",
-                fontFamily: "var(--font-mono)"
-              },
-              children: [
-                "Latest successful extraction ",
-                formatTs(summary.latest_success_at),
-                " UTC"
-              ]
-            }
-          )
-        ] })
+        /* @__PURE__ */ u4(
+          "button",
+          {
+            id: "rescan-btn",
+            ref: btnRef,
+            type: "button",
+            disabled: rescanDisabled.value,
+            onClick: () => triggerRef.current?.(),
+            "aria-label": "Rescan database",
+            children: rescanLabel.value
+          }
+        ),
+        /* @__PURE__ */ u4(InlineStatus, { placement: "rescan", inline: true }),
+        /* @__PURE__ */ u4(InlineStatus, { placement: "header-refresh", inline: true, dismissable: false })
       ] })
-    ] }) });
-  }
-
-  // src/ui/components/ReconciliationBlock.tsx
-  function ReconciliationBlock({ reconciliation }) {
-    const deltaMatch = Math.abs(reconciliation.delta_cost) < 0.01;
-    return /* @__PURE__ */ u2("div", { class: "card card-flat bento-full", children: [
-      /* @__PURE__ */ u2("h2", { children: "OpenAI Org Usage Reconciliation" }),
-      /* @__PURE__ */ u2("div", { class: "muted", style: { marginBottom: "12px" }, children: [
-        "Official OpenAI organization usage buckets for Codex-compatible models over the last ",
-        reconciliation.lookback_days,
-        " days."
-      ] }),
-      reconciliation.available ? /* @__PURE__ */ u2("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "16px" }, children: [
-        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Period" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
-            reconciliation.start_date,
-            " - ",
-            reconciliation.end_date
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Rolling comparison window" })
-        ] }) }),
-        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Local Estimated Cost" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
-            "$",
-            reconciliation.estimated_local_cost.toFixed(4)
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Codex local logs" })
-        ] }) }),
-        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Org Usage Cost" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
-            "$",
-            reconciliation.api_usage_cost.toFixed(4)
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "OpenAI organization usage API" })
-        ] }) }),
-        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Delta" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "20px", color: deltaMatch ? "var(--text-primary)" : "var(--accent)" }, children: [
-            reconciliation.delta_cost >= 0 ? "+" : "",
-            "$",
-            reconciliation.delta_cost.toFixed(4)
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Org usage cost minus local estimate" })
-        ] }) }),
-        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "API Tokens" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
-            reconciliation.api_input_tokens.toLocaleString(),
-            " / ",
-            reconciliation.api_output_tokens.toLocaleString()
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Input / output tokens" })
-        ] }) }),
-        /* @__PURE__ */ u2("div", { class: "stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Cached Input + Requests" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
-            reconciliation.api_cached_input_tokens.toLocaleString(),
-            " / ",
-            reconciliation.api_requests.toLocaleString()
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "stat-sub", children: "Cached input tokens / requests" })
-        ] }) })
-      ] }) : /* @__PURE__ */ u2("div", { class: "muted", children: reconciliation.error ?? "Unavailable" })
     ] });
   }
 
@@ -2570,513 +1780,476 @@
       dataLabels: { enabled: false }
     };
     if (type === "line") {
-      base.legend.show = false;
+      if (base.legend) base.legend.show = false;
       base.fill = { type: "solid", opacity: 0 };
     }
     return base;
   }
 
-  // src/ui/components/ApexChart.tsx
-  function ApexChart({ options, id }) {
-    const ref = A2(null);
-    const chartRef = A2(null);
-    y2(() => {
-      if (chartRef.current) chartRef.current.destroy();
-      if (!ref.current || !options) {
-        return () => {
-          chartRef.current?.destroy();
-          chartRef.current = null;
-        };
-      }
-      let cancelled = false;
-      const raf = requestAnimationFrame(() => {
-        if (cancelled || !ref.current) return;
-        const parent = ref.current.parentElement;
-        let h5 = parent?.clientHeight ?? 0;
-        if (h5 <= 0) h5 = parent?.classList.contains("tall") ? 300 : 240;
-        const opts = { ...options, chart: { ...options.chart, height: h5 } };
-        chartRef.current = new ApexCharts(ref.current, opts);
-        chartRef.current.render();
-      });
-      return () => {
-        cancelled = true;
-        cancelAnimationFrame(raf);
-        chartRef.current?.destroy();
-        chartRef.current = null;
-      };
-    }, [id, options]);
-    return /* @__PURE__ */ u2("div", { ref, id, style: { width: "100%", height: "100%" } });
+  // src/ui/lib/format.ts
+  function $2(id) {
+    return document.getElementById(id);
+  }
+  function fmt(n3) {
+    if (n3 >= 1e9) return (n3 / 1e9).toFixed(2) + "B";
+    if (n3 >= 1e6) return (n3 / 1e6).toFixed(2) + "M";
+    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
+    return n3.toLocaleString();
+  }
+  function fmtCost(c4) {
+    return "$" + c4.toFixed(4);
+  }
+  function fmtCostBig(c4) {
+    return "$" + c4.toFixed(2);
+  }
+  function fmtResetTime(minutes) {
+    if (minutes == null || minutes <= 0) return "now";
+    if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
+    if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
+    return minutes + "m";
+  }
+  function fmtRelativeTime(iso) {
+    if (!iso) return "never";
+    const ts = Date.parse(iso);
+    if (Number.isNaN(ts)) return iso;
+    const diffMs = Date.now() - ts;
+    if (diffMs <= 0) return "just now";
+    const minutes = Math.floor(diffMs / 6e4);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+  function anyHasCredits(rows) {
+    return rows.some((r4) => r4.credits != null);
+  }
+  function fmtCredits(n3) {
+    if (n3 == null) return "\u2014";
+    return n3.toFixed(2);
+  }
+  function esc(s4) {
+    return s4.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function truncateMid(s4, max2, tailChars = 8) {
+    const codepoints = Array.from(s4);
+    if (codepoints.length <= max2) return s4;
+    const safeTail = Math.min(tailChars, Math.max(0, max2 - 2));
+    const head = Math.max(0, max2 - safeTail - 1);
+    return codepoints.slice(0, head).join("") + "\u2026" + codepoints.slice(-safeTail).join("");
   }
 
-  // src/ui/components/Sparkline.tsx
-  function Sparkline({ daily }) {
-    const last7 = daily.slice(-7);
-    if (last7.length < 2) return null;
-    const options = {
-      chart: {
-        type: "line",
-        height: 30,
-        width: 120,
-        sparkline: { enabled: true },
-        background: "transparent",
-        fontFamily: "inherit"
-      },
-      series: [{ data: last7.map((d5) => d5.input + d5.output) }],
-      stroke: { width: 1.5, curve: "smooth" },
-      colors: [cssVar("--accent")],
-      tooltip: { enabled: false }
-    };
-    return /* @__PURE__ */ u2("div", { children: [
-      /* @__PURE__ */ u2("div", { class: "sub", style: { marginBottom: "4px" }, children: "7-day trend" }),
-      /* @__PURE__ */ u2(ApexChart, { options })
-    ] });
+  // src/ui/components/ActivityHeatmap.tsx
+  var DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function cellOpacity(costNanos, maxCostNanos) {
+    if (maxCostNanos <= 0 || costNanos <= 0) return 0.05;
+    const ratio = costNanos / maxCostNanos;
+    return Math.min(0.05 + 0.85 * ratio, 0.9);
   }
-
-  // src/ui/components/CacheEfficiencyCard.tsx
-  function CacheEfficiencyCard({
-    data,
-    inputRatePerMtok,
-    cacheReadRatePerMtok
-  }) {
-    const rate = data.cache_hit_rate;
-    const hasRate = rate !== null && rate !== void 0;
-    const displayPct = hasRate ? (rate * 100).toFixed(1) + "%" : "--";
-    const barFill = hasRate ? Math.max(0, Math.min(1, rate)) : 0;
-    const tooltipParts = [];
-    if (hasRate) {
-      const readM = (data.cache_read_tokens / 1e6).toFixed(2);
-      const totalM = ((data.cache_read_tokens + data.input_tokens) / 1e6).toFixed(2);
-      tooltipParts.push(`${readM}M tokens cache-read / ${totalM}M total input-addressable tokens`);
-      if (inputRatePerMtok !== void 0 && cacheReadRatePerMtok !== void 0 && data.cache_read_tokens > 0) {
-        const savedUsd = data.cache_read_tokens / 1e6 * (inputRatePerMtok - cacheReadRatePerMtok);
-        tooltipParts.push(
-          `saved approx $${savedUsd.toFixed(2)} vs. no-cache`
-        );
-      }
-    } else {
-      tooltipParts.push("No cache activity recorded");
+  function ActivityHeatmap({ data }) {
+    const { cells, max_cost_nanos, active_days, total_cost_nanos, period } = data;
+    const lookup = /* @__PURE__ */ new Map();
+    for (const c4 of cells) {
+      lookup.set(`${c4.dow},${c4.hour}`, c4);
     }
-    const tooltip = tooltipParts.join(" \xB7 ");
-    return /* @__PURE__ */ u2("div", { class: "card stat-card", title: tooltip, children: [
-      /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Cache Hit Rate" }),
-        /* @__PURE__ */ u2(
-          "div",
-          {
-            class: "stat-value",
-            style: { fontFamily: "var(--font-mono)", letterSpacing: "-0.02em" },
-            children: displayPct
-          }
-        ),
-        /* @__PURE__ */ u2("div", { class: "stat-sub", children: "prompt cache reuse" })
-      ] }),
-      /* @__PURE__ */ u2(
+    const avgPerDay = active_days > 0 ? fmtCost(total_cost_nanos / 1e9 / active_days) : "--";
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4(
         "div",
         {
-          role: "img",
           style: {
-            marginTop: "10px",
-            height: "4px",
-            borderRadius: "2px",
-            background: "rgba(var(--text-primary-rgb, 232,232,232), 0.12)",
-            overflow: "hidden"
+            display: "flex",
+            alignItems: "baseline",
+            gap: "12px",
+            marginBottom: "8px",
+            flexWrap: "wrap"
           },
-          "aria-label": `Cache hit rate: ${displayPct}`,
-          children: /* @__PURE__ */ u2(
-            "div",
-            {
-              style: {
-                height: "100%",
-                width: `${(barFill * 100).toFixed(2)}%`,
-                background: "rgba(var(--text-primary-rgb, 232,232,232), 0.70)",
-                borderRadius: "2px",
-                transition: "width 300ms cubic-bezier(0.25,0.1,0.25,1)"
+          children: [
+            /* @__PURE__ */ u4(
+              "span",
+              {
+                class: "section-title",
+                style: {
+                  padding: 0,
+                  fontFamily: "var(--font-mono)",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase"
+                },
+                children: [
+                  "ACTIVITY / 7x24 / ",
+                  period.toUpperCase()
+                ]
               }
-            }
-          )
+            ),
+            /* @__PURE__ */ u4(
+              "span",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11px",
+                  color: "var(--text-secondary)",
+                  letterSpacing: "0.04em"
+                },
+                children: [
+                  active_days,
+                  " active ",
+                  active_days === 1 ? "day" : "days",
+                  " \xB7 ",
+                  avgPerDay,
+                  " per active day"
+                ]
+              }
+            )
+          ]
+        }
+      ),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "grid",
+            gridTemplateColumns: "28px repeat(24, 1fr)",
+            gap: "2px"
+          },
+          children: [
+            /* @__PURE__ */ u4("div", {}),
+            Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "9px",
+                  color: "var(--text-secondary)",
+                  textAlign: "center",
+                  letterSpacing: "0.04em",
+                  // Show only 0, 6, 12, 18 to avoid crowding
+                  visibility: [0, 6, 12, 18].includes(h5) ? "visible" : "hidden"
+                },
+                children: String(h5).padStart(2, "0")
+              },
+              h5
+            )),
+            Array.from({ length: 7 }, (_4, dow) => /* @__PURE__ */ u4(S, { children: [
+              /* @__PURE__ */ u4(
+                "div",
+                {
+                  style: {
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "9px",
+                    color: "var(--text-secondary)",
+                    display: "flex",
+                    alignItems: "center",
+                    letterSpacing: "0.04em"
+                  },
+                  children: DOW_LABELS[dow]
+                },
+                `label-${dow}`
+              ),
+              Array.from({ length: 24 }, (_5, hour) => {
+                const cell = lookup.get(`${dow},${hour}`);
+                const costNanos = cell?.cost_nanos ?? 0;
+                const callCount = cell?.call_count ?? 0;
+                const opacity = cellOpacity(costNanos, max_cost_nanos);
+                const bg = withAlpha("--text-display", opacity);
+                const costUsd = costNanos / 1e9;
+                const title = `${DOW_LABELS[dow]} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${callCount} call${callCount !== 1 ? "s" : ""}`;
+                return /* @__PURE__ */ u4(
+                  "div",
+                  {
+                    title,
+                    style: {
+                      background: bg,
+                      borderRadius: "2px",
+                      aspectRatio: "1",
+                      minHeight: "10px"
+                    }
+                  },
+                  `${dow}-${hour}`
+                );
+              })
+            ] }))
+          ]
         }
       )
     ] });
   }
 
-  // src/ui/components/BillingBlocksCard.tsx
-  function severityToStatus(s4) {
-    if (s4 === "ok") return "success";
-    if (s4 === "warn") return "warning";
-    return "accent";
-  }
-  function severityLabel(s4) {
-    return s4 === "ok" ? "[OK]" : s4 === "warn" ? "[WARN]" : "[CRIT]";
-  }
-  function tierLabel(t4) {
-    if (t4 === "normal") return "[NORMAL]";
-    if (t4 === "moderate") return "[WARN]";
-    return "[CRIT]";
-  }
-  function tierColor(t4) {
-    if (t4 === "normal") return "var(--success)";
-    if (t4 === "moderate") return "var(--warning)";
-    return "var(--accent)";
-  }
-  function formatDuration(from, to) {
-    const diffMs = new Date(to).getTime() - new Date(from).getTime();
-    if (isNaN(diffMs) || diffMs < 0) return "--";
-    const totalMin = Math.floor(diffMs / 6e4);
-    const h5 = Math.floor(totalMin / 60);
-    const m4 = totalMin % 60;
-    if (h5 === 0) return `${m4}m`;
-    return `${h5}h ${m4}m`;
-  }
-  function fmtTokens(n3) {
-    if (n3 >= 1e6) return (n3 / 1e6).toFixed(1) + "M";
-    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
-    return n3.toString();
-  }
-  function fmtUtcTime(iso) {
-    try {
-      const d5 = new Date(iso);
-      return d5.toISOString().slice(11, 16) + " UTC";
-    } catch {
-      return "--";
-    }
-  }
-  function QuotaSection({ block }) {
-    const { quota } = block;
-    if (!quota) {
-      return /* @__PURE__ */ u2(
-        "div",
-        {
-          class: "stat-sub",
-          style: { marginTop: "8px", fontStyle: "italic" },
-          children: "Token quota not configured \u2014 set [blocks.token_limit] in config."
+  // src/ui/components/AgentStatusCard.tsx
+  function IndicatorDot({ indicator }) {
+    const isAlert = indicator === "major" || indicator === "critical";
+    const isMinor = indicator === "minor";
+    const color = isAlert ? "var(--accent)" : "var(--text-secondary)";
+    const opacity = isAlert ? 1 : isMinor ? 0.6 : 0.3;
+    return /* @__PURE__ */ u4(
+      "span",
+      {
+        "aria-hidden": "true",
+        style: {
+          display: "inline-block",
+          width: "10px",
+          height: "10px",
+          borderRadius: "50%",
+          backgroundColor: color,
+          opacity,
+          marginRight: "8px",
+          flexShrink: 0
         }
-      );
+      }
+    );
+  }
+  function ProviderRow({ name, status, expanded }) {
+    if (!status) {
+      return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
+        /* @__PURE__ */ u4(IndicatorDot, { indicator: "none" }),
+        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
+        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: "unavailable" })
+      ] });
     }
-    const currentPct = Math.min(100, quota.current_pct).toFixed(0);
-    const projectedPct = Math.min(999, quota.projected_pct).toFixed(0);
-    return /* @__PURE__ */ u2("div", { style: { marginTop: "10px" }, children: [
-      /* @__PURE__ */ u2("div", { style: { marginBottom: "4px" }, children: [
-        /* @__PURE__ */ u2(
-          "div",
+    const incidentCount = status.active_incidents.length;
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
+        /* @__PURE__ */ u4(IndicatorDot, { indicator: status.indicator }),
+        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
+        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: status.description }),
+        incidentCount > 0 && /* @__PURE__ */ u4(
+          "span",
           {
             style: {
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              marginBottom: "3px"
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              color: status.indicator === "major" || status.indicator === "critical" ? "var(--accent)" : "var(--text-secondary)",
+              marginLeft: "8px"
             },
             children: [
-              /* @__PURE__ */ u2("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "USED" }),
-              /* @__PURE__ */ u2(
-                "span",
-                {
-                  class: "stat-sub",
-                  style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
-                  children: [
-                    fmtTokens(quota.used_tokens),
-                    " / ",
-                    fmtTokens(quota.limit_tokens),
-                    " ",
-                    currentPct,
-                    "%",
-                    " ",
-                    /* @__PURE__ */ u2(
-                      "span",
-                      {
-                        style: {
-                          color: quota.current_severity === "danger" ? "var(--accent)" : quota.current_severity === "warn" ? "var(--warning)" : void 0
-                        },
-                        children: severityLabel(quota.current_severity)
-                      }
-                    )
-                  ]
-                }
-              )
+              "(",
+              incidentCount,
+              " active)"
             ]
           }
         ),
-        /* @__PURE__ */ u2(
-          SegmentedProgressBar,
+        /* @__PURE__ */ u4(
+          "a",
           {
-            value: quota.used_tokens,
-            max: quota.limit_tokens,
-            status: severityToStatus(quota.current_severity),
-            "aria-label": "Token quota used"
+            href: status.page_url,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            style: {
+              color: "var(--text-secondary)",
+              fontSize: "11px",
+              marginLeft: "4px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: "24px",
+              minHeight: "24px"
+            },
+            "aria-label": `${name} status page`,
+            children: "\u2197"
           }
         )
       ] }),
-      /* @__PURE__ */ u2("div", { style: { marginTop: "1px" }, children: [
-        /* @__PURE__ */ u2(
-          "div",
-          {
-            style: {
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              marginBottom: "3px"
-            },
-            children: [
-              /* @__PURE__ */ u2("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "PROJECTED" }),
-              /* @__PURE__ */ u2(
-                "span",
-                {
-                  class: "stat-sub",
-                  style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
-                  children: [
-                    fmtTokens(quota.projected_tokens),
-                    " / ",
-                    fmtTokens(quota.limit_tokens),
-                    " ",
-                    projectedPct,
-                    "%",
-                    " ",
-                    /* @__PURE__ */ u2(
-                      "span",
-                      {
-                        style: {
-                          color: quota.projected_severity === "danger" ? "var(--accent)" : quota.projected_severity === "warn" ? "var(--warning)" : void 0
-                        },
-                        children: severityLabel(quota.projected_severity)
-                      }
-                    )
-                  ]
-                }
-              )
-            ]
-          }
-        ),
-        /* @__PURE__ */ u2(
-          SegmentedProgressBar,
-          {
-            value: quota.projected_tokens,
-            max: quota.limit_tokens,
-            status: severityToStatus(quota.projected_severity),
-            "aria-label": "Projected token quota"
-          }
-        )
-      ] })
-    ] });
-  }
-  function BillingBlocksCard({ data }) {
-    const activeBlock = data.blocks.find((b4) => b4.is_active) ?? null;
-    if (!activeBlock) {
-      return /* @__PURE__ */ u2("div", { class: "card stat-card", children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "BILLING BLOCK" }),
-        /* @__PURE__ */ u2("div", { class: "stat-value", style: { opacity: 0.4 }, children: "NO ACTIVE BLOCK" }),
-        /* @__PURE__ */ u2("div", { class: "stat-sub", children: [
-          "7d historical max:",
-          " ",
-          /* @__PURE__ */ u2("span", { style: { fontFamily: "var(--font-mono)" }, children: fmtTokens(data.historical_max_tokens) }),
-          " ",
-          "tokens"
-        ] })
-      ] }) });
-    }
-    const totalTokens2 = activeBlock.tokens.input + activeBlock.tokens.output + activeBlock.tokens.cache_read + activeBlock.tokens.cache_creation + activeBlock.tokens.reasoning_output;
-    const elapsed = formatDuration(activeBlock.first_timestamp, activeBlock.last_timestamp);
-    const blockEnd = fmtUtcTime(activeBlock.end);
-    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
-      /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "BILLING BLOCK" }),
-        /* @__PURE__ */ u2(
-          "div",
-          {
-            class: "stat-value",
-            style: { fontFamily: "var(--font-mono)", letterSpacing: "-0.02em" },
-            children: fmtTokens(totalTokens2)
-          }
-        ),
-        /* @__PURE__ */ u2("div", { class: "stat-sub", children: [
-          elapsed,
-          " elapsed \xB7 ends ",
-          blockEnd,
-          " \xB7 ",
-          activeBlock.entry_count,
-          " entries"
-        ] }),
-        activeBlock.burn_rate && /* @__PURE__ */ u2("div", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "4px" }, children: [
-          "$",
-          (activeBlock.burn_rate.cost_per_hour_nanos / 1e9).toFixed(4),
-          "/hr",
-          activeBlock.burn_rate.tier && /* @__PURE__ */ u2(
-            "span",
-            {
-              style: {
-                marginLeft: "6px",
-                color: tierColor(activeBlock.burn_rate.tier),
+      expanded && /* @__PURE__ */ u4("div", { style: { paddingLeft: "18px", paddingBottom: "8px" }, children: [
+        status.components.length > 0 && /* @__PURE__ */ u4("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse", marginBottom: "8px" }, children: [
+          /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { style: { color: "var(--text-secondary)" }, children: [
+            /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Component" }),
+            /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 0", fontWeight: 500 }, children: "Status" })
+          ] }) }),
+          /* @__PURE__ */ u4("tbody", { children: status.components.map((c4, i4) => {
+            const fmt2 = (v4) => v4 != null ? `${(v4 * 100).toFixed(2)}%` : "--";
+            const has30 = c4.uptime_30d != null;
+            const has7 = c4.uptime_7d != null;
+            const showUptime = has30 || has7;
+            return /* @__PURE__ */ u4(S, { children: [
+              /* @__PURE__ */ u4("tr", { children: [
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: c4.name }),
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 0", color: "var(--text-secondary)" }, children: c4.status.replace(/_/g, " ") })
+              ] }, i4),
+              showUptime && /* @__PURE__ */ u4("tr", { children: /* @__PURE__ */ u4("td", { colSpan: 2, style: { padding: "0 0 4px 0" }, children: /* @__PURE__ */ u4("span", { style: {
+                fontFamily: "var(--font-mono)",
                 fontSize: "11px",
                 letterSpacing: "0.04em"
-              },
-              children: tierLabel(activeBlock.burn_rate.tier)
-            }
-          )
-        ] })
-      ] }),
-      /* @__PURE__ */ u2(QuotaSection, { block: activeBlock })
-    ] });
-  }
-
-  // src/ui/components/ContextWindowCard.tsx
-  function severityToStatus2(s4) {
-    if (s4 === "ok") return "success";
-    if (s4 === "warn") return "warning";
-    return "accent";
-  }
-  function severityLabel2(s4) {
-    return s4 === "ok" ? "[OK]" : s4 === "warn" ? "[WARN]" : "[CRIT]";
-  }
-  function ContextWindowCard({ data }) {
-    if (!data || data.enabled === false) return null;
-    if (data.total_input_tokens == null || data.context_window_size == null) return null;
-    if (data.context_window_size <= 0) return null;
-    const used = data.total_input_tokens;
-    const size = data.context_window_size;
-    const pct = Math.max(0, Math.min(999, (data.pct ?? used / size) * 100));
-    const severity = data.severity ?? "ok";
-    return /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
-      /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "CONTEXT WINDOW" }),
-        /* @__PURE__ */ u2(
+              }, children: [
+                /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: "30D " }),
+                /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_30d) }),
+                /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: " \xB7 7D " }),
+                /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_7d) })
+              ] }) }) }, `${i4}-uptime`)
+            ] });
+          }) })
+        ] }),
+        status.active_incidents.map((inc, i4) => /* @__PURE__ */ u4(
           "div",
           {
-            class: "stat-value",
-            style: { fontFamily: "var(--font-mono)", letterSpacing: "-0.02em" },
-            children: fmt(used)
-          }
-        ),
-        /* @__PURE__ */ u2("div", { class: "stat-sub", children: [
-          "of ",
-          fmt(size),
-          " \xB7 ",
-          pct.toFixed(1),
-          "%",
-          " ",
-          /* @__PURE__ */ u2(
-            "span",
-            {
-              style: {
-                color: severity === "danger" ? "var(--accent)" : severity === "warn" ? "var(--warning)" : void 0
-              },
-              children: severityLabel2(severity)
-            }
-          )
-        ] })
-      ] }),
-      /* @__PURE__ */ u2(
-        SegmentedProgressBar,
+            style: {
+              fontSize: "12px",
+              color: "var(--text-secondary)",
+              marginBottom: "4px",
+              paddingLeft: "4px",
+              borderLeft: "2px solid var(--border)"
+            },
+            children: [
+              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)" }, children: inc.shortlink ? /* @__PURE__ */ u4(
+                "a",
+                {
+                  href: inc.shortlink,
+                  target: "_blank",
+                  rel: "noopener noreferrer",
+                  style: { color: "inherit", textDecoration: "underline" },
+                  children: inc.name
+                }
+              ) : inc.name }),
+              " ",
+              /* @__PURE__ */ u4("span", { style: { opacity: 0.7 }, children: [
+                "[",
+                inc.impact,
+                "] ",
+                inc.status,
+                " \u2014 ",
+                inc.started_at.slice(0, 16).replace("T", " ")
+              ] })
+            ]
+          },
+          i4
+        ))
+      ] })
+    ] });
+  }
+  function signalLevelStyle(level) {
+    switch (level) {
+      case "spike":
+        return { label: "SPIKE", color: "var(--accent)" };
+      case "elevated":
+        return { label: "ELEVATED", color: "var(--text-primary)" };
+      case "normal":
+        return { label: "NORMAL", color: "var(--text-secondary)" };
+      default:
+        return { label: "UNKNOWN", color: "var(--text-secondary)" };
+    }
+  }
+  function CommunitySignalRow({ label, signals }) {
+    const first = signals[0];
+    if (!first) return null;
+    const levelOrder = ["spike", "elevated", "normal", "unknown"];
+    const worstLevel = levelOrder.find((l5) => signals.some((s4) => s4.level === l5)) ?? "unknown";
+    const { label: levelLabel, color } = signalLevelStyle(worstLevel);
+    return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "4px 0", gap: "8px" }, children: [
+      /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: label }),
+      /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", color }, children: levelLabel }),
+      /* @__PURE__ */ u4(
+        "a",
         {
-          value: used,
-          max: size,
-          status: severityToStatus2(severity),
-          "aria-label": "Context window usage"
+          href: first.source_url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: { color: "var(--text-secondary)", fontSize: "11px" },
+          "aria-label": `${label} community signal source`,
+          children: "\u2197"
         }
       )
     ] });
   }
-
-  // src/ui/components/StatsCards.tsx
-  function StatsCards({
-    totals,
-    daily,
-    activeDays,
-    activeDayTotalCostNanos,
-    cacheEfficiency,
-    billingBlocks,
-    contextWindow
-  }) {
-    const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
-    const avgPerActiveDay = (() => {
-      if (activeDays === void 0 || activeDays === null) return "--";
-      if (activeDays === 0) return "--";
-      const totalUsd = (activeDayTotalCostNanos ?? 0) / 1e9;
-      return fmtCost(totalUsd / activeDays);
-    })();
-    const activeDayTooltip = activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `Averaged over ${activeDays} day${activeDays === 1 ? "" : "s"} with non-zero spend` : "No spend in selected period";
-    const stats = [
-      { label: "Sessions", value: totals.sessions.toLocaleString(), sub: rangeLabel },
-      { label: "Turns", value: fmt(totals.turns), sub: rangeLabel },
-      { label: "Input Tokens", value: fmt(totals.input), sub: rangeLabel },
-      { label: "Output Tokens", value: fmt(totals.output), sub: rangeLabel },
-      { label: "Cached Input", value: fmt(totals.cache_read), sub: "prompt cache" },
-      { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "cache writes" },
-      { label: "Reasoning", value: fmt(totals.reasoning_output), sub: "subset of output" },
-      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing", isCost: true }
-    ];
-    return /* @__PURE__ */ u2(S, { children: [
-      stats.map((s4) => /* @__PURE__ */ u2("div", { class: "card stat-card", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: s4.label }),
-          /* @__PURE__ */ u2("div", { class: `stat-value${s4.isCost ? " cost-value doto-hero" : ""}`, children: s4.value }),
-          s4.sub ? /* @__PURE__ */ u2("div", { class: "stat-sub", children: s4.sub }) : null
-        ] }),
-        s4.isCost && daily && daily.length >= 2 ? /* @__PURE__ */ u2("div", { class: "stat-sparkline", children: /* @__PURE__ */ u2(Sparkline, { daily }) }) : null
-      ] }, s4.label)),
-      /* @__PURE__ */ u2("div", { class: "card stat-card", title: activeDayTooltip, children: /* @__PURE__ */ u2("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u2("div", { class: "stat-label", children: "Avg / Active Day" }),
-        /* @__PURE__ */ u2("div", { class: "stat-value", children: avgPerActiveDay }),
-        /* @__PURE__ */ u2("div", { class: "stat-sub", children: activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `${activeDays} active ${activeDays === 1 ? "day" : "days"}` : "no spend" })
-      ] }) }),
-      billingBlocks && /* @__PURE__ */ u2(BillingBlocksCard, { data: billingBlocks }),
-      /* @__PURE__ */ u2(ContextWindowCard, { data: contextWindow ?? null }),
-      cacheEfficiency && /* @__PURE__ */ u2(CacheEfficiencyCard, { data: cacheEfficiency })
-    ] });
+  function AgentStatusCard({ snapshot, communitySignal }) {
+    const expanded = agent_status_expanded.value;
+    const hasData = snapshot.claude != null || snapshot.openai != null;
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { minWidth: "300px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "8px"
+          },
+          children: [
+            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent Status" }),
+            hasData && /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                onClick: () => {
+                  agent_status_expanded.value = !expanded;
+                  syncDashboardUrl();
+                },
+                style: {
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "4px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-secondary)",
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  minHeight: "32px",
+                  padding: "6px 8px"
+                },
+                "aria-expanded": expanded,
+                children: [
+                  /* @__PURE__ */ u4("span", { "aria-hidden": "true", children: expanded ? "\u25B2" : "\u25BC" }),
+                  /* @__PURE__ */ u4("span", { children: expanded ? "Collapse" : "Expand" })
+                ]
+              }
+            )
+          ]
+        }
+      ),
+      /* @__PURE__ */ u4(ProviderRow, { name: "Claude", status: snapshot.claude, expanded }),
+      /* @__PURE__ */ u4(ProviderRow, { name: "OpenAI / Codex", status: snapshot.openai, expanded }),
+      communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && /* @__PURE__ */ u4("div", { style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }, children: [
+        /* @__PURE__ */ u4("div", { style: { fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", marginBottom: "6px", letterSpacing: "0.06em" }, children: "COMMUNITY SIGNAL" }),
+        /* @__PURE__ */ u4(CommunitySignalRow, { label: "Claude", signals: communitySignal.claude }),
+        /* @__PURE__ */ u4(CommunitySignalRow, { label: "OpenAI", signals: communitySignal.openai }),
+        communitySignal.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "4px", fontFamily: "var(--font-mono)" }, children: [
+          "Crowd data ",
+          communitySignal.fetched_at.slice(0, 19).replace("T", " "),
+          " UTC"
+        ] })
+      ] }),
+      snapshot.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "8px", fontFamily: "var(--font-mono)" }, children: [
+        "Refreshed ",
+        snapshot.fetched_at.slice(0, 19).replace("T", " "),
+        " UTC"
+      ] })
+    ] }) });
   }
 
-  // src/ui/components/SubagentSummary.tsx
-  function SubagentSummary({ summary }) {
-    if (summary.subagent_turns === 0) return null;
-    const totalInput = summary.parent_input + summary.subagent_input;
-    const totalOutput = summary.parent_output + summary.subagent_output;
-    const subPctInput = totalInput > 0 ? summary.subagent_input / totalInput * 100 : 0;
-    const subPctOutput = totalOutput > 0 ? summary.subagent_output / totalOutput * 100 : 0;
-    return /* @__PURE__ */ u2("div", { class: "table-card", children: [
-      /* @__PURE__ */ u2("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: /* @__PURE__ */ u2("div", { class: "section-title", style: { padding: "0" }, children: "Subagent Breakdown" }) }),
-      /* @__PURE__ */ u2("div", { style: "display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:12px 20px 20px", children: [
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Turns" }),
-          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
-            "Parent: ",
-            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.parent_turns) })
-          ] }),
-          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
-            "Subagent: ",
-            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.subagent_turns) })
-          ] }),
-          /* @__PURE__ */ u2("div", { class: "sub", children: [
-            summary.unique_agents,
-            " unique agents"
-          ] })
-        ] }),
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Input Tokens" }),
-          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
-            "Parent: ",
-            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.parent_input) })
-          ] }),
-          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
-            "Subagent: ",
-            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.subagent_input) }),
-            " (",
-            subPctInput.toFixed(1),
-            "%)"
-          ] })
-        ] }),
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("div", { class: "stat-label", children: "Output Tokens" }),
-          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
-            "Parent: ",
-            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.parent_output) })
-          ] }),
-          /* @__PURE__ */ u2("div", { style: "font-size:15px", children: [
-            "Subagent: ",
-            /* @__PURE__ */ u2("span", { class: "num", children: fmt(summary.subagent_output) }),
-            " (",
-            subPctOutput.toFixed(1),
-            "%)"
-          ] })
-        ] })
-      ] })
-    ] });
+  // src/ui/InlineRankBar.tsx
+  function InlineRankBar({
+    value,
+    max: max2,
+    label
+  }) {
+    const pct = max2 > 0 ? value / max2 * 100 : 0;
+    const tooltip = `${value} (${pct.toFixed(1)}% of max ${max2})`;
+    return /* @__PURE__ */ u4(
+      "span",
+      {
+        style: { position: "relative", display: "inline-block", width: "100%" },
+        title: tooltip,
+        children: [
+          /* @__PURE__ */ u4(
+            "span",
+            {
+              "data-testid": "rank-bar",
+              style: {
+                position: "absolute",
+                top: 0,
+                left: 0,
+                bottom: 0,
+                width: `${pct}%`,
+                backgroundColor: "var(--color-text-primary)",
+                opacity: 0.12,
+                pointerEvents: "none"
+              }
+            }
+          ),
+          /* @__PURE__ */ u4("span", { class: "num", style: { position: "relative", zIndex: 1 }, children: label })
+        ]
+      }
+    );
   }
 
   // node_modules/@tanstack/table-core/build/lib/index.mjs
@@ -5846,7 +5019,7 @@
     if (typeof def === "function") {
       return def(header.getContext());
     }
-    return def;
+    return def ?? header.column.id;
   }
   function resolveUpdater(updater, prev) {
     return typeof updater === "function" ? updater(prev) : updater;
@@ -5909,10 +5082,16 @@
       rerender((n3) => n3 + 1);
     };
     if (!tableRef.current) {
+      const tableState = {
+        sorting,
+        pagination,
+        columnVisibility,
+        columnPinning: { left: [], right: [] }
+      };
       tableRef.current = createTable({
         columns: columns4,
         data,
-        state: { sorting, pagination, columnVisibility, columnPinning: { left: [], right: [] } },
+        state: tableState,
         onStateChange: () => {
         },
         onSortingChange: (updater) => {
@@ -5944,11 +5123,11 @@
       setSectionCollapsed(sectionKey, !collapsed);
       syncDashboardUrl();
     };
-    return /* @__PURE__ */ u2("div", { class: "table-card", children: [
-      (title || exportFn) && /* @__PURE__ */ u2("div", { class: "section-header", children: [
-        title && /* @__PURE__ */ u2("h2", { id: headingId, class: "section-title", style: { margin: 0 }, children: title }),
-        /* @__PURE__ */ u2("div", { class: "section-actions", children: [
-          sectionKey && /* @__PURE__ */ u2(
+    return /* @__PURE__ */ u4("div", { class: "table-card", children: [
+      (title || exportFn) && /* @__PURE__ */ u4("div", { class: "section-header", children: [
+        title && /* @__PURE__ */ u4("h2", { id: headingId, class: "section-title", style: { margin: 0 }, children: title }),
+        /* @__PURE__ */ u4("div", { class: "section-actions", children: [
+          sectionKey && /* @__PURE__ */ u4(
             "button",
             {
               class: "section-toggle",
@@ -5959,12 +5138,12 @@
               children: collapsed ? "Show" : "Hide"
             }
           ),
-          exportFn && /* @__PURE__ */ u2("button", { class: "export-btn", type: "button", onClick: exportFn, title: "Export to CSV", children: "\u2913 CSV" })
+          exportFn && /* @__PURE__ */ u4("button", { class: "export-btn", type: "button", onClick: exportFn, title: "Export to CSV", children: "\u2913 CSV" })
         ] })
       ] }),
-      /* @__PURE__ */ u2("div", { id: sectionContentId, style: collapsed ? { display: "none" } : void 0, children: [
-        enableColumnVisibility && /* @__PURE__ */ u2("div", { class: "column-toggle", children: table.getAllLeafColumns().map((column) => /* @__PURE__ */ u2("label", { children: [
-          /* @__PURE__ */ u2(
+      /* @__PURE__ */ u4("div", { id: sectionContentId, style: collapsed ? { display: "none" } : void 0, children: [
+        enableColumnVisibility && /* @__PURE__ */ u4("div", { class: "column-toggle", children: table.getAllLeafColumns().map((column) => /* @__PURE__ */ u4("label", { children: [
+          /* @__PURE__ */ u4(
             "input",
             {
               type: "checkbox",
@@ -5974,11 +5153,11 @@
           ),
           typeof column.columnDef.header === "string" ? column.columnDef.header : column.id
         ] }, column.id)) }),
-        /* @__PURE__ */ u2("table", { "aria-labelledby": headingId, children: [
-          /* @__PURE__ */ u2("thead", { children: headerGroups.map((headerGroup) => /* @__PURE__ */ u2("tr", { children: headerGroup.headers.map((header) => {
+        /* @__PURE__ */ u4("table", { "aria-labelledby": headingId, children: [
+          /* @__PURE__ */ u4("thead", { children: headerGroups.map((headerGroup) => /* @__PURE__ */ u4("tr", { children: headerGroup.headers.map((header) => {
             const canSort = header.column.getCanSort();
             const sorted = header.column.getIsSorted();
-            return /* @__PURE__ */ u2(
+            return /* @__PURE__ */ u4(
               "th",
               {
                 scope: "col",
@@ -5995,21 +5174,21 @@
                 } : void 0,
                 children: [
                   renderHeader(header),
-                  canSort && /* @__PURE__ */ u2("span", { class: "sort-icon", children: sorted === "desc" ? " \u25BC" : sorted === "asc" ? " \u25B2" : "" })
+                  canSort && /* @__PURE__ */ u4("span", { class: "sort-icon", children: sorted === "desc" ? " \u25BC" : sorted === "asc" ? " \u25B2" : "" })
                 ]
               },
               header.id
             );
           }) }, headerGroup.id)) }),
-          /* @__PURE__ */ u2("tbody", { children: rows.map((row) => /* @__PURE__ */ u2("tr", { class: costRows ? "cost-row" : void 0, children: row.getVisibleCells().map((cell) => /* @__PURE__ */ u2("td", { children: renderCell(cell) }, cell.id)) }, row.id)) })
+          /* @__PURE__ */ u4("tbody", { children: rows.map((row) => /* @__PURE__ */ u4("tr", { class: costRows ? "cost-row" : void 0, children: row.getVisibleCells().map((cell) => /* @__PURE__ */ u4("td", { children: renderCell(cell) }, cell.id)) }, row.id)) })
         ] }),
-        pageSize && /* @__PURE__ */ u2("div", { class: "pagination", children: [
-          /* @__PURE__ */ u2("span", { children: table.getRowCount() > 0 ? `Showing ${pagination.pageIndex * pagination.pageSize + 1}\u2013${Math.min(
+        pageSize && /* @__PURE__ */ u4("div", { class: "pagination", children: [
+          /* @__PURE__ */ u4("span", { children: table.getRowCount() > 0 ? `Showing ${pagination.pageIndex * pagination.pageSize + 1}\u2013${Math.min(
             (pagination.pageIndex + 1) * pagination.pageSize,
             table.getRowCount()
           )} of ${table.getRowCount()}` : "No sessions" }),
-          /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "6px" }, children: [
-            /* @__PURE__ */ u2(
+          /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "6px" }, children: [
+            /* @__PURE__ */ u4(
               "button",
               {
                 class: "filter-btn",
@@ -6018,7 +5197,7 @@
                 children: "\xAB Prev"
               }
             ),
-            /* @__PURE__ */ u2(
+            /* @__PURE__ */ u4(
               "button",
               {
                 class: "filter-btn",
@@ -6033,42 +5212,1395 @@
     ] });
   }
 
+  // src/ui/components/BranchTable.tsx
+  function makeColumns(data) {
+    const maxSessions = data.reduce((m4, r4) => Math.max(m4, r4.sessions), 0);
+    return [
+      {
+        accessorKey: "provider",
+        header: "Provider",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+      },
+      {
+        accessorKey: "branch",
+        header: "Branch",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()) })
+      },
+      {
+        accessorKey: "sessions",
+        header: "Sessions",
+        cell: ({ getValue }) => /* @__PURE__ */ u4(
+          InlineRankBar,
+          {
+            value: getValue(),
+            max: maxSessions,
+            label: String(getValue())
+          }
+        )
+      },
+      {
+        accessorKey: "turns",
+        header: "Turns",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
+      },
+      {
+        accessorKey: "input",
+        header: "Input",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
+      },
+      {
+        accessorKey: "output",
+        header: "Output",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
+      },
+      {
+        accessorKey: "cost",
+        header: "Est. Cost",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "cost", children: fmtCost(getValue()) })
+      }
+    ];
+  }
+  function BranchTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u4(DataTable, { columns: makeColumns(data), data, title: "Usage by Git Branch", sectionKey: "branch-summary" });
+  }
+
+  // src/ui/components/SegmentedProgressBar.tsx
+  function resolveStatus(pct, status) {
+    if (status === "neutral") return "var(--text-display)";
+    if (status === "success") return "var(--success)";
+    if (status === "warning") return "var(--warning)";
+    if (status === "accent") return "var(--accent)";
+    if (pct >= 90) return "var(--accent)";
+    if (pct >= 70) return "var(--warning)";
+    return "var(--success)";
+  }
+  function SegmentedProgressBar({
+    value,
+    max: max2,
+    segments = 20,
+    size = "standard",
+    status = "auto",
+    "aria-label": ariaLabel
+  }) {
+    const safeMax = max2 > 0 ? max2 : 1;
+    const ratio = value / safeMax;
+    const pct = Math.min(100, Math.max(0, ratio * 100));
+    const overflow = ratio > 1;
+    const filled = Math.round(pct / 100 * segments);
+    const fillColor = overflow ? "var(--accent)" : resolveStatus(pct, status);
+    const emptyColor = "var(--border)";
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        class: `segmented-bar segmented-bar--${size}`,
+        role: "progressbar",
+        "aria-label": ariaLabel,
+        "aria-valuenow": Math.round(pct),
+        "aria-valuemin": 0,
+        "aria-valuemax": 100,
+        children: Array.from({ length: segments }).map((_4, i4) => /* @__PURE__ */ u4(
+          "div",
+          {
+            class: "segmented-bar__segment",
+            style: { background: i4 < filled ? fillColor : emptyColor }
+          },
+          i4
+        ))
+      }
+    );
+  }
+
+  // src/ui/components/ClaudeUsagePanel.tsx
+  function statusColor(status) {
+    if (status === "failed") return "var(--accent)";
+    if (status === "unparsed") return "var(--warning)";
+    return "var(--text-secondary)";
+  }
+  function ClaudeUsagePanel({ data }) {
+    const snapshot = data.latest_snapshot ?? null;
+    const lastRun = data.last_run ?? null;
+    const lastSuccess = snapshot?.run.captured_at ?? null;
+    return /* @__PURE__ */ u4("div", { class: "card card-flat bento-full table-card", "aria-label": "Claude usage monitor", children: [
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "16px",
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+            marginBottom: snapshot ? "18px" : "0"
+          },
+          children: [
+            /* @__PURE__ */ u4("div", { children: [
+              /* @__PURE__ */ u4("h2", { style: { marginBottom: "8px" }, children: "Claude /usage" }),
+              /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+                "Last success ",
+                fmtRelativeTime(lastSuccess),
+                lastRun ? ` \xB7 Last run ${fmtRelativeTime(lastRun.captured_at)}` : ""
+              ] })
+            ] }),
+            lastRun && /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "12px",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: statusColor(lastRun.status)
+                },
+                children: [
+                  "[",
+                  lastRun.status,
+                  "]"
+                ]
+              }
+            )
+          ]
+        }
+      ),
+      !snapshot && /* @__PURE__ */ u4("div", { class: "stat-sub", children: lastRun?.error_summary || "No parsed Claude /usage snapshot has been captured yet." }),
+      snapshot && /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "14px" }, children: [
+        snapshot.factors.map((factor) => /* @__PURE__ */ u4(
+          "div",
+          {
+            style: {
+              borderTop: "1px solid var(--border)",
+              paddingTop: "14px"
+            },
+            children: [
+              /* @__PURE__ */ u4(
+                "div",
+                {
+                  style: {
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: "16px",
+                    marginBottom: "10px",
+                    flexWrap: "wrap"
+                  },
+                  children: [
+                    /* @__PURE__ */ u4("div", { style: { fontWeight: 500 }, children: factor.display_label }),
+                    /* @__PURE__ */ u4(
+                      "div",
+                      {
+                        style: {
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "14px",
+                          whiteSpace: "nowrap"
+                        },
+                        children: [
+                          factor.percent.toFixed(1),
+                          "%"
+                        ]
+                      }
+                    )
+                  ]
+                }
+              ),
+              /* @__PURE__ */ u4(
+                SegmentedProgressBar,
+                {
+                  value: factor.percent,
+                  max: 100,
+                  size: "compact",
+                  "aria-label": `${factor.display_label} percent`
+                }
+              ),
+              factor.advice_text && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "10px" }, children: factor.advice_text })
+            ]
+          },
+          factor.factor_key
+        )),
+        lastRun?.status !== "success" && lastRun?.error_summary && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "4px" }, children: [
+          "Latest run note: ",
+          lastRun.error_summary
+        ] })
+      ] })
+    ] });
+  }
+
+  // src/ui/components/CostReconciliationPanel.tsx
+  function CostReconciliationPanel({ data }) {
+    if (!data || !data.enabled) return null;
+    if (data.hook_total_nanos == null || data.local_total_nanos == null) return null;
+    const hookUsd = data.hook_total_nanos / 1e9;
+    const localUsd = data.local_total_nanos / 1e9;
+    const divergence = data.divergence_pct ?? 0;
+    const divergencePctSigned = divergence * 100;
+    const divergencePctAbs = Math.abs(divergencePctSigned);
+    const isWarn = divergencePctAbs > 10;
+    return /* @__PURE__ */ u4("div", { class: "card card-flat", style: { gridColumn: "1 / -1" }, children: [
+      /* @__PURE__ */ u4("div", { style: { marginBottom: "16px" }, children: [
+        /* @__PURE__ */ u4("span", { style: {
+          fontFamily: "var(--font-mono)",
+          fontSize: "11px",
+          fontWeight: 400,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "var(--text-secondary)"
+        }, children: "COST RECONCILIATION" }),
+        data.period && /* @__PURE__ */ u4("span", { style: {
+          fontFamily: "var(--font-mono)",
+          fontSize: "11px",
+          color: "var(--text-disabled)",
+          marginLeft: "8px"
+        }, children: [
+          "(",
+          data.period,
+          ")"
+        ] })
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "32px", flexWrap: "wrap", marginBottom: "20px" }, children: [
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--text-secondary)",
+            marginBottom: "8px"
+          }, children: "HOOK-REPORTED" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "24px" }, children: fmtCost(hookUsd) })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--text-secondary)",
+            marginBottom: "8px"
+          }, children: "LOCAL ESTIMATE" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "24px" }, children: fmtCost(localUsd) })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: "var(--text-secondary)",
+            marginBottom: "8px"
+          }, children: "DIVERGENCE" }),
+          /* @__PURE__ */ u4(
+            "div",
+            {
+              class: "stat-value",
+              style: { fontSize: "24px", color: isWarn ? "var(--accent)" : void 0 },
+              children: [
+                divergencePctSigned >= 0 ? "+" : "",
+                divergencePctSigned.toFixed(1),
+                "%",
+                isWarn && /* @__PURE__ */ u4("span", { style: {
+                  display: "inline-block",
+                  marginLeft: "8px",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11px",
+                  fontWeight: 400,
+                  letterSpacing: "0.06em",
+                  padding: "2px 8px",
+                  border: "1px solid var(--accent)",
+                  borderRadius: "4px",
+                  color: "var(--accent)",
+                  verticalAlign: "middle"
+                }, children: "[DRIFT]" })
+              ]
+            }
+          )
+        ] })
+      ] }),
+      data.breakdown && data.breakdown.length > 0 && /* @__PURE__ */ u4("div", { style: { overflowX: "auto" }, children: /* @__PURE__ */ u4("table", { children: [
+        /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
+          /* @__PURE__ */ u4("th", { children: "DAY" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right" }, children: "HOOK" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right" }, children: "LOCAL" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right" }, children: "\u0394" })
+        ] }) }),
+        /* @__PURE__ */ u4("tbody", { children: data.breakdown.slice().reverse().slice(0, 30).map((r4) => {
+          const h5 = r4.hook_nanos / 1e9;
+          const l5 = r4.local_nanos / 1e9;
+          const delta = h5 - l5;
+          const rowWarn = l5 > 1e-9 && Math.abs(delta) / l5 > 0.1;
+          return /* @__PURE__ */ u4("tr", { children: [
+            /* @__PURE__ */ u4("td", { class: "num", children: r4.day }),
+            /* @__PURE__ */ u4("td", { class: "num", style: { textAlign: "right" }, children: fmtCost(h5) }),
+            /* @__PURE__ */ u4("td", { class: "num", style: { textAlign: "right" }, children: fmtCost(l5) }),
+            /* @__PURE__ */ u4(
+              "td",
+              {
+                class: "num",
+                style: {
+                  textAlign: "right",
+                  color: rowWarn ? "var(--accent)" : "var(--text-secondary)"
+                },
+                children: [
+                  delta >= 0 ? "+" : "",
+                  fmtCost(delta)
+                ]
+              }
+            )
+          ] }, r4.day);
+        }) })
+      ] }) })
+    ] });
+  }
+
+  // src/ui/components/ApexChart.tsx
+  function ApexChart({ options, id }) {
+    const ref = A2(null);
+    const chartRef = A2(null);
+    y2(() => {
+      if (chartRef.current) chartRef.current.destroy();
+      if (!ref.current || !options) {
+        return () => {
+          chartRef.current?.destroy();
+          chartRef.current = null;
+        };
+      }
+      let cancelled = false;
+      const raf = requestAnimationFrame(() => {
+        if (cancelled || !ref.current) return;
+        const apexCharts = window.ApexCharts;
+        if (!apexCharts) return;
+        const parent = ref.current.parentElement;
+        let h5 = parent?.clientHeight ?? 0;
+        if (h5 <= 0) h5 = parent?.classList.contains("tall") ? 300 : 240;
+        const opts = { ...options, chart: { ...options.chart, height: h5 } };
+        chartRef.current = new apexCharts(ref.current, opts);
+        void chartRef.current.render();
+      });
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
+        chartRef.current?.destroy();
+        chartRef.current = null;
+      };
+    }, [id, options]);
+    return /* @__PURE__ */ u4("div", { ref, id, style: { width: "100%", height: "100%" } });
+  }
+
+  // src/ui/components/DailyChart.tsx
+  function DailyChart({ daily }) {
+    const base = industrialChartOptions("bar");
+    const options = {
+      ...base,
+      chart: { ...base.chart, type: "bar", stacked: true },
+      series: [
+        { name: "Input", data: daily.map((d5) => d5.input) },
+        { name: "Output", data: daily.map((d5) => d5.output) },
+        { name: "Cached Input", data: daily.map((d5) => d5.cache_read) },
+        { name: "Cache Creation", data: daily.map((d5) => d5.cache_creation) }
+      ],
+      colors: tokenSeriesColors(),
+      fill: { type: "solid" },
+      plotOptions: { bar: { columnWidth: "70%", borderRadius: 0 } },
+      xaxis: {
+        ...base.xaxis ?? {},
+        categories: daily.map((d5) => d5.day),
+        labels: { ...base.xaxis?.labels ?? {}, rotate: -45, maxHeight: 60 },
+        tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange.value])
+      },
+      yaxis: {
+        ...base.yaxis ?? {},
+        labels: { ...base.yaxis?.labels ?? {}, formatter: (v4) => fmt(v4) }
+      },
+      tooltip: { ...base.tooltip, y: { formatter: (v4) => fmt(v4) + " tokens" } }
+    };
+    return /* @__PURE__ */ u4(ApexChart, { options, id: "chart-daily" });
+  }
+
   // src/ui/components/EntrypointTable.tsx
   var columns = [
     {
       accessorKey: "provider",
       header: "Provider",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
     },
     {
       accessorKey: "entrypoint",
       header: "Entrypoint",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()) })
     },
     {
       accessorKey: "sessions",
       header: "Sessions",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: getValue() })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
     },
     {
       accessorKey: "turns",
       header: "Turns",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
     },
     {
       accessorKey: "input",
       header: "Input",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
     },
     {
       accessorKey: "output",
       header: "Output",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
     }
   ];
   function EntrypointTable({ data }) {
     if (!data.length) return null;
-    return /* @__PURE__ */ u2(DataTable, { columns, data, title: "Usage by Entrypoint", sectionKey: "entrypoint-breakdown" });
+    return /* @__PURE__ */ u4(DataTable, { columns, data, title: "Usage by Entrypoint", sectionKey: "entrypoint-breakdown" });
+  }
+
+  // src/ui/components/EstimationMeta.tsx
+  function EstimationMeta({
+    confidenceBreakdown,
+    billingModeBreakdown,
+    pricingVersions
+  }) {
+    return /* @__PURE__ */ u4(S, { children: [
+      /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cost Confidence" }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: confidenceBreakdown.length ? confidenceBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Session mix in current filter" })
+      ] }) }),
+      /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Billing Mode" }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: billingModeBreakdown.length ? billingModeBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Local estimate vs subscriber-included sessions" })
+      ] }) }),
+      /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Pricing Snapshot" }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: pricingVersions.length === 0 ? "n/a" : pricingVersions.length === 1 ? pricingVersions[0] : `mixed (${pricingVersions.length})` }),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Stored per-session pricing metadata" })
+      ] }) })
+    ] });
+  }
+
+  // src/ui/components/HourlyChart.tsx
+  function HourlyChart({ data }) {
+    if (!data.length) return null;
+    const maxTurns = Math.max(...data.map((d5) => d5.turns), 1);
+    const fillColor = cssVar("--text-display");
+    const emptyColor = cssVar("--border");
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: "0", marginBottom: "12px" }, children: "Activity by Hour of Day" }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", height: "80px" }, children: Array.from({ length: 24 }, (_4, h5) => {
+        const row = data.find((d5) => d5.hour === h5);
+        const turns = row?.turns ?? 0;
+        const pct = turns / maxTurns * 100;
+        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct / 100 * 0.6) : emptyColor;
+        return /* @__PURE__ */ u4(
+          "div",
+          {
+            title: `${h5}:00 -- ${fmt(turns)} turns`,
+            style: {
+              flex: 1,
+              height: `${Math.max(pct, 2)}%`,
+              background,
+              borderRadius: 0
+            }
+          },
+          h5
+        );
+      }) }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "2px", marginTop: "6px" }, children: Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u4(
+        "span",
+        {
+          class: "muted",
+          style: {
+            flex: 1,
+            fontFamily: "var(--font-mono)",
+            fontSize: "9px",
+            textAlign: "center",
+            letterSpacing: "0.04em",
+            color: cssVar("--text-secondary"),
+            visibility: [0, 6, 12, 18].includes(h5) ? "visible" : "hidden"
+          },
+          children: String(h5).padStart(2, "0")
+        },
+        h5
+      )) }),
+      /* @__PURE__ */ u4("div", { style: { display: "none" }, "data-fill": fillColor })
+    ] });
+  }
+
+  // src/ui/components/McpSummaryTable.tsx
+  function makeColumns2(data) {
+    const maxInvocations = data.reduce((m4, r4) => Math.max(m4, r4.invocations), 0);
+    return [
+      {
+        accessorKey: "provider",
+        header: "Provider",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+      },
+      {
+        accessorKey: "server",
+        header: "MCP Server",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag mcp", children: String(getValue()) })
+      },
+      {
+        accessorKey: "tools_used",
+        header: "Tools",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
+      },
+      {
+        accessorKey: "invocations",
+        header: "Calls",
+        cell: ({ getValue }) => /* @__PURE__ */ u4(
+          InlineRankBar,
+          {
+            value: getValue(),
+            max: maxInvocations,
+            label: fmt(getValue())
+          }
+        )
+      },
+      {
+        accessorKey: "sessions_used",
+        header: "Sessions",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
+      }
+    ];
+  }
+  function McpSummaryTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u4(DataTable, { columns: makeColumns2(data), data, title: "MCP Server Usage", sectionKey: "mcp-summary" });
+  }
+
+  // src/ui/components/ModelChart.tsx
+  var METRIC_LABELS = {
+    cost: "Cost",
+    tokens: "Tokens",
+    calls: "Calls"
+  };
+  var SLICE_OPACITY_LADDER = [1, 0.64, 0.46, 0.34, 0.24, 0.16];
+  function totalTokens(row) {
+    return row.input + row.output + row.cache_read + row.cache_creation + row.reasoning_output;
+  }
+  function metricValue(row, metric) {
+    switch (metric) {
+      case "cost":
+        return row.cost;
+      case "tokens":
+        return totalTokens(row);
+      case "calls":
+        return row.turns;
+    }
+  }
+  function formatMetricValue(value, metric, large = false) {
+    switch (metric) {
+      case "cost":
+        return large ? value < 1 ? fmtCost(value) : fmtCostBig(value) : fmtCost(value);
+      case "tokens":
+      case "calls":
+        return fmt(value);
+    }
+  }
+  function formatShare(share) {
+    if (share >= 99.5) return "100%";
+    if (share >= 10) return `${share.toFixed(0)}%`;
+    return `${share.toFixed(1)}%`;
+  }
+  function ModelChart({
+    byModel,
+    onSelectModel
+  }) {
+    if (!byModel.length) return null;
+    const [selectedMetric, setSelectedMetric] = d2("cost");
+    const totals = {
+      cost: byModel.reduce((sum2, row) => sum2 + row.cost, 0),
+      tokens: byModel.reduce((sum2, row) => sum2 + totalTokens(row), 0),
+      calls: byModel.reduce((sum2, row) => sum2 + row.turns, 0)
+    };
+    const enabledMetrics = Object.keys(METRIC_LABELS).filter((metric2) => totals[metric2] > 0);
+    const metric = enabledMetrics.includes(selectedMetric) ? selectedMetric : enabledMetrics[0] ?? "cost";
+    const sorted = [...byModel].map((row) => ({
+      row,
+      value: metricValue(row, metric),
+      tokens: totalTokens(row)
+    })).filter((entry) => entry.value > 0).sort((a4, b4) => b4.value - a4.value);
+    if (!sorted.length) return null;
+    const TOP_N = 5;
+    const top = sorted.slice(0, TOP_N);
+    const rest = sorted.slice(TOP_N);
+    const total = sorted.reduce((sum2, entry) => sum2 + entry.value, 0);
+    const rows = top.map((entry, index) => ({
+      label: entry.row.model,
+      value: entry.value,
+      share: total > 0 ? entry.value / total * 100 : 0,
+      cost: entry.row.cost,
+      calls: entry.row.turns,
+      tokens: entry.tokens,
+      color: withAlpha("--text-display", SLICE_OPACITY_LADDER[Math.min(index, SLICE_OPACITY_LADDER.length - 1)] ?? 0.16),
+      isOther: false
+    }));
+    const otherValue = rest.reduce((sum2, entry) => sum2 + entry.value, 0);
+    const hasOther = otherValue > 0;
+    if (hasOther) {
+      rows.push({
+        label: `Other (${rest.length})`,
+        value: otherValue,
+        share: total > 0 ? otherValue / total * 100 : 0,
+        cost: rest.reduce((sum2, entry) => sum2 + entry.row.cost, 0),
+        calls: rest.reduce((sum2, entry) => sum2 + entry.row.turns, 0),
+        tokens: rest.reduce((sum2, entry) => sum2 + entry.tokens, 0),
+        color: withAlpha("--text-display", SLICE_OPACITY_LADDER[Math.min(rows.length, SLICE_OPACITY_LADDER.length - 1)] ?? 0.16),
+        isOther: true
+      });
+    }
+    const base = industrialChartOptions("donut");
+    const options = {
+      ...base,
+      chart: {
+        ...base.chart,
+        type: "donut",
+        ...onSelectModel ? {
+          events: {
+            dataPointSelection: (_event, _ctx, config) => {
+              const row = rows[config.dataPointIndex];
+              if (row && !row.isOther) onSelectModel(row.label);
+            }
+          }
+        } : {}
+      },
+      series: rows.map((row) => row.value),
+      labels: rows.map((row) => row.label),
+      colors: rows.map((row) => row.color),
+      stroke: { width: 2, colors: [cssVar("--surface")] },
+      legend: { ...base.legend, show: false },
+      states: {
+        hover: { filter: { type: "none", value: 0 } },
+        active: { filter: { type: "none", value: 0 } }
+      },
+      tooltip: {
+        ...base.tooltip,
+        custom: ({ seriesIndex }) => {
+          const row = rows[seriesIndex];
+          if (!row) return "";
+          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${esc(row.label)}</strong><br/>${esc(METRIC_LABELS[metric])}: ${esc(formatMetricValue(row.value, metric))} (${esc(formatShare(row.share))} share)<br/>Cost: ${esc(formatMetricValue(row.cost, "cost"))} &nbsp;&bull;&nbsp; Calls: ${esc(formatMetricValue(row.calls, "calls"))} &nbsp;&bull;&nbsp; Tokens: ${esc(formatMetricValue(row.tokens, "tokens"))}</div>`;
+        }
+      },
+      plotOptions: {
+        pie: {
+          expandOnClick: false,
+          donut: {
+            size: "72%",
+            labels: { show: false }
+          }
+        }
+      }
+    };
+    return /* @__PURE__ */ u4("div", { class: "model-chart-panel", children: [
+      /* @__PURE__ */ u4("div", { class: "range-group", "aria-label": "Model metric", children: Object.keys(METRIC_LABELS).map((nextMetric) => /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: `range-btn${metric === nextMetric ? " active" : ""}`,
+          disabled: totals[nextMetric] <= 0,
+          "aria-pressed": metric === nextMetric,
+          onClick: () => setSelectedMetric(nextMetric),
+          children: METRIC_LABELS[nextMetric]
+        },
+        nextMetric
+      )) }),
+      /* @__PURE__ */ u4("div", { class: "model-chart-ring", children: [
+        /* @__PURE__ */ u4(ApexChart, { options, id: "chart-model-apex" }),
+        /* @__PURE__ */ u4("div", { class: "model-chart-center", "aria-hidden": "true", children: /* @__PURE__ */ u4("div", { class: "model-chart-center-inner", children: [
+          /* @__PURE__ */ u4("div", { class: "model-chart-center-kicker", children: METRIC_LABELS[metric] }),
+          /* @__PURE__ */ u4("div", { class: "model-chart-center-total", children: formatMetricValue(total, metric, true) }),
+          hasOther ? /* @__PURE__ */ u4("div", { class: "model-chart-center-meta", children: "Top 5 + Other" }) : null
+        ] }) })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "model-share-list", children: rows.map((row) => /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: `model-share-row${onSelectModel && !row.isOther ? " interactive" : ""}`,
+          onClick: onSelectModel && !row.isOther ? () => onSelectModel(row.label) : void 0,
+          disabled: !onSelectModel || row.isOther,
+          "aria-label": row.isOther ? `${row.label} ${METRIC_LABELS[metric]} summary` : `Filter to ${row.label}`,
+          children: [
+            /* @__PURE__ */ u4("div", { class: "model-share-row-head", children: [
+              /* @__PURE__ */ u4("div", { class: "model-share-label", children: [
+                /* @__PURE__ */ u4("span", { class: "model-share-swatch", style: { background: row.color }, "aria-hidden": "true" }),
+                /* @__PURE__ */ u4("span", { title: row.label, children: truncateMid(row.label, row.isOther ? 18 : 24, 8) })
+              ] }),
+              /* @__PURE__ */ u4("div", { class: "model-share-value", children: formatMetricValue(row.value, metric) })
+            ] }),
+            /* @__PURE__ */ u4("div", { class: "model-share-row-meta", children: [
+              /* @__PURE__ */ u4("div", { class: "model-share-bar", "aria-label": `${row.label} ${METRIC_LABELS[metric]} share`, children: /* @__PURE__ */ u4("div", { class: "model-share-bar-fill", style: { width: `${Math.min(100, row.share)}%`, background: row.color } }) }),
+              /* @__PURE__ */ u4("div", { class: "model-share-percent", children: formatShare(row.share) })
+            ] })
+          ]
+        },
+        row.label
+      )) })
+    ] });
+  }
+
+  // src/ui/components/ModelCostTable.tsx
+  var defaultSort = [{ id: "cost", desc: true }];
+  function CostShareBar({ value, max: max2, label }) {
+    if (max2 <= 0 || value <= 0) return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
+    const pct = value / max2 * 100;
+    return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", gap: "6px", minWidth: "100px" }, children: [
+      /* @__PURE__ */ u4("span", { class: "num", style: { fontSize: "13px", minWidth: "52px", textAlign: "right" }, children: fmtCost(value) }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          role: "img",
+          style: {
+            flex: 1,
+            height: "4px",
+            background: "rgba(var(--text-primary-rgb,232,232,232),0.12)",
+            borderRadius: "2px",
+            overflow: "hidden"
+          },
+          "aria-label": label,
+          children: /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                height: "100%",
+                width: `${Math.min(100, pct).toFixed(1)}%`,
+                background: "rgba(var(--text-primary-rgb,232,232,232),0.65)",
+                borderRadius: "2px"
+              }
+            }
+          )
+        }
+      )
+    ] });
+  }
+  function useModelColumns(totalCost, totalCacheReadCost, totalCacheWriteCost, showCredits, onSelectModel) {
+    return T2(
+      () => [
+        {
+          id: "model",
+          accessorKey: "model",
+          header: "Model",
+          enableSorting: false,
+          cell: (info) => {
+            const model = String(info.getValue());
+            if (!onSelectModel) return /* @__PURE__ */ u4("span", { class: "model-tag", children: model });
+            return /* @__PURE__ */ u4("button", { type: "button", class: "table-action-btn table-action-btn--tag", onClick: () => onSelectModel(model), children: /* @__PURE__ */ u4("span", { class: "model-tag", children: model }) });
+          }
+        },
+        {
+          id: "turns",
+          accessorKey: "turns",
+          header: "Turns",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "input",
+          accessorKey: "input",
+          header: "Input",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "output",
+          accessorKey: "output",
+          header: "Output",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "cache_read",
+          accessorKey: "cache_read",
+          header: "Cached Input",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "cache_creation",
+          accessorKey: "cache_creation",
+          header: "Cache Creation",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "cost",
+          accessorKey: "cost",
+          header: "Est. Cost",
+          cell: (info) => {
+            const row = info.row.original;
+            return row.is_billable ? /* @__PURE__ */ u4("span", { class: "cost", children: fmtCost(Number(info.getValue() ?? 0)) }) : /* @__PURE__ */ u4("span", { class: "cost-na", children: "n/a" });
+          }
+        },
+        {
+          id: "share",
+          accessorFn: (row) => row.cost,
+          header: "Share",
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            if (!row.is_billable || totalCost <= 0) {
+              return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
+            }
+            const pct = row.cost / totalCost * 100;
+            return /* @__PURE__ */ u4("div", { style: { minWidth: "120px", display: "flex", alignItems: "center", gap: "8px" }, children: [
+              /* @__PURE__ */ u4("div", { style: { flex: 1 }, children: /* @__PURE__ */ u4(
+                SegmentedProgressBar,
+                {
+                  value: row.cost,
+                  max: totalCost,
+                  segments: 12,
+                  size: "compact",
+                  status: "neutral",
+                  "aria-label": `${row.model} cost share`
+                }
+              ) }),
+              /* @__PURE__ */ u4("span", { class: "num", style: { fontSize: "11px", color: "var(--text-secondary)", minWidth: "36px", textAlign: "right" }, children: [
+                pct.toFixed(0),
+                "%"
+              ] })
+            ] });
+          }
+        },
+        // Phase 21: cache-read cost column with inline micro-bar
+        {
+          id: "cache_read_cost",
+          accessorFn: (row) => row.cache_read_cost ?? 0,
+          header: "Cache Read",
+          cell: (info) => {
+            const row = info.row.original;
+            if (!row.is_billable) return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
+            return /* @__PURE__ */ u4(
+              CostShareBar,
+              {
+                value: row.cache_read_cost ?? 0,
+                max: totalCacheReadCost,
+                label: `${row.model} cache-read cost share`
+              }
+            );
+          }
+        },
+        // Phase 21: cache-write cost column with inline micro-bar
+        {
+          id: "cache_write_cost",
+          accessorFn: (row) => row.cache_write_cost ?? 0,
+          header: "Cache Write",
+          cell: (info) => {
+            const row = info.row.original;
+            if (!row.is_billable) return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
+            return /* @__PURE__ */ u4(
+              CostShareBar,
+              {
+                value: row.cache_write_cost ?? 0,
+                max: totalCacheWriteCost,
+                label: `${row.model} cache-write cost share`
+              }
+            );
+          }
+        },
+        // Phase 12: credits column (hidden when no Amp rows in view)
+        ...showCredits ? [{
+          id: "credits",
+          accessorFn: (row) => row.credits ?? null,
+          header: "Credits",
+          sortUndefined: "last",
+          cell: (info) => {
+            const v4 = info.getValue();
+            return /* @__PURE__ */ u4("span", { class: "num", children: fmtCredits(v4) });
+          }
+        }] : []
+      ],
+      [totalCost, totalCacheReadCost, totalCacheWriteCost, showCredits, onSelectModel]
+    );
+  }
+  function ModelCostTable({
+    byModel,
+    onSelectModel
+  }) {
+    const totalCost = T2(
+      () => byModel.reduce((s4, m4) => m4.is_billable ? s4 + m4.cost : s4, 0),
+      [byModel]
+    );
+    const totalCacheReadCost = T2(
+      () => byModel.reduce((s4, m4) => s4 + (m4.cache_read_cost ?? 0), 0),
+      [byModel]
+    );
+    const totalCacheWriteCost = T2(
+      () => byModel.reduce((s4, m4) => s4 + (m4.cache_write_cost ?? 0), 0),
+      [byModel]
+    );
+    const showCredits = anyHasCredits(byModel);
+    const columns4 = useModelColumns(totalCost, totalCacheReadCost, totalCacheWriteCost, showCredits, onSelectModel);
+    return /* @__PURE__ */ u4(
+      DataTable,
+      {
+        columns: columns4,
+        data: byModel,
+        title: "Cost by Model",
+        sectionKey: "model-cost-mount",
+        defaultSort,
+        costRows: true
+      }
+    );
+  }
+
+  // src/ui/components/OfficialSyncPanel.tsx
+  function sourceVisible(provider, providerFilter) {
+    if (providerFilter === "both") return true;
+    if (provider === "frankfurter") return true;
+    if (providerFilter === "claude") return provider === "anthropic";
+    return provider === "openai";
+  }
+  function statusLabel(status) {
+    if (status === "success") return "OK";
+    if (status === "skipped") return "SKIP";
+    if (status === "parse_error") return "PARSE";
+    if (status === "fetch_error") return "FETCH";
+    return status.toUpperCase();
+  }
+  function statusColor2(status) {
+    if (status === "success") return "var(--text-primary)";
+    if (status === "skipped") return "var(--text-secondary)";
+    return "var(--accent)";
+  }
+  function formatTs(ts) {
+    if (!ts) return "n/a";
+    return ts.slice(0, 19).replace("T", " ");
+  }
+  function OfficialSyncPanel({ summary, providerFilter }) {
+    const expanded = official_sync_expanded.value;
+    const sources = summary.sources.filter((source) => sourceVisible(source.provider, providerFilter));
+    const recordCounts = summary.record_counts.filter((record) => {
+      if (providerFilter === "both") return true;
+      if (providerFilter === "claude") {
+        return !record.record_type.startsWith("usage_");
+      }
+      return true;
+    });
+    const successCount = sources.filter((source) => source.status === "success").length;
+    const errorCount = sources.filter(
+      (source) => source.status === "fetch_error" || source.status === "parse_error"
+    ).length;
+    const skippedCount = sources.filter((source) => source.status === "skipped").length;
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "8px"
+          },
+          children: [
+            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Official History" }),
+            summary.available && /* @__PURE__ */ u4(
+              "button",
+              {
+                onClick: () => {
+                  official_sync_expanded.value = !expanded;
+                  syncDashboardUrl();
+                },
+                style: {
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-secondary)",
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  padding: "2px 4px"
+                },
+                "aria-expanded": expanded,
+                "aria-label": "Toggle official history details",
+                children: expanded ? "\u25B2 collapse" : "\u25BC expand"
+              }
+            )
+          ]
+        }
+      ),
+      !summary.available ? /* @__PURE__ */ u4("div", { class: "muted", children: "No persisted official sync history yet" }) : /* @__PURE__ */ u4(S, { children: [
+        /* @__PURE__ */ u4(
+          "div",
+          {
+            style: {
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+              gap: "12px",
+              marginBottom: expanded ? "12px" : "0"
+            },
+            children: [
+              /* @__PURE__ */ u4("div", { children: [
+                /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: formatTs(summary.last_sync_at) }),
+                /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Latest sync" })
+              ] }),
+              /* @__PURE__ */ u4("div", { children: [
+                /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: [
+                  summary.total_runs,
+                  " / ",
+                  summary.total_records
+                ] }),
+                /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Runs / extracted records" })
+              ] }),
+              /* @__PURE__ */ u4("div", { children: [
+                /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: [
+                  successCount,
+                  " / ",
+                  errorCount,
+                  " / ",
+                  skippedCount
+                ] }),
+                /* @__PURE__ */ u4("div", { class: "stat-sub", children: "OK / error / skipped sources" })
+              ] })
+            ]
+          }
+        ),
+        expanded && /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "12px" }, children: [
+          /* @__PURE__ */ u4("div", { children: [
+            /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--text-secondary)",
+                  marginBottom: "6px",
+                  letterSpacing: "0.06em"
+                },
+                children: "LATEST SOURCES"
+              }
+            ),
+            /* @__PURE__ */ u4("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse" }, children: [
+              /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { style: { color: "var(--text-secondary)" }, children: [
+                /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Source" }),
+                /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Kind" }),
+                /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Status" }),
+                /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 0", fontWeight: 500 }, children: "Rows" })
+              ] }) }),
+              /* @__PURE__ */ u4("tbody", { children: sources.map((source) => /* @__PURE__ */ u4("tr", { children: [
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: source.source_slug }),
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", color: "var(--text-secondary)" }, children: source.source_kind }),
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", color: statusColor2(source.status), fontFamily: "var(--font-mono)" }, children: statusLabel(source.status) }),
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 0", textAlign: "right", fontFamily: "var(--font-mono)" }, children: source.record_count.toLocaleString() })
+              ] }, source.source_slug)) })
+            ] })
+          ] }),
+          /* @__PURE__ */ u4("div", { children: [
+            /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--text-secondary)",
+                  marginBottom: "6px",
+                  letterSpacing: "0.06em"
+                },
+                children: "RECORD TYPES"
+              }
+            ),
+            /* @__PURE__ */ u4("div", { style: { display: "flex", flexWrap: "wrap", gap: "8px" }, children: recordCounts.map((record) => /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  border: "1px solid var(--border)",
+                  padding: "6px 8px",
+                  minWidth: "140px"
+                },
+                children: [
+                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "12px" }, children: record.record_type }),
+                  /* @__PURE__ */ u4("div", { style: { fontSize: "11px", color: "var(--text-secondary)" }, children: [
+                    record.count.toLocaleString(),
+                    " rows"
+                  ] })
+                ]
+              },
+              record.record_type
+            )) })
+          ] }),
+          summary.latest_success_at && /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                fontSize: "10px",
+                color: "var(--text-secondary)",
+                fontFamily: "var(--font-mono)"
+              },
+              children: [
+                "Latest successful extraction ",
+                formatTs(summary.latest_success_at),
+                " UTC"
+              ]
+            }
+          )
+        ] })
+      ] })
+    ] }) });
+  }
+
+  // src/ui/components/ProjectChart.tsx
+  function ProjectChart({
+    byProject,
+    onSelectProject
+  }) {
+    const top = byProject.slice(0, 10);
+    if (!top.length) return null;
+    const base = industrialChartOptions("bar");
+    const colors = tokenSeriesColors();
+    const totals = top.map((p5) => p5.input + p5.output);
+    const maxTotal = totals.reduce((m4, v4) => v4 > m4 ? v4 : m4, 0);
+    const shares = totals.map((v4) => maxTotal > 0 ? v4 / maxTotal * 100 : 0);
+    const options = {
+      ...base,
+      chart: {
+        ...base.chart,
+        type: "bar",
+        ...onSelectProject ? {
+          events: {
+            dataPointSelection: (_event, _ctx, config) => {
+              const row = top[config.dataPointIndex];
+              if (row) onSelectProject(row);
+            }
+          }
+        } : {}
+      },
+      series: [{ name: "Share of top", data: shares }],
+      colors: [colors[0] ?? "currentColor"],
+      fill: { type: "solid" },
+      plotOptions: { bar: { horizontal: true, barHeight: "60%", borderRadius: 0 } },
+      xaxis: {
+        ...base.xaxis ?? {},
+        categories: top.map((p5) => truncateMid(p5.display_name || p5.project, 18, 8)),
+        min: 0,
+        max: 100,
+        tickAmount: 4,
+        labels: {
+          ...base.xaxis?.labels ?? {},
+          formatter: (v4) => `${Math.round(v4)}%`,
+          hideOverlappingLabels: true
+        }
+      },
+      yaxis: {
+        ...base.yaxis ?? {},
+        labels: { ...base.yaxis?.labels ?? {}, maxWidth: 120 }
+      },
+      // Anchor the tooltip to the plot's bottom-left so it cannot cover the
+      // card's "TOP PROJECTS" title during hover.
+      tooltip: {
+        ...base.tooltip,
+        fixed: { enabled: true, position: "bottomLeft", offsetX: 0, offsetY: 0 },
+        y: {
+          // Display the raw token count per project regardless of bar scale.
+          formatter: (_v, opts) => {
+            const raw = totals[opts?.dataPointIndex ?? 0] ?? 0;
+            return fmt(raw) + " tokens";
+          }
+        }
+      }
+    };
+    return /* @__PURE__ */ u4(ApexChart, { options, id: "chart-project" });
+  }
+
+  // src/ui/components/ProjectCostTable.tsx
+  var defaultSort2 = [{ id: "cost", desc: true }];
+  function useProjectColumns(showCredits, onSelectProject) {
+    return T2(
+      () => [
+        {
+          id: "project",
+          accessorKey: "project",
+          header: "Project",
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            const label = row.display_name || row.project;
+            if (!onSelectProject) return /* @__PURE__ */ u4("span", { title: row.project, children: label });
+            return /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "table-action-btn",
+                title: row.project,
+                onClick: () => onSelectProject(row),
+                children: label
+              }
+            );
+          }
+        },
+        {
+          id: "sessions",
+          accessorKey: "sessions",
+          header: "Sessions",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: Number(info.getValue() ?? 0) })
+        },
+        {
+          id: "turns",
+          accessorKey: "turns",
+          header: "Turns",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "input",
+          accessorKey: "input",
+          header: "Input",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "output",
+          accessorKey: "output",
+          header: "Output",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "cost",
+          accessorKey: "cost",
+          header: "Est. Cost",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "cost", children: fmtCost(Number(info.getValue() ?? 0)) })
+        },
+        ...showCredits ? [{
+          id: "credits",
+          accessorFn: (row) => row.credits ?? null,
+          header: "Credits",
+          sortUndefined: "last",
+          cell: (info) => {
+            const v4 = info.getValue();
+            return /* @__PURE__ */ u4("span", { class: "num", children: fmtCredits(v4) });
+          }
+        }] : []
+      ],
+      [showCredits, onSelectProject]
+    );
+  }
+  function ProjectCostTable({
+    byProject,
+    onExportCSV,
+    onSelectProject
+  }) {
+    const showCredits = anyHasCredits(byProject);
+    const columns4 = useProjectColumns(showCredits, onSelectProject);
+    return /* @__PURE__ */ u4(
+      DataTable,
+      {
+        columns: columns4,
+        data: byProject,
+        title: "Cost by Project",
+        sectionKey: "project-cost-mount",
+        exportFn: onExportCSV,
+        defaultSort: defaultSort2,
+        costRows: true
+      }
+    );
+  }
+
+  // src/ui/components/RateWindowCard.tsx
+  function RateWindowCard({ label, window: window2 }) {
+    const pct = Math.min(100, window2.used_percent);
+    const resetText = window2.resets_in_minutes != null ? `Resets in ${fmtResetTime(window2.resets_in_minutes)}` : "";
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: label }),
+      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "28px" }, children: [
+        pct.toFixed(1),
+        "%"
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u4(
+        SegmentedProgressBar,
+        {
+          value: window2.used_percent,
+          max: 100,
+          size: "standard",
+          "aria-label": `${label} usage`
+        }
+      ) }),
+      resetText && /* @__PURE__ */ u4("div", { class: "stat-sub", children: resetText })
+    ] }) });
+  }
+  function BudgetCard({ used, limit, currency, utilization }) {
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Monthly Budget" }),
+      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "24px" }, children: [
+        "$",
+        used.toFixed(2),
+        " / $",
+        limit.toFixed(2)
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u4(
+        SegmentedProgressBar,
+        {
+          value: utilization,
+          max: 100,
+          size: "standard",
+          "aria-label": "Monthly budget usage"
+        }
+      ) }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", children: currency })
+    ] }) });
+  }
+  function RateWindowUnavailable({ error }) {
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Rate Windows" }),
+      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px", color: "var(--text-secondary)" }, children: "Unavailable" }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", children: error })
+    ] }) });
+  }
+
+  // src/ui/components/ReconciliationBlock.tsx
+  function ReconciliationBlock({ reconciliation }) {
+    const deltaMatch = Math.abs(reconciliation.delta_cost) < 0.01;
+    return /* @__PURE__ */ u4("div", { class: "card card-flat bento-full", children: [
+      /* @__PURE__ */ u4("h2", { children: "OpenAI Org Usage Reconciliation" }),
+      /* @__PURE__ */ u4("div", { class: "muted", style: { marginBottom: "12px" }, children: [
+        "Official OpenAI organization usage buckets for Codex-compatible models over the last ",
+        reconciliation.lookback_days,
+        " days."
+      ] }),
+      reconciliation.available ? /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Period" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.start_date,
+            " - ",
+            reconciliation.end_date
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Rolling comparison window" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Local Estimated Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
+            "$",
+            reconciliation.estimated_local_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Codex local logs" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Org Usage Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
+            "$",
+            reconciliation.api_usage_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "OpenAI organization usage API" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Delta" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px", color: deltaMatch ? "var(--text-primary)" : "var(--accent)" }, children: [
+            reconciliation.delta_cost >= 0 ? "+" : "",
+            "$",
+            reconciliation.delta_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Org usage cost minus local estimate" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "API Tokens" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.api_input_tokens.toLocaleString(),
+            " / ",
+            reconciliation.api_output_tokens.toLocaleString()
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Input / output tokens" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cached Input + Requests" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.api_cached_input_tokens.toLocaleString(),
+            " / ",
+            reconciliation.api_requests.toLocaleString()
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Cached input tokens / requests" })
+        ] }) })
+      ] }) : /* @__PURE__ */ u4("div", { class: "muted", children: reconciliation.error ?? "Unavailable" })
+    ] });
   }
 
   // src/ui/components/ServiceTiers.tsx
@@ -6076,59 +6608,719 @@
     {
       accessorKey: "provider",
       header: "Provider",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
     },
     { accessorKey: "service_tier", header: "Tier" },
     { accessorKey: "inference_geo", header: "Region" },
     {
       accessorKey: "turns",
       header: "Turns",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
     }
   ];
   function ServiceTiersTable({ data }) {
     if (!data.length) return null;
-    return /* @__PURE__ */ u2(DataTable, { columns: columns2, data, title: "Service Tiers", sectionKey: "service-tiers" });
+    return /* @__PURE__ */ u4(DataTable, { columns: columns2, data, title: "Service Tiers", sectionKey: "service-tiers" });
   }
 
-  // src/ui/components/ToolUsageTable.tsx
-  function RankBar({ value, max: max2, label }) {
-    const pct = max2 > 0 ? value / max2 * 100 : 0;
-    const tooltip = `${value} (${pct.toFixed(1)}% of max ${max2})`;
-    return /* @__PURE__ */ u2(
-      "span",
+  // src/ui/components/SessionsTable.tsx
+  var defaultSort3 = [{ id: "last", desc: true }];
+  var primaryOverflowStyle = {
+    display: "block",
+    minWidth: 0,
+    maxWidth: "clamp(14rem, 28vw, 24rem)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap"
+  };
+  var secondaryOverflowStyle = {
+    ...primaryOverflowStyle,
+    marginTop: "2px",
+    fontSize: "10px",
+    fontFamily: "var(--font-mono)"
+  };
+  var projectOverflowStyle = {
+    ...primaryOverflowStyle,
+    maxWidth: "clamp(12rem, 24vw, 22rem)"
+  };
+  function useSessionColumns(showCredits, onSelectProject, onSelectModel) {
+    return T2(
+      () => [
+        {
+          id: "session",
+          accessorKey: "session_id",
+          header: "Session",
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            const title = row.title?.trim();
+            const sessionId = String(info.getValue());
+            const tooltip = title ? `${title}
+${sessionId}` : sessionId;
+            return /* @__PURE__ */ u4("div", { style: { minWidth: 0, maxWidth: "clamp(14rem, 28vw, 24rem)" }, title: tooltip, children: [
+              /* @__PURE__ */ u4("span", { class: "muted", style: { ...primaryOverflowStyle, fontFamily: "var(--font-mono)" }, children: title || sessionId }),
+              title && /* @__PURE__ */ u4("span", { class: "muted", style: secondaryOverflowStyle, children: sessionId })
+            ] });
+          }
+        },
+        {
+          id: "project",
+          accessorKey: "project",
+          header: "Project",
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            const label = row.display_name || row.project;
+            const showProjectPath = label !== row.project;
+            const tooltip = showProjectPath ? `${label}
+${row.project}` : row.project;
+            const content = /* @__PURE__ */ u4(S, { children: [
+              /* @__PURE__ */ u4("span", { style: projectOverflowStyle, children: label }),
+              showProjectPath && /* @__PURE__ */ u4("span", { class: "muted", style: secondaryOverflowStyle, children: row.project })
+            ] });
+            return /* @__PURE__ */ u4("div", { style: { minWidth: 0, maxWidth: "clamp(12rem, 24vw, 22rem)" }, title: tooltip, children: onSelectProject ? /* @__PURE__ */ u4("button", { type: "button", class: "table-action-btn table-action-btn--stack", onClick: () => onSelectProject(row), children: content }) : content });
+          }
+        },
+        {
+          id: "provider",
+          accessorKey: "provider",
+          header: "Provider",
+          enableSorting: false,
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(info.getValue()).toUpperCase() })
+        },
+        {
+          id: "last",
+          accessorKey: "last",
+          header: "Last Active",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "muted", children: String(info.getValue() ?? "") })
+        },
+        {
+          id: "duration_min",
+          accessorKey: "duration_min",
+          header: "Duration",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "muted", children: [
+            Number(info.getValue() ?? 0),
+            "m"
+          ] })
+        },
+        {
+          id: "model",
+          accessorKey: "model",
+          header: "Model",
+          enableSorting: false,
+          cell: (info) => {
+            const model = String(info.getValue());
+            if (!onSelectModel) return /* @__PURE__ */ u4("span", { class: "model-tag", children: model });
+            return /* @__PURE__ */ u4("button", { type: "button", class: "table-action-btn table-action-btn--tag", onClick: () => onSelectModel(model), children: /* @__PURE__ */ u4("span", { class: "model-tag", children: model }) });
+          }
+        },
+        {
+          id: "turns",
+          accessorKey: "turns",
+          header: "Turns",
+          cell: (info) => {
+            const row = info.row.original;
+            return /* @__PURE__ */ u4("span", { class: "num", children: [
+              fmt(Number(info.getValue() ?? 0)),
+              row.subagent_count > 0 && /* @__PURE__ */ u4("span", { class: "muted", style: { fontSize: "10px" }, children: [
+                " ",
+                "(",
+                row.subagent_count,
+                " agents)"
+              ] })
+            ] });
+          }
+        },
+        {
+          id: "input",
+          accessorKey: "input",
+          header: "Input",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "output",
+          accessorKey: "output",
+          header: "Output",
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+        },
+        {
+          id: "cost",
+          accessorKey: "cost",
+          header: "Est. Cost",
+          cell: (info) => {
+            const row = info.row.original;
+            return row.is_billable ? /* @__PURE__ */ u4("span", { class: "cost", children: fmtCost(Number(info.getValue() ?? 0)) }) : /* @__PURE__ */ u4("span", { class: "cost-na", children: "n/a" });
+          }
+        },
+        ...showCredits ? [{
+          id: "credits",
+          accessorFn: (row) => row.credits ?? null,
+          header: "Credits",
+          sortUndefined: "last",
+          cell: (info) => {
+            const v4 = info.getValue();
+            return /* @__PURE__ */ u4("span", { class: "num", children: fmtCredits(v4) });
+          }
+        }] : [],
+        {
+          id: "cost_meta",
+          accessorKey: "cost_confidence",
+          header: "Cost Meta",
+          enableSorting: false,
+          cell: (info) => {
+            const row = info.row.original;
+            return /* @__PURE__ */ u4("div", { class: "muted", style: { fontSize: "10px", lineHeight: "1.35" }, children: [
+              /* @__PURE__ */ u4("div", { children: [
+                row.cost_confidence || "low",
+                " / ",
+                row.billing_mode || "estimated_local"
+              ] }),
+              /* @__PURE__ */ u4("div", { children: row.pricing_version || "n/a" })
+            ] });
+          }
+        },
+        {
+          id: "cache_hit_ratio",
+          accessorKey: "cache_hit_ratio",
+          header: "Cache %",
+          cell: (info) => {
+            const v4 = info.getValue();
+            if (v4 == null || !Number.isFinite(v4)) return /* @__PURE__ */ u4("span", { class: "num", children: "--" });
+            return /* @__PURE__ */ u4("span", { class: "num", children: [
+              (v4 * 100).toFixed(0),
+              "%"
+            ] });
+          }
+        },
+        {
+          id: "tokens_per_min",
+          accessorKey: "tokens_per_min",
+          header: "Tok/min",
+          cell: (info) => {
+            const v4 = info.getValue();
+            return /* @__PURE__ */ u4("span", { class: "num", children: v4 > 0 ? fmt(Math.round(v4)) : "--" });
+          }
+        }
+      ],
+      [showCredits, onSelectProject, onSelectModel]
+    );
+  }
+  function SessionsTable({
+    onExportCSV,
+    onSelectProject,
+    onSelectModel
+  }) {
+    const data = lastFilteredSessions.value;
+    const showCredits = anyHasCredits(data);
+    const columns4 = useSessionColumns(showCredits, onSelectProject, onSelectModel);
+    const pagination = sessionsTablePagination.value;
+    const columnVisibility = sessionsTableColumnVisibility.value;
+    const handlePaginationChange = (nextPagination) => {
+      sessionsTablePagination.value = nextPagination;
+      syncDashboardUrl();
+    };
+    const handleColumnVisibilityChange = (nextColumnVisibility) => {
+      sessionsTableColumnVisibility.value = nextColumnVisibility;
+      syncDashboardUrl();
+    };
+    return /* @__PURE__ */ u4(
+      DataTable,
       {
-        style: { position: "relative", display: "inline-block", width: "100%" },
-        title: tooltip,
-        children: [
-          /* @__PURE__ */ u2(
-            "span",
-            {
-              "data-testid": "rank-bar",
-              style: {
-                position: "absolute",
-                top: 0,
-                left: 0,
-                bottom: 0,
-                width: `${pct}%`,
-                backgroundColor: "var(--color-text-primary)",
-                opacity: 0.12,
-                pointerEvents: "none"
-              }
-            }
-          ),
-          /* @__PURE__ */ u2("span", { class: "num", style: { position: "relative", zIndex: 1 }, children: label })
-        ]
+        columns: columns4,
+        data,
+        title: "Recent Sessions",
+        sectionKey: "sessions-mount",
+        exportFn: onExportCSV,
+        pageSize: SESSIONS_PAGE_SIZE,
+        defaultSort: defaultSort3,
+        enableColumnVisibility: true,
+        paginationState: pagination,
+        onPaginationChange: handlePaginationChange,
+        columnVisibilityState: columnVisibility,
+        onColumnVisibilityChange: handleColumnVisibilityChange
       }
     );
   }
-  function makeColumns(data) {
+
+  // src/ui/components/Sparkline.tsx
+  function Sparkline({ daily }) {
+    const last7 = daily.slice(-7);
+    if (last7.length < 2) return null;
+    const options = {
+      chart: {
+        type: "line",
+        height: 30,
+        width: 120,
+        sparkline: { enabled: true },
+        background: "transparent",
+        fontFamily: "inherit"
+      },
+      series: [{ data: last7.map((d5) => d5.input + d5.output) }],
+      stroke: { width: 1.5, curve: "smooth" },
+      colors: [cssVar("--accent")],
+      tooltip: { enabled: false }
+    };
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "sub", style: { marginBottom: "4px" }, children: "7-day trend" }),
+      /* @__PURE__ */ u4(ApexChart, { options })
+    ] });
+  }
+
+  // src/ui/components/CacheEfficiencyCard.tsx
+  function CacheEfficiencyCard({
+    data,
+    inputRatePerMtok,
+    cacheReadRatePerMtok
+  }) {
+    const rate = data.cache_hit_rate;
+    const hasRate = rate !== null && rate !== void 0;
+    const displayPct = hasRate ? (rate * 100).toFixed(1) + "%" : "--";
+    const barFill = hasRate ? Math.max(0, Math.min(1, rate)) : 0;
+    const tooltipParts = [];
+    if (hasRate) {
+      const readM = (data.cache_read_tokens / 1e6).toFixed(2);
+      const totalM = ((data.cache_read_tokens + data.input_tokens) / 1e6).toFixed(2);
+      tooltipParts.push(`${readM}M tokens cache-read / ${totalM}M total input-addressable tokens`);
+      if (inputRatePerMtok !== void 0 && cacheReadRatePerMtok !== void 0 && data.cache_read_tokens > 0) {
+        const savedUsd = data.cache_read_tokens / 1e6 * (inputRatePerMtok - cacheReadRatePerMtok);
+        tooltipParts.push(
+          `saved approx $${savedUsd.toFixed(2)} vs. no-cache`
+        );
+      }
+    } else {
+      tooltipParts.push("No cache activity recorded");
+    }
+    const tooltip = tooltipParts.join(" \xB7 ");
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", title: tooltip, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cache Hit Rate" }),
+        /* @__PURE__ */ u4(
+          "div",
+          {
+            class: "stat-value",
+            style: { fontFamily: "var(--font-mono)", letterSpacing: "-0.02em" },
+            children: displayPct
+          }
+        ),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "prompt cache reuse" })
+      ] }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          role: "img",
+          style: {
+            marginTop: "10px",
+            height: "4px",
+            borderRadius: "2px",
+            background: "rgba(var(--text-primary-rgb, 232,232,232), 0.12)",
+            overflow: "hidden"
+          },
+          "aria-label": `Cache hit rate: ${displayPct}`,
+          children: /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                height: "100%",
+                width: `${(barFill * 100).toFixed(2)}%`,
+                background: "rgba(var(--text-primary-rgb, 232,232,232), 0.70)",
+                borderRadius: "2px",
+                transition: "width 300ms cubic-bezier(0.25,0.1,0.25,1)"
+              }
+            }
+          )
+        }
+      )
+    ] });
+  }
+
+  // src/ui/components/BillingBlocksCard.tsx
+  function severityToStatus(s4) {
+    if (s4 === "ok") return "success";
+    if (s4 === "warn") return "warning";
+    return "accent";
+  }
+  function severityLabel(s4) {
+    return s4 === "ok" ? "[OK]" : s4 === "warn" ? "[WARN]" : "[CRIT]";
+  }
+  function tierLabel(t4) {
+    if (t4 === "normal") return "[NORMAL]";
+    if (t4 === "moderate") return "[WARN]";
+    return "[CRIT]";
+  }
+  function tierColor(t4) {
+    if (t4 === "normal") return "var(--success)";
+    if (t4 === "moderate") return "var(--warning)";
+    return "var(--accent)";
+  }
+  function formatDuration(from, to) {
+    const diffMs = new Date(to).getTime() - new Date(from).getTime();
+    if (isNaN(diffMs) || diffMs < 0) return "--";
+    const totalMin = Math.floor(diffMs / 6e4);
+    const h5 = Math.floor(totalMin / 60);
+    const m4 = totalMin % 60;
+    if (h5 === 0) return `${m4}m`;
+    return `${h5}h ${m4}m`;
+  }
+  function fmtTokens(n3) {
+    if (n3 >= 1e6) return (n3 / 1e6).toFixed(1) + "M";
+    if (n3 >= 1e3) return (n3 / 1e3).toFixed(1) + "K";
+    return n3.toString();
+  }
+  function fmtUtcTime(iso) {
+    try {
+      const d5 = new Date(iso);
+      return d5.toISOString().slice(11, 16) + " UTC";
+    } catch {
+      return "--";
+    }
+  }
+  function QuotaSection({ block }) {
+    const { quota } = block;
+    if (!quota) {
+      return /* @__PURE__ */ u4(
+        "div",
+        {
+          class: "stat-sub",
+          style: { marginTop: "8px", fontStyle: "italic" },
+          children: "Token quota not configured \u2014 set [blocks.token_limit] in config."
+        }
+      );
+    }
+    const currentPct = Math.min(100, quota.current_pct).toFixed(0);
+    const projectedPct = Math.min(999, quota.projected_pct).toFixed(0);
+    return /* @__PURE__ */ u4("div", { style: { marginTop: "10px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { marginBottom: "4px" }, children: [
+        /* @__PURE__ */ u4(
+          "div",
+          {
+            style: {
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginBottom: "3px"
+            },
+            children: [
+              /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "USED" }),
+              /* @__PURE__ */ u4(
+                "span",
+                {
+                  class: "stat-sub",
+                  style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
+                  children: [
+                    fmtTokens(quota.used_tokens),
+                    " / ",
+                    fmtTokens(quota.limit_tokens),
+                    " ",
+                    currentPct,
+                    "%",
+                    " ",
+                    /* @__PURE__ */ u4(
+                      "span",
+                      {
+                        style: {
+                          color: quota.current_severity === "danger" ? "var(--accent)" : quota.current_severity === "warn" ? "var(--warning)" : void 0
+                        },
+                        children: severityLabel(quota.current_severity)
+                      }
+                    )
+                  ]
+                }
+              )
+            ]
+          }
+        ),
+        /* @__PURE__ */ u4(
+          SegmentedProgressBar,
+          {
+            value: quota.used_tokens,
+            max: quota.limit_tokens,
+            status: severityToStatus(quota.current_severity),
+            "aria-label": "Token quota used"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { marginTop: "1px" }, children: [
+        /* @__PURE__ */ u4(
+          "div",
+          {
+            style: {
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              marginBottom: "3px"
+            },
+            children: [
+              /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "PROJECTED" }),
+              /* @__PURE__ */ u4(
+                "span",
+                {
+                  class: "stat-sub",
+                  style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
+                  children: [
+                    fmtTokens(quota.projected_tokens),
+                    " / ",
+                    fmtTokens(quota.limit_tokens),
+                    " ",
+                    projectedPct,
+                    "%",
+                    " ",
+                    /* @__PURE__ */ u4(
+                      "span",
+                      {
+                        style: {
+                          color: quota.projected_severity === "danger" ? "var(--accent)" : quota.projected_severity === "warn" ? "var(--warning)" : void 0
+                        },
+                        children: severityLabel(quota.projected_severity)
+                      }
+                    )
+                  ]
+                }
+              )
+            ]
+          }
+        ),
+        /* @__PURE__ */ u4(
+          SegmentedProgressBar,
+          {
+            value: quota.projected_tokens,
+            max: quota.limit_tokens,
+            status: severityToStatus(quota.projected_severity),
+            "aria-label": "Projected token quota"
+          }
+        )
+      ] })
+    ] });
+  }
+  function BillingBlocksCard({ data }) {
+    const activeBlock = data.blocks.find((b4) => b4.is_active) ?? null;
+    if (!activeBlock) {
+      return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "BILLING BLOCK" }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { opacity: 0.4 }, children: "NO ACTIVE BLOCK" }),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+          "7d historical max:",
+          " ",
+          /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)" }, children: fmtTokens(data.historical_max_tokens) }),
+          " ",
+          "tokens"
+        ] })
+      ] }) });
+    }
+    const totalTokens2 = activeBlock.tokens.input + activeBlock.tokens.output + activeBlock.tokens.cache_read + activeBlock.tokens.cache_creation + activeBlock.tokens.reasoning_output;
+    const elapsed = formatDuration(activeBlock.first_timestamp, activeBlock.last_timestamp);
+    const blockEnd = fmtUtcTime(activeBlock.end);
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "BILLING BLOCK" }),
+        /* @__PURE__ */ u4(
+          "div",
+          {
+            class: "stat-value",
+            style: { fontFamily: "var(--font-mono)", letterSpacing: "-0.02em" },
+            children: fmtTokens(totalTokens2)
+          }
+        ),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+          elapsed,
+          " elapsed \xB7 ends ",
+          blockEnd,
+          " \xB7 ",
+          activeBlock.entry_count,
+          " entries"
+        ] }),
+        activeBlock.burn_rate && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "4px" }, children: [
+          "$",
+          (activeBlock.burn_rate.cost_per_hour_nanos / 1e9).toFixed(4),
+          "/hr",
+          activeBlock.burn_rate.tier && /* @__PURE__ */ u4(
+            "span",
+            {
+              style: {
+                marginLeft: "6px",
+                color: tierColor(activeBlock.burn_rate.tier),
+                fontSize: "11px",
+                letterSpacing: "0.04em"
+              },
+              children: tierLabel(activeBlock.burn_rate.tier)
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ u4(QuotaSection, { block: activeBlock })
+    ] });
+  }
+
+  // src/ui/components/ContextWindowCard.tsx
+  function severityToStatus2(s4) {
+    if (s4 === "ok") return "success";
+    if (s4 === "warn") return "warning";
+    return "accent";
+  }
+  function severityLabel2(s4) {
+    return s4 === "ok" ? "[OK]" : s4 === "warn" ? "[WARN]" : "[CRIT]";
+  }
+  function ContextWindowCard({ data }) {
+    if (!data || data.enabled === false) return null;
+    if (data.total_input_tokens == null || data.context_window_size == null) return null;
+    if (data.context_window_size <= 0) return null;
+    const used = data.total_input_tokens;
+    const size = data.context_window_size;
+    const pct = Math.max(0, Math.min(999, (data.pct ?? used / size) * 100));
+    const severity = data.severity ?? "ok";
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "CONTEXT WINDOW" }),
+        /* @__PURE__ */ u4(
+          "div",
+          {
+            class: "stat-value",
+            style: { fontFamily: "var(--font-mono)", letterSpacing: "-0.02em" },
+            children: fmt(used)
+          }
+        ),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+          "of ",
+          fmt(size),
+          " \xB7 ",
+          pct.toFixed(1),
+          "%",
+          " ",
+          /* @__PURE__ */ u4(
+            "span",
+            {
+              style: {
+                color: severity === "danger" ? "var(--accent)" : severity === "warn" ? "var(--warning)" : void 0
+              },
+              children: severityLabel2(severity)
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ u4(
+        SegmentedProgressBar,
+        {
+          value: used,
+          max: size,
+          status: severityToStatus2(severity),
+          "aria-label": "Context window usage"
+        }
+      )
+    ] });
+  }
+
+  // src/ui/components/StatsCards.tsx
+  function StatsCards({
+    totals,
+    daily,
+    activeDays,
+    activeDayTotalCostNanos,
+    cacheEfficiency,
+    billingBlocks,
+    contextWindow
+  }) {
+    const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
+    const avgPerActiveDay = (() => {
+      if (activeDays === void 0 || activeDays === null) return "--";
+      if (activeDays === 0) return "--";
+      const totalUsd = (activeDayTotalCostNanos ?? 0) / 1e9;
+      return fmtCost(totalUsd / activeDays);
+    })();
+    const activeDayTooltip = activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `Averaged over ${activeDays} day${activeDays === 1 ? "" : "s"} with non-zero spend` : "No spend in selected period";
+    const stats = [
+      { label: "Sessions", value: totals.sessions.toLocaleString(), sub: rangeLabel },
+      { label: "Turns", value: fmt(totals.turns), sub: rangeLabel },
+      { label: "Input Tokens", value: fmt(totals.input), sub: rangeLabel },
+      { label: "Output Tokens", value: fmt(totals.output), sub: rangeLabel },
+      { label: "Cached Input", value: fmt(totals.cache_read), sub: "prompt cache" },
+      { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "cache writes" },
+      { label: "Reasoning", value: fmt(totals.reasoning_output), sub: "subset of output" },
+      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing", isCost: true }
+    ];
+    return /* @__PURE__ */ u4(S, { children: [
+      stats.map((s4) => /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: s4.label }),
+          /* @__PURE__ */ u4("div", { class: `stat-value${s4.isCost ? " cost-value doto-hero" : ""}`, children: s4.value }),
+          s4.sub ? /* @__PURE__ */ u4("div", { class: "stat-sub", children: s4.sub }) : null
+        ] }),
+        s4.isCost && daily && daily.length >= 2 ? /* @__PURE__ */ u4("div", { class: "stat-sparkline", children: /* @__PURE__ */ u4(Sparkline, { daily }) }) : null
+      ] }, s4.label)),
+      /* @__PURE__ */ u4("div", { class: "card stat-card", title: activeDayTooltip, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Avg / Active Day" }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", children: avgPerActiveDay }),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `${activeDays} active ${activeDays === 1 ? "day" : "days"}` : "no spend" })
+      ] }) }),
+      billingBlocks && /* @__PURE__ */ u4(BillingBlocksCard, { data: billingBlocks }),
+      /* @__PURE__ */ u4(ContextWindowCard, { data: contextWindow ?? null }),
+      cacheEfficiency && /* @__PURE__ */ u4(CacheEfficiencyCard, { data: cacheEfficiency })
+    ] });
+  }
+
+  // src/ui/components/SubagentSummary.tsx
+  function SubagentSummary({ summary }) {
+    if (summary.subagent_turns === 0) return null;
+    const totalInput = summary.parent_input + summary.subagent_input;
+    const totalOutput = summary.parent_output + summary.subagent_output;
+    const subPctInput = totalInput > 0 ? summary.subagent_input / totalInput * 100 : 0;
+    const subPctOutput = totalOutput > 0 ? summary.subagent_output / totalOutput * 100 : 0;
+    return /* @__PURE__ */ u4("div", { class: "table-card", children: [
+      /* @__PURE__ */ u4("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: "0" }, children: "Subagent Breakdown" }) }),
+      /* @__PURE__ */ u4("div", { style: "display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:12px 20px 20px", children: [
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Turns" }),
+          /* @__PURE__ */ u4("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u4("span", { class: "num", children: fmt(summary.parent_turns) })
+          ] }),
+          /* @__PURE__ */ u4("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u4("span", { class: "num", children: fmt(summary.subagent_turns) })
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "sub", children: [
+            summary.unique_agents,
+            " unique agents"
+          ] })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Input Tokens" }),
+          /* @__PURE__ */ u4("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u4("span", { class: "num", children: fmt(summary.parent_input) })
+          ] }),
+          /* @__PURE__ */ u4("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u4("span", { class: "num", children: fmt(summary.subagent_input) }),
+            " (",
+            subPctInput.toFixed(1),
+            "%)"
+          ] })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Output Tokens" }),
+          /* @__PURE__ */ u4("div", { style: "font-size:15px", children: [
+            "Parent: ",
+            /* @__PURE__ */ u4("span", { class: "num", children: fmt(summary.parent_output) })
+          ] }),
+          /* @__PURE__ */ u4("div", { style: "font-size:15px", children: [
+            "Subagent: ",
+            /* @__PURE__ */ u4("span", { class: "num", children: fmt(summary.subagent_output) }),
+            " (",
+            subPctOutput.toFixed(1),
+            "%)"
+          ] })
+        ] })
+      ] })
+    ] });
+  }
+
+  // src/ui/components/ToolUsageTable.tsx
+  function makeColumns3(data) {
     const maxInvocations = data.reduce((m4, r4) => Math.max(m4, r4.invocations), 0);
     return [
       {
         accessorKey: "provider",
         header: "Provider",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
       },
       {
         accessorKey: "tool_name",
@@ -6136,8 +7328,8 @@
         cell: ({ row }) => {
           const cat = row.original.category;
           const badge = cat === "mcp" ? "mcp" : "builtin";
-          return /* @__PURE__ */ u2("span", { children: [
-            /* @__PURE__ */ u2("span", { class: `model-tag ${badge}`, children: cat }),
+          return /* @__PURE__ */ u4("span", { children: [
+            /* @__PURE__ */ u4("span", { class: `model-tag ${badge}`, children: cat }),
             " ",
             row.original.tool_name
           ] });
@@ -6148,14 +7340,14 @@
         header: "MCP Server",
         cell: ({ getValue }) => {
           const v4 = getValue();
-          return v4 ? /* @__PURE__ */ u2("span", { class: "muted", children: v4 }) : /* @__PURE__ */ u2("span", { class: "muted", children: "--" });
+          return v4 ? /* @__PURE__ */ u4("span", { class: "muted", children: v4 }) : /* @__PURE__ */ u4("span", { class: "muted", children: "--" });
         }
       },
       {
         accessorKey: "invocations",
         header: "Calls",
-        cell: ({ getValue }) => /* @__PURE__ */ u2(
-          RankBar,
+        cell: ({ getValue }) => /* @__PURE__ */ u4(
+          InlineRankBar,
           {
             value: getValue(),
             max: maxInvocations,
@@ -6166,21 +7358,21 @@
       {
         accessorKey: "turns_used",
         header: "Turns",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
       },
       {
         accessorKey: "sessions_used",
         header: "Sessions",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
       },
       {
         accessorKey: "errors",
         header: "Errors",
         cell: ({ row }) => {
           const e4 = row.original.errors;
-          if (!e4) return /* @__PURE__ */ u2("span", { class: "dim", children: "0" });
+          if (!e4) return /* @__PURE__ */ u4("span", { class: "dim", children: "0" });
           const pct = row.original.invocations > 0 ? (e4 / row.original.invocations * 100).toFixed(1) : "0";
-          return /* @__PURE__ */ u2("span", { class: "num", style: { color: "var(--accent)" }, children: [
+          return /* @__PURE__ */ u4("span", { class: "num", style: { color: "var(--accent)" }, children: [
             e4,
             " (",
             pct,
@@ -6192,203 +7384,16 @@
   }
   function ToolUsageTable({ data }) {
     if (!data.length) return null;
-    return /* @__PURE__ */ u2(DataTable, { columns: makeColumns(data), data, title: "Tool Usage", sectionKey: "tool-summary" });
-  }
-
-  // src/ui/components/McpSummaryTable.tsx
-  function RankBar2({ value, max: max2, label }) {
-    const pct = max2 > 0 ? value / max2 * 100 : 0;
-    const tooltip = `${value} (${pct.toFixed(1)}% of max ${max2})`;
-    return /* @__PURE__ */ u2(
-      "span",
-      {
-        style: { position: "relative", display: "inline-block", width: "100%" },
-        title: tooltip,
-        children: [
-          /* @__PURE__ */ u2(
-            "span",
-            {
-              "data-testid": "rank-bar",
-              style: {
-                position: "absolute",
-                top: 0,
-                left: 0,
-                bottom: 0,
-                width: `${pct}%`,
-                backgroundColor: "var(--color-text-primary)",
-                opacity: 0.12,
-                pointerEvents: "none"
-              }
-            }
-          ),
-          /* @__PURE__ */ u2("span", { class: "num", style: { position: "relative", zIndex: 1 }, children: label })
-        ]
-      }
-    );
-  }
-  function makeColumns2(data) {
-    const maxInvocations = data.reduce((m4, r4) => Math.max(m4, r4.invocations), 0);
-    return [
-      {
-        accessorKey: "provider",
-        header: "Provider",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
-      },
-      {
-        accessorKey: "server",
-        header: "MCP Server",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag mcp", children: String(getValue()) })
-      },
-      {
-        accessorKey: "tools_used",
-        header: "Tools",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: getValue() })
-      },
-      {
-        accessorKey: "invocations",
-        header: "Calls",
-        cell: ({ getValue }) => /* @__PURE__ */ u2(
-          RankBar2,
-          {
-            value: getValue(),
-            max: maxInvocations,
-            label: fmt(getValue())
-          }
-        )
-      },
-      {
-        accessorKey: "sessions_used",
-        header: "Sessions",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
-      }
-    ];
-  }
-  function McpSummaryTable({ data }) {
-    if (!data.length) return null;
-    return /* @__PURE__ */ u2(DataTable, { columns: makeColumns2(data), data, title: "MCP Server Usage", sectionKey: "mcp-summary" });
-  }
-
-  // src/ui/components/BranchTable.tsx
-  function RankBar3({ value, max: max2, label }) {
-    const pct = max2 > 0 ? value / max2 * 100 : 0;
-    const tooltip = `${value} (${pct.toFixed(1)}% of max ${max2})`;
-    return /* @__PURE__ */ u2(
-      "span",
-      {
-        style: { position: "relative", display: "inline-block", width: "100%" },
-        title: tooltip,
-        children: [
-          /* @__PURE__ */ u2(
-            "span",
-            {
-              "data-testid": "rank-bar",
-              style: {
-                position: "absolute",
-                top: 0,
-                left: 0,
-                bottom: 0,
-                width: `${pct}%`,
-                backgroundColor: "var(--color-text-primary)",
-                opacity: 0.12,
-                pointerEvents: "none"
-              }
-            }
-          ),
-          /* @__PURE__ */ u2("span", { class: "num", style: { position: "relative", zIndex: 1 }, children: label })
-        ]
-      }
-    );
-  }
-  function makeColumns3(data) {
-    const maxSessions = data.reduce((m4, r4) => Math.max(m4, r4.sessions), 0);
-    return [
-      {
-        accessorKey: "provider",
-        header: "Provider",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
-      },
-      {
-        accessorKey: "branch",
-        header: "Branch",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()) })
-      },
-      {
-        accessorKey: "sessions",
-        header: "Sessions",
-        cell: ({ getValue }) => /* @__PURE__ */ u2(
-          RankBar3,
-          {
-            value: getValue(),
-            max: maxSessions,
-            label: String(getValue())
-          }
-        )
-      },
-      {
-        accessorKey: "turns",
-        header: "Turns",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
-      },
-      {
-        accessorKey: "input",
-        header: "Input",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
-      },
-      {
-        accessorKey: "output",
-        header: "Output",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
-      },
-      {
-        accessorKey: "cost",
-        header: "Est. Cost",
-        cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(getValue()) })
-      }
-    ];
-  }
-  function BranchTable({ data }) {
-    if (!data.length) return null;
-    return /* @__PURE__ */ u2(DataTable, { columns: makeColumns3(data), data, title: "Usage by Git Branch", sectionKey: "branch-summary" });
-  }
-
-  // src/ui/components/VersionTable.tsx
-  var columns3 = [
-    {
-      accessorKey: "provider",
-      header: "Provider",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
-    },
-    {
-      accessorKey: "version",
-      header: "Version",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(getValue()) })
-    },
-    {
-      accessorKey: "turns",
-      header: "Turns",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(getValue()) })
-    },
-    {
-      accessorKey: "sessions",
-      header: "Sessions",
-      cell: ({ getValue }) => /* @__PURE__ */ u2("span", { class: "num", children: getValue() })
-    }
-  ];
-  function VersionTable({ data, title = "CLI Versions" }) {
-    if (!data.length) return null;
-    if (title == null) {
-      return /* @__PURE__ */ u2(DataTable, { columns: columns3, data });
-    }
-    return /* @__PURE__ */ u2(DataTable, { columns: columns3, data, title });
+    return /* @__PURE__ */ u4(DataTable, { columns: makeColumns3(data), data, title: "Tool Usage", sectionKey: "tool-summary" });
   }
 
   // src/ui/components/VersionDonut.tsx
-  var METRIC_LABELS = {
+  var METRIC_LABELS2 = {
     cost: "Cost",
     calls: "Calls",
     tokens: "Tokens"
   };
-  function metricValue(row, metric) {
+  function metricValue2(row, metric) {
     switch (metric) {
       case "cost":
         return row.cost;
@@ -6412,7 +7417,7 @@
       ...r4,
       version: r4.version === "" || r4.version === "unknown" ? "(unknown)" : r4.version
     }));
-    const series = normalized.map((r4) => metricValue(r4, metric));
+    const series = normalized.map((r4) => metricValue2(r4, metric));
     const labels = normalized.map((r4) => r4.version);
     const total = series.reduce((s4, v4) => s4 + v4, 0);
     const base = industrialChartOptions("donut");
@@ -6465,747 +7470,56 @@
         }
       }
     };
-    return /* @__PURE__ */ u2("div", { style: { display: "flex", flexDirection: "column", gap: "8px", height: "100%" }, children: [
-      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "4px", alignItems: "center" }, children: Object.keys(METRIC_LABELS).map((m4) => /* @__PURE__ */ u2(
+    return /* @__PURE__ */ u4("div", { style: { display: "flex", flexDirection: "column", gap: "8px", height: "100%" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "4px", alignItems: "center" }, children: Object.keys(METRIC_LABELS2).map((m4) => /* @__PURE__ */ u4(
         "button",
         {
           type: "button",
           class: `range-btn${metric === m4 ? " active" : ""}`,
           onClick: () => onMetricChange(m4),
-          children: METRIC_LABELS[m4]
+          children: METRIC_LABELS2[m4]
         },
         m4
       )) }),
-      /* @__PURE__ */ u2("div", { style: { flex: 1, minHeight: 0 }, children: /* @__PURE__ */ u2(ApexChart, { options, id: "chart-version-donut" }) })
+      /* @__PURE__ */ u4("div", { style: { flex: 1, minHeight: 0 }, children: /* @__PURE__ */ u4(ApexChart, { options, id: "chart-version-donut" }) })
     ] });
   }
 
-  // src/ui/components/HourlyChart.tsx
-  function HourlyChart({ data }) {
-    if (!data.length) return null;
-    const maxTurns = Math.max(...data.map((d5) => d5.turns), 1);
-    const fillColor = cssVar("--text-display");
-    const emptyColor = cssVar("--border");
-    return /* @__PURE__ */ u2("div", { children: [
-      /* @__PURE__ */ u2("div", { class: "section-title", style: { padding: "0", marginBottom: "12px" }, children: "Activity by Hour of Day" }),
-      /* @__PURE__ */ u2("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", height: "80px" }, children: Array.from({ length: 24 }, (_4, h5) => {
-        const row = data.find((d5) => d5.hour === h5);
-        const turns = row?.turns ?? 0;
-        const pct = turns / maxTurns * 100;
-        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct / 100 * 0.6) : emptyColor;
-        return /* @__PURE__ */ u2(
-          "div",
-          {
-            title: `${h5}:00 -- ${fmt(turns)} turns`,
-            style: {
-              flex: 1,
-              height: `${Math.max(pct, 2)}%`,
-              background,
-              borderRadius: 0
-            }
-          },
-          h5
-        );
-      }) }),
-      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "2px", marginTop: "6px" }, children: Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u2(
-        "span",
-        {
-          class: "muted",
-          style: {
-            flex: 1,
-            fontFamily: "var(--font-mono)",
-            fontSize: "9px",
-            textAlign: "center",
-            letterSpacing: "0.04em",
-            color: cssVar("--text-secondary"),
-            visibility: [0, 6, 12, 18].includes(h5) ? "visible" : "hidden"
-          },
-          children: String(h5).padStart(2, "0")
-        },
-        h5
-      )) }),
-      /* @__PURE__ */ u2("div", { style: { display: "none" }, "data-fill": fillColor })
-    ] });
-  }
-
-  // src/ui/components/ActivityHeatmap.tsx
-  var DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  function cellOpacity(costNanos, maxCostNanos) {
-    if (maxCostNanos <= 0 || costNanos <= 0) return 0.05;
-    const ratio = costNanos / maxCostNanos;
-    return Math.min(0.05 + 0.85 * ratio, 0.9);
-  }
-  function ActivityHeatmap({ data }) {
-    const { cells, max_cost_nanos, active_days, total_cost_nanos, period } = data;
-    const lookup = /* @__PURE__ */ new Map();
-    for (const c4 of cells) {
-      lookup.set(`${c4.dow},${c4.hour}`, c4);
+  // src/ui/components/VersionTable.tsx
+  var columns3 = [
+    {
+      accessorKey: "provider",
+      header: "Provider",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+    },
+    {
+      accessorKey: "version",
+      header: "Version",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()) })
+    },
+    {
+      accessorKey: "turns",
+      header: "Turns",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "sessions",
+      header: "Sessions",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
     }
-    const avgPerDay = active_days > 0 ? fmtCost(total_cost_nanos / 1e9 / active_days) : "--";
-    return /* @__PURE__ */ u2("div", { children: [
-      /* @__PURE__ */ u2(
-        "div",
-        {
-          style: {
-            display: "flex",
-            alignItems: "baseline",
-            gap: "12px",
-            marginBottom: "8px",
-            flexWrap: "wrap"
-          },
-          children: [
-            /* @__PURE__ */ u2(
-              "span",
-              {
-                class: "section-title",
-                style: {
-                  padding: 0,
-                  fontFamily: "var(--font-mono)",
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase"
-                },
-                children: [
-                  "ACTIVITY / 7x24 / ",
-                  period.toUpperCase()
-                ]
-              }
-            ),
-            /* @__PURE__ */ u2(
-              "span",
-              {
-                style: {
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "var(--text-secondary)",
-                  letterSpacing: "0.04em"
-                },
-                children: [
-                  active_days,
-                  " active ",
-                  active_days === 1 ? "day" : "days",
-                  " \xB7 ",
-                  avgPerDay,
-                  " per active day"
-                ]
-              }
-            )
-          ]
-        }
-      ),
-      /* @__PURE__ */ u2(
-        "div",
-        {
-          style: {
-            display: "grid",
-            gridTemplateColumns: "28px repeat(24, 1fr)",
-            gap: "2px"
-          },
-          children: [
-            /* @__PURE__ */ u2("div", {}),
-            Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u2(
-              "div",
-              {
-                style: {
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: "var(--text-secondary)",
-                  textAlign: "center",
-                  letterSpacing: "0.04em",
-                  // Show only 0, 6, 12, 18 to avoid crowding
-                  visibility: [0, 6, 12, 18].includes(h5) ? "visible" : "hidden"
-                },
-                children: String(h5).padStart(2, "0")
-              },
-              h5
-            )),
-            Array.from({ length: 7 }, (_4, dow) => /* @__PURE__ */ u2(S, { children: [
-              /* @__PURE__ */ u2(
-                "div",
-                {
-                  style: {
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "9px",
-                    color: "var(--text-secondary)",
-                    display: "flex",
-                    alignItems: "center",
-                    letterSpacing: "0.04em"
-                  },
-                  children: DOW_LABELS[dow]
-                },
-                `label-${dow}`
-              ),
-              Array.from({ length: 24 }, (_5, hour) => {
-                const cell = lookup.get(`${dow},${hour}`);
-                const costNanos = cell?.cost_nanos ?? 0;
-                const callCount = cell?.call_count ?? 0;
-                const opacity = cellOpacity(costNanos, max_cost_nanos);
-                const bg = withAlpha("--text-display", opacity);
-                const costUsd = costNanos / 1e9;
-                const title = `${DOW_LABELS[dow]} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${callCount} call${callCount !== 1 ? "s" : ""}`;
-                return /* @__PURE__ */ u2(
-                  "div",
-                  {
-                    title,
-                    style: {
-                      background: bg,
-                      borderRadius: "2px",
-                      aspectRatio: "1",
-                      minHeight: "10px"
-                    }
-                  },
-                  `${dow}-${hour}`
-                );
-              })
-            ] }))
-          ]
-        }
-      )
-    ] });
-  }
-
-  // src/ui/components/SessionsTable.tsx
-  var defaultSort = [{ id: "last", desc: true }];
-  var primaryOverflowStyle = {
-    display: "block",
-    minWidth: 0,
-    maxWidth: "clamp(14rem, 28vw, 24rem)",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap"
-  };
-  var secondaryOverflowStyle = {
-    ...primaryOverflowStyle,
-    marginTop: "2px",
-    fontSize: "10px",
-    fontFamily: "var(--font-mono)"
-  };
-  var projectOverflowStyle = {
-    ...primaryOverflowStyle,
-    maxWidth: "clamp(12rem, 24vw, 22rem)"
-  };
-  function useSessionColumns(showCredits, onSelectProject, onSelectModel) {
-    return T2(
-      () => [
-        {
-          id: "session",
-          accessorKey: "session_id",
-          header: "Session",
-          enableSorting: false,
-          cell: (info) => {
-            const row = info.row.original;
-            const title = row.title?.trim();
-            const sessionId = String(info.getValue());
-            const tooltip = title ? `${title}
-${sessionId}` : sessionId;
-            return /* @__PURE__ */ u2("div", { style: { minWidth: 0, maxWidth: "clamp(14rem, 28vw, 24rem)" }, title: tooltip, children: [
-              /* @__PURE__ */ u2("span", { class: "muted", style: { ...primaryOverflowStyle, fontFamily: "var(--font-mono)" }, children: title || sessionId }),
-              title && /* @__PURE__ */ u2("span", { class: "muted", style: secondaryOverflowStyle, children: sessionId })
-            ] });
-          }
-        },
-        {
-          id: "project",
-          accessorKey: "project",
-          header: "Project",
-          enableSorting: false,
-          cell: (info) => {
-            const row = info.row.original;
-            const label = row.display_name || row.project;
-            const showProjectPath = label !== row.project;
-            const tooltip = showProjectPath ? `${label}
-${row.project}` : row.project;
-            const content = /* @__PURE__ */ u2(S, { children: [
-              /* @__PURE__ */ u2("span", { style: projectOverflowStyle, children: label }),
-              showProjectPath && /* @__PURE__ */ u2("span", { class: "muted", style: secondaryOverflowStyle, children: row.project })
-            ] });
-            return /* @__PURE__ */ u2("div", { style: { minWidth: 0, maxWidth: "clamp(12rem, 24vw, 22rem)" }, title: tooltip, children: onSelectProject ? /* @__PURE__ */ u2("button", { type: "button", class: "table-action-btn table-action-btn--stack", onClick: () => onSelectProject(row), children: content }) : content });
-          }
-        },
-        {
-          id: "provider",
-          accessorKey: "provider",
-          header: "Provider",
-          enableSorting: false,
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "model-tag", children: String(info.getValue()).toUpperCase() })
-        },
-        {
-          id: "last",
-          accessorKey: "last",
-          header: "Last Active",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "muted", children: info.getValue() })
-        },
-        {
-          id: "duration_min",
-          accessorKey: "duration_min",
-          header: "Duration",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "muted", children: [
-            info.getValue(),
-            "m"
-          ] })
-        },
-        {
-          id: "model",
-          accessorKey: "model",
-          header: "Model",
-          enableSorting: false,
-          cell: (info) => {
-            const model = String(info.getValue());
-            if (!onSelectModel) return /* @__PURE__ */ u2("span", { class: "model-tag", children: model });
-            return /* @__PURE__ */ u2("button", { type: "button", class: "table-action-btn table-action-btn--tag", onClick: () => onSelectModel(model), children: /* @__PURE__ */ u2("span", { class: "model-tag", children: model }) });
-          }
-        },
-        {
-          id: "turns",
-          accessorKey: "turns",
-          header: "Turns",
-          cell: (info) => {
-            const row = info.row.original;
-            return /* @__PURE__ */ u2("span", { class: "num", children: [
-              fmt(info.getValue()),
-              row.subagent_count > 0 && /* @__PURE__ */ u2("span", { class: "muted", style: { fontSize: "10px" }, children: [
-                " ",
-                "(",
-                row.subagent_count,
-                " agents)"
-              ] })
-            ] });
-          }
-        },
-        {
-          id: "input",
-          accessorKey: "input",
-          header: "Input",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "output",
-          accessorKey: "output",
-          header: "Output",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "cost",
-          accessorKey: "cost",
-          header: "Est. Cost",
-          cell: (info) => {
-            const row = info.row.original;
-            return row.is_billable ? /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(info.getValue()) }) : /* @__PURE__ */ u2("span", { class: "cost-na", children: "n/a" });
-          }
-        },
-        ...showCredits ? [{
-          id: "credits",
-          accessorFn: (row) => row.credits ?? null,
-          header: "Credits",
-          sortUndefined: "last",
-          cell: (info) => {
-            const v4 = info.getValue();
-            return /* @__PURE__ */ u2("span", { class: "num", children: fmtCredits(v4) });
-          }
-        }] : [],
-        {
-          id: "cost_meta",
-          accessorKey: "cost_confidence",
-          header: "Cost Meta",
-          enableSorting: false,
-          cell: (info) => {
-            const row = info.row.original;
-            return /* @__PURE__ */ u2("div", { class: "muted", style: { fontSize: "10px", lineHeight: "1.35" }, children: [
-              /* @__PURE__ */ u2("div", { children: [
-                row.cost_confidence || "low",
-                " / ",
-                row.billing_mode || "estimated_local"
-              ] }),
-              /* @__PURE__ */ u2("div", { children: row.pricing_version || "n/a" })
-            ] });
-          }
-        },
-        {
-          id: "cache_hit_ratio",
-          accessorKey: "cache_hit_ratio",
-          header: "Cache %",
-          cell: (info) => {
-            const v4 = info.getValue();
-            if (v4 == null || !Number.isFinite(v4)) return /* @__PURE__ */ u2("span", { class: "num", children: "--" });
-            return /* @__PURE__ */ u2("span", { class: "num", children: [
-              (v4 * 100).toFixed(0),
-              "%"
-            ] });
-          }
-        },
-        {
-          id: "tokens_per_min",
-          accessorKey: "tokens_per_min",
-          header: "Tok/min",
-          cell: (info) => {
-            const v4 = info.getValue();
-            return /* @__PURE__ */ u2("span", { class: "num", children: v4 > 0 ? fmt(Math.round(v4)) : "--" });
-          }
-        }
-      ],
-      [showCredits, onSelectProject, onSelectModel]
-    );
-  }
-  function SessionsTable({
-    onExportCSV,
-    onSelectProject,
-    onSelectModel
-  }) {
-    const data = lastFilteredSessions.value;
-    const showCredits = anyHasCredits(data);
-    const columns4 = useSessionColumns(showCredits, onSelectProject, onSelectModel);
-    const pagination = sessionsTablePagination.value;
-    const columnVisibility = sessionsTableColumnVisibility.value;
-    const handlePaginationChange = (nextPagination) => {
-      sessionsTablePagination.value = nextPagination;
-      syncDashboardUrl();
-    };
-    const handleColumnVisibilityChange = (nextColumnVisibility) => {
-      sessionsTableColumnVisibility.value = nextColumnVisibility;
-      syncDashboardUrl();
-    };
-    return /* @__PURE__ */ u2(
-      DataTable,
-      {
-        columns: columns4,
-        data,
-        title: "Recent Sessions",
-        sectionKey: "sessions-mount",
-        exportFn: onExportCSV,
-        pageSize: SESSIONS_PAGE_SIZE,
-        defaultSort,
-        enableColumnVisibility: true,
-        paginationState: pagination,
-        onPaginationChange: handlePaginationChange,
-        columnVisibilityState: columnVisibility,
-        onColumnVisibilityChange: handleColumnVisibilityChange
-      }
-    );
-  }
-
-  // src/ui/components/ModelCostTable.tsx
-  var defaultSort2 = [{ id: "cost", desc: true }];
-  function CostShareBar({ value, max: max2, label }) {
-    if (max2 <= 0 || value <= 0) return /* @__PURE__ */ u2("span", { class: "cost-na", children: "\u2014" });
-    const pct = value / max2 * 100;
-    return /* @__PURE__ */ u2("div", { style: { display: "flex", alignItems: "center", gap: "6px", minWidth: "100px" }, children: [
-      /* @__PURE__ */ u2("span", { class: "num", style: { fontSize: "13px", minWidth: "52px", textAlign: "right" }, children: fmtCost(value) }),
-      /* @__PURE__ */ u2(
-        "div",
-        {
-          role: "img",
-          style: {
-            flex: 1,
-            height: "4px",
-            background: "rgba(var(--text-primary-rgb,232,232,232),0.12)",
-            borderRadius: "2px",
-            overflow: "hidden"
-          },
-          "aria-label": label,
-          children: /* @__PURE__ */ u2(
-            "div",
-            {
-              style: {
-                height: "100%",
-                width: `${Math.min(100, pct).toFixed(1)}%`,
-                background: "rgba(var(--text-primary-rgb,232,232,232),0.65)",
-                borderRadius: "2px"
-              }
-            }
-          )
-        }
-      )
-    ] });
-  }
-  function useModelColumns(totalCost, totalCacheReadCost, totalCacheWriteCost, showCredits, onSelectModel) {
-    return T2(
-      () => [
-        {
-          id: "model",
-          accessorKey: "model",
-          header: "Model",
-          enableSorting: false,
-          cell: (info) => {
-            const model = String(info.getValue());
-            if (!onSelectModel) return /* @__PURE__ */ u2("span", { class: "model-tag", children: model });
-            return /* @__PURE__ */ u2("button", { type: "button", class: "table-action-btn table-action-btn--tag", onClick: () => onSelectModel(model), children: /* @__PURE__ */ u2("span", { class: "model-tag", children: model }) });
-          }
-        },
-        {
-          id: "turns",
-          accessorKey: "turns",
-          header: "Turns",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "input",
-          accessorKey: "input",
-          header: "Input",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "output",
-          accessorKey: "output",
-          header: "Output",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "cache_read",
-          accessorKey: "cache_read",
-          header: "Cached Input",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "cache_creation",
-          accessorKey: "cache_creation",
-          header: "Cache Creation",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "cost",
-          accessorKey: "cost",
-          header: "Est. Cost",
-          cell: (info) => {
-            const row = info.row.original;
-            return row.is_billable ? /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(info.getValue()) }) : /* @__PURE__ */ u2("span", { class: "cost-na", children: "n/a" });
-          }
-        },
-        {
-          id: "share",
-          accessorFn: (row) => row.cost,
-          header: "Share",
-          enableSorting: false,
-          cell: (info) => {
-            const row = info.row.original;
-            if (!row.is_billable || totalCost <= 0) {
-              return /* @__PURE__ */ u2("span", { class: "cost-na", children: "\u2014" });
-            }
-            const pct = row.cost / totalCost * 100;
-            return /* @__PURE__ */ u2("div", { style: { minWidth: "120px", display: "flex", alignItems: "center", gap: "8px" }, children: [
-              /* @__PURE__ */ u2("div", { style: { flex: 1 }, children: /* @__PURE__ */ u2(
-                SegmentedProgressBar,
-                {
-                  value: row.cost,
-                  max: totalCost,
-                  segments: 12,
-                  size: "compact",
-                  status: "neutral",
-                  "aria-label": `${row.model} cost share`
-                }
-              ) }),
-              /* @__PURE__ */ u2("span", { class: "num", style: { fontSize: "11px", color: "var(--text-secondary)", minWidth: "36px", textAlign: "right" }, children: [
-                pct.toFixed(0),
-                "%"
-              ] })
-            ] });
-          }
-        },
-        // Phase 21: cache-read cost column with inline micro-bar
-        {
-          id: "cache_read_cost",
-          accessorFn: (row) => row.cache_read_cost ?? 0,
-          header: "Cache Read",
-          cell: (info) => {
-            const row = info.row.original;
-            if (!row.is_billable) return /* @__PURE__ */ u2("span", { class: "cost-na", children: "\u2014" });
-            return /* @__PURE__ */ u2(
-              CostShareBar,
-              {
-                value: row.cache_read_cost ?? 0,
-                max: totalCacheReadCost,
-                label: `${row.model} cache-read cost share`
-              }
-            );
-          }
-        },
-        // Phase 21: cache-write cost column with inline micro-bar
-        {
-          id: "cache_write_cost",
-          accessorFn: (row) => row.cache_write_cost ?? 0,
-          header: "Cache Write",
-          cell: (info) => {
-            const row = info.row.original;
-            if (!row.is_billable) return /* @__PURE__ */ u2("span", { class: "cost-na", children: "\u2014" });
-            return /* @__PURE__ */ u2(
-              CostShareBar,
-              {
-                value: row.cache_write_cost ?? 0,
-                max: totalCacheWriteCost,
-                label: `${row.model} cache-write cost share`
-              }
-            );
-          }
-        },
-        // Phase 12: credits column (hidden when no Amp rows in view)
-        ...showCredits ? [{
-          id: "credits",
-          accessorFn: (row) => row.credits ?? null,
-          header: "Credits",
-          sortUndefined: "last",
-          cell: (info) => {
-            const v4 = info.getValue();
-            return /* @__PURE__ */ u2("span", { class: "num", children: fmtCredits(v4) });
-          }
-        }] : []
-      ],
-      [totalCost, totalCacheReadCost, totalCacheWriteCost, showCredits, onSelectModel]
-    );
-  }
-  function ModelCostTable({
-    byModel,
-    onSelectModel
-  }) {
-    const totalCost = T2(
-      () => byModel.reduce((s4, m4) => m4.is_billable ? s4 + m4.cost : s4, 0),
-      [byModel]
-    );
-    const totalCacheReadCost = T2(
-      () => byModel.reduce((s4, m4) => s4 + (m4.cache_read_cost ?? 0), 0),
-      [byModel]
-    );
-    const totalCacheWriteCost = T2(
-      () => byModel.reduce((s4, m4) => s4 + (m4.cache_write_cost ?? 0), 0),
-      [byModel]
-    );
-    const showCredits = anyHasCredits(byModel);
-    const columns4 = useModelColumns(totalCost, totalCacheReadCost, totalCacheWriteCost, showCredits, onSelectModel);
-    return /* @__PURE__ */ u2(
-      DataTable,
-      {
-        columns: columns4,
-        data: byModel,
-        title: "Cost by Model",
-        sectionKey: "model-cost-mount",
-        defaultSort: defaultSort2,
-        costRows: true
-      }
-    );
-  }
-
-  // src/ui/components/ProjectCostTable.tsx
-  var defaultSort3 = [{ id: "cost", desc: true }];
-  function useProjectColumns(showCredits, onSelectProject) {
-    return T2(
-      () => [
-        {
-          id: "project",
-          accessorKey: "project",
-          header: "Project",
-          enableSorting: false,
-          cell: (info) => {
-            const row = info.row.original;
-            const label = row.display_name || row.project;
-            if (!onSelectProject) return /* @__PURE__ */ u2("span", { title: row.project, children: label });
-            return /* @__PURE__ */ u2(
-              "button",
-              {
-                type: "button",
-                class: "table-action-btn",
-                title: row.project,
-                onClick: () => onSelectProject(row),
-                children: label
-              }
-            );
-          }
-        },
-        {
-          id: "sessions",
-          accessorKey: "sessions",
-          header: "Sessions",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: info.getValue() })
-        },
-        {
-          id: "turns",
-          accessorKey: "turns",
-          header: "Turns",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "input",
-          accessorKey: "input",
-          header: "Input",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "output",
-          accessorKey: "output",
-          header: "Output",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "num", children: fmt(info.getValue()) })
-        },
-        {
-          id: "cost",
-          accessorKey: "cost",
-          header: "Est. Cost",
-          cell: (info) => /* @__PURE__ */ u2("span", { class: "cost", children: fmtCost(info.getValue()) })
-        },
-        ...showCredits ? [{
-          id: "credits",
-          accessorFn: (row) => row.credits ?? null,
-          header: "Credits",
-          sortUndefined: "last",
-          cell: (info) => {
-            const v4 = info.getValue();
-            return /* @__PURE__ */ u2("span", { class: "num", children: fmtCredits(v4) });
-          }
-        }] : []
-      ],
-      [showCredits, onSelectProject]
-    );
-  }
-  function ProjectCostTable({
-    byProject,
-    onExportCSV,
-    onSelectProject
-  }) {
-    const showCredits = anyHasCredits(byProject);
-    const columns4 = useProjectColumns(showCredits, onSelectProject);
-    return /* @__PURE__ */ u2(
-      DataTable,
-      {
-        columns: columns4,
-        data: byProject,
-        title: "Cost by Project",
-        sectionKey: "project-cost-mount",
-        exportFn: onExportCSV,
-        defaultSort: defaultSort3,
-        costRows: true
-      }
-    );
-  }
-
-  // src/ui/components/DailyChart.tsx
-  function DailyChart({ daily }) {
-    const base = industrialChartOptions("bar");
-    const options = {
-      ...base,
-      chart: { ...base.chart, type: "bar", stacked: true },
-      series: [
-        { name: "Input", data: daily.map((d5) => d5.input) },
-        { name: "Output", data: daily.map((d5) => d5.output) },
-        { name: "Cached Input", data: daily.map((d5) => d5.cache_read) },
-        { name: "Cache Creation", data: daily.map((d5) => d5.cache_creation) }
-      ],
-      colors: tokenSeriesColors(),
-      fill: { type: "solid" },
-      plotOptions: { bar: { columnWidth: "70%", borderRadius: 0 } },
-      xaxis: {
-        ...base.xaxis,
-        categories: daily.map((d5) => d5.day),
-        labels: { ...base.xaxis.labels, rotate: -45, maxHeight: 60 },
-        tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange.value])
-      },
-      yaxis: {
-        ...base.yaxis,
-        labels: { ...base.yaxis.labels, formatter: (v4) => fmt(v4) }
-      },
-      tooltip: { ...base.tooltip, y: { formatter: (v4) => fmt(v4) + " tokens" } }
-    };
-    return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-daily" });
+  ];
+  function VersionTable({ data, title = "CLI Versions" }) {
+    if (!data.length) return null;
+    if (title == null) {
+      return /* @__PURE__ */ u4(DataTable, { columns: columns3, data });
+    }
+    return /* @__PURE__ */ u4(DataTable, { columns: columns3, data, title });
   }
 
   // src/ui/components/WeeklyChart.tsx
   function WeeklyChart({ weekly }) {
     if (!weekly?.length) {
-      return /* @__PURE__ */ u2("div", { style: { padding: "24px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: "12px" }, children: "No weekly data available." });
+      return /* @__PURE__ */ u4("div", { style: { padding: "24px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: "12px" }, children: "No weekly data available." });
     }
     const base = industrialChartOptions("bar");
     const options = {
@@ -7221,14 +7535,14 @@ ${row.project}` : row.project;
       fill: { type: "solid" },
       plotOptions: { bar: { columnWidth: "70%", borderRadius: 0 } },
       xaxis: {
-        ...base.xaxis,
+        ...base.xaxis ?? {},
         categories: weekly.map((w5) => w5.week),
-        labels: { ...base.xaxis.labels, rotate: -45, maxHeight: 60 },
+        labels: { ...base.xaxis?.labels ?? {}, rotate: -45, maxHeight: 60 },
         tickAmount: Math.min(weekly.length, 26)
       },
       yaxis: {
-        ...base.yaxis,
-        labels: { ...base.yaxis.labels, formatter: (v4) => fmt(v4) }
+        ...base.yaxis ?? {},
+        labels: { ...base.yaxis?.labels ?? {}, formatter: (v4) => fmt(v4) }
       },
       tooltip: {
         ...base.tooltip,
@@ -7243,363 +7557,648 @@ ${row.project}` : row.project;
         }
       }
     };
-    return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-weekly" });
+    return /* @__PURE__ */ u4(ApexChart, { options, id: "chart-weekly" });
   }
 
-  // src/ui/components/ModelChart.tsx
-  var METRIC_LABELS2 = {
-    cost: "Cost",
-    tokens: "Tokens",
-    calls: "Calls"
-  };
-  var SLICE_OPACITY_LADDER = [1, 0.64, 0.46, 0.34, 0.24, 0.16];
-  function totalTokens(row) {
-    return row.input + row.output + row.cache_read + row.cache_creation + row.reasoning_output;
+  // src/ui/lib/dashboardAggregation.ts
+  function formatLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
-  function metricValue2(row, metric) {
-    switch (metric) {
-      case "cost":
-        return row.cost;
-      case "tokens":
-        return totalTokens(row);
-      case "calls":
-        return row.turns;
-    }
+  function getRangeCutoff(range) {
+    if (range === "all") return null;
+    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
+    const date = /* @__PURE__ */ new Date();
+    date.setDate(date.getDate() - days);
+    return formatLocalDate(date);
   }
-  function formatMetricValue(value, metric, large = false) {
-    switch (metric) {
-      case "cost":
-        return large ? value < 1 ? fmtCost(value) : fmtCostBig(value) : fmtCost(value);
-      case "tokens":
-      case "calls":
-        return fmt(value);
-    }
+  function weekLabelToWeekStart(label) {
+    const [yearStr, weekStr] = label.split("-");
+    const year = parseInt(yearStr ?? "", 10);
+    const week = parseInt(weekStr ?? "", 10);
+    if (!Number.isFinite(year) || !Number.isFinite(week)) return /* @__PURE__ */ new Date(NaN);
+    const jan1 = new Date(Date.UTC(year, 0, 1));
+    if (week === 0) return jan1;
+    const jan1Dow = jan1.getUTCDay();
+    const daysToFirstMon = (8 - jan1Dow) % 7;
+    const firstMondayUtc = new Date(Date.UTC(year, 0, 1 + daysToFirstMon));
+    return new Date(firstMondayUtc.getTime() + (week - 1) * 7 * 86400 * 1e3);
   }
-  function formatShare(share) {
-    if (share >= 99.5) return "100%";
-    if (share >= 10) return `${share.toFixed(0)}%`;
-    return `${share.toFixed(1)}%`;
-  }
-  function ModelChart({
-    byModel,
-    onSelectModel
-  }) {
-    if (!byModel.length) return null;
-    const [selectedMetric, setSelectedMetric] = d2("cost");
-    const totals = {
-      cost: byModel.reduce((sum2, row) => sum2 + row.cost, 0),
-      tokens: byModel.reduce((sum2, row) => sum2 + totalTokens(row), 0),
-      calls: byModel.reduce((sum2, row) => sum2 + row.turns, 0)
-    };
-    const enabledMetrics = Object.keys(METRIC_LABELS2).filter((metric2) => totals[metric2] > 0);
-    const metric = enabledMetrics.includes(selectedMetric) ? selectedMetric : enabledMetrics[0] ?? "cost";
-    const sorted = [...byModel].map((row) => ({
-      row,
-      value: metricValue2(row, metric),
-      tokens: totalTokens(row)
-    })).filter((entry) => entry.value > 0).sort((a4, b4) => b4.value - a4.value);
-    if (!sorted.length) return null;
-    const TOP_N = 5;
-    const top = sorted.slice(0, TOP_N);
-    const rest = sorted.slice(TOP_N);
-    const total = sorted.reduce((sum2, entry) => sum2 + entry.value, 0);
-    const rows = top.map((entry, index) => ({
-      label: entry.row.model,
-      value: entry.value,
-      share: total > 0 ? entry.value / total * 100 : 0,
-      cost: entry.row.cost,
-      calls: entry.row.turns,
-      tokens: entry.tokens,
-      color: withAlpha("--text-display", SLICE_OPACITY_LADDER[Math.min(index, SLICE_OPACITY_LADDER.length - 1)] ?? 0.16),
-      isOther: false
-    }));
-    const otherValue = rest.reduce((sum2, entry) => sum2 + entry.value, 0);
-    const hasOther = otherValue > 0;
-    if (hasOther) {
-      rows.push({
-        label: `Other (${rest.length})`,
-        value: otherValue,
-        share: total > 0 ? otherValue / total * 100 : 0,
-        cost: rest.reduce((sum2, entry) => sum2 + entry.row.cost, 0),
-        calls: rest.reduce((sum2, entry) => sum2 + entry.row.turns, 0),
-        tokens: rest.reduce((sum2, entry) => sum2 + entry.tokens, 0),
-        color: withAlpha("--text-display", SLICE_OPACITY_LADDER[Math.min(rows.length, SLICE_OPACITY_LADDER.length - 1)] ?? 0.16),
-        isOther: true
+  function buildWeeklyAgg(rows, selectedModels2, range) {
+    if (!rows.length) return [];
+    const cutoff = getRangeCutoff(range);
+    const weekMap = {};
+    for (const row of rows) {
+      if (!selectedModels2.has(row.model)) continue;
+      if (cutoff) {
+        const weekStart = weekLabelToWeekStart(row.week);
+        if (Number.isNaN(weekStart.getTime())) continue;
+        if (weekStart.toISOString().slice(0, 10) < cutoff) continue;
+      }
+      const weekly = weekMap[row.week] ?? (weekMap[row.week] = {
+        week: row.week,
+        input: 0,
+        output: 0,
+        cache_read: 0,
+        cache_creation: 0,
+        reasoning_output: 0,
+        cost_nanos: 0
       });
+      weekly.input += row.input_tokens;
+      weekly.output += row.output_tokens;
+      weekly.cache_read += row.cache_read_tokens;
+      weekly.cache_creation += row.cache_creation_tokens;
+      weekly.reasoning_output += row.reasoning_output_tokens;
+      weekly.cost_nanos += row.cost_nanos;
     }
-    const base = industrialChartOptions("donut");
-    const options = {
-      ...base,
-      chart: {
-        ...base.chart,
-        type: "donut",
-        events: onSelectModel ? {
-          dataPointSelection: (_event, _ctx, config) => {
-            const row = rows[config.dataPointIndex];
-            if (row && !row.isOther) onSelectModel(row.label);
-          }
-        } : void 0
-      },
-      series: rows.map((row) => row.value),
-      labels: rows.map((row) => row.label),
-      colors: rows.map((row) => row.color),
-      stroke: { width: 2, colors: [cssVar("--surface")] },
-      legend: { ...base.legend, show: false },
-      states: {
-        hover: { filter: { type: "none", value: 0 } },
-        active: { filter: { type: "none", value: 0 } }
-      },
-      tooltip: {
-        ...base.tooltip,
-        custom: ({ seriesIndex }) => {
-          const row = rows[seriesIndex];
-          if (!row) return "";
-          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${esc(row.label)}</strong><br/>${esc(METRIC_LABELS2[metric])}: ${esc(formatMetricValue(row.value, metric))} (${esc(formatShare(row.share))} share)<br/>Cost: ${esc(formatMetricValue(row.cost, "cost"))} &nbsp;&bull;&nbsp; Calls: ${esc(formatMetricValue(row.calls, "calls"))} &nbsp;&bull;&nbsp; Tokens: ${esc(formatMetricValue(row.tokens, "tokens"))}</div>`;
-        }
-      },
-      plotOptions: {
-        pie: {
-          expandOnClick: false,
-          donut: {
-            size: "72%",
-            labels: { show: false }
-          }
-        }
+    return Object.values(weekMap).sort((left, right) => left.week.localeCompare(right.week));
+  }
+  function confidenceRank(confidence) {
+    switch (confidence) {
+      case "low":
+        return 0;
+      case "medium":
+        return 1;
+      case "high":
+        return 2;
+      default:
+        return 3;
+    }
+  }
+  function buildAggregations(filteredDaily, filteredSessions) {
+    const dailyMap = {};
+    for (const row of filteredDaily) {
+      const daily2 = dailyMap[row.day] ?? (dailyMap[row.day] = {
+        day: row.day,
+        input: 0,
+        output: 0,
+        cache_read: 0,
+        cache_creation: 0,
+        reasoning_output: 0,
+        cost: 0
+      });
+      daily2.input += row.input;
+      daily2.output += row.output;
+      daily2.cache_read += row.cache_read;
+      daily2.cache_creation += row.cache_creation;
+      daily2.reasoning_output += row.reasoning_output;
+      daily2.cost += row.cost;
+    }
+    const daily = Object.values(dailyMap).sort((left, right) => left.day.localeCompare(right.day));
+    const modelMap = {};
+    for (const row of filteredDaily) {
+      const model = modelMap[row.model] ?? (modelMap[row.model] = {
+        model: row.model,
+        input: 0,
+        output: 0,
+        cache_read: 0,
+        cache_creation: 0,
+        reasoning_output: 0,
+        turns: 0,
+        sessions: 0,
+        cost: 0,
+        is_billable: row.cost > 0,
+        input_cost: 0,
+        output_cost: 0,
+        cache_read_cost: 0,
+        cache_write_cost: 0,
+        credits: null
+      });
+      model.input += row.input;
+      model.output += row.output;
+      model.cache_read += row.cache_read;
+      model.cache_creation += row.cache_creation;
+      model.reasoning_output += row.reasoning_output;
+      model.turns += row.turns;
+      model.cost += row.cost;
+      if (row.cost > 0) model.is_billable = true;
+      model.input_cost = (model.input_cost ?? 0) + (row.input_cost ?? 0);
+      model.output_cost = (model.output_cost ?? 0) + (row.output_cost ?? 0);
+      model.cache_read_cost = (model.cache_read_cost ?? 0) + (row.cache_read_cost ?? 0);
+      model.cache_write_cost = (model.cache_write_cost ?? 0) + (row.cache_write_cost ?? 0);
+      if (row.credits != null) {
+        model.credits = (model.credits ?? 0) + row.credits;
       }
+    }
+    for (const session of filteredSessions) {
+      const model = modelMap[session.model];
+      if (model) model.sessions += 1;
+    }
+    const byModel = Object.values(modelMap).sort(
+      (left, right) => right.input + right.output - (left.input + left.output)
+    );
+    const projectMap = {};
+    for (const session of filteredSessions) {
+      const project = projectMap[session.project] ?? (projectMap[session.project] = {
+        project: session.project,
+        display_name: session.display_name || session.project,
+        input: 0,
+        output: 0,
+        cache_read: 0,
+        cache_creation: 0,
+        reasoning_output: 0,
+        turns: 0,
+        sessions: 0,
+        cost: 0,
+        credits: null
+      });
+      project.input += session.input;
+      project.output += session.output;
+      project.cache_read += session.cache_read;
+      project.cache_creation += session.cache_creation;
+      project.reasoning_output += session.reasoning_output;
+      project.turns += session.turns;
+      project.sessions += 1;
+      project.cost += session.cost;
+      if (session.credits != null) {
+        project.credits = (project.credits ?? 0) + session.credits;
+      }
+    }
+    const byProject = Object.values(projectMap).sort(
+      (left, right) => right.input + right.output - (left.input + left.output)
+    );
+    const totals = {
+      sessions: filteredSessions.length,
+      turns: filteredSessions.reduce((sum2, session) => sum2 + session.turns, 0),
+      input: filteredSessions.reduce((sum2, session) => sum2 + session.input, 0),
+      output: filteredSessions.reduce((sum2, session) => sum2 + session.output, 0),
+      cache_read: filteredSessions.reduce((sum2, session) => sum2 + session.cache_read, 0),
+      cache_creation: filteredSessions.reduce((sum2, session) => sum2 + session.cache_creation, 0),
+      reasoning_output: filteredSessions.reduce((sum2, session) => sum2 + session.reasoning_output, 0),
+      cost: filteredSessions.reduce((sum2, session) => sum2 + session.cost, 0)
     };
-    return /* @__PURE__ */ u2("div", { class: "model-chart-panel", children: [
-      /* @__PURE__ */ u2("div", { class: "range-group", "aria-label": "Model metric", children: Object.keys(METRIC_LABELS2).map((nextMetric) => /* @__PURE__ */ u2(
-        "button",
-        {
-          type: "button",
-          class: `range-btn${metric === nextMetric ? " active" : ""}`,
-          disabled: totals[nextMetric] <= 0,
-          "aria-pressed": metric === nextMetric,
-          onClick: () => setSelectedMetric(nextMetric),
-          children: METRIC_LABELS2[nextMetric]
-        },
-        nextMetric
-      )) }),
-      /* @__PURE__ */ u2("div", { class: "model-chart-ring", children: [
-        /* @__PURE__ */ u2(ApexChart, { options, id: "chart-model-apex" }),
-        /* @__PURE__ */ u2("div", { class: "model-chart-center", "aria-hidden": "true", children: /* @__PURE__ */ u2("div", { class: "model-chart-center-inner", children: [
-          /* @__PURE__ */ u2("div", { class: "model-chart-center-kicker", children: METRIC_LABELS2[metric] }),
-          /* @__PURE__ */ u2("div", { class: "model-chart-center-total", children: formatMetricValue(total, metric, true) }),
-          hasOther ? /* @__PURE__ */ u2("div", { class: "model-chart-center-meta", children: "Top 5 + Other" }) : null
-        ] }) })
-      ] }),
-      /* @__PURE__ */ u2("div", { class: "model-share-list", children: rows.map((row) => /* @__PURE__ */ u2(
-        "button",
-        {
-          type: "button",
-          class: `model-share-row${onSelectModel && !row.isOther ? " interactive" : ""}`,
-          onClick: onSelectModel && !row.isOther ? () => onSelectModel(row.label) : void 0,
-          disabled: !onSelectModel || row.isOther,
-          "aria-label": row.isOther ? `${row.label} ${METRIC_LABELS2[metric]} summary` : `Filter to ${row.label}`,
-          children: [
-            /* @__PURE__ */ u2("div", { class: "model-share-row-head", children: [
-              /* @__PURE__ */ u2("div", { class: "model-share-label", children: [
-                /* @__PURE__ */ u2("span", { class: "model-share-swatch", style: { background: row.color }, "aria-hidden": "true" }),
-                /* @__PURE__ */ u2("span", { title: row.label, children: truncateMid(row.label, row.isOther ? 18 : 24, 8) })
-              ] }),
-              /* @__PURE__ */ u2("div", { class: "model-share-value", children: formatMetricValue(row.value, metric) })
-            ] }),
-            /* @__PURE__ */ u2("div", { class: "model-share-row-meta", children: [
-              /* @__PURE__ */ u2("div", { class: "model-share-bar", "aria-label": `${row.label} ${METRIC_LABELS2[metric]} share`, children: /* @__PURE__ */ u2("div", { class: "model-share-bar-fill", style: { width: `${Math.min(100, row.share)}%`, background: row.color } }) }),
-              /* @__PURE__ */ u2("div", { class: "model-share-percent", children: formatShare(row.share) })
-            ] })
-          ]
-        },
-        row.label
-      )) })
-    ] });
+    const confidenceBreakdown = Object.entries(
+      filteredSessions.reduce((acc, session) => {
+        const key = session.cost_confidence || "low";
+        if (!acc[key]) acc[key] = { sessions: 0, cost: 0 };
+        acc[key].sessions += 1;
+        acc[key].cost += session.cost;
+        return acc;
+      }, {})
+    ).sort(([left], [right]) => confidenceRank(left) - confidenceRank(right));
+    const billingModeBreakdown = Object.entries(
+      filteredSessions.reduce((acc, session) => {
+        const key = session.billing_mode || "estimated_local";
+        if (!acc[key]) acc[key] = { sessions: 0, cost: 0 };
+        acc[key].sessions += 1;
+        acc[key].cost += session.cost;
+        return acc;
+      }, {})
+    ).sort((left, right) => right[1].sessions - left[1].sessions);
+    const pricingVersions = Array.from(
+      new Set(filteredSessions.map((session) => session.pricing_version).filter(Boolean))
+    );
+    return {
+      daily,
+      byModel,
+      byProject,
+      totals,
+      confidenceBreakdown,
+      billingModeBreakdown,
+      pricingVersions
+    };
   }
 
-  // src/ui/components/ProjectChart.tsx
-  function ProjectChart({
-    byProject,
-    onSelectProject
-  }) {
-    const top = byProject.slice(0, 10);
-    if (!top.length) return null;
-    const base = industrialChartOptions("bar");
-    const colors = tokenSeriesColors();
-    const totals = top.map((p5) => p5.input + p5.output);
-    const maxTotal = totals.reduce((m4, v4) => v4 > m4 ? v4 : m4, 0);
-    const shares = totals.map((v4) => maxTotal > 0 ? v4 / maxTotal * 100 : 0);
-    const options = {
-      ...base,
-      chart: {
-        ...base.chart,
-        type: "bar",
-        events: onSelectProject ? {
-          dataPointSelection: (_event, _ctx, config) => {
-            const row = top[config.dataPointIndex];
-            if (row) onSelectProject(row);
-          }
-        } : void 0
-      },
-      series: [{ name: "Share of top", data: shares }],
-      colors: [colors[0]],
-      fill: { type: "solid" },
-      plotOptions: { bar: { horizontal: true, barHeight: "60%", borderRadius: 0 } },
-      xaxis: {
-        ...base.xaxis,
-        categories: top.map((p5) => truncateMid(p5.display_name || p5.project, 18, 8)),
-        min: 0,
-        max: 100,
-        tickAmount: 4,
-        labels: {
-          ...base.xaxis.labels,
-          formatter: (v4) => `${Math.round(v4)}%`,
-          hideOverlappingLabels: true
-        }
-      },
-      yaxis: {
-        ...base.yaxis,
-        labels: { ...base.yaxis.labels, maxWidth: 120 }
-      },
-      // Anchor the tooltip to the plot's bottom-left so it cannot cover the
-      // card's "TOP PROJECTS" title during hover.
-      tooltip: {
-        ...base.tooltip,
-        fixed: { enabled: true, position: "bottomLeft", offsetX: 0, offsetY: 0 },
-        y: {
-          // Display the raw token count per project regardless of bar scale.
-          formatter: (_v, opts) => {
-            const raw = totals[opts?.dataPointIndex ?? 0] ?? 0;
-            return fmt(raw) + " tokens";
-          }
-        }
-      }
-    };
-    return /* @__PURE__ */ u2(ApexChart, { options, id: "chart-project" });
+  // src/ui/dashboardView.tsx
+  var SECTION_TAB_MAP = {
+    "usage-windows": "overview",
+    "claude-usage": "overview",
+    "agent-status": "overview",
+    "estimation-meta": "overview",
+    "official-sync": "overview",
+    "openai-reconciliation": "overview",
+    "stats-row": "overview",
+    "daily-chart-card": "activity",
+    "model-chart-card": "activity",
+    "project-chart-card": "activity",
+    "hourly-chart": "activity",
+    "activity-heatmap": "activity",
+    "subagent-summary": "breakdowns",
+    "entrypoint-breakdown": "breakdowns",
+    "service-tiers": "breakdowns",
+    "tool-summary": "breakdowns",
+    "mcp-summary": "breakdowns",
+    "branch-summary": "breakdowns",
+    "version-summary": "breakdowns",
+    "cost-reconciliation": "breakdowns",
+    "model-cost-mount": "tables",
+    "sessions-mount": "tables",
+    "project-cost-mount": "tables"
+  };
+  var SECTION_DISPLAY_MODE = {
+    "usage-windows": "grid",
+    "agent-status": "grid",
+    "estimation-meta": "grid",
+    "stats-row": "grid"
+  };
+  function matchesProvider(row) {
+    if (selectedProvider.value === "both") return true;
+    return row.provider === selectedProvider.value;
   }
-
-  // src/ui/components/CostReconciliationPanel.tsx
-  function CostReconciliationPanel({ data }) {
-    if (!data || !data.enabled) return null;
-    if (data.hook_total_nanos == null || data.local_total_nanos == null) return null;
-    const hookUsd = data.hook_total_nanos / 1e9;
-    const localUsd = data.local_total_nanos / 1e9;
-    const divergence = data.divergence_pct ?? 0;
-    const divergencePctSigned = divergence * 100;
-    const divergencePctAbs = Math.abs(divergencePctSigned);
-    const isWarn = divergencePctAbs > 10;
-    return /* @__PURE__ */ u2("div", { class: "card card-flat", style: { gridColumn: "1 / -1" }, children: [
-      /* @__PURE__ */ u2("div", { style: { marginBottom: "16px" }, children: [
-        /* @__PURE__ */ u2("span", { style: {
-          fontFamily: "var(--font-mono)",
-          fontSize: "11px",
-          fontWeight: 400,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "var(--text-secondary)"
-        }, children: "COST RECONCILIATION" }),
-        data.period && /* @__PURE__ */ u2("span", { style: {
-          fontFamily: "var(--font-mono)",
-          fontSize: "11px",
-          color: "var(--text-disabled)",
-          marginLeft: "8px"
-        }, children: [
-          "(",
-          data.period,
-          ")"
-        ] })
-      ] }),
-      /* @__PURE__ */ u2("div", { style: { display: "flex", gap: "32px", flexWrap: "wrap", marginBottom: "20px" }, children: [
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("div", { style: {
-            fontFamily: "var(--font-mono)",
-            fontSize: "11px",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            color: "var(--text-secondary)",
-            marginBottom: "8px"
-          }, children: "HOOK-REPORTED" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "24px" }, children: fmtCost(hookUsd) })
-        ] }),
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("div", { style: {
-            fontFamily: "var(--font-mono)",
-            fontSize: "11px",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            color: "var(--text-secondary)",
-            marginBottom: "8px"
-          }, children: "LOCAL ESTIMATE" }),
-          /* @__PURE__ */ u2("div", { class: "stat-value", style: { fontSize: "24px" }, children: fmtCost(localUsd) })
-        ] }),
-        /* @__PURE__ */ u2("div", { children: [
-          /* @__PURE__ */ u2("div", { style: {
-            fontFamily: "var(--font-mono)",
-            fontSize: "11px",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            color: "var(--text-secondary)",
-            marginBottom: "8px"
-          }, children: "DIVERGENCE" }),
-          /* @__PURE__ */ u2(
-            "div",
+  function matchesProjectSearch(project, displayName) {
+    const query = projectSearchQuery.value;
+    if (!query) return true;
+    if (project.toLowerCase().includes(query)) return true;
+    if (displayName && displayName.toLowerCase().includes(query)) return true;
+    return false;
+  }
+  function setSectionVisibility(sectionId, hasContent, displayMode = "") {
+    const container = $2(sectionId);
+    if (!container) return;
+    container.dataset["hasContent"] = hasContent ? "1" : "0";
+    const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
+    container.style.display = hasContent && visibleInTab ? displayMode : "none";
+  }
+  function refreshSectionVisibility() {
+    for (const [sectionId, tab] of Object.entries(SECTION_TAB_MAP)) {
+      const container = $2(sectionId);
+      if (!container) continue;
+      const hasContent = container.dataset["hasContent"] !== "0";
+      const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? "";
+      container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : "none";
+    }
+  }
+  function renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions) {
+    const container = $2("estimation-meta");
+    if (!container) return;
+    if (!confidenceBreakdown.length && !billingModeBreakdown.length && !pricingVersions.length) {
+      setSectionVisibility("estimation-meta", false, "grid");
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("estimation-meta", true, "grid");
+    R(
+      /* @__PURE__ */ u4(
+        EstimationMeta,
+        {
+          confidenceBreakdown,
+          billingModeBreakdown,
+          pricingVersions
+        }
+      ),
+      container
+    );
+  }
+  function renderOpenAiReconciliation(reconciliation) {
+    const container = $2("openai-reconciliation");
+    if (!container) return;
+    if (!reconciliation) {
+      setSectionVisibility("openai-reconciliation", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("openai-reconciliation", true);
+    R(/* @__PURE__ */ u4(ReconciliationBlock, { reconciliation }), container);
+  }
+  function renderOfficialSync(summary) {
+    const container = $2("official-sync");
+    if (!container) return;
+    if (!summary?.available) {
+      setSectionVisibility("official-sync", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("official-sync", true);
+    R(
+      /* @__PURE__ */ u4(OfficialSyncPanel, { summary, providerFilter: selectedProvider.value }),
+      container
+    );
+  }
+  function renderSubagentSummary(summary) {
+    const container = $2("subagent-summary");
+    if (!container) return;
+    if (summary.subagent_turns === 0) {
+      setSectionVisibility("subagent-summary", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("subagent-summary", true);
+    R(/* @__PURE__ */ u4(SubagentSummary, { summary }), container);
+  }
+  function renderEntrypointBreakdown(data) {
+    const container = $2("entrypoint-breakdown");
+    if (!container) return;
+    if (!data.length) {
+      setSectionVisibility("entrypoint-breakdown", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("entrypoint-breakdown", true);
+    R(/* @__PURE__ */ u4(EntrypointTable, { data }), container);
+  }
+  function renderServiceTiers(data) {
+    const container = $2("service-tiers");
+    if (!container) return;
+    if (!data.length) {
+      setSectionVisibility("service-tiers", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("service-tiers", true);
+    R(/* @__PURE__ */ u4(ServiceTiersTable, { data }), container);
+  }
+  function renderToolSummary(data) {
+    const container = $2("tool-summary");
+    if (!container) return;
+    if (!data.length) {
+      setSectionVisibility("tool-summary", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("tool-summary", true);
+    R(/* @__PURE__ */ u4(ToolUsageTable, { data }), container);
+  }
+  function renderMcpSummary(data) {
+    const container = $2("mcp-summary");
+    if (!container) return;
+    if (!data.length) {
+      setSectionVisibility("mcp-summary", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("mcp-summary", true);
+    R(/* @__PURE__ */ u4(McpSummaryTable, { data }), container);
+  }
+  function renderBranchSummary(data) {
+    const container = $2("branch-summary");
+    if (!container) return;
+    if (!data.length) {
+      setSectionVisibility("branch-summary", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("branch-summary", true);
+    R(/* @__PURE__ */ u4(BranchTable, { data }), container);
+  }
+  function renderVersionSummary(data) {
+    const container = $2("version-summary");
+    if (!container) return;
+    if (!data.length) {
+      setSectionVisibility("version-summary", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("version-summary", true);
+    const handleMetricChange = (next) => {
+      versionDonutMetric.value = next;
+      syncDashboardUrl();
+      renderVersionSummary(data);
+    };
+    const collapsed = isSectionCollapsed("version-summary");
+    const toggleCollapsed = () => {
+      setSectionCollapsed("version-summary", !collapsed);
+      syncDashboardUrl();
+      renderVersionSummary(data);
+    };
+    R(
+      /* @__PURE__ */ u4("div", { class: "table-card", children: [
+        /* @__PURE__ */ u4("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: [
+          /* @__PURE__ */ u4("h2", { class: "section-title", style: { margin: 0 }, children: "CLI Versions" }),
+          /* @__PURE__ */ u4("div", { class: "section-actions", children: /* @__PURE__ */ u4(
+            "button",
             {
-              class: "stat-value",
-              style: { fontSize: "24px", color: isWarn ? "var(--accent)" : void 0 },
-              children: [
-                divergencePctSigned >= 0 ? "+" : "",
-                divergencePctSigned.toFixed(1),
-                "%",
-                isWarn && /* @__PURE__ */ u2("span", { style: {
-                  display: "inline-block",
-                  marginLeft: "8px",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  fontWeight: 400,
-                  letterSpacing: "0.06em",
-                  padding: "2px 8px",
-                  border: "1px solid var(--accent)",
-                  borderRadius: "4px",
-                  color: "var(--accent)",
-                  verticalAlign: "middle"
-                }, children: "[DRIFT]" })
-              ]
+              class: "section-toggle",
+              type: "button",
+              "aria-expanded": !collapsed,
+              "aria-controls": "version-summary-content",
+              onClick: toggleCollapsed,
+              children: collapsed ? "Show" : "Hide"
             }
-          )
-        ] })
+          ) })
+        ] }),
+        !collapsed && /* @__PURE__ */ u4(
+          "div",
+          {
+            id: "version-summary-content",
+            style: {
+              display: "flex",
+              gap: "24px",
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+              padding: "20px"
+            },
+            children: [
+              /* @__PURE__ */ u4("div", { style: { flex: "1 1 260px", minWidth: "220px", height: "300px" }, children: /* @__PURE__ */ u4(
+                VersionDonut,
+                {
+                  rows: data,
+                  metric: versionDonutMetric.value,
+                  onMetricChange: handleMetricChange
+                }
+              ) }),
+              /* @__PURE__ */ u4("div", { style: { flex: "2 1 320px", minWidth: "280px" }, children: /* @__PURE__ */ u4(VersionTable, { data, title: null }) })
+            ]
+          }
+        )
       ] }),
-      data.breakdown && data.breakdown.length > 0 && /* @__PURE__ */ u2("div", { style: { overflowX: "auto" }, children: /* @__PURE__ */ u2("table", { children: [
-        /* @__PURE__ */ u2("thead", { children: /* @__PURE__ */ u2("tr", { children: [
-          /* @__PURE__ */ u2("th", { children: "DAY" }),
-          /* @__PURE__ */ u2("th", { style: { textAlign: "right" }, children: "HOOK" }),
-          /* @__PURE__ */ u2("th", { style: { textAlign: "right" }, children: "LOCAL" }),
-          /* @__PURE__ */ u2("th", { style: { textAlign: "right" }, children: "\u0394" })
-        ] }) }),
-        /* @__PURE__ */ u2("tbody", { children: data.breakdown.slice().reverse().slice(0, 30).map((r4) => {
-          const h5 = r4.hook_nanos / 1e9;
-          const l5 = r4.local_nanos / 1e9;
-          const delta = h5 - l5;
-          const rowWarn = l5 > 1e-9 && Math.abs(delta) / l5 > 0.1;
-          return /* @__PURE__ */ u2("tr", { children: [
-            /* @__PURE__ */ u2("td", { class: "num", children: r4.day }),
-            /* @__PURE__ */ u2("td", { class: "num", style: { textAlign: "right" }, children: fmtCost(h5) }),
-            /* @__PURE__ */ u2("td", { class: "num", style: { textAlign: "right" }, children: fmtCost(l5) }),
-            /* @__PURE__ */ u2(
-              "td",
-              {
-                class: "num",
-                style: {
-                  textAlign: "right",
-                  color: rowWarn ? "var(--accent)" : "var(--text-secondary)"
-                },
-                children: [
-                  delta >= 0 ? "+" : "",
-                  fmtCost(delta)
-                ]
-              }
-            )
-          ] }, r4.day);
-        }) })
-      ] }) })
-    ] });
+      container
+    );
+  }
+  function renderHourlyChart(data) {
+    const container = $2("hourly-chart");
+    if (!container) return;
+    if (!data.length) {
+      setSectionVisibility("hourly-chart", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("hourly-chart", true);
+    R(/* @__PURE__ */ u4(HourlyChart, { data }), container);
+  }
+  function renderUsageWindows(data, previousSessionPercent2, setPreviousSessionPercent, setStatusMessage, clearStatusMessage) {
+    const container = $2("usage-windows");
+    if (!container) return;
+    if (!data.available) {
+      planBadge.value = "";
+      if (data.error) {
+        setSectionVisibility("usage-windows", true, "grid");
+        R(/* @__PURE__ */ u4(RateWindowUnavailable, { error: data.error }), container);
+      } else {
+        setSectionVisibility("usage-windows", false, "grid");
+        R(null, container);
+      }
+      return;
+    }
+    setSectionVisibility("usage-windows", true, "grid");
+    R(
+      /* @__PURE__ */ u4(S, { children: [
+        data.session && /* @__PURE__ */ u4(RateWindowCard, { label: "Session (5h)", window: data.session }),
+        data.weekly && /* @__PURE__ */ u4(RateWindowCard, { label: "Weekly", window: data.weekly }),
+        data.weekly_opus && /* @__PURE__ */ u4(RateWindowCard, { label: "Weekly Opus", window: data.weekly_opus }),
+        data.weekly_sonnet && /* @__PURE__ */ u4(RateWindowCard, { label: "Weekly Sonnet", window: data.weekly_sonnet }),
+        data.budget && /* @__PURE__ */ u4(
+          BudgetCard,
+          {
+            used: data.budget.used,
+            limit: data.budget.limit,
+            currency: data.budget.currency,
+            utilization: data.budget.utilization
+          }
+        ),
+        /* @__PURE__ */ u4("div", { style: { gridColumn: "1 / -1" }, children: /* @__PURE__ */ u4(InlineStatus, { placement: "rate-windows" }) })
+      ] }),
+      container
+    );
+    if (data.session) {
+      const currentPercent = 100 - data.session.used_percent;
+      if (previousSessionPercent2 !== null) {
+        if (previousSessionPercent2 > 0.01 && currentPercent <= 0.01) {
+          setStatusMessage(`Session depleted - resets in ${data.session.resets_in_minutes ?? 0}m`, true);
+        } else if (previousSessionPercent2 <= 0.01 && currentPercent > 0.01) {
+          clearStatusMessage();
+        }
+      }
+      setPreviousSessionPercent(currentPercent);
+    }
+    planBadge.value = data.identity?.plan ? data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1) : "";
+  }
+  function renderClaudeUsage(data) {
+    const container = $2("claude-usage");
+    if (!container) return;
+    if (!data.last_run && !data.latest_snapshot) {
+      setSectionVisibility("claude-usage", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("claude-usage", true);
+    R(/* @__PURE__ */ u4(ClaudeUsagePanel, { data }), container);
+  }
+  function renderAgentStatus(snapshot, communitySignal) {
+    const container = $2("agent-status");
+    if (!container) return;
+    setSectionVisibility("agent-status", true, "grid");
+    R(/* @__PURE__ */ u4(AgentStatusCard, { snapshot, communitySignal }), container);
+  }
+  function renderActivityHeatmap(data) {
+    const container = $2("activity-heatmap");
+    if (!container) return;
+    if (!data) {
+      setSectionVisibility("activity-heatmap", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("activity-heatmap", true);
+    R(/* @__PURE__ */ u4(ActivityHeatmap, { data }), container);
+  }
+  function renderCostReconciliation() {
+    const container = $2("cost-reconciliation");
+    if (!container) return;
+    const data = costReconciliationData.value;
+    if (!data || !data.enabled) {
+      setSectionVisibility("cost-reconciliation", false);
+      R(null, container);
+      return;
+    }
+    setSectionVisibility("cost-reconciliation", true);
+    R(/* @__PURE__ */ u4(CostReconciliationPanel, { data }), container);
+  }
+  function renderDashboardView(data, focusSingleModel2, focusProjectQuery2, exportSessionsCSV2, exportProjectsCSV2) {
+    const cutoff = getRangeCutoff(selectedRange.value);
+    const filteredDaily = data.daily_by_model.filter(
+      (row) => selectedModels.value.has(row.model) && (!cutoff || row.day >= cutoff) && matchesProvider(row)
+    );
+    const filteredSessions = data.sessions_all.filter(
+      (session) => selectedModels.value.has(session.model) && (!cutoff || session.last_date >= cutoff) && matchesProjectSearch(session.project, session.display_name) && matchesProvider(session)
+    );
+    const {
+      daily,
+      byModel,
+      byProject,
+      totals,
+      confidenceBreakdown,
+      billingModeBreakdown,
+      pricingVersions
+    } = buildAggregations(filteredDaily, filteredSessions);
+    const providerLabel = selectedProvider.value === "both" ? "" : ` (${selectedProvider.value})`;
+    const bucketIsWeek = selectedBucket.value === "week";
+    const activeDays = daily.filter((day) => day.cost > 0).length;
+    const activeDayCostNanos = Math.round(
+      daily.reduce((sum2, day) => sum2 + day.cost, 0) * 1e9
+    );
+    const chartTitleEl = $2("daily-chart-title");
+    if (chartTitleEl) {
+      chartTitleEl.textContent = (bucketIsWeek ? "Weekly Token Usage - " : "Daily Token Usage - ") + RANGE_LABELS[selectedRange.value] + providerLabel;
+    }
+    R(
+      /* @__PURE__ */ u4(
+        StatsCards,
+        {
+          totals,
+          daily,
+          activeDays,
+          activeDayTotalCostNanos: activeDayCostNanos,
+          cacheEfficiency: data.cache_efficiency,
+          billingBlocks: billingBlocksData.value,
+          contextWindow: contextWindowData.value
+        }
+      ),
+      $2("stats-row")
+    );
+    setSectionVisibility("stats-row", true, "grid");
+    renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
+    renderOfficialSync(data.official_sync);
+    renderOpenAiReconciliation(data.openai_reconciliation);
+    if (bucketIsWeek) {
+      const weekly = buildWeeklyAgg(data.weekly_by_model, selectedModels.value, selectedRange.value);
+      R(/* @__PURE__ */ u4(WeeklyChart, { weekly }), $2("chart-daily"));
+      setSectionVisibility("daily-chart-card", weekly.length > 0);
+    } else {
+      R(/* @__PURE__ */ u4(DailyChart, { daily }), $2("chart-daily"));
+      setSectionVisibility("daily-chart-card", daily.length > 0);
+    }
+    R(/* @__PURE__ */ u4(ModelChart, { byModel, onSelectModel: focusSingleModel2 }), $2("chart-model"));
+    R(
+      /* @__PURE__ */ u4(
+        ProjectChart,
+        {
+          byProject,
+          onSelectProject: (project) => focusProjectQuery2(project.display_name || project.project)
+        }
+      ),
+      $2("chart-project")
+    );
+    setSectionVisibility("model-chart-card", byModel.length > 0);
+    setSectionVisibility("project-chart-card", byProject.length > 0);
+    lastFilteredSessions.value = filteredSessions;
+    lastByProject.value = byProject;
+    R(/* @__PURE__ */ u4(ModelCostTable, { byModel, onSelectModel: focusSingleModel2 }), $2("model-cost-mount"));
+    R(
+      /* @__PURE__ */ u4(
+        SessionsTable,
+        {
+          onExportCSV: exportSessionsCSV2,
+          onSelectProject: (session) => focusProjectQuery2(session.display_name || session.project),
+          onSelectModel: focusSingleModel2
+        }
+      ),
+      $2("sessions-mount")
+    );
+    R(
+      /* @__PURE__ */ u4(
+        ProjectCostTable,
+        {
+          byProject: lastByProject.value.slice(0, 30),
+          onExportCSV: exportProjectsCSV2,
+          onSelectProject: (project) => focusProjectQuery2(project.display_name || project.project)
+        }
+      ),
+      $2("project-cost-mount")
+    );
+    setSectionVisibility("model-cost-mount", byModel.length > 0);
+    setSectionVisibility("sessions-mount", filteredSessions.length > 0);
+    setSectionVisibility("project-cost-mount", lastByProject.value.length > 0);
+    renderSubagentSummary(data.subagent_summary);
+    renderEntrypointBreakdown((data.entrypoint_breakdown ?? []).filter(matchesProvider));
+    renderServiceTiers((data.service_tiers ?? []).filter(matchesProvider));
+    renderToolSummary((data.tool_summary ?? []).filter(matchesProvider));
+    renderMcpSummary((data.mcp_summary ?? []).filter(matchesProvider));
+    renderBranchSummary((data.git_branch_summary ?? []).filter(matchesProvider));
+    renderVersionSummary((data.version_summary ?? []).filter(matchesProvider));
+    renderHourlyChart((data.hourly_distribution ?? []).filter(matchesProvider));
+    renderCostReconciliation();
+    refreshSectionVisibility();
   }
 
   // src/ui/lib/csv.ts
@@ -7659,86 +8258,25 @@ ${row.project}` : row.project;
   var loadAgentStatusInFlight = false;
   var loadCommunitySignalInFlight = false;
   var lastCommunitySignal = null;
+  var lastAgentStatusSnapshot = null;
   var loadBillingBlocksInFlight = false;
   var loadContextWindowInFlight = false;
   var loadCostReconciliationInFlight = false;
-  var SECTION_TAB_MAP = {
-    "usage-windows": "overview",
-    "claude-usage": "overview",
-    "agent-status": "overview",
-    "estimation-meta": "overview",
-    "official-sync": "overview",
-    "openai-reconciliation": "overview",
-    "stats-row": "overview",
-    "daily-chart-card": "activity",
-    "model-chart-card": "activity",
-    "project-chart-card": "activity",
-    "hourly-chart": "activity",
-    "activity-heatmap": "activity",
-    "subagent-summary": "breakdowns",
-    "entrypoint-breakdown": "breakdowns",
-    "service-tiers": "breakdowns",
-    "tool-summary": "breakdowns",
-    "mcp-summary": "breakdowns",
-    "branch-summary": "breakdowns",
-    "version-summary": "breakdowns",
-    "cost-reconciliation": "breakdowns",
-    "model-cost-mount": "tables",
-    "sessions-mount": "tables",
-    "project-cost-mount": "tables"
-  };
-  var SECTION_DISPLAY_MODE = {
-    "usage-windows": "grid",
-    "agent-status": "grid",
-    "estimation-meta": "grid",
-    "stats-row": "grid"
-  };
-  function setSectionVisibility(sectionId, hasContent, displayMode = "") {
-    const container = $2(sectionId);
-    if (!container) return;
-    container.dataset["hasContent"] = hasContent ? "1" : "0";
-    const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
-    container.style.display = hasContent && visibleInTab ? displayMode : "none";
-  }
-  function refreshSectionVisibility() {
-    for (const [sectionId, tab] of Object.entries(SECTION_TAB_MAP)) {
-      const container = $2(sectionId);
-      if (!container) continue;
-      const hasContent = container.dataset["hasContent"] !== "0";
-      const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? "";
-      container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : "none";
-    }
-  }
   function handleDashboardTabChange(tab) {
     if (activeDashboardTab.value === tab) return;
     activeDashboardTab.value = tab;
     syncDashboardUrl();
     refreshSectionVisibility();
   }
-  function formatLocalDate(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-  function getRangeCutoff(range) {
-    if (range === "all") return null;
-    const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
-    const d5 = /* @__PURE__ */ new Date();
-    d5.setDate(d5.getDate() - days);
-    return formatLocalDate(d5);
-  }
-  function matchesProvider(row) {
-    const p5 = selectedProvider.value;
-    if (p5 === "both") return true;
-    return row.provider === p5;
-  }
-  function matchesProjectSearch(project, displayName) {
-    if (!projectSearchQuery.value) return true;
-    const q3 = projectSearchQuery.value;
-    if (project.toLowerCase().includes(q3)) return true;
-    if (displayName && displayName.toLowerCase().includes(q3)) return true;
-    return false;
+  function applyFilter() {
+    if (!rawData.value) return;
+    renderDashboardView(
+      rawData.value,
+      focusSingleModel,
+      focusProjectQuery,
+      exportSessionsCSV,
+      exportProjectsCSV
+    );
   }
   function focusSingleModel(model) {
     if (!rawData.value) return;
@@ -7753,541 +8291,100 @@ ${row.project}` : row.project;
     syncDashboardUrl();
     applyFilter();
   }
-  function weekLabelToWeekStart(label) {
-    const [yearStr, weekStr] = label.split("-");
-    const year = parseInt(yearStr, 10);
-    const week = parseInt(weekStr, 10);
-    if (!Number.isFinite(year) || !Number.isFinite(week)) return /* @__PURE__ */ new Date(NaN);
-    const jan1 = new Date(Date.UTC(year, 0, 1));
-    if (week === 0) return jan1;
-    const jan1Dow = jan1.getUTCDay();
-    const daysToFirstMon = (8 - jan1Dow) % 7;
-    const firstMondayUtc = new Date(Date.UTC(year, 0, 1 + daysToFirstMon));
-    return new Date(firstMondayUtc.getTime() + (week - 1) * 7 * 86400 * 1e3);
-  }
-  function buildWeeklyAgg(range) {
-    const rows = rawData.value?.weekly_by_model ?? [];
-    if (!rows.length) return [];
-    const cutoff = getRangeCutoff(range);
-    const weekMap = {};
-    for (const r4 of rows) {
-      if (!selectedModels.value.has(r4.model)) continue;
-      if (cutoff) {
-        const weekStart = weekLabelToWeekStart(r4.week);
-        if (isNaN(weekStart.getTime())) continue;
-        const weekStartStr = weekStart.toISOString().slice(0, 10);
-        if (weekStartStr < cutoff) continue;
-      }
-      const w5 = weekMap[r4.week] ?? (weekMap[r4.week] = {
-        week: r4.week,
-        input: 0,
-        output: 0,
-        cache_read: 0,
-        cache_creation: 0,
-        reasoning_output: 0,
-        cost_nanos: 0
-      });
-      w5.input += r4.input_tokens;
-      w5.output += r4.output_tokens;
-      w5.cache_read += r4.cache_read_tokens;
-      w5.cache_creation += r4.cache_creation_tokens;
-      w5.reasoning_output += r4.reasoning_output_tokens;
-      w5.cost_nanos += r4.cost_nanos;
-    }
-    return Object.values(weekMap).sort((a4, b4) => a4.week.localeCompare(b4.week));
-  }
-  function buildAggregations(filteredDaily, filteredSessions) {
-    const dailyMap = {};
-    for (const r4 of filteredDaily) {
-      const d5 = dailyMap[r4.day] ?? (dailyMap[r4.day] = {
-        day: r4.day,
-        input: 0,
-        output: 0,
-        cache_read: 0,
-        cache_creation: 0,
-        reasoning_output: 0,
-        cost: 0
-      });
-      d5.input += r4.input;
-      d5.output += r4.output;
-      d5.cache_read += r4.cache_read;
-      d5.cache_creation += r4.cache_creation;
-      d5.reasoning_output += r4.reasoning_output;
-      d5.cost += r4.cost;
-    }
-    const daily = Object.values(dailyMap).sort((a4, b4) => a4.day.localeCompare(b4.day));
-    const modelMap = {};
-    for (const r4 of filteredDaily) {
-      const m4 = modelMap[r4.model] ?? (modelMap[r4.model] = {
-        model: r4.model,
-        input: 0,
-        output: 0,
-        cache_read: 0,
-        cache_creation: 0,
-        reasoning_output: 0,
-        turns: 0,
-        sessions: 0,
-        cost: 0,
-        is_billable: r4.cost > 0,
-        input_cost: 0,
-        output_cost: 0,
-        cache_read_cost: 0,
-        cache_write_cost: 0,
-        credits: null
-      });
-      m4.input += r4.input;
-      m4.output += r4.output;
-      m4.cache_read += r4.cache_read;
-      m4.cache_creation += r4.cache_creation;
-      m4.reasoning_output += r4.reasoning_output;
-      m4.turns += r4.turns;
-      m4.cost += r4.cost;
-      if (r4.cost > 0) m4.is_billable = true;
-      m4.input_cost = (m4.input_cost ?? 0) + (r4.input_cost ?? 0);
-      m4.output_cost = (m4.output_cost ?? 0) + (r4.output_cost ?? 0);
-      m4.cache_read_cost = (m4.cache_read_cost ?? 0) + (r4.cache_read_cost ?? 0);
-      m4.cache_write_cost = (m4.cache_write_cost ?? 0) + (r4.cache_write_cost ?? 0);
-      if (r4.credits != null) {
-        m4.credits = (m4.credits ?? 0) + r4.credits;
-      }
-    }
-    for (const s4 of filteredSessions) {
-      const m4 = modelMap[s4.model];
-      if (m4) m4.sessions++;
-    }
-    const byModel = Object.values(modelMap).sort((a4, b4) => b4.input + b4.output - (a4.input + a4.output));
-    const projMap = {};
-    for (const s4 of filteredSessions) {
-      const p5 = projMap[s4.project] ?? (projMap[s4.project] = {
-        project: s4.project,
-        display_name: s4.display_name || s4.project,
-        input: 0,
-        output: 0,
-        cache_read: 0,
-        cache_creation: 0,
-        reasoning_output: 0,
-        turns: 0,
-        sessions: 0,
-        cost: 0,
-        credits: null
-      });
-      p5.input += s4.input;
-      p5.output += s4.output;
-      p5.cache_read += s4.cache_read;
-      p5.cache_creation += s4.cache_creation;
-      p5.reasoning_output += s4.reasoning_output;
-      p5.turns += s4.turns;
-      p5.sessions++;
-      p5.cost += s4.cost;
-      if (s4.credits != null) {
-        p5.credits = (p5.credits ?? 0) + s4.credits;
-      }
-    }
-    const byProject = Object.values(projMap).sort((a4, b4) => b4.input + b4.output - (a4.input + a4.output));
-    const totals = {
-      sessions: filteredSessions.length,
-      turns: filteredSessions.reduce((s4, sess) => s4 + sess.turns, 0),
-      input: filteredSessions.reduce((s4, sess) => s4 + sess.input, 0),
-      output: filteredSessions.reduce((s4, sess) => s4 + sess.output, 0),
-      cache_read: filteredSessions.reduce((s4, sess) => s4 + sess.cache_read, 0),
-      cache_creation: filteredSessions.reduce((s4, sess) => s4 + sess.cache_creation, 0),
-      reasoning_output: filteredSessions.reduce((s4, sess) => s4 + sess.reasoning_output, 0),
-      cost: filteredSessions.reduce((s4, sess) => s4 + sess.cost, 0)
-    };
-    const confidenceBreakdown = Object.entries(
-      filteredSessions.reduce((acc, session) => {
-        const key = session.cost_confidence || "low";
-        if (!acc[key]) acc[key] = { sessions: 0, cost: 0 };
-        acc[key].sessions += 1;
-        acc[key].cost += session.cost;
-        return acc;
-      }, {})
-    ).sort(([a4], [b4]) => confidenceRank(a4) - confidenceRank(b4));
-    const billingModeBreakdown = Object.entries(
-      filteredSessions.reduce((acc, session) => {
-        const key = session.billing_mode || "estimated_local";
-        if (!acc[key]) acc[key] = { sessions: 0, cost: 0 };
-        acc[key].sessions += 1;
-        acc[key].cost += session.cost;
-        return acc;
-      }, {})
-    ).sort((a4, b4) => b4[1].sessions - a4[1].sessions);
-    const pricingVersions = Array.from(
-      new Set(filteredSessions.map((session) => session.pricing_version).filter(Boolean))
-    );
-    return { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions };
-  }
-  function confidenceRank(confidence) {
-    switch (confidence) {
-      case "low":
-        return 0;
-      case "medium":
-        return 1;
-      case "high":
-        return 2;
-      default:
-        return 3;
-    }
-  }
-  function renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions) {
-    const container = $2("estimation-meta");
-    if (!container) return;
-    if (!confidenceBreakdown.length && !billingModeBreakdown.length && !pricingVersions.length) {
-      setSectionVisibility("estimation-meta", false, "grid");
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("estimation-meta", true, "grid");
-    R(
-      /* @__PURE__ */ u2(
-        EstimationMeta,
-        {
-          confidenceBreakdown,
-          billingModeBreakdown,
-          pricingVersions
-        }
-      ),
-      container
-    );
-  }
-  function renderOpenAiReconciliation(reconciliation) {
-    const container = $2("openai-reconciliation");
-    if (!container) return;
-    if (!reconciliation) {
-      setSectionVisibility("openai-reconciliation", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("openai-reconciliation", true);
-    R(/* @__PURE__ */ u2(ReconciliationBlock, { reconciliation }), container);
-  }
-  function renderOfficialSync(summary) {
-    const container = $2("official-sync");
-    if (!container) return;
-    if (!summary?.available) {
-      setSectionVisibility("official-sync", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("official-sync", true);
-    R(
-      /* @__PURE__ */ u2(
-        OfficialSyncPanel,
-        {
-          summary,
-          providerFilter: selectedProvider.value
-        }
-      ),
-      container
-    );
-  }
-  function applyFilter() {
-    if (!rawData.value) return;
-    const cutoff = getRangeCutoff(selectedRange.value);
-    const filteredDaily = rawData.value.daily_by_model.filter(
-      (r4) => selectedModels.value.has(r4.model) && (!cutoff || r4.day >= cutoff) && matchesProvider(r4)
-    );
-    const filteredSessions = rawData.value.sessions_all.filter(
-      (s4) => selectedModels.value.has(s4.model) && (!cutoff || s4.last_date >= cutoff) && matchesProjectSearch(s4.project, s4.display_name) && matchesProvider(s4)
-    );
-    const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } = buildAggregations(filteredDaily, filteredSessions);
-    const providerLabel = selectedProvider.value === "both" ? "" : ` (${selectedProvider.value})`;
-    const bucketIsWeek = selectedBucket.value === "week";
-    const activeDays = daily.filter((day) => day.cost > 0).length;
-    const activeDayCostNanos = Math.round(
-      daily.reduce((sum2, day) => sum2 + day.cost, 0) * 1e9
-    );
-    const chartTitleEl = $2("daily-chart-title");
-    if (chartTitleEl) {
-      chartTitleEl.textContent = (bucketIsWeek ? "Weekly Token Usage - " : "Daily Token Usage - ") + RANGE_LABELS[selectedRange.value] + providerLabel;
-    }
-    R(
-      /* @__PURE__ */ u2(
-        StatsCards,
-        {
-          totals,
-          daily,
-          activeDays,
-          activeDayTotalCostNanos: activeDayCostNanos,
-          cacheEfficiency: rawData.value?.cache_efficiency,
-          billingBlocks: billingBlocksData.value,
-          contextWindow: contextWindowData.value
-        }
-      ),
-      $2("stats-row")
-    );
-    setSectionVisibility("stats-row", true, "grid");
-    renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
-    renderOfficialSync(rawData.value.official_sync);
-    renderOpenAiReconciliation(rawData.value.openai_reconciliation);
-    if (bucketIsWeek) {
-      const weekly = buildWeeklyAgg(selectedRange.value);
-      R(/* @__PURE__ */ u2(WeeklyChart, { weekly }), $2("chart-daily"));
-      setSectionVisibility("daily-chart-card", weekly.length > 0);
-    } else {
-      R(/* @__PURE__ */ u2(DailyChart, { daily }), $2("chart-daily"));
-      setSectionVisibility("daily-chart-card", daily.length > 0);
-    }
-    R(/* @__PURE__ */ u2(ModelChart, { byModel, onSelectModel: focusSingleModel }), $2("chart-model"));
-    R(/* @__PURE__ */ u2(ProjectChart, { byProject, onSelectProject: (project) => focusProjectQuery(project.display_name || project.project) }), $2("chart-project"));
-    setSectionVisibility("model-chart-card", byModel.length > 0);
-    setSectionVisibility("project-chart-card", byProject.length > 0);
-    lastFilteredSessions.value = filteredSessions;
-    lastByProject.value = byProject;
-    R(/* @__PURE__ */ u2(ModelCostTable, { byModel, onSelectModel: focusSingleModel }), $2("model-cost-mount"));
-    R(
-      /* @__PURE__ */ u2(
-        SessionsTable,
-        {
-          onExportCSV: exportSessionsCSV,
-          onSelectProject: (session) => focusProjectQuery(session.display_name || session.project),
-          onSelectModel: focusSingleModel
-        }
-      ),
-      $2("sessions-mount")
-    );
-    R(
-      /* @__PURE__ */ u2(
-        ProjectCostTable,
-        {
-          byProject: lastByProject.value.slice(0, 30),
-          onExportCSV: exportProjectsCSV,
-          onSelectProject: (project) => focusProjectQuery(project.display_name || project.project)
-        }
-      ),
-      $2("project-cost-mount")
-    );
-    setSectionVisibility("model-cost-mount", byModel.length > 0);
-    setSectionVisibility("sessions-mount", filteredSessions.length > 0);
-    setSectionVisibility("project-cost-mount", lastByProject.value.length > 0);
-    if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
-    renderEntrypointBreakdown((rawData.value.entrypoint_breakdown ?? []).filter(matchesProvider));
-    renderServiceTiers((rawData.value.service_tiers ?? []).filter(matchesProvider));
-    renderToolSummary((rawData.value.tool_summary ?? []).filter(matchesProvider));
-    renderMcpSummary((rawData.value.mcp_summary ?? []).filter(matchesProvider));
-    renderBranchSummary((rawData.value.git_branch_summary ?? []).filter(matchesProvider));
-    renderVersionSummary((rawData.value.version_summary ?? []).filter(matchesProvider));
-    renderHourlyChart((rawData.value.hourly_distribution ?? []).filter(matchesProvider));
-    refreshSectionVisibility();
-  }
   function exportSessionsCSV() {
-    const header = ["Session", "Provider", "Project", "Last Active", "Duration (min)", "Model", "Turns", "Input", "Output", "Cached Input", "Cache Creation", "Reasoning Output", "Est. Cost"];
-    const rows = lastFilteredSessions.value.map((s4) => {
-      const cost = s4.cost;
-      return [s4.session_id, s4.provider, s4.project, s4.last, s4.duration_min, s4.model, s4.turns, s4.input, s4.output, s4.cache_read, s4.cache_creation, s4.reasoning_output, cost.toFixed(4)];
-    });
+    const header = [
+      "Session",
+      "Provider",
+      "Project",
+      "Last Active",
+      "Duration (min)",
+      "Model",
+      "Turns",
+      "Input",
+      "Output",
+      "Cached Input",
+      "Cache Creation",
+      "Reasoning Output",
+      "Est. Cost"
+    ];
+    const rows = rawData.value ? rawData.value.sessions_all.filter((session) => selectedModels.value.has(session.model)).map((session) => [
+      session.session_id,
+      session.provider,
+      session.project,
+      session.last,
+      session.duration_min,
+      session.model,
+      session.turns,
+      session.input,
+      session.output,
+      session.cache_read,
+      session.cache_creation,
+      session.reasoning_output,
+      session.cost.toFixed(4)
+    ]) : [];
     downloadCSV("sessions", header, rows);
   }
   function exportProjectRowsCSV(filename, rowsData) {
-    const header = ["Project", "Sessions", "Turns", "Input", "Output", "Cached Input", "Cache Creation", "Reasoning Output", "Est. Cost"];
-    const rows = rowsData.map(
-      (p5) => [p5.project, p5.sessions, p5.turns, p5.input, p5.output, p5.cache_read, p5.cache_creation, p5.reasoning_output, p5.cost.toFixed(4)]
-    );
+    const header = [
+      "Project",
+      "Sessions",
+      "Turns",
+      "Input",
+      "Output",
+      "Cached Input",
+      "Cache Creation",
+      "Reasoning Output",
+      "Est. Cost"
+    ];
+    const rows = rowsData.map((project) => [
+      project.project,
+      project.sessions,
+      project.turns,
+      project.input,
+      project.output,
+      project.cache_read,
+      project.cache_creation,
+      project.reasoning_output,
+      project.cost.toFixed(4)
+    ]);
     downloadCSV(filename, header, rows);
   }
   function exportProjectsCSV() {
-    exportProjectRowsCSV("projects", lastByProject.value);
-  }
-  function renderUsageWindows(data) {
-    const container = $2("usage-windows");
-    if (!container) return;
-    if (!data.available) {
-      planBadge.value = "";
-      if (data.error) {
-        setSectionVisibility("usage-windows", true, "grid");
-        R(/* @__PURE__ */ u2(RateWindowUnavailable, { error: data.error }), container);
-      } else {
-        setSectionVisibility("usage-windows", false, "grid");
-        R(null, container);
+    const byProject = rawData.value ? rawData.value.sessions_all.reduce((acc, session) => {
+      if (!selectedModels.value.has(session.model)) return acc;
+      const current = acc.get(session.project) ?? {
+        project: session.project,
+        display_name: session.display_name || session.project,
+        input: 0,
+        output: 0,
+        cache_read: 0,
+        cache_creation: 0,
+        reasoning_output: 0,
+        turns: 0,
+        sessions: 0,
+        cost: 0,
+        credits: null
+      };
+      current.input += session.input;
+      current.output += session.output;
+      current.cache_read += session.cache_read;
+      current.cache_creation += session.cache_creation;
+      current.reasoning_output += session.reasoning_output;
+      current.turns += session.turns;
+      current.sessions += 1;
+      current.cost += session.cost;
+      if (session.credits != null) {
+        current.credits = (current.credits ?? 0) + session.credits;
       }
-      return;
-    }
-    setSectionVisibility("usage-windows", true, "grid");
-    R(
-      /* @__PURE__ */ u2(S, { children: [
-        data.session && /* @__PURE__ */ u2(RateWindowCard, { label: "Session (5h)", window: data.session }),
-        data.weekly && /* @__PURE__ */ u2(RateWindowCard, { label: "Weekly", window: data.weekly }),
-        data.weekly_opus && /* @__PURE__ */ u2(RateWindowCard, { label: "Weekly Opus", window: data.weekly_opus }),
-        data.weekly_sonnet && /* @__PURE__ */ u2(RateWindowCard, { label: "Weekly Sonnet", window: data.weekly_sonnet }),
-        data.budget && /* @__PURE__ */ u2(
-          BudgetCard,
-          {
-            used: data.budget.used,
-            limit: data.budget.limit,
-            currency: data.budget.currency,
-            utilization: data.budget.utilization
-          }
-        ),
-        /* @__PURE__ */ u2("div", { style: { gridColumn: "1 / -1" }, children: /* @__PURE__ */ u2(InlineStatus, { placement: "rate-windows" }) })
-      ] }),
-      container
+      acc.set(session.project, current);
+      return acc;
+    }, /* @__PURE__ */ new Map()) : /* @__PURE__ */ new Map();
+    exportProjectRowsCSV(
+      "projects",
+      Array.from(byProject.values()).sort(
+        (left, right) => right.input + right.output - (left.input + left.output)
+      )
     );
-    if (data.session) {
-      const currentPercent = 100 - data.session.used_percent;
-      if (previousSessionPercent !== null) {
-        if (previousSessionPercent > 0.01 && currentPercent <= 0.01) {
-          setStatus(
-            "rate-windows",
-            "error",
-            "Session depleted \u2014 resets in " + (data.session.resets_in_minutes ?? 0) + "m"
-          );
-        } else if (previousSessionPercent <= 0.01 && currentPercent > 0.01) {
-          setStatus("rate-windows", "success", "Session restored", 4e3);
-        }
-      }
-      previousSessionPercent = currentPercent;
-    }
-    planBadge.value = data.identity?.plan ? data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1) : "";
-  }
-  function renderClaudeUsage(data) {
-    const container = $2("claude-usage");
-    if (!container) return;
-    if (!data.last_run && !data.latest_snapshot) {
-      setSectionVisibility("claude-usage", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("claude-usage", true);
-    R(/* @__PURE__ */ u2(ClaudeUsagePanel, { data }), container);
-  }
-  function renderSubagentSummary(summary) {
-    const container = $2("subagent-summary");
-    if (!container) return;
-    if (summary.subagent_turns === 0) {
-      setSectionVisibility("subagent-summary", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("subagent-summary", true);
-    R(/* @__PURE__ */ u2(SubagentSummary, { summary }), container);
-  }
-  function renderEntrypointBreakdown(data) {
-    const container = $2("entrypoint-breakdown");
-    if (!container) return;
-    if (!data.length) {
-      setSectionVisibility("entrypoint-breakdown", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("entrypoint-breakdown", true);
-    R(/* @__PURE__ */ u2(EntrypointTable, { data }), container);
-  }
-  function renderServiceTiers(data) {
-    const container = $2("service-tiers");
-    if (!container) return;
-    if (!data.length) {
-      setSectionVisibility("service-tiers", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("service-tiers", true);
-    R(/* @__PURE__ */ u2(ServiceTiersTable, { data }), container);
-  }
-  function renderToolSummary(data) {
-    const container = $2("tool-summary");
-    if (!container) return;
-    if (!data.length) {
-      setSectionVisibility("tool-summary", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("tool-summary", true);
-    R(/* @__PURE__ */ u2(ToolUsageTable, { data }), container);
-  }
-  function renderMcpSummary(data) {
-    const container = $2("mcp-summary");
-    if (!container) return;
-    if (!data.length) {
-      setSectionVisibility("mcp-summary", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("mcp-summary", true);
-    R(/* @__PURE__ */ u2(McpSummaryTable, { data }), container);
-  }
-  function renderBranchSummary(data) {
-    const container = $2("branch-summary");
-    if (!container) return;
-    if (!data.length) {
-      setSectionVisibility("branch-summary", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("branch-summary", true);
-    R(/* @__PURE__ */ u2(BranchTable, { data }), container);
-  }
-  function renderVersionSummary(data) {
-    const container = $2("version-summary");
-    if (!container) return;
-    if (!data.length) {
-      setSectionVisibility("version-summary", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("version-summary", true);
-    const handleMetricChange = (next) => {
-      versionDonutMetric.value = next;
-      syncDashboardUrl();
-      renderVersionSummary(data);
-    };
-    const collapsed = isSectionCollapsed("version-summary");
-    const toggleCollapsed = () => {
-      setSectionCollapsed("version-summary", !collapsed);
-      syncDashboardUrl();
-      renderVersionSummary(data);
-    };
-    R(
-      /* @__PURE__ */ u2("div", { class: "table-card", children: [
-        /* @__PURE__ */ u2("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: [
-          /* @__PURE__ */ u2("h2", { class: "section-title", style: { margin: 0 }, children: "CLI Versions" }),
-          /* @__PURE__ */ u2("div", { class: "section-actions", children: /* @__PURE__ */ u2(
-            "button",
-            {
-              class: "section-toggle",
-              type: "button",
-              "aria-expanded": !collapsed,
-              "aria-controls": "version-summary-content",
-              onClick: toggleCollapsed,
-              children: collapsed ? "Show" : "Hide"
-            }
-          ) })
-        ] }),
-        !collapsed && /* @__PURE__ */ u2("div", { id: "version-summary-content", style: { display: "flex", gap: "24px", alignItems: "flex-start", flexWrap: "wrap", padding: "20px" }, children: [
-          /* @__PURE__ */ u2("div", { style: { flex: "1 1 260px", minWidth: "220px", height: "300px" }, children: /* @__PURE__ */ u2(
-            VersionDonut,
-            {
-              rows: data,
-              metric: versionDonutMetric.value,
-              onMetricChange: handleMetricChange
-            }
-          ) }),
-          /* @__PURE__ */ u2("div", { style: { flex: "2 1 320px", minWidth: "280px" }, children: /* @__PURE__ */ u2(VersionTable, { data, title: null }) })
-        ] })
-      ] }),
-      container
-    );
-  }
-  function renderHourlyChart(data) {
-    const container = $2("hourly-chart");
-    if (!container) return;
-    if (!data.length) {
-      setSectionVisibility("hourly-chart", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("hourly-chart", true);
-    R(/* @__PURE__ */ u2(HourlyChart, { data }), container);
-  }
-  function renderActivityHeatmap(data) {
-    const container = $2("activity-heatmap");
-    if (!container) return;
-    if (!data) {
-      setSectionVisibility("activity-heatmap", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("activity-heatmap", true);
-    R(/* @__PURE__ */ u2(ActivityHeatmap, { data }), container);
   }
   async function loadUsageWindows() {
     if (loadUsageWindowsInFlight) return;
@@ -8296,7 +8393,22 @@ ${row.project}` : row.project;
       const resp = await fetch("/api/usage-windows");
       if (!resp.ok) return;
       const data = await resp.json();
-      renderUsageWindows(data);
+      renderUsageWindows(
+        data,
+        previousSessionPercent,
+        (value) => {
+          previousSessionPercent = value;
+        },
+        (message, isError = false) => {
+          setStatus(
+            "rate-windows",
+            isError ? "error" : "success",
+            message,
+            isError ? void 0 : 4e3
+          );
+        },
+        () => clearStatus("rate-windows")
+      );
     } catch {
     } finally {
       loadUsageWindowsInFlight = false;
@@ -8315,12 +8427,6 @@ ${row.project}` : row.project;
       loadClaudeUsageInFlight = false;
     }
   }
-  function renderAgentStatus(snapshot) {
-    const container = $2("agent-status");
-    if (!container) return;
-    setSectionVisibility("agent-status", true, "grid");
-    R(/* @__PURE__ */ u2(AgentStatusCard, { snapshot, communitySignal: lastCommunitySignal }), container);
-  }
   async function loadAgentStatus() {
     if (loadAgentStatusInFlight) return;
     loadAgentStatusInFlight = true;
@@ -8328,7 +8434,8 @@ ${row.project}` : row.project;
       const resp = await fetch("/api/agent-status");
       if (!resp.ok) return;
       const data = await resp.json();
-      renderAgentStatus(data);
+      lastAgentStatusSnapshot = data;
+      renderAgentStatus(data, lastCommunitySignal);
     } catch {
     } finally {
       loadAgentStatusInFlight = false;
@@ -8342,12 +8449,8 @@ ${row.project}` : row.project;
       if (!resp.ok) return;
       const data = await resp.json();
       lastCommunitySignal = data.enabled ? data : null;
-      const container = $2("agent-status");
-      if (container && container.style.display !== "none") {
-        const existing = container.querySelector("[aria-label]");
-        if (existing) {
-          loadAgentStatus();
-        }
+      if (lastAgentStatusSnapshot) {
+        renderAgentStatus(lastAgentStatusSnapshot, lastCommunitySignal);
       }
     } catch {
     } finally {
@@ -8408,18 +8511,6 @@ ${row.project}` : row.project;
       loadCostReconciliationInFlight = false;
     }
   }
-  function renderCostReconciliation() {
-    const container = $2("cost-reconciliation");
-    if (!container) return;
-    const data = costReconciliationData.value;
-    if (!data || !data.enabled) {
-      setSectionVisibility("cost-reconciliation", false);
-      R(null, container);
-      return;
-    }
-    setSectionVisibility("cost-reconciliation", true);
-    R(/* @__PURE__ */ u2(CostReconciliationPanel, { data }), container);
-  }
   async function loadHeatmap(period = "month") {
     if (loadHeatmapInFlight) return;
     loadHeatmapInFlight = true;
@@ -8450,21 +8541,19 @@ ${row.project}` : row.project;
         setStatus("global", "error", `Failed to load data: HTTP ${resp.status}`);
         return;
       }
-      const d5 = await resp.json();
-      if (d5.error) {
-        setStatus("global", "error", d5.error);
+      const data = await resp.json();
+      if (data.error) {
+        setStatus("global", "error", data.error);
         return;
       }
       clearStatus("global");
       clearStatus("header-refresh");
-      metaText.value = "Updated: " + d5.generated_at + " \xB7 Auto-refresh 30s";
-      const isFirstLoad = rawData.value === null;
-      rawData.value = d5;
-      if (isFirstLoad) {
-        restoreDashboardStateFromUrl(d5.all_models);
+      rawData.value = data;
+      if (isSubsequentFetch === false) {
+        restoreDashboardStateFromUrl(data.all_models);
       }
       applyFilter();
-    } catch (e4) {
+    } catch {
       setStatus("global", "error", "Network error loading data");
       clearStatus("header-refresh");
     } finally {
@@ -8474,23 +8563,26 @@ ${row.project}` : row.project;
   }
   var headerMount = document.getElementById("header-mount");
   if (headerMount) {
-    R(/* @__PURE__ */ u2(Header, { onDataReload: loadData, onThemeToggle: toggleTheme }), headerMount);
+    R(/* @__PURE__ */ u4(Header, { onDataReload: loadData, onThemeToggle: toggleTheme }), headerMount);
   }
   var filterBarMount = document.getElementById("filter-bar-mount");
   if (filterBarMount) {
-    R(/* @__PURE__ */ u2(FilterBar, { onFilterChange: applyFilter, onURLUpdate: syncDashboardUrl }), filterBarMount);
+    R(
+      /* @__PURE__ */ u4(FilterBar, { onFilterChange: applyFilter, onURLUpdate: syncDashboardUrl }),
+      filterBarMount
+    );
   }
   var dashboardTabsMount = document.getElementById("dashboard-tabs-mount");
   if (dashboardTabsMount) {
-    R(/* @__PURE__ */ u2(DashboardTabs, { onTabChange: handleDashboardTabChange }), dashboardTabsMount);
+    R(/* @__PURE__ */ u4(DashboardTabs, { onTabChange: handleDashboardTabChange }), dashboardTabsMount);
   }
   var footerEl = document.querySelector("footer");
-  if (footerEl && footerEl.parentElement) {
-    R(/* @__PURE__ */ u2(Footer, {}), footerEl.parentElement, footerEl);
+  if (footerEl?.parentElement) {
+    R(/* @__PURE__ */ u4(Footer, {}), footerEl.parentElement, footerEl);
   }
   var globalStatusMount = document.getElementById("inline-status-global");
   if (globalStatusMount) {
-    R(/* @__PURE__ */ u2(InlineStatus, { placement: "global" }), globalStatusMount);
+    R(/* @__PURE__ */ u4(InlineStatus, { placement: "global" }), globalStatusMount);
   }
   window.addEventListener("popstate", () => {
     if (!rawData.value) return;

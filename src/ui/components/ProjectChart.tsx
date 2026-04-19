@@ -1,4 +1,5 @@
 import { ApexChart } from './ApexChart';
+import type { ApexDataPointSelectionConfig, ApexTooltipFormatterContext } from '../lib/apex';
 import { industrialChartOptions, tokenSeriesColors } from '../lib/charts';
 import { fmt, truncateMid } from '../lib/format';
 import type { ProjectAgg } from '../state/types';
@@ -31,32 +32,40 @@ export function ProjectChart({
     chart: {
       ...base.chart,
       type: 'bar',
-      events: onSelectProject ? {
-        dataPointSelection: (_event: unknown, _ctx: unknown, config: { dataPointIndex: number }) => {
-          const row = top[config.dataPointIndex];
-          if (row) onSelectProject(row);
-        },
-      } : undefined,
+      ...(onSelectProject
+        ? {
+            events: {
+              dataPointSelection: (
+                _event: unknown,
+                _ctx: unknown,
+                config: ApexDataPointSelectionConfig
+              ) => {
+                const row = top[config.dataPointIndex];
+                if (row) onSelectProject(row);
+              },
+            },
+          }
+        : {}),
     },
     series: [{ name: 'Share of top', data: shares }],
-    colors: [colors[0]],
+    colors: [colors[0] ?? 'currentColor'],
     fill: { type: 'solid' },
     plotOptions: { bar: { horizontal: true, barHeight: '60%', borderRadius: 0 } },
     xaxis: {
-      ...base.xaxis,
+      ...(base.xaxis ?? {}),
       categories: top.map(p => truncateMid(p.display_name || p.project, 18, 8)),
       min: 0,
       max: 100,
       tickAmount: 4,
       labels: {
-        ...base.xaxis.labels,
+        ...(base.xaxis?.labels ?? {}),
         formatter: (v: number) => `${Math.round(v)}%`,
         hideOverlappingLabels: true,
       },
     },
     yaxis: {
-      ...base.yaxis,
-      labels: { ...base.yaxis.labels, maxWidth: 120 },
+      ...(base.yaxis ?? {}),
+      labels: { ...(base.yaxis?.labels ?? {}), maxWidth: 120 },
     },
     // Anchor the tooltip to the plot's bottom-left so it cannot cover the
     // card's "TOP PROJECTS" title during hover.
@@ -65,7 +74,7 @@ export function ProjectChart({
       fixed: { enabled: true, position: 'bottomLeft', offsetX: 0, offsetY: 0 },
       y: {
         // Display the raw token count per project regardless of bar scale.
-        formatter: (_v: number, opts: any) => {
+        formatter: (_v: number, opts?: ApexTooltipFormatterContext) => {
           const raw = totals[opts?.dataPointIndex ?? 0] ?? 0;
           return fmt(raw) + ' tokens';
         },

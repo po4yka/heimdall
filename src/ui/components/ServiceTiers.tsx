@@ -3,7 +3,7 @@ import { fmt } from '../lib/format';
 import type { ServiceTierSummary } from '../state/types';
 import { DataTable } from './DataTable';
 
-const columns: ColumnDef<ServiceTierSummary, any>[] = [
+const columns: ColumnDef<ServiceTierSummary, unknown>[] = [
   { accessorKey: 'provider', header: 'Provider',
     cell: ({ getValue }) => <span class="model-tag">{String(getValue()).toUpperCase()}</span> },
   { accessorKey: 'service_tier', header: 'Tier' },

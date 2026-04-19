@@ -1,10 +1,13 @@
 import { useRef, useEffect } from 'preact/hooks';
+import type {
+  ApexChartConstructor,
+  ApexChartInstance,
+  ApexOptions,
+} from '../lib/apex';
 
-declare const ApexCharts: any;
-
-export function ApexChart({ options, id }: { options: any; id?: string }) {
+export function ApexChart({ options, id }: { options: ApexOptions; id?: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
+  const chartRef = useRef<ApexChartInstance | null>(null);
 
   // Recreate the chart on every options identity change so labels,
   // callbacks, and closure-backed tooltip data stay in sync.
@@ -23,12 +26,15 @@ export function ApexChart({ options, id }: { options: any; id?: string }) {
     let cancelled = false;
     const raf = requestAnimationFrame(() => {
       if (cancelled || !ref.current) return;
+      const apexCharts = (window as Window & { ApexCharts?: ApexChartConstructor })
+        .ApexCharts;
+      if (!apexCharts) return;
       const parent = ref.current.parentElement;
       let h = parent?.clientHeight ?? 0;
       if (h <= 0) h = parent?.classList.contains('tall') ? 300 : 240;
       const opts = { ...options, chart: { ...options.chart, height: h } };
-      chartRef.current = new ApexCharts(ref.current, opts);
-      chartRef.current.render();
+      chartRef.current = new apexCharts(ref.current, opts);
+      void chartRef.current.render();
     });
     return () => {
       cancelled = true;

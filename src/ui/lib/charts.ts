@@ -1,3 +1,4 @@
+import type { ApexOptions } from './apex';
 import type { RangeKey } from '../state/types';
 
 // ── Time range ─────────────────────────────────────────────────────────
@@ -59,7 +60,7 @@ export function modelSeriesColors(n: number): string[] {
 }
 
 // ── Industrial base ApexCharts options ────────────────────────────────
-export function industrialChartOptions(type: 'bar' | 'donut' | 'line'): any {
+export function industrialChartOptions(type: 'bar' | 'donut' | 'line'): ApexOptions {
   const axisLabelStyle = {
     colors: cssVar('--text-secondary'),
     fontFamily: 'var(--font-mono), "Space Mono", monospace',
@@ -67,7 +68,7 @@ export function industrialChartOptions(type: 'bar' | 'donut' | 'line'): any {
     letterSpacing: '0.04em',
   };
 
-  const base: any = {
+  const base: ApexOptions = {
     chart: {
       type,
       height: '100%',
@@ -109,7 +110,7 @@ export function industrialChartOptions(type: 'bar' | 'donut' | 'line'): any {
   };
 
   if (type === 'line') {
-    base.legend.show = false;
+    if (base.legend) base.legend.show = false;
     base.fill = { type: 'solid', opacity: 0 };
   }
 

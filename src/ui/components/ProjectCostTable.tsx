@@ -1,5 +1,9 @@
 import { useMemo } from 'preact/hooks';
-import { type ColumnDef, type SortingState } from '@tanstack/table-core';
+import {
+  type CellContext,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/table-core';
 import { fmt, fmtCost, anyHasCredits, fmtCredits } from '../lib/format';
 import type { ProjectAgg } from '../state/types';
 
@@ -10,7 +14,7 @@ const defaultSort: SortingState = [{ id: 'cost', desc: true }];
 function useProjectColumns(
   showCredits: boolean,
   onSelectProject?: ((project: ProjectAgg) => void) | undefined,
-): ColumnDef<ProjectAgg, any>[] {
+): ColumnDef<ProjectAgg, unknown>[] {
   return useMemo(
     () => [
       {
@@ -18,7 +22,7 @@ function useProjectColumns(
         accessorKey: 'project',
         header: 'Project',
         enableSorting: false,
-        cell: (info: any) => {
+        cell: (info: CellContext<ProjectAgg, unknown>) => {
           const row = info.row.original as ProjectAgg;
           const label = row.display_name || row.project;
           if (!onSelectProject) return <span title={row.project}>{label}</span>;
@@ -38,38 +42,48 @@ function useProjectColumns(
         id: 'sessions',
         accessorKey: 'sessions',
         header: 'Sessions',
-        cell: (info: any) => <span class="num">{info.getValue()}</span>,
+        cell: (info: CellContext<ProjectAgg, unknown>) => (
+          <span class="num">{Number(info.getValue() ?? 0)}</span>
+        ),
       },
       {
         id: 'turns',
         accessorKey: 'turns',
         header: 'Turns',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<ProjectAgg, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'input',
         accessorKey: 'input',
         header: 'Input',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<ProjectAgg, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'output',
         accessorKey: 'output',
         header: 'Output',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<ProjectAgg, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'cost',
         accessorKey: 'cost',
         header: 'Est. Cost',
-        cell: (info: any) => <span class="cost">{fmtCost(info.getValue())}</span>,
+        cell: (info: CellContext<ProjectAgg, unknown>) => (
+          <span class="cost">{fmtCost(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       ...(showCredits ? [{
         id: 'credits',
         accessorFn: (row: ProjectAgg) => row.credits ?? null,
         header: 'Credits',
         sortUndefined: 'last' as const,
-        cell: (info: any) => {
+        cell: (info: CellContext<ProjectAgg, unknown>) => {
           const v = info.getValue() as number | null;
           return <span class="num">{fmtCredits(v)}</span>;
         },

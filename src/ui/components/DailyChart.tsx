@@ -19,14 +19,14 @@ export function DailyChart({ daily }: { daily: DailyAgg[] }) {
     fill: { type: 'solid' },
     plotOptions: { bar: { columnWidth: '70%', borderRadius: 0 } },
     xaxis: {
-      ...base.xaxis,
+      ...(base.xaxis ?? {}),
       categories: daily.map(d => d.day),
-      labels: { ...base.xaxis.labels, rotate: -45, maxHeight: 60 },
+      labels: { ...(base.xaxis?.labels ?? {}), rotate: -45, maxHeight: 60 },
       tickAmount: Math.min(daily.length, RANGE_TICKS[selectedRange.value]),
     },
     yaxis: {
-      ...base.yaxis,
-      labels: { ...base.yaxis.labels, formatter: (v: number) => fmt(v) },
+      ...(base.yaxis ?? {}),
+      labels: { ...(base.yaxis?.labels ?? {}), formatter: (v: number) => fmt(v) },
     },
     tooltip: { ...base.tooltip, y: { formatter: (v: number) => fmt(v) + ' tokens' } },
   };

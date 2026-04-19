@@ -1,5 +1,11 @@
 import { useMemo } from 'preact/hooks';
-import { type ColumnDef, type SortingState, type PaginationState, type VisibilityState } from '@tanstack/table-core';
+import {
+  type CellContext,
+  type ColumnDef,
+  type PaginationState,
+  type SortingState,
+  type VisibilityState,
+} from '@tanstack/table-core';
 import { fmt, fmtCost, anyHasCredits, fmtCredits } from '../lib/format';
 import {
   lastFilteredSessions,
@@ -35,7 +41,7 @@ function useSessionColumns(
   showCredits: boolean,
   onSelectProject?: ((row: SessionRow) => void) | undefined,
   onSelectModel?: ((model: string) => void) | undefined,
-): ColumnDef<SessionRow, any>[] {
+): ColumnDef<SessionRow, unknown>[] {
   return useMemo(
     () => [
       {
@@ -43,7 +49,7 @@ function useSessionColumns(
         accessorKey: 'session_id',
         header: 'Session',
         enableSorting: false,
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const row = info.row.original as SessionRow;
           const title = row.title?.trim();
           const sessionId = String(info.getValue());
@@ -67,7 +73,7 @@ function useSessionColumns(
         accessorKey: 'project',
         header: 'Project',
         enableSorting: false,
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const row = info.row.original as SessionRow;
           const label = row.display_name || row.project;
           const showProjectPath = label !== row.project;
@@ -98,7 +104,7 @@ function useSessionColumns(
         accessorKey: 'provider',
         header: 'Provider',
         enableSorting: false,
-        cell: (info: any) => (
+        cell: (info: CellContext<SessionRow, unknown>) => (
           <span class="model-tag">{String(info.getValue()).toUpperCase()}</span>
         ),
       },
@@ -106,20 +112,24 @@ function useSessionColumns(
         id: 'last',
         accessorKey: 'last',
         header: 'Last Active',
-        cell: (info: any) => <span class="muted">{info.getValue()}</span>,
+        cell: (info: CellContext<SessionRow, unknown>) => (
+          <span class="muted">{String(info.getValue() ?? '')}</span>
+        ),
       },
       {
         id: 'duration_min',
         accessorKey: 'duration_min',
         header: 'Duration',
-        cell: (info: any) => <span class="muted">{info.getValue()}m</span>,
+        cell: (info: CellContext<SessionRow, unknown>) => (
+          <span class="muted">{Number(info.getValue() ?? 0)}m</span>
+        ),
       },
       {
         id: 'model',
         accessorKey: 'model',
         header: 'Model',
         enableSorting: false,
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const model = String(info.getValue());
           if (!onSelectModel) return <span class="model-tag">{model}</span>;
           return (
@@ -133,11 +143,11 @@ function useSessionColumns(
         id: 'turns',
         accessorKey: 'turns',
         header: 'Turns',
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const row = info.row.original as SessionRow;
           return (
             <span class="num">
-              {fmt(info.getValue())}
+              {fmt(Number(info.getValue() ?? 0))}
               {row.subagent_count > 0 && (
                 <span class="muted" style={{ fontSize: '10px' }}>
                   {' '}
@@ -152,22 +162,26 @@ function useSessionColumns(
         id: 'input',
         accessorKey: 'input',
         header: 'Input',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<SessionRow, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'output',
         accessorKey: 'output',
         header: 'Output',
-        cell: (info: any) => <span class="num">{fmt(info.getValue())}</span>,
+        cell: (info: CellContext<SessionRow, unknown>) => (
+          <span class="num">{fmt(Number(info.getValue() ?? 0))}</span>
+        ),
       },
       {
         id: 'cost',
         accessorKey: 'cost',
         header: 'Est. Cost',
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const row = info.row.original as SessionRow;
           return row.is_billable ? (
-            <span class="cost">{fmtCost(info.getValue())}</span>
+            <span class="cost">{fmtCost(Number(info.getValue() ?? 0))}</span>
           ) : (
             <span class="cost-na">n/a</span>
           );
@@ -178,7 +192,7 @@ function useSessionColumns(
         accessorFn: (row: SessionRow) => row.credits ?? null,
         header: 'Credits',
         sortUndefined: 'last' as const,
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const v = info.getValue() as number | null;
           return <span class="num">{fmtCredits(v)}</span>;
         },
@@ -188,7 +202,7 @@ function useSessionColumns(
         accessorKey: 'cost_confidence',
         header: 'Cost Meta',
         enableSorting: false,
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const row = info.row.original as SessionRow;
           return (
             <div class="muted" style={{ fontSize: '10px', lineHeight: '1.35' }}>
@@ -202,7 +216,7 @@ function useSessionColumns(
         id: 'cache_hit_ratio',
         accessorKey: 'cache_hit_ratio',
         header: 'Cache %',
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const v = info.getValue() as number | null | undefined;
           if (v == null || !Number.isFinite(v)) return <span class="num">--</span>;
           return <span class="num">{(v * 100).toFixed(0)}%</span>;
@@ -212,7 +226,7 @@ function useSessionColumns(
         id: 'tokens_per_min',
         accessorKey: 'tokens_per_min',
         header: 'Tok/min',
-        cell: (info: any) => {
+        cell: (info: CellContext<SessionRow, unknown>) => {
           const v = info.getValue() as number;
           return <span class="num">{v > 0 ? fmt(Math.round(v)) : '--'}</span>;
         },

@@ -1,102 +1,60 @@
 import { render } from 'preact';
+import { DashboardTabs } from './components/DashboardTabs';
+import { FilterBar } from './components/FilterBar';
 import { Footer } from './components/Footer';
 import { Header } from './components/Header';
-import { FilterBar } from './components/FilterBar';
-import { DashboardTabs } from './components/DashboardTabs';
-import { RateWindowCard, BudgetCard, RateWindowUnavailable } from './components/RateWindowCard';
-import { AgentStatusCard } from './components/AgentStatusCard';
-import { ClaudeUsagePanel } from './components/ClaudeUsagePanel';
-import { EstimationMeta } from './components/EstimationMeta';
-import { OfficialSyncPanel } from './components/OfficialSyncPanel';
-import { ReconciliationBlock } from './components/ReconciliationBlock';
-import { StatsCards } from './components/StatsCards';
 import { InlineStatus } from './components/InlineStatus';
-import { setStatus, clearStatus } from './lib/status';
-import { SubagentSummary as SubagentSummaryComponent } from './components/SubagentSummary';
-import { EntrypointTable } from './components/EntrypointTable';
-import { ServiceTiersTable } from './components/ServiceTiers';
-import { ToolUsageTable } from './components/ToolUsageTable';
-import { McpSummaryTable } from './components/McpSummaryTable';
-import { BranchTable } from './components/BranchTable';
-import { VersionTable } from './components/VersionTable';
-import { VersionDonut } from './components/VersionDonut';
-import { HourlyChart } from './components/HourlyChart';
-import { ActivityHeatmap } from './components/ActivityHeatmap';
-import { SessionsTable } from './components/SessionsTable';
-import { ModelCostTable } from './components/ModelCostTable';
-import { ProjectCostTable } from './components/ProjectCostTable';
-import { DailyChart } from './components/DailyChart';
-import { WeeklyChart } from './components/WeeklyChart';
-import { ModelChart } from './components/ModelChart';
-import { ProjectChart } from './components/ProjectChart';
-import { CostReconciliationPanel } from './components/CostReconciliationPanel';
-
+import {
+  refreshSectionVisibility,
+  renderActivityHeatmap,
+  renderAgentStatus,
+  renderClaudeUsage,
+  renderCostReconciliation,
+  renderDashboardView,
+  renderUsageWindows,
+} from './dashboardView';
+import { downloadCSV } from './lib/csv';
+import { applyTheme, getTheme } from './lib/theme';
+import { clearStatus, setStatus } from './lib/status';
 import type {
-  UsageWindowsResponse,
-  ClaudeUsageResponse,
-  SubagentSummary,
-  EntrypointSummary,
-  ServiceTierSummary,
-  ToolSummary,
-  McpServerSummary,
-  HourlyRow,
-  BranchSummary,
-  VersionSummary,
-  DashboardData,
-  DailyModelRow,
-  DailyAgg,
-  WeeklyAgg,
-  ModelAgg,
-  ProjectAgg,
-  Totals,
-  RangeKey,
-  HeatmapData,
   AgentStatusSnapshot,
-  CommunitySignal,
   BillingBlocksResponse,
+  ClaudeUsageResponse,
+  CommunitySignal,
   ContextWindowResponse,
   CostReconciliationResponse,
+  DashboardData,
+  HeatmapData,
+  ProjectAgg,
+  UsageWindowsResponse,
 } from './state/types';
 import {
-  rawData,
+  activeDashboardTab,
   billingBlocksData,
   contextWindowData,
   costReconciliationData,
-  activeDashboardTab,
-  selectedModels,
-  selectedRange,
-  selectedProvider,
-  selectedBucket,
-  projectSearchQuery,
-  lastFilteredSessions,
-  lastByProject,
-  metaText,
-  planBadge,
-  versionDonutMetric,
   loadState,
-  isSectionCollapsed,
+  projectSearchQuery,
+  rawData,
   restoreDashboardStateFromUrl,
-  setSectionCollapsed,
+  selectedModels,
   syncDashboardUrl,
   type DashboardTab,
 } from './state/store';
-import { $ } from './lib/format';
-import { downloadCSV } from './lib/csv';
-import { RANGE_LABELS } from './lib/charts';
-import { applyTheme, getTheme } from './lib/theme';
 
-// ── Theme bootstrap ──────────────────────────────────────────────────
 applyTheme(getTheme());
 
 function toggleTheme(): void {
-  const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const current =
+    document.documentElement.getAttribute('data-theme') === 'light'
+      ? 'light'
+      : 'dark';
   const next: 'light' | 'dark' = current === 'light' ? 'dark' : 'light';
   localStorage.setItem('theme', next);
   applyTheme(next);
   if (rawData.value) applyFilter();
 }
 
-// ── Local-only state ─────────────────────────────────────────────────
 let previousSessionPercent: number | null = null;
 let loadDataInFlight = false;
 let loadUsageWindowsInFlight = false;
@@ -105,60 +63,10 @@ let loadHeatmapInFlight = false;
 let loadAgentStatusInFlight = false;
 let loadCommunitySignalInFlight = false;
 let lastCommunitySignal: CommunitySignal | null = null;
+let lastAgentStatusSnapshot: AgentStatusSnapshot | null = null;
 let loadBillingBlocksInFlight = false;
 let loadContextWindowInFlight = false;
 let loadCostReconciliationInFlight = false;
-
-const SECTION_TAB_MAP: Record<string, DashboardTab> = {
-  'usage-windows': 'overview',
-  'claude-usage': 'overview',
-  'agent-status': 'overview',
-  'estimation-meta': 'overview',
-  'official-sync': 'overview',
-  'openai-reconciliation': 'overview',
-  'stats-row': 'overview',
-  'daily-chart-card': 'activity',
-  'model-chart-card': 'activity',
-  'project-chart-card': 'activity',
-  'hourly-chart': 'activity',
-  'activity-heatmap': 'activity',
-  'subagent-summary': 'breakdowns',
-  'entrypoint-breakdown': 'breakdowns',
-  'service-tiers': 'breakdowns',
-  'tool-summary': 'breakdowns',
-  'mcp-summary': 'breakdowns',
-  'branch-summary': 'breakdowns',
-  'version-summary': 'breakdowns',
-  'cost-reconciliation': 'breakdowns',
-  'model-cost-mount': 'tables',
-  'sessions-mount': 'tables',
-  'project-cost-mount': 'tables',
-};
-
-const SECTION_DISPLAY_MODE: Record<string, string> = {
-  'usage-windows': 'grid',
-  'agent-status': 'grid',
-  'estimation-meta': 'grid',
-  'stats-row': 'grid',
-};
-
-function setSectionVisibility(sectionId: string, hasContent: boolean, displayMode = ''): void {
-  const container = $(sectionId);
-  if (!container) return;
-  container.dataset['hasContent'] = hasContent ? '1' : '0';
-  const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
-  container.style.display = hasContent && visibleInTab ? displayMode : 'none';
-}
-
-function refreshSectionVisibility(): void {
-  for (const [sectionId, tab] of Object.entries(SECTION_TAB_MAP)) {
-    const container = $(sectionId);
-    if (!container) continue;
-    const hasContent = container.dataset['hasContent'] !== '0';
-    const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? '';
-    container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : 'none';
-  }
-}
 
 function handleDashboardTabChange(tab: DashboardTab): void {
   if (activeDashboardTab.value === tab) return;
@@ -167,652 +75,139 @@ function handleDashboardTabChange(tab: DashboardTab): void {
   refreshSectionVisibility();
 }
 
-// ── URL persistence ──────────────────────────────────────────────────
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function getRangeCutoff(range: RangeKey): string | null {
-  if (range === 'all') return null;
-  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90;
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return formatLocalDate(d);
-}
-
-function matchesProvider<T extends { provider?: string }>(row: T): boolean {
-  const p = selectedProvider.value;
-  if (p === 'both') return true;
-  return row.provider === p;
-}
-
-function matchesProjectSearch(project: string, displayName?: string): boolean {
-  if (!projectSearchQuery.value) return true;
-  const q = projectSearchQuery.value;
-  if (project.toLowerCase().includes(q)) return true;
-  if (displayName && displayName.toLowerCase().includes(q)) return true;
-  return false;
+function applyFilter(): void {
+  if (!rawData.value) return;
+  renderDashboardView(
+    rawData.value,
+    focusSingleModel,
+    focusProjectQuery,
+    exportSessionsCSV,
+    exportProjectsCSV
+  );
 }
 
 function focusSingleModel(model: string): void {
   if (!rawData.value) return;
-  const isSoleSelection = selectedModels.value.size === 1 && selectedModels.value.has(model);
-  selectedModels.value = isSoleSelection ? new Set(rawData.value.all_models) : new Set([model]);
+  const isSoleSelection =
+    selectedModels.value.size === 1 && selectedModels.value.has(model);
+  selectedModels.value = isSoleSelection
+    ? new Set(rawData.value.all_models)
+    : new Set([model]);
   syncDashboardUrl();
   applyFilter();
 }
 
 function focusProjectQuery(project: string): void {
   const normalized = project.toLowerCase().trim();
-  projectSearchQuery.value = projectSearchQuery.value === normalized ? '' : normalized;
+  projectSearchQuery.value =
+    projectSearchQuery.value === normalized ? '' : normalized;
   syncDashboardUrl();
   applyFilter();
 }
 
-// ── SQLite %W week range filter ──────────────────────────────────────
-// NOTE: SQLite strftime('%W') semantics — week 00 is the partial Jan week
-// before the first Monday. This helper must stay in sync with Rust's
-// sql_week_expr.
-//
-// SQLite %W rules (differ from ISO 8601 %V):
-//   - Week 00 = days before the first Monday of the year.
-//   - Week 01 = starts on the first Monday of the year.
-//   - No week 53 (unlike ISO %V).
-function weekLabelToWeekStart(label: string): Date {
-  const [yearStr, weekStr] = label.split('-');
-  const year = parseInt(yearStr!, 10);
-  const week = parseInt(weekStr!, 10);
-  if (!Number.isFinite(year) || !Number.isFinite(week)) return new Date(NaN);
-  const jan1 = new Date(Date.UTC(year, 0, 1));
-  if (week === 0) return jan1;
-  const jan1Dow = jan1.getUTCDay();              // 0=Sun..6=Sat
-  const daysToFirstMon = (8 - jan1Dow) % 7;      // 0..6
-  const firstMondayUtc = new Date(Date.UTC(year, 0, 1 + daysToFirstMon));
-  return new Date(firstMondayUtc.getTime() + (week - 1) * 7 * 86400 * 1000);
-}
-
-function buildWeeklyAgg(range: RangeKey): WeeklyAgg[] {
-  const rows = rawData.value?.weekly_by_model ?? [];
-  if (!rows.length) return [];
-
-  const cutoff = getRangeCutoff(range);
-
-  const weekMap: Record<string, WeeklyAgg> = {};
-  for (const r of rows) {
-    // Apply the model filter so the weekly chart stays consistent with
-    // the rest of the dashboard when the user narrows to a single model.
-    // (Provider cannot be filtered here — weekly_by_model is aggregated
-    // across providers on the server.)
-    if (!selectedModels.value.has(r.model)) continue;
-    if (cutoff) {
-      const weekStart = weekLabelToWeekStart(r.week);
-      if (isNaN(weekStart.getTime())) continue;
-      const weekStartStr = weekStart.toISOString().slice(0, 10);
-      if (weekStartStr < cutoff) continue;
-    }
-    const w = weekMap[r.week] ?? (weekMap[r.week] = {
-      week: r.week,
-      input: 0,
-      output: 0,
-      cache_read: 0,
-      cache_creation: 0,
-      reasoning_output: 0,
-      cost_nanos: 0,
-    });
-    w.input += r.input_tokens;
-    w.output += r.output_tokens;
-    w.cache_read += r.cache_read_tokens;
-    w.cache_creation += r.cache_creation_tokens;
-    w.reasoning_output += r.reasoning_output_tokens;
-    w.cost_nanos += r.cost_nanos;
-  }
-  return Object.values(weekMap).sort((a, b) => a.week.localeCompare(b.week));
-}
-
-// ── Aggregations ─────────────────────────────────────────────────────
-function buildAggregations(filteredDaily: DailyModelRow[], filteredSessions: typeof lastFilteredSessions.value) {
-  const dailyMap: Record<string, DailyAgg> = {};
-  for (const r of filteredDaily) {
-    const d = dailyMap[r.day] ?? (dailyMap[r.day] = {
-      day: r.day,
-      input: 0,
-      output: 0,
-      cache_read: 0,
-      cache_creation: 0,
-      reasoning_output: 0,
-      cost: 0,
-    });
-    d.input += r.input;
-    d.output += r.output;
-    d.cache_read += r.cache_read;
-    d.cache_creation += r.cache_creation;
-    d.reasoning_output += r.reasoning_output;
-    d.cost += r.cost;
-  }
-  const daily = Object.values(dailyMap).sort((a, b) => a.day.localeCompare(b.day));
-
-  const modelMap: Record<string, ModelAgg> = {};
-  for (const r of filteredDaily) {
-    const m = modelMap[r.model] ?? (modelMap[r.model] = {
-      model: r.model,
-      input: 0,
-      output: 0,
-      cache_read: 0,
-      cache_creation: 0,
-      reasoning_output: 0,
-      turns: 0,
-      sessions: 0,
-      cost: 0,
-      is_billable: r.cost > 0,
-      input_cost: 0,
-      output_cost: 0,
-      cache_read_cost: 0,
-      cache_write_cost: 0,
-      credits: null,
-    });
-    m.input += r.input;
-    m.output += r.output;
-    m.cache_read += r.cache_read;
-    m.cache_creation += r.cache_creation;
-    m.reasoning_output += r.reasoning_output;
-    m.turns += r.turns;
-    m.cost += r.cost;
-    if (r.cost > 0) m.is_billable = true;
-    // Phase 21: accumulate per-type costs
-    m.input_cost = (m.input_cost ?? 0) + (r.input_cost ?? 0);
-    m.output_cost = (m.output_cost ?? 0) + (r.output_cost ?? 0);
-    m.cache_read_cost = (m.cache_read_cost ?? 0) + (r.cache_read_cost ?? 0);
-    m.cache_write_cost = (m.cache_write_cost ?? 0) + (r.cache_write_cost ?? 0);
-    if (r.credits != null) {
-      m.credits = (m.credits ?? 0) + r.credits;
-    }
-  }
-
-  for (const s of filteredSessions) {
-    const m = modelMap[s.model];
-    if (m) m.sessions++;
-  }
-  const byModel = Object.values(modelMap).sort((a, b) => (b.input + b.output) - (a.input + a.output));
-
-  const projMap: Record<string, ProjectAgg> = {};
-  for (const s of filteredSessions) {
-    const p = projMap[s.project] ?? (projMap[s.project] = {
-      project: s.project,
-      display_name: s.display_name || s.project,
-      input: 0,
-      output: 0,
-      cache_read: 0,
-      cache_creation: 0,
-      reasoning_output: 0,
-      turns: 0,
-      sessions: 0,
-      cost: 0,
-      credits: null,
-    });
-    p.input += s.input;
-    p.output += s.output;
-    p.cache_read += s.cache_read;
-    p.cache_creation += s.cache_creation;
-    p.reasoning_output += s.reasoning_output;
-    p.turns += s.turns;
-    p.sessions++;
-    p.cost += s.cost;
-    if (s.credits != null) {
-      p.credits = (p.credits ?? 0) + s.credits;
-    }
-  }
-  const byProject = Object.values(projMap).sort((a, b) => (b.input + b.output) - (a.input + a.output));
-
-  // Derive totals from filteredSessions so the stat cards stay consistent
-  // with the project filter. daily_by_model has no project dimension, so
-  // summing byModel would leak tokens from other projects when a user
-  // narrows the dashboard to a single project.
-  const totals: Totals = {
-    sessions: filteredSessions.length,
-    turns: filteredSessions.reduce((s, sess) => s + sess.turns, 0),
-    input: filteredSessions.reduce((s, sess) => s + sess.input, 0),
-    output: filteredSessions.reduce((s, sess) => s + sess.output, 0),
-    cache_read: filteredSessions.reduce((s, sess) => s + sess.cache_read, 0),
-    cache_creation: filteredSessions.reduce((s, sess) => s + sess.cache_creation, 0),
-    reasoning_output: filteredSessions.reduce((s, sess) => s + sess.reasoning_output, 0),
-    cost: filteredSessions.reduce((s, sess) => s + sess.cost, 0),
-  };
-
-  const confidenceBreakdown = Object.entries(
-    filteredSessions.reduce<Record<string, { sessions: number; cost: number }>>((acc, session) => {
-      const key = session.cost_confidence || 'low';
-      if (!acc[key]) acc[key] = { sessions: 0, cost: 0 };
-      acc[key].sessions += 1;
-      acc[key].cost += session.cost;
-      return acc;
-    }, {})
-  ).sort(([a], [b]) => confidenceRank(a) - confidenceRank(b));
-
-  const billingModeBreakdown = Object.entries(
-    filteredSessions.reduce<Record<string, { sessions: number; cost: number }>>((acc, session) => {
-      const key = session.billing_mode || 'estimated_local';
-      if (!acc[key]) acc[key] = { sessions: 0, cost: 0 };
-      acc[key].sessions += 1;
-      acc[key].cost += session.cost;
-      return acc;
-    }, {})
-  ).sort((a, b) => b[1].sessions - a[1].sessions);
-
-  const pricingVersions = Array.from(
-    new Set(filteredSessions.map(session => session.pricing_version).filter(Boolean))
-  );
-
-  return { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions };
-}
-
-function confidenceRank(confidence: string): number {
-  switch (confidence) {
-    case 'low': return 0;
-    case 'medium': return 1;
-    case 'high': return 2;
-    default: return 3;
-  }
-}
-
-// ── Renderers (Preact into existing mount points) ────────────────────
-function renderEstimationMeta(
-  confidenceBreakdown: Array<[string, { sessions: number; cost: number }]>,
-  billingModeBreakdown: Array<[string, { sessions: number; cost: number }]>,
-  pricingVersions: string[]
-): void {
-  const container = $('estimation-meta');
-  if (!container) return;
-
-  if (!confidenceBreakdown.length && !billingModeBreakdown.length && !pricingVersions.length) {
-    setSectionVisibility('estimation-meta', false, 'grid');
-    render(null, container);
-    return;
-  }
-
-  setSectionVisibility('estimation-meta', true, 'grid');
-  render(
-    <EstimationMeta
-      confidenceBreakdown={confidenceBreakdown}
-      billingModeBreakdown={billingModeBreakdown}
-      pricingVersions={pricingVersions}
-    />,
-    container
-  );
-}
-
-function renderOpenAiReconciliation(reconciliation: DashboardData['openai_reconciliation']): void {
-  const container = $('openai-reconciliation');
-  if (!container) return;
-  if (!reconciliation) {
-    setSectionVisibility('openai-reconciliation', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('openai-reconciliation', true);
-  render(<ReconciliationBlock reconciliation={reconciliation} />, container);
-}
-
-function renderOfficialSync(summary: DashboardData['official_sync']): void {
-  const container = $('official-sync');
-  if (!container) return;
-  if (!summary?.available) {
-    setSectionVisibility('official-sync', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('official-sync', true);
-  render(
-    <OfficialSyncPanel
-      summary={summary}
-      providerFilter={selectedProvider.value}
-    />,
-    container
-  );
-}
-
-// ── Filter driver ────────────────────────────────────────────────────
-function applyFilter(): void {
-  if (!rawData.value) return;
-  const cutoff = getRangeCutoff(selectedRange.value);
-
-  const filteredDaily = rawData.value.daily_by_model.filter(r =>
-    selectedModels.value.has(r.model) && (!cutoff || r.day >= cutoff) && matchesProvider(r)
-  );
-
-  const filteredSessions = rawData.value.sessions_all.filter(s =>
-    selectedModels.value.has(s.model) && (!cutoff || s.last_date >= cutoff) && matchesProjectSearch(s.project, s.display_name) && matchesProvider(s)
-  );
-  const { daily, byModel, byProject, totals, confidenceBreakdown, billingModeBreakdown, pricingVersions } =
-    buildAggregations(filteredDaily, filteredSessions);
-
-  const providerLabel = selectedProvider.value === 'both' ? '' : ` (${selectedProvider.value})`;
-  const bucketIsWeek = selectedBucket.value === 'week';
-  const activeDays = daily.filter(day => day.cost > 0).length;
-  const activeDayCostNanos = Math.round(
-    daily.reduce((sum, day) => sum + day.cost, 0) * 1_000_000_000
-  );
-  const chartTitleEl = $('daily-chart-title');
-  if (chartTitleEl) {
-    chartTitleEl.textContent = (bucketIsWeek ? 'Weekly Token Usage - ' : 'Daily Token Usage - ') +
-      RANGE_LABELS[selectedRange.value] + providerLabel;
-  }
-
-  render(
-    <StatsCards
-      totals={totals}
-      daily={daily}
-      activeDays={activeDays}
-      activeDayTotalCostNanos={activeDayCostNanos}
-      cacheEfficiency={rawData.value?.cache_efficiency}
-      billingBlocks={billingBlocksData.value}
-      contextWindow={contextWindowData.value}
-    />,
-    $('stats-row')
-  );
-  setSectionVisibility('stats-row', true, 'grid');
-  renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
-  renderOfficialSync(rawData.value.official_sync);
-  renderOpenAiReconciliation(rawData.value.openai_reconciliation);
-
-  if (bucketIsWeek) {
-    const weekly = buildWeeklyAgg(selectedRange.value);
-    render(<WeeklyChart weekly={weekly} />, $('chart-daily'));
-    setSectionVisibility('daily-chart-card', weekly.length > 0);
-  } else {
-    render(<DailyChart daily={daily} />, $('chart-daily'));
-    setSectionVisibility('daily-chart-card', daily.length > 0);
-  }
-  render(<ModelChart byModel={byModel} onSelectModel={focusSingleModel} />, $('chart-model'));
-  render(<ProjectChart byProject={byProject} onSelectProject={(project) => focusProjectQuery(project.display_name || project.project)} />, $('chart-project'));
-  setSectionVisibility('model-chart-card', byModel.length > 0);
-  setSectionVisibility('project-chart-card', byProject.length > 0);
-
-  lastFilteredSessions.value = filteredSessions;
-  lastByProject.value = byProject;
-
-  render(<ModelCostTable byModel={byModel} onSelectModel={focusSingleModel} />, $('model-cost-mount'));
-  render(
-    <SessionsTable
-      onExportCSV={exportSessionsCSV}
-      onSelectProject={(session) => focusProjectQuery(session.display_name || session.project)}
-      onSelectModel={focusSingleModel}
-    />,
-    $('sessions-mount')
-  );
-  render(
-    <ProjectCostTable
-      byProject={lastByProject.value.slice(0, 30)}
-      onExportCSV={exportProjectsCSV}
-      onSelectProject={(project) => focusProjectQuery(project.display_name || project.project)}
-    />,
-    $('project-cost-mount')
-  );
-  setSectionVisibility('model-cost-mount', byModel.length > 0);
-  setSectionVisibility('sessions-mount', filteredSessions.length > 0);
-  setSectionVisibility('project-cost-mount', lastByProject.value.length > 0);
-
-  // Secondary tables honour the provider filter too.
-  if (rawData.value.subagent_summary) renderSubagentSummary(rawData.value.subagent_summary);
-  renderEntrypointBreakdown((rawData.value.entrypoint_breakdown ?? []).filter(matchesProvider));
-  renderServiceTiers((rawData.value.service_tiers ?? []).filter(matchesProvider));
-  renderToolSummary((rawData.value.tool_summary ?? []).filter(matchesProvider));
-  renderMcpSummary((rawData.value.mcp_summary ?? []).filter(matchesProvider));
-  renderBranchSummary((rawData.value.git_branch_summary ?? []).filter(matchesProvider));
-  renderVersionSummary((rawData.value.version_summary ?? []).filter(matchesProvider));
-  renderHourlyChart((rawData.value.hourly_distribution ?? []).filter(matchesProvider));
-  refreshSectionVisibility();
-}
-
-// ── CSV Export ───────────────────────────────────────────────────────
 function exportSessionsCSV(): void {
-  const header = ['Session', 'Provider', 'Project', 'Last Active', 'Duration (min)', 'Model', 'Turns', 'Input', 'Output', 'Cached Input', 'Cache Creation', 'Reasoning Output', 'Est. Cost'];
-  const rows = lastFilteredSessions.value.map(s => {
-    const cost = s.cost;
-    return [s.session_id, s.provider, s.project, s.last, s.duration_min, s.model, s.turns, s.input, s.output, s.cache_read, s.cache_creation, s.reasoning_output, cost.toFixed(4)];
-  });
+  const header = [
+    'Session',
+    'Provider',
+    'Project',
+    'Last Active',
+    'Duration (min)',
+    'Model',
+    'Turns',
+    'Input',
+    'Output',
+    'Cached Input',
+    'Cache Creation',
+    'Reasoning Output',
+    'Est. Cost',
+  ];
+  const rows = rawData.value
+    ? rawData.value.sessions_all
+        .filter(session => selectedModels.value.has(session.model))
+        .map(session => [
+          session.session_id,
+          session.provider,
+          session.project,
+          session.last,
+          session.duration_min,
+          session.model,
+          session.turns,
+          session.input,
+          session.output,
+          session.cache_read,
+          session.cache_creation,
+          session.reasoning_output,
+          session.cost.toFixed(4),
+        ])
+    : [];
   downloadCSV('sessions', header, rows);
 }
 
 function exportProjectRowsCSV(filename: string, rowsData: ProjectAgg[]): void {
-  const header = ['Project', 'Sessions', 'Turns', 'Input', 'Output', 'Cached Input', 'Cache Creation', 'Reasoning Output', 'Est. Cost'];
-  const rows = rowsData.map(p =>
-    [p.project, p.sessions, p.turns, p.input, p.output, p.cache_read, p.cache_creation, p.reasoning_output, p.cost.toFixed(4)]
-  );
+  const header = [
+    'Project',
+    'Sessions',
+    'Turns',
+    'Input',
+    'Output',
+    'Cached Input',
+    'Cache Creation',
+    'Reasoning Output',
+    'Est. Cost',
+  ];
+  const rows = rowsData.map(project => [
+    project.project,
+    project.sessions,
+    project.turns,
+    project.input,
+    project.output,
+    project.cache_read,
+    project.cache_creation,
+    project.reasoning_output,
+    project.cost.toFixed(4),
+  ]);
   downloadCSV(filename, header, rows);
 }
 
 function exportProjectsCSV(): void {
-  exportProjectRowsCSV('projects', lastByProject.value);
-}
+  const byProject = rawData.value
+    ? rawData.value.sessions_all.reduce<Map<string, ProjectAgg>>((acc, session) => {
+        if (!selectedModels.value.has(session.model)) return acc;
+        const current = acc.get(session.project) ?? {
+          project: session.project,
+          display_name: session.display_name || session.project,
+          input: 0,
+          output: 0,
+          cache_read: 0,
+          cache_creation: 0,
+          reasoning_output: 0,
+          turns: 0,
+          sessions: 0,
+          cost: 0,
+          credits: null,
+        };
+        current.input += session.input;
+        current.output += session.output;
+        current.cache_read += session.cache_read;
+        current.cache_creation += session.cache_creation;
+        current.reasoning_output += session.reasoning_output;
+        current.turns += session.turns;
+        current.sessions += 1;
+        current.cost += session.cost;
+        if (session.credits != null) {
+          current.credits = (current.credits ?? 0) + session.credits;
+        }
+        acc.set(session.project, current);
+        return acc;
+      }, new Map())
+    : new Map<string, ProjectAgg>();
 
-// ── Usage windows ────────────────────────────────────────────────────
-function renderUsageWindows(data: UsageWindowsResponse): void {
-  const container = $('usage-windows');
-  if (!container) return;
-
-  if (!data.available) {
-    planBadge.value = '';
-    if (data.error) {
-      setSectionVisibility('usage-windows', true, 'grid');
-      render(<RateWindowUnavailable error={data.error} />, container);
-    } else {
-      setSectionVisibility('usage-windows', false, 'grid');
-      render(null, container);
-    }
-    return;
-  }
-
-  setSectionVisibility('usage-windows', true, 'grid');
-  render(
-    <>
-      {data.session && <RateWindowCard label="Session (5h)" window={data.session} />}
-      {data.weekly && <RateWindowCard label="Weekly" window={data.weekly} />}
-      {data.weekly_opus && <RateWindowCard label="Weekly Opus" window={data.weekly_opus} />}
-      {data.weekly_sonnet && <RateWindowCard label="Weekly Sonnet" window={data.weekly_sonnet} />}
-      {data.budget && (
-        <BudgetCard
-          used={data.budget.used}
-          limit={data.budget.limit}
-          currency={data.budget.currency}
-          utilization={data.budget.utilization}
-        />
-      )}
-      <div style={{ gridColumn: '1 / -1' }}>
-        <InlineStatus placement="rate-windows" />
-      </div>
-    </>,
-    container
+  exportProjectRowsCSV(
+    'projects',
+    Array.from(byProject.values()).sort(
+      (left, right) => (right.input + right.output) - (left.input + left.output)
+    )
   );
-
-  // Session depletion inline alert
-  if (data.session) {
-    const currentPercent = 100 - data.session.used_percent;
-    if (previousSessionPercent !== null) {
-      if (previousSessionPercent > 0.01 && currentPercent <= 0.01) {
-        setStatus(
-          'rate-windows',
-          'error',
-          'Session depleted \u2014 resets in ' + (data.session.resets_in_minutes ?? 0) + 'm',
-        );
-      } else if (previousSessionPercent <= 0.01 && currentPercent > 0.01) {
-        setStatus('rate-windows', 'success', 'Session restored', 4000);
-      }
-    }
-    previousSessionPercent = currentPercent;
-  }
-
-  planBadge.value = data.identity?.plan
-    ? data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1)
-    : '';
-}
-
-function renderClaudeUsage(data: ClaudeUsageResponse): void {
-  const container = $('claude-usage');
-  if (!container) return;
-  if (!data.last_run && !data.latest_snapshot) {
-    setSectionVisibility('claude-usage', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('claude-usage', true);
-  render(<ClaudeUsagePanel data={data} />, container);
-}
-
-// ── Secondary tables ─────────────────────────────────────────────────
-function renderSubagentSummary(summary: SubagentSummary): void {
-  const container = $('subagent-summary');
-  if (!container) return;
-  if (summary.subagent_turns === 0) {
-    setSectionVisibility('subagent-summary', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('subagent-summary', true);
-  render(<SubagentSummaryComponent summary={summary} />, container);
-}
-
-function renderEntrypointBreakdown(data: EntrypointSummary[]): void {
-  const container = $('entrypoint-breakdown');
-  if (!container) return;
-  if (!data.length) {
-    setSectionVisibility('entrypoint-breakdown', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('entrypoint-breakdown', true);
-  render(<EntrypointTable data={data} />, container);
-}
-
-function renderServiceTiers(data: ServiceTierSummary[]): void {
-  const container = $('service-tiers');
-  if (!container) return;
-  if (!data.length) {
-    setSectionVisibility('service-tiers', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('service-tiers', true);
-  render(<ServiceTiersTable data={data} />, container);
-}
-
-function renderToolSummary(data: ToolSummary[]): void {
-  const container = $('tool-summary');
-  if (!container) return;
-  if (!data.length) {
-    setSectionVisibility('tool-summary', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('tool-summary', true);
-  render(<ToolUsageTable data={data} />, container);
-}
-
-function renderMcpSummary(data: McpServerSummary[]): void {
-  const container = $('mcp-summary');
-  if (!container) return;
-  if (!data.length) {
-    setSectionVisibility('mcp-summary', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('mcp-summary', true);
-  render(<McpSummaryTable data={data} />, container);
-}
-
-function renderBranchSummary(data: BranchSummary[]): void {
-  const container = $('branch-summary');
-  if (!container) return;
-  if (!data.length) {
-    setSectionVisibility('branch-summary', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('branch-summary', true);
-  render(<BranchTable data={data} />, container);
-}
-
-function renderVersionSummary(data: VersionSummary[]): void {
-  const container = $('version-summary');
-  if (!container) return;
-  if (!data.length) {
-    setSectionVisibility('version-summary', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('version-summary', true);
-
-  const handleMetricChange = (next: import('./state/store').VersionMetric) => {
-    versionDonutMetric.value = next;
-    syncDashboardUrl();
-    renderVersionSummary(data);
-  };
-  const collapsed = isSectionCollapsed('version-summary');
-  const toggleCollapsed = () => {
-    setSectionCollapsed('version-summary', !collapsed);
-    syncDashboardUrl();
-    renderVersionSummary(data);
-  };
-
-  render(
-    <div class="table-card">
-      <div class="section-header" style={{ padding: '20px 20px 0' }}>
-        <h2 class="section-title" style={{ margin: 0 }}>CLI Versions</h2>
-        <div class="section-actions">
-          <button
-            class="section-toggle"
-            type="button"
-            aria-expanded={!collapsed}
-            aria-controls="version-summary-content"
-            onClick={toggleCollapsed}
-          >
-            {collapsed ? 'Show' : 'Hide'}
-          </button>
-        </div>
-      </div>
-      {!collapsed && (
-        <div id="version-summary-content" style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap', padding: '20px' }}>
-          <div style={{ flex: '1 1 260px', minWidth: '220px', height: '300px' }}>
-            <VersionDonut
-              rows={data}
-              metric={versionDonutMetric.value}
-              onMetricChange={handleMetricChange}
-            />
-          </div>
-          <div style={{ flex: '2 1 320px', minWidth: '280px' }}>
-            <VersionTable data={data} title={null} />
-          </div>
-        </div>
-      )}
-    </div>,
-    container
-  );
-}
-
-function renderHourlyChart(data: HourlyRow[]): void {
-  const container = $('hourly-chart');
-  if (!container) return;
-  if (!data.length) {
-    setSectionVisibility('hourly-chart', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('hourly-chart', true);
-  render(<HourlyChart data={data} />, container);
-}
-
-function renderActivityHeatmap(data: HeatmapData | null): void {
-  const container = $('activity-heatmap');
-  if (!container) return;
-  if (!data) {
-    setSectionVisibility('activity-heatmap', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('activity-heatmap', true);
-  render(<ActivityHeatmap data={data} />, container);
 }
 
 async function loadUsageWindows(): Promise<void> {
@@ -822,9 +217,25 @@ async function loadUsageWindows(): Promise<void> {
     const resp = await fetch('/api/usage-windows');
     if (!resp.ok) return;
     const data: UsageWindowsResponse = await resp.json();
-    renderUsageWindows(data);
-  } catch { /* silent */ }
-  finally {
+    renderUsageWindows(
+      data,
+      previousSessionPercent,
+      value => {
+        previousSessionPercent = value;
+      },
+      (message, isError = false) => {
+        setStatus(
+          'rate-windows',
+          isError ? 'error' : 'success',
+          message,
+          isError ? undefined : 4000
+        );
+      },
+      () => clearStatus('rate-windows')
+    );
+  } catch {
+    // Silent by design.
+  } finally {
     loadUsageWindowsInFlight = false;
   }
 }
@@ -837,18 +248,11 @@ async function loadClaudeUsage(): Promise<void> {
     if (!resp.ok) return;
     const data: ClaudeUsageResponse = await resp.json();
     renderClaudeUsage(data);
-  } catch { /* silent */ }
-  finally {
+  } catch {
+    // Silent by design.
+  } finally {
     loadClaudeUsageInFlight = false;
   }
-}
-
-// ── Agent status ─────────────────────────────────────────────────────
-function renderAgentStatus(snapshot: AgentStatusSnapshot): void {
-  const container = $('agent-status');
-  if (!container) return;
-  setSectionVisibility('agent-status', true, 'grid');
-  render(<AgentStatusCard snapshot={snapshot} communitySignal={lastCommunitySignal} />, container);
 }
 
 async function loadAgentStatus(): Promise<void> {
@@ -858,14 +262,15 @@ async function loadAgentStatus(): Promise<void> {
     const resp = await fetch('/api/agent-status');
     if (!resp.ok) return;
     const data: AgentStatusSnapshot = await resp.json();
-    renderAgentStatus(data);
-  } catch { /* silent */ }
-  finally {
+    lastAgentStatusSnapshot = data;
+    renderAgentStatus(data, lastCommunitySignal);
+  } catch {
+    // Silent by design.
+  } finally {
     loadAgentStatusInFlight = false;
   }
 }
 
-// ── Community signal ──────────────────────────────────────────────────
 async function loadCommunitySignal(): Promise<void> {
   if (loadCommunitySignalInFlight) return;
   loadCommunitySignalInFlight = true;
@@ -873,39 +278,28 @@ async function loadCommunitySignal(): Promise<void> {
     const resp = await fetch('/api/community-signal');
     if (!resp.ok) return;
     const data: CommunitySignal = await resp.json();
-    // When the aggregator is disabled the server returns {enabled: false}.
     lastCommunitySignal = data.enabled ? data : null;
-    // Re-render the agent-status card so the community section appears.
-    const container = $('agent-status');
-    if (container && container.style.display !== 'none') {
-      // Re-use the last rendered snapshot if available; no-op when absent.
-      const existing = container.querySelector('[aria-label]');
-      if (existing) {
-        // Trigger a re-render via loadAgentStatus (reads cache, no network).
-        // This keeps the snapshot fresh without duplicating state.
-        loadAgentStatus();
-      }
+    if (lastAgentStatusSnapshot) {
+      renderAgentStatus(lastAgentStatusSnapshot, lastCommunitySignal);
     }
-  } catch { /* silent */ }
-  finally {
+  } catch {
+    // Silent by design.
+  } finally {
     loadCommunitySignalInFlight = false;
   }
 }
 
-// ── Phase 2: Billing blocks fetch ────────────────────────────────────
 async function loadBillingBlocks(): Promise<void> {
   if (loadBillingBlocksInFlight) return;
   loadBillingBlocksInFlight = true;
   try {
     const resp = await fetch('/api/billing-blocks');
     if (!resp.ok) {
-      // 404 expected until the Rust side lands — set null, card hides gracefully.
       billingBlocksData.value = null;
       return;
     }
     const data: BillingBlocksResponse = await resp.json();
     billingBlocksData.value = data;
-    // Re-render StatsCards so billing block reflects fresh data.
     if (rawData.value) applyFilter();
   } catch {
     billingBlocksData.value = null;
@@ -914,20 +308,17 @@ async function loadBillingBlocks(): Promise<void> {
   }
 }
 
-// ── Phase 5: Context window fetch ───────────────────────────────────
 async function loadContextWindow(): Promise<void> {
   if (loadContextWindowInFlight) return;
   loadContextWindowInFlight = true;
   try {
     const resp = await fetch('/api/context-window');
     if (!resp.ok) {
-      // 404 expected until Rust side lands — card hides gracefully.
       contextWindowData.value = null;
       return;
     }
     const data: ContextWindowResponse = await resp.json();
     contextWindowData.value = data;
-    // Re-render StatsCards so context window card reflects fresh data.
     if (rawData.value) applyFilter();
   } catch {
     contextWindowData.value = null;
@@ -936,7 +327,6 @@ async function loadContextWindow(): Promise<void> {
   }
 }
 
-// ── Phase 8: Cost reconciliation fetch ──────────────────────────────
 async function loadCostReconciliation(): Promise<void> {
   if (loadCostReconciliationInFlight) return;
   loadCostReconciliationInFlight = true;
@@ -956,51 +346,31 @@ async function loadCostReconciliation(): Promise<void> {
   }
 }
 
-function renderCostReconciliation(): void {
-  const container = $('cost-reconciliation');
-  if (!container) return;
-  const data = costReconciliationData.value;
-  if (!data || !data.enabled) {
-    setSectionVisibility('cost-reconciliation', false);
-    render(null, container);
-    return;
-  }
-  setSectionVisibility('cost-reconciliation', true);
-  render(<CostReconciliationPanel data={data} />, container);
-}
-
-// ── Phase 13: Heatmap fetch ──────────────────────────────────────────
-// Fetches the 7x24 heatmap from /api/heatmap, threading the client
-// timezone offset so dow/hour bucketing respects local time.
-// Defaults to UTC when the browser API is unavailable.
 async function loadHeatmap(period = 'month'): Promise<void> {
   if (loadHeatmapInFlight) return;
   loadHeatmapInFlight = true;
   try {
-    const tzOffset = (typeof window !== 'undefined' && typeof window.Date !== 'undefined')
-      ? new Date().getTimezoneOffset() * -1
-      : 0;
+    const tzOffset =
+      typeof window !== 'undefined' && typeof window.Date !== 'undefined'
+        ? new Date().getTimezoneOffset() * -1
+        : 0;
     const resp = await fetch(
       `/api/heatmap?period=${encodeURIComponent(period)}&tz_offset_min=${tzOffset}`
     );
     if (!resp.ok) return;
     const data: HeatmapData = await resp.json();
     renderActivityHeatmap(data);
-  } catch { /* silent */ }
-  finally {
+  } catch {
+    // Silent by design.
+  } finally {
     loadHeatmapInFlight = false;
   }
 }
 
-// ── Data loading ─────────────────────────────────────────────────────
 async function loadData(force = false): Promise<void> {
   if (loadDataInFlight && !force) return;
   loadDataInFlight = true;
 
-  // On a subsequent fetch (not the first load), keep old data visible and
-  // show a non-blocking [REFRESHING] status in the header instead of blanking
-  // the UI. This is the signals-based equivalent of TanStack Query's
-  // keepPreviousData pattern.
   const isSubsequentFetch = rawData.value !== null;
   if (isSubsequentFetch) {
     loadState.value = 'refreshing';
@@ -1011,40 +381,33 @@ async function loadData(force = false): Promise<void> {
     const resp = await fetch('/api/data');
     if (!resp.ok) {
       setStatus('global', 'error', `Failed to load data: HTTP ${resp.status}`);
-      // On error, keep old data visible — do NOT clear rawData.
       return;
     }
-    const d: DashboardData = await resp.json();
-    if (d.error) {
-      setStatus('global', 'error', d.error);
-      // On error, keep old data visible — do NOT clear rawData.
+
+    const data: DashboardData = await resp.json();
+    if (data.error) {
+      setStatus('global', 'error', data.error);
       return;
     }
+
     clearStatus('global');
     clearStatus('header-refresh');
-    metaText.value = 'Updated: ' + d.generated_at + ' \u00b7 Auto-refresh 30s';
+    rawData.value = data;
 
-    const isFirstLoad = rawData.value === null;
-    // Atomic swap: replace signals in one assignment to avoid partial renders.
-    rawData.value = d;
-
-    if (isFirstLoad) {
-      restoreDashboardStateFromUrl(d.all_models);
+    if (isSubsequentFetch === false) {
+      restoreDashboardStateFromUrl(data.all_models);
     }
 
     applyFilter();
-  } catch (e) {
-    // Network error — keep old data, show error, do not clear the view.
+  } catch {
     setStatus('global', 'error', 'Network error loading data');
     clearStatus('header-refresh');
-  }
-  finally {
+  } finally {
     loadState.value = 'idle';
     loadDataInFlight = false;
   }
 }
 
-// ── Preact mounts ────────────────────────────────────────────────────
 const headerMount = document.getElementById('header-mount');
 if (headerMount) {
   render(<Header onDataReload={loadData} onThemeToggle={toggleTheme} />, headerMount);
@@ -1052,7 +415,10 @@ if (headerMount) {
 
 const filterBarMount = document.getElementById('filter-bar-mount');
 if (filterBarMount) {
-  render(<FilterBar onFilterChange={applyFilter} onURLUpdate={syncDashboardUrl} />, filterBarMount);
+  render(
+    <FilterBar onFilterChange={applyFilter} onURLUpdate={syncDashboardUrl} />,
+    filterBarMount
+  );
 }
 
 const dashboardTabsMount = document.getElementById('dashboard-tabs-mount');
@@ -1061,7 +427,7 @@ if (dashboardTabsMount) {
 }
 
 const footerEl = document.querySelector('footer');
-if (footerEl && footerEl.parentElement) {
+if (footerEl?.parentElement) {
   render(<Footer />, footerEl.parentElement, footerEl);
 }
 
@@ -1070,8 +436,6 @@ if (globalStatusMount) {
   render(<InlineStatus placement="global" />, globalStatusMount);
 }
 
-// ── Boot ─────────────────────────────────────────────────────────────
-// Restore URL-persisted signals on browser Back/Forward navigation.
 window.addEventListener('popstate', () => {
   if (!rawData.value) return;
   restoreDashboardStateFromUrl(rawData.value.all_models);
@@ -1084,7 +448,12 @@ loadUsageWindows();
 loadClaudeUsage();
 loadAgentStatus();
 loadCommunitySignal();
-setInterval(() => { loadUsageWindows(); loadClaudeUsage(); loadAgentStatus(); loadCommunitySignal(); }, 60000);
+setInterval(() => {
+  loadUsageWindows();
+  loadClaudeUsage();
+  loadAgentStatus();
+  loadCommunitySignal();
+}, 60000);
 loadHeatmap('all');
 setInterval(() => loadHeatmap('all'), 30000);
 loadBillingBlocks();
