@@ -162,6 +162,10 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
                 move || async { Html(html) }
             }),
         )
+        .route(
+            "/favicon.ico",
+            get(|| async { axum::http::StatusCode::NO_CONTENT }),
+        )
         .route("/api/data", get(api::api_data))
         .route("/api/rescan", post(api::api_rescan))
         .route("/api/usage-windows", get(api::api_usage_windows))
