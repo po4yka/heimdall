@@ -300,8 +300,8 @@ mod tests {
         let input = make_input(&transcript_path);
         let _lock = acquire_lock(Duration::from_millis(20)).expect("held lock");
 
-        let line = run_inner_with_input(&opts, &input, Duration::from_millis(10))
-            .expect("lock fallback");
+        let line =
+            run_inner_with_input(&opts, &input, Duration::from_millis(10)).expect("lock fallback");
         assert_eq!(line, "...");
         assert!(read_cache().is_none());
     }

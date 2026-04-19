@@ -208,7 +208,9 @@ pub fn merge_heimdall_entry_for_job(
     if !clean.is_empty() && !clean.ends_with('\n') {
         clean.push('\n');
     }
-    clean.push_str(&build_heimdall_block_for_job(job, bin_path, db_path, interval));
+    clean.push_str(&build_heimdall_block_for_job(
+        job, bin_path, db_path, interval,
+    ));
     clean
 }
 
@@ -217,7 +219,8 @@ pub fn merge_heimdall_entry_for_job(
 impl Scheduler for CronScheduler {
     fn install(&self, interval: Interval, bin_path: &Path, db_path: &Path) -> Result<()> {
         let existing = self.read_crontab()?;
-        let updated = merge_heimdall_entry_for_job(&existing, bin_path, db_path, interval, self.job);
+        let updated =
+            merge_heimdall_entry_for_job(&existing, bin_path, db_path, interval, self.job);
         self.write_crontab(&updated)?;
         Ok(())
     }

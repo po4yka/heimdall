@@ -256,8 +256,15 @@ Last 24h · these are independent characteristics of your usage, not a breakdown
             "was while 4+ sessions ran in parallel"
         );
         assert!((factors[0].percent - 98.0).abs() < 0.001);
-        assert!(factors[0].advice_text.contains("All sessions share one limit"));
-        assert_eq!(factors[0].factor_key, "was_while_4_sessions_ran_in_parallel");
+        assert!(
+            factors[0]
+                .advice_text
+                .contains("All sessions share one limit")
+        );
+        assert_eq!(
+            factors[0].factor_key,
+            "was_while_4_sessions_ran_in_parallel"
+        );
     }
 
     #[test]
@@ -279,11 +286,8 @@ Last 24h · these are independent characteristics of your usage, not a breakdown
 
     #[test]
     fn persist_capture_result_records_failed_exit() {
-        let persisted = persist_capture_result(
-            "/usage isn't available in this environment.\n",
-            "",
-            Some(1),
-        );
+        let persisted =
+            persist_capture_result("/usage isn't available in this environment.\n", "", Some(1));
         assert_eq!(persisted.status, STATUS_FAILED);
         assert_eq!(
             persisted.error_summary.as_deref(),
@@ -310,6 +314,11 @@ Last 24h · these are independent characteristics of your usage, not a breakdown
         assert!(!response.available);
         let last_run = response.last_run.expect("missing last run");
         assert_eq!(last_run.status, STATUS_FAILED);
-        assert!(last_run.error_summary.unwrap_or_default().contains("failed to run Claude"));
+        assert!(
+            last_run
+                .error_summary
+                .unwrap_or_default()
+                .contains("failed to run Claude")
+        );
     }
 }
