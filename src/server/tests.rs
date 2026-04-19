@@ -2,6 +2,8 @@
 mod tests {
     use std::io::Write;
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::time::Duration;
     use tempfile::TempDir;
 
     use axum::Router;
@@ -80,19 +82,23 @@ mod tests {
             oauth_enabled: false,
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
+            oauth_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
             openai_lookback_days: 30,
             openai_cache: tokio::sync::RwLock::new(None),
+            openai_refresh_lock: tokio::sync::Mutex::new(()),
             db_lock: tokio::sync::Mutex::new(()),
             webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
             webhook_config: WebhookConfig::default(),
             scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
             agent_status_config,
             agent_status_cache: tokio::sync::RwLock::new(None),
+            agent_status_refresh_lock: tokio::sync::Mutex::new(()),
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
+            aggregator_refresh_lock: tokio::sync::Mutex::new(()),
             blocks_token_limit: None,
             session_length_hours: 5.0,
             project_aliases: std::collections::HashMap::new(),
@@ -113,6 +119,10 @@ mod tests {
             .route(
                 "/api/usage-windows",
                 get(crate::server::api::api_usage_windows),
+            )
+            .route(
+                "/api/claude-usage",
+                get(crate::server::api::api_claude_usage),
             )
             .route("/api/heatmap", get(crate::server::api::api_heatmap))
             .route("/api/agent-status", get(api_agent_status))
@@ -203,6 +213,39 @@ mod tests {
                 ],
             )
             .unwrap();
+            conn.execute(
+                "INSERT INTO claude_usage_runs
+                    (captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                rusqlite::params![
+                    "2026-04-08T10:05:00Z",
+                    "success",
+                    0_i64,
+                    "stdout",
+                    "",
+                    "print_slash_command",
+                    "today",
+                    "v1",
+                    "",
+                ],
+            )
+            .unwrap();
+            let run_id = conn.last_insert_rowid();
+            conn.execute(
+                "INSERT INTO claude_usage_factors
+                    (run_id, factor_key, display_label, percent, description, advice_text, display_order)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    run_id,
+                    "parallel_sessions",
+                    "was while 4+ sessions ran in parallel",
+                    98.0_f64,
+                    "All sessions share one limit.",
+                    "All sessions share one limit.",
+                    0_i64,
+                ],
+            )
+            .unwrap();
         }
 
         let app = test_app(db_path.clone(), projects);
@@ -234,10 +277,20 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
+        let usage_runs: i64 = conn
+            .query_row("SELECT COUNT(*) FROM claude_usage_runs", [], |r| r.get(0))
+            .unwrap();
+        let usage_factors: i64 = conn
+            .query_row("SELECT COUNT(*) FROM claude_usage_factors", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
 
         assert_eq!(live_events, 1);
         assert_eq!(agent_history, 1);
         assert_eq!(oauth_windows, 1);
+        assert_eq!(usage_runs, 1);
+        assert_eq!(usage_factors, 1);
     }
 
     #[tokio::test]
@@ -380,6 +433,61 @@ mod tests {
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(data["available"], false);
+    }
+
+    #[tokio::test]
+    async fn test_api_claude_usage_returns_latest_snapshot() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        {
+            let conn = crate::scanner::db::open_db(&db_path).unwrap();
+            crate::scanner::db::init_db(&conn).unwrap();
+            let run_id = crate::scanner::db::insert_claude_usage_run(
+                &conn,
+                "success",
+                Some(0),
+                "stdout",
+                "",
+                "print_slash_command",
+                "today",
+                "v1",
+                None,
+            )
+            .unwrap();
+            crate::scanner::db::insert_claude_usage_factors(
+                &conn,
+                run_id,
+                &[crate::models::ClaudeUsageFactor {
+                    factor_key: "parallel_sessions".into(),
+                    display_label: "was while 4+ sessions ran in parallel".into(),
+                    percent: 98.0,
+                    description: "All sessions share one limit.".into(),
+                    advice_text: "All sessions share one limit.".into(),
+                    display_order: 0,
+                }],
+            )
+            .unwrap();
+        }
+
+        let app = test_app(db_path, projects);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/claude-usage")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(data["available"], true);
+        assert_eq!(
+            data["latest_snapshot"]["factors"][0]["factor_key"],
+            "parallel_sessions"
+        );
+        assert_eq!(data["last_run"]["status"], "success");
     }
 
     #[tokio::test]
@@ -1127,11 +1235,13 @@ mod tests {
             oauth_enabled: false,
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
+            oauth_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
             openai_lookback_days: 30,
             openai_cache: tokio::sync::RwLock::new(None),
+            openai_refresh_lock: tokio::sync::Mutex::new(()),
             db_lock: tokio::sync::Mutex::new(()),
             webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
             webhook_config: WebhookConfig::default(),
@@ -1142,8 +1252,10 @@ mod tests {
                 snapshot,
                 None,
             ))),
+            agent_status_refresh_lock: tokio::sync::Mutex::new(()),
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
+            aggregator_refresh_lock: tokio::sync::Mutex::new(()),
             blocks_token_limit: None,
             session_length_hours: 5.0,
             project_aliases: std::collections::HashMap::new(),
@@ -1273,6 +1385,199 @@ mod tests {
         assert!(json["openai"].is_null());
     }
 
+    #[tokio::test]
+    async fn test_refresh_agent_status_primes_cache_and_persists_history() {
+        use crate::agent_status::models::{
+            AgentStatusSnapshot, ComponentStatus, ProviderStatus, StatusIndicator,
+        };
+
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+
+        let mut cfg = AgentStatusConfig::default();
+        cfg.enabled = true;
+        cfg.refresh_interval = 3600;
+
+        let state = Arc::new(AppState {
+            db_path: db_path.clone(),
+            projects_dirs: Some(vec![projects]),
+            oauth_enabled: false,
+            oauth_refresh_interval: 60,
+            oauth_cache: tokio::sync::RwLock::new(None),
+            oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            openai_enabled: false,
+            openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
+            openai_refresh_interval: 300,
+            openai_lookback_days: 30,
+            openai_cache: tokio::sync::RwLock::new(None),
+            openai_refresh_lock: tokio::sync::Mutex::new(()),
+            db_lock: tokio::sync::Mutex::new(()),
+            webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
+            webhook_config: WebhookConfig::default(),
+            scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
+            agent_status_config: cfg,
+            agent_status_cache: tokio::sync::RwLock::new(None),
+            agent_status_refresh_lock: tokio::sync::Mutex::new(()),
+            aggregator_config: AggregatorConfig::default(),
+            aggregator_cache: tokio::sync::RwLock::new(None),
+            aggregator_refresh_lock: tokio::sync::Mutex::new(()),
+            blocks_token_limit: None,
+            session_length_hours: 5.0,
+            project_aliases: std::collections::HashMap::new(),
+        });
+
+        let snapshot = AgentStatusSnapshot {
+            claude: Some(ProviderStatus {
+                indicator: StatusIndicator::None,
+                description: "All Systems Operational".into(),
+                components: vec![ComponentStatus {
+                    id: "component-1".into(),
+                    name: "Claude API".into(),
+                    status: "operational".into(),
+                    uptime_30d: None,
+                    uptime_7d: None,
+                }],
+                active_incidents: vec![],
+                page_url: "https://status.claude.com".into(),
+            }),
+            openai: None,
+            fetched_at: chrono::Utc::now().to_rfc3339(),
+        };
+
+        let fetch_count = Arc::new(AtomicUsize::new(0));
+        let returned = crate::server::api::refresh_agent_status_with(&state, {
+            let snapshot = snapshot.clone();
+            let fetch_count = fetch_count.clone();
+            move |_, _| async move {
+                fetch_count.fetch_add(1, Ordering::SeqCst);
+                Ok((snapshot, Some("etag-1".into())))
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(fetch_count.load(Ordering::SeqCst), 1);
+        assert!(returned.claude.is_some());
+
+        let cached = state.agent_status_cache.read().await;
+        assert!(cached.is_some(), "refresh should populate the cache");
+        drop(cached);
+
+        let conn = crate::scanner::db::open_db(&db_path).unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_status_history", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 1, "one component sample should be persisted");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_agent_status_reuses_cache_within_ttl() {
+        use crate::agent_status::models::AgentStatusSnapshot;
+
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+
+        let mut cfg = AgentStatusConfig::default();
+        cfg.enabled = true;
+        cfg.refresh_interval = 3600;
+
+        let state = Arc::new(AppState {
+            db_path,
+            projects_dirs: Some(vec![projects]),
+            oauth_enabled: false,
+            oauth_refresh_interval: 60,
+            oauth_cache: tokio::sync::RwLock::new(None),
+            oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            openai_enabled: false,
+            openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
+            openai_refresh_interval: 300,
+            openai_lookback_days: 30,
+            openai_cache: tokio::sync::RwLock::new(None),
+            openai_refresh_lock: tokio::sync::Mutex::new(()),
+            db_lock: tokio::sync::Mutex::new(()),
+            webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
+            webhook_config: WebhookConfig::default(),
+            scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
+            agent_status_config: cfg,
+            agent_status_cache: tokio::sync::RwLock::new(None),
+            agent_status_refresh_lock: tokio::sync::Mutex::new(()),
+            aggregator_config: AggregatorConfig::default(),
+            aggregator_cache: tokio::sync::RwLock::new(None),
+            aggregator_refresh_lock: tokio::sync::Mutex::new(()),
+            blocks_token_limit: None,
+            session_length_hours: 5.0,
+            project_aliases: std::collections::HashMap::new(),
+        });
+
+        let fetch_count = Arc::new(AtomicUsize::new(0));
+        let first = crate::server::api::refresh_agent_status_with(&state, {
+            let fetch_count = fetch_count.clone();
+            move |_, _| async move {
+                fetch_count.fetch_add(1, Ordering::SeqCst);
+                Ok((AgentStatusSnapshot::default(), Some("etag-1".into())))
+            }
+        })
+        .await
+        .unwrap();
+        assert!(first.claude.is_none());
+
+        let second = crate::server::api::refresh_agent_status_with(&state, {
+            let fetch_count = fetch_count.clone();
+            move |_, _| async move {
+                fetch_count.fetch_add(1, Ordering::SeqCst);
+                Ok((AgentStatusSnapshot::default(), Some("etag-2".into())))
+            }
+        })
+        .await
+        .unwrap();
+
+        assert!(second.claude.is_none());
+        assert_eq!(
+            fetch_count.load(Ordering::SeqCst),
+            1,
+            "cached snapshot should suppress the second fetch within the TTL"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_background_loop_runs_immediately_and_survives_errors() {
+        let runs = Arc::new(AtomicUsize::new(0));
+        let fail_once = Arc::new(AtomicBool::new(true));
+
+        let handle = crate::server::spawn_background_loop("test", 1, {
+            let runs = runs.clone();
+            let fail_once = fail_once.clone();
+            move || {
+                let runs = runs.clone();
+                let fail_once = fail_once.clone();
+                async move {
+                    runs.fetch_add(1, Ordering::SeqCst);
+                    if fail_once.swap(false, Ordering::SeqCst) {
+                        Err(StatusCode::SERVICE_UNAVAILABLE)
+                    } else {
+                        Ok(())
+                    }
+                }
+            }
+        });
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            runs.load(Ordering::SeqCst) >= 1,
+            "background loop should run immediately on startup"
+        );
+
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        assert!(
+            runs.load(Ordering::SeqCst) >= 2,
+            "background loop should keep running after an error"
+        );
+
+        handle.abort();
+    }
+
     // -----------------------------------------------------------------------
     // Community signal endpoint tests
     // -----------------------------------------------------------------------
@@ -1323,19 +1628,23 @@ mod tests {
             oauth_enabled: false,
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
+            oauth_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
             openai_lookback_days: 30,
             openai_cache: tokio::sync::RwLock::new(None),
+            openai_refresh_lock: tokio::sync::Mutex::new(()),
             db_lock: tokio::sync::Mutex::new(()),
             webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
             webhook_config: WebhookConfig::default(),
             scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
             agent_status_config: AgentStatusConfig::default(),
             agent_status_cache: tokio::sync::RwLock::new(None),
+            agent_status_refresh_lock: tokio::sync::Mutex::new(()),
             aggregator_config: agg_cfg,
             aggregator_cache: tokio::sync::RwLock::new(None),
+            aggregator_refresh_lock: tokio::sync::Mutex::new(()),
             blocks_token_limit: None,
             session_length_hours: 5.0,
             project_aliases: std::collections::HashMap::new(),
@@ -1416,22 +1725,26 @@ mod tests {
             oauth_enabled: false,
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
+            oauth_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
             openai_lookback_days: 30,
             openai_cache: tokio::sync::RwLock::new(None),
+            openai_refresh_lock: tokio::sync::Mutex::new(()),
             db_lock: tokio::sync::Mutex::new(()),
             webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
             webhook_config: WebhookConfig::default(),
             scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
             agent_status_config: AgentStatusConfig::default(),
             agent_status_cache: tokio::sync::RwLock::new(None),
+            agent_status_refresh_lock: tokio::sync::Mutex::new(()),
             aggregator_config: agg_cfg,
             aggregator_cache: tokio::sync::RwLock::new(Some((
                 std::time::Instant::now(),
                 cached_signal,
             ))),
+            aggregator_refresh_lock: tokio::sync::Mutex::new(()),
             blocks_token_limit: None,
             session_length_hours: 5.0,
             project_aliases: std::collections::HashMap::new(),
@@ -1481,19 +1794,23 @@ mod tests {
             oauth_enabled: false,
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
+            oauth_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
             openai_lookback_days: 30,
             openai_cache: tokio::sync::RwLock::new(None),
+            openai_refresh_lock: tokio::sync::Mutex::new(()),
             db_lock: tokio::sync::Mutex::new(()),
             webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
             webhook_config: WebhookConfig::default(),
             scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
             agent_status_config: AgentStatusConfig::default(),
             agent_status_cache: tokio::sync::RwLock::new(None),
+            agent_status_refresh_lock: tokio::sync::Mutex::new(()),
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
+            aggregator_refresh_lock: tokio::sync::Mutex::new(()),
             blocks_token_limit: token_limit,
             session_length_hours: 5.0,
             project_aliases: std::collections::HashMap::new(),
@@ -1621,19 +1938,23 @@ mod tests {
             oauth_enabled: false,
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
+            oauth_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
             openai_lookback_days: 30,
             openai_cache: tokio::sync::RwLock::new(None),
+            openai_refresh_lock: tokio::sync::Mutex::new(()),
             db_lock: tokio::sync::Mutex::new(()),
             webhook_state: tokio::sync::Mutex::new(WebhookState::default()),
             webhook_config: WebhookConfig::default(),
             scan_event_tx: tokio::sync::broadcast::channel::<String>(16).0,
             agent_status_config: AgentStatusConfig::default(),
             agent_status_cache: tokio::sync::RwLock::new(None),
+            agent_status_refresh_lock: tokio::sync::Mutex::new(()),
             aggregator_config: AggregatorConfig::default(),
             aggregator_cache: tokio::sync::RwLock::new(None),
+            aggregator_refresh_lock: tokio::sync::Mutex::new(()),
             blocks_token_limit: None,
             session_length_hours: 2.5,
             project_aliases: std::collections::HashMap::new(),

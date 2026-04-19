@@ -5,7 +5,8 @@ use tracing::warn;
 use std::collections::HashMap;
 
 use crate::models::{
-    BillingModeSummary, BranchSummary, ConfidenceSummary, DailyModelRow, DailyProjectRow,
+    BillingModeSummary, BranchSummary, ClaudeUsageFactor, ClaudeUsageResponse,
+    ClaudeUsageRunMeta, ClaudeUsageSnapshot, ConfidenceSummary, DailyModelRow, DailyProjectRow,
     DashboardData, EntrypointSummary, HourlyRow, McpServerSummary, ProviderSummary,
     ServiceTierSummary, SessionRow, ToolEvent, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
@@ -89,6 +90,35 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             resets_at TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_rwh_timestamp ON rate_window_history(timestamp);",
+    )?;
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS claude_usage_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            captured_at TEXT NOT NULL,
+            status TEXT NOT NULL,
+            exit_code INTEGER,
+            stdout_raw TEXT NOT NULL DEFAULT '',
+            stderr_raw TEXT NOT NULL DEFAULT '',
+            invocation_mode TEXT NOT NULL DEFAULT '',
+            period TEXT NOT NULL DEFAULT 'today',
+            parser_version TEXT NOT NULL DEFAULT '',
+            error_summary TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_cur_captured_at ON claude_usage_runs(captured_at DESC);
+
+        CREATE TABLE IF NOT EXISTS claude_usage_factors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            factor_key TEXT NOT NULL,
+            display_label TEXT NOT NULL,
+            percent REAL NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            advice_text TEXT NOT NULL DEFAULT '',
+            display_order INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_cuf_run_order
+            ON claude_usage_factors(run_id, display_order);",
     )?;
 
     // Migration: add subagent columns if upgrading from older schema
@@ -1813,6 +1843,156 @@ pub fn get_rate_window_history(
     Ok(rows)
 }
 
+pub fn insert_claude_usage_run(
+    conn: &Connection,
+    status: &str,
+    exit_code: Option<i32>,
+    stdout_raw: &str,
+    stderr_raw: &str,
+    invocation_mode: &str,
+    period: &str,
+    parser_version: &str,
+    error_summary: Option<&str>,
+) -> Result<i64> {
+    let captured_at = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO claude_usage_runs
+            (captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE(?9, ''))",
+        rusqlite::params![
+            captured_at,
+            status,
+            exit_code,
+            stdout_raw,
+            stderr_raw,
+            invocation_mode,
+            period,
+            parser_version,
+            error_summary,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn insert_claude_usage_factors(
+    conn: &Connection,
+    run_id: i64,
+    factors: &[ClaudeUsageFactor],
+) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "INSERT INTO claude_usage_factors
+            (run_id, factor_key, display_label, percent, description, advice_text, display_order)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+    )?;
+    for factor in factors {
+        stmt.execute(rusqlite::params![
+            run_id,
+            factor.factor_key,
+            factor.display_label,
+            factor.percent,
+            factor.description,
+            factor.advice_text,
+            factor.display_order,
+        ])?;
+    }
+    Ok(())
+}
+
+pub fn get_latest_claude_usage_response(conn: &Connection) -> Result<ClaudeUsageResponse> {
+    let last_run = get_latest_claude_usage_run(conn, None)?;
+    let latest_success = get_latest_claude_usage_run(conn, Some("success"))?;
+
+    let latest_snapshot = match latest_success {
+        Some(run) => Some(ClaudeUsageSnapshot {
+            factors: get_claude_usage_factors(conn, run.id)?,
+            run,
+        }),
+        None => None,
+    };
+
+    Ok(ClaudeUsageResponse {
+        available: latest_snapshot.is_some(),
+        last_run,
+        latest_snapshot,
+    })
+}
+
+fn get_latest_claude_usage_run(
+    conn: &Connection,
+    status: Option<&str>,
+) -> Result<Option<ClaudeUsageRunMeta>> {
+    let sql = if status.is_some() {
+        "SELECT id, captured_at, status, exit_code, invocation_mode, period, parser_version, error_summary
+         FROM claude_usage_runs
+         WHERE status = ?1
+         ORDER BY id DESC
+         LIMIT 1"
+    } else {
+        "SELECT id, captured_at, status, exit_code, invocation_mode, period, parser_version, error_summary
+         FROM claude_usage_runs
+         ORDER BY id DESC
+         LIMIT 1"
+    };
+    let mut stmt = conn.prepare(sql)?;
+    let row = if let Some(status) = status {
+        stmt.query_row([status], map_claude_usage_run_meta)
+    } else {
+        stmt.query_row([], map_claude_usage_run_meta)
+    };
+    match row {
+        Ok(run) => Ok(Some(run)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn map_claude_usage_run_meta(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClaudeUsageRunMeta> {
+    let error_summary: String = row.get(7)?;
+    Ok(ClaudeUsageRunMeta {
+        id: row.get(0)?,
+        captured_at: row.get(1)?,
+        status: row.get(2)?,
+        exit_code: row.get(3)?,
+        invocation_mode: row.get(4)?,
+        period: row.get(5)?,
+        parser_version: row.get(6)?,
+        error_summary: if error_summary.is_empty() {
+            None
+        } else {
+            Some(error_summary)
+        },
+    })
+}
+
+fn get_claude_usage_factors(conn: &Connection, run_id: i64) -> Result<Vec<ClaudeUsageFactor>> {
+    let mut stmt = conn.prepare(
+        "SELECT factor_key, display_label, percent, description, advice_text, display_order
+         FROM claude_usage_factors
+         WHERE run_id = ?1
+         ORDER BY display_order ASC, id ASC",
+    )?;
+    let rows = stmt
+        .query_map([run_id], |row| {
+            Ok(ClaudeUsageFactor {
+                factor_key: row.get(0)?,
+                display_label: row.get(1)?,
+                percent: row.get(2)?,
+                description: row.get(3)?,
+                advice_text: row.get(4)?,
+                display_order: row.get(5)?,
+            })
+        })?
+        .filter_map(|r| match r {
+            Ok(val) => Some(val),
+            Err(e) => {
+                warn!("Failed to read Claude usage factor row: {}", e);
+                None
+            }
+        })
+        .collect();
+    Ok(rows)
+}
+
 // ── Phase 13: 7×24 Activity Heatmap + Active-Period Averaging ────────────────
 
 /// Date-bound SQL fragment for a given period.
@@ -2343,6 +2523,72 @@ mod tests {
 
         let weekly = get_rate_window_history(&conn, "weekly", 24).unwrap();
         assert_eq!(weekly.len(), 1);
+    }
+
+    #[test]
+    fn test_claude_usage_roundtrip() {
+        let conn = test_conn();
+        let run_id = insert_claude_usage_run(
+            &conn,
+            "success",
+            Some(0),
+            "stdout",
+            "",
+            "print_slash_command",
+            "today",
+            "v1",
+            None,
+        )
+        .unwrap();
+        insert_claude_usage_factors(
+            &conn,
+            run_id,
+            &[ClaudeUsageFactor {
+                factor_key: "parallel_sessions".into(),
+                display_label: "was while 4+ sessions ran in parallel".into(),
+                percent: 98.0,
+                description: "All sessions share one limit.".into(),
+                advice_text: "All sessions share one limit.".into(),
+                display_order: 0,
+            }],
+        )
+        .unwrap();
+
+        let response = get_latest_claude_usage_response(&conn).unwrap();
+        assert!(response.available);
+        assert_eq!(response.last_run.as_ref().unwrap().status, "success");
+        let snapshot = response.latest_snapshot.expect("missing latest snapshot");
+        assert_eq!(snapshot.run.id, run_id);
+        assert_eq!(snapshot.factors.len(), 1);
+        assert_eq!(snapshot.factors[0].factor_key, "parallel_sessions");
+    }
+
+    #[test]
+    fn test_claude_usage_failed_run_without_factors() {
+        let conn = test_conn();
+
+        insert_claude_usage_run(
+            &conn,
+            "failed",
+            Some(1),
+            "/usage isn't available in this environment.",
+            "",
+            "print_slash_command",
+            "today",
+            "v1",
+            Some("/usage isn't available in this environment."),
+        )
+        .unwrap();
+
+        let response = get_latest_claude_usage_response(&conn).unwrap();
+        assert!(!response.available);
+        let last_run = response.last_run.expect("missing last run");
+        assert_eq!(last_run.status, "failed");
+        assert_eq!(
+            last_run.error_summary.as_deref(),
+            Some("/usage isn't available in this environment.")
+        );
+        assert!(response.latest_snapshot.is_none());
     }
 
     #[test]

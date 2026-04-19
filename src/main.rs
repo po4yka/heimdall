@@ -16,6 +16,7 @@ use claude_usage_tracker::scanner;
 use claude_usage_tracker::scheduler;
 use claude_usage_tracker::server;
 use claude_usage_tracker::statusline;
+use claude_usage_tracker::usage_monitor;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -108,6 +109,12 @@ enum Commands {
         /// Enable file-watcher auto-refresh: re-scan whenever .jsonl files change
         #[arg(long, default_value_t = false)]
         watch: bool,
+        /// Do not automatically open the dashboard in a browser
+        #[arg(long, default_value_t = false)]
+        no_open: bool,
+        /// Start background polling so remote monitoring data warms without browser traffic
+        #[arg(long, default_value_t = false)]
+        background_poll: bool,
     },
     /// Export aggregated usage to CSV / JSON / JSONL
     Export {
@@ -154,6 +161,11 @@ enum Commands {
     Scheduler {
         #[command(subcommand)]
         action: SchedulerAction,
+    },
+    /// Capture Claude `/usage` snapshots and manage their scheduled collection
+    UsageMonitor {
+        #[command(subcommand)]
+        action: UsageMonitorAction,
     },
     /// Analyse usage data and report waste findings (Phase 6)
     Optimize {
@@ -501,6 +513,29 @@ enum SchedulerAction {
     Status,
 }
 
+#[derive(Subcommand)]
+enum UsageMonitorAction {
+    /// Capture one Claude `/usage` snapshot immediately
+    Capture {
+        /// Override the database path used by the capture
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+    },
+    /// Install a platform-native scheduled Claude `/usage` capture job
+    Install {
+        /// How often to run: hourly or daily (defaults to config or daily)
+        #[arg(long)]
+        interval: Option<String>,
+        /// Override the database path used by the scheduled job
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+    },
+    /// Remove the scheduled Claude `/usage` capture job
+    Uninstall,
+    /// Show the current Claude `/usage` scheduler status
+    Status,
+}
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
@@ -526,6 +561,7 @@ fn main() -> Result<()> {
     let cfg_port = cfg.port;
     let cfg_oauth_enabled = cfg.oauth.enabled;
     let cfg_oauth_refresh = cfg.oauth.refresh_interval;
+    let cfg_claude_usage_monitor = cfg.claude_usage_monitor.clone();
     let cfg_webhooks = cfg.webhooks;
     let cfg_openai_enabled = cfg.openai.enabled;
     let cfg_openai_admin_key_env = cfg.openai.admin_key_env;
@@ -629,6 +665,8 @@ fn main() -> Result<()> {
             host,
             port,
             watch,
+            no_open,
+            background_poll,
         } => {
             let db = default_db(db_path);
             let dirs = default_dirs(projects_dir);
@@ -647,7 +685,9 @@ fn main() -> Result<()> {
                 .unwrap_or(port);
 
             let url = format!("http://{}:{}", host_env, port_env);
-            let _ = open::that(&url);
+            if !no_open {
+                let _ = open::that(&url);
+            }
 
             let rt = tokio::runtime::Runtime::new()?;
             rt.block_on(server::serve(server::ServeOptions {
@@ -663,6 +703,7 @@ fn main() -> Result<()> {
                 openai_lookback_days: cfg_openai_lookback_days,
                 webhook_config: cfg_webhooks,
                 watch,
+                background_poll,
                 agent_status_config: cfg_agent_status,
                 aggregator_config: cfg_aggregator,
                 blocks_token_limit: cfg_blocks_token_limit,
@@ -723,6 +764,9 @@ fn main() -> Result<()> {
         }
         Commands::Scheduler { action } => {
             cmd_scheduler(action, &default_db(None))?;
+        }
+        Commands::UsageMonitor { action } => {
+            cmd_usage_monitor(action, &default_db(None), &cfg_claude_usage_monitor)?;
         }
         Commands::Optimize {
             db_path,
@@ -1079,6 +1123,93 @@ fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Resul
                 println!("Unsupported platform: {}", plat);
             }
         },
+    }
+    Ok(())
+}
+
+fn cmd_usage_monitor(
+    action: UsageMonitorAction,
+    default_db: &std::path::Path,
+    cfg: &config::ClaudeUsageMonitorConfig,
+) -> Result<()> {
+    use scheduler::{InstallStatus, Interval, USAGE_MONITOR_JOB};
+    use std::str::FromStr;
+
+    match action {
+        UsageMonitorAction::Capture { db_path } => {
+            let db = db_path.unwrap_or_else(|| default_db.to_path_buf());
+            let result = usage_monitor::capture_snapshot(&usage_monitor::CaptureOptions {
+                db_path: db,
+                claude_binary: cfg.claude_binary.clone(),
+                working_dir: cfg.working_dir.clone(),
+            })?;
+            match result.status.as_str() {
+                "success" => {
+                    println!(
+                        "Captured Claude /usage snapshot: run {} (success)",
+                        result.run_id
+                    );
+                }
+                "unparsed" => {
+                    anyhow::bail!(
+                        "Claude /usage capture stored raw output but could not parse it (run {})",
+                        result.run_id
+                    );
+                }
+                _ => {
+                    anyhow::bail!("Claude /usage capture failed (run {})", result.run_id);
+                }
+            }
+        }
+        UsageMonitorAction::Install { interval, db_path } => {
+            let sched = scheduler::current_for(USAGE_MONITOR_JOB);
+            let interval_str = interval.unwrap_or_else(|| cfg.default_interval.clone());
+            let interval = Interval::from_str(&interval_str)?;
+            let bin_path = scheduler::resolve_bin_path()?;
+            let db = db_path.unwrap_or_else(|| default_db.to_path_buf());
+            sched.install(interval, &bin_path, &db)?;
+            match sched.status()? {
+                InstallStatus::Installed {
+                    next_run_hint,
+                    config_path,
+                } => {
+                    if let Some(path) = config_path {
+                        println!("Installed: {} ({})", next_run_hint, path.display());
+                    } else {
+                        println!("Installed: {}", next_run_hint);
+                    }
+                }
+                InstallStatus::NotInstalled => println!("Installed (status unknown)"),
+                InstallStatus::UnsupportedPlatform(plat) => {
+                    eprintln!("Unsupported platform: {}", plat);
+                    std::process::exit(1);
+                }
+            }
+        }
+        UsageMonitorAction::Uninstall => {
+            let sched = scheduler::current_for(USAGE_MONITOR_JOB);
+            sched.uninstall()?;
+            println!("Uninstalled: scheduled Claude /usage capture job removed");
+        }
+        UsageMonitorAction::Status => {
+            let sched = scheduler::current_for(USAGE_MONITOR_JOB);
+            match sched.status()? {
+                InstallStatus::Installed {
+                    next_run_hint,
+                    config_path,
+                } => {
+                    if let Some(path) = config_path {
+                        println!("Installed: {} ({})", next_run_hint, path.display());
+                    } else {
+                        println!("Installed: {}", next_run_hint);
+                    }
+                }
+                InstallStatus::NotInstalled => println!("Not installed"),
+                InstallStatus::UnsupportedPlatform(plat) => {
+                    println!("Unsupported platform: {}", plat);
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -2733,7 +2864,12 @@ fn cmd_blocks(
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser as _;
+
+    use super::Cli;
+    use super::Commands;
     use super::TokenLimit;
+    use super::UsageMonitorAction;
     use super::parse_token_limit;
     use super::parse_weekday;
     use super::weekday_to_u8;
@@ -2811,6 +2947,39 @@ mod tests {
     }
 
     #[test]
+    fn cli_parses_usage_monitor_capture() {
+        let cli = Cli::parse_from(["heimdall", "usage-monitor", "capture"]);
+        match cli.command {
+            Commands::UsageMonitor {
+                action: UsageMonitorAction::Capture { db_path },
+            } => {
+                assert!(db_path.is_none());
+            }
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_usage_monitor_install_interval() {
+        let cli = Cli::parse_from([
+            "heimdall",
+            "usage-monitor",
+            "install",
+            "--interval",
+            "hourly",
+        ]);
+        match cli.command {
+            Commands::UsageMonitor {
+                action: UsageMonitorAction::Install { interval, db_path },
+            } => {
+                assert_eq!(interval.as_deref(), Some("hourly"));
+                assert!(db_path.is_none());
+            }
+            _ => panic!("unexpected command"),
+        }
+    }
+
+    #[test]
     fn parse_weekday_rejects_bogus() {
         assert!(parse_weekday("weekday").is_err());
         assert!(parse_weekday("").is_err());
@@ -2822,5 +2991,53 @@ mod tests {
         assert_eq!(weekday_to_u8(chrono::Weekday::Sun), 0);
         assert_eq!(weekday_to_u8(chrono::Weekday::Mon), 1);
         assert_eq!(weekday_to_u8(chrono::Weekday::Sat), 6);
+    }
+
+    #[test]
+    fn dashboard_cli_flags_default_to_interactive_foreground() {
+        let cli = Cli::parse_from(["claude-usage-tracker", "dashboard"]);
+        match cli.command {
+            Commands::Dashboard {
+                watch,
+                no_open,
+                background_poll,
+                ..
+            } => {
+                assert!(!watch);
+                assert!(!no_open);
+                assert!(!background_poll);
+            }
+            other => panic!(
+                "expected dashboard command, got {:?}",
+                std::mem::discriminant(&other)
+            ),
+        }
+    }
+
+    #[test]
+    fn dashboard_cli_accepts_background_flags() {
+        let cli = Cli::parse_from([
+            "claude-usage-tracker",
+            "dashboard",
+            "--watch",
+            "--no-open",
+            "--background-poll",
+        ]);
+        match cli.command {
+            Commands::Dashboard {
+                watch,
+                no_open,
+                background_poll,
+                ..
+            } => {
+                assert!(watch);
+                assert!(no_open);
+                assert!(background_poll);
+            }
+            other => panic!(
+                "expected dashboard command, got {:?}",
+                std::mem::discriminant(&other)
+            ),
+        }
     }
 }

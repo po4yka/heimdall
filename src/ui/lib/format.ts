@@ -24,6 +24,21 @@ export function fmtResetTime(minutes: number | null | undefined): string {
   return minutes + 'm';
 }
 
+export function fmtRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return 'never';
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return iso;
+  const diffMs = Date.now() - ts;
+  if (diffMs <= 0) return 'just now';
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export function progressColor(percent: number): string {
   if (percent >= 90) return 'var(--accent)';
   if (percent >= 70) return 'var(--warning)';

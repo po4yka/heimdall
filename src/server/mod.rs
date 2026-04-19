@@ -6,6 +6,7 @@ pub mod tz;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::Router;
 use axum::response::Html;
@@ -30,6 +31,8 @@ pub struct ServeOptions {
     pub webhook_config: WebhookConfig,
     /// Phase 20: enable file-watcher auto-refresh (started with `--watch`).
     pub watch: bool,
+    /// Start background polling so remote monitoring data warms at login.
+    pub background_poll: bool,
     /// Agent status monitoring config.
     pub agent_status_config: AgentStatusConfig,
     /// Community signal aggregator config (opt-in, off by default).
@@ -53,23 +56,31 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         oauth_enabled: options.oauth_enabled,
         oauth_refresh_interval: options.oauth_refresh_interval,
         oauth_cache: RwLock::new(None),
+        oauth_refresh_lock: Mutex::new(()),
         openai_enabled: options.openai_enabled,
         openai_admin_key_env: options.openai_admin_key_env,
         openai_refresh_interval: options.openai_refresh_interval,
         openai_lookback_days: options.openai_lookback_days,
         openai_cache: RwLock::new(None),
+        openai_refresh_lock: Mutex::new(()),
         db_lock: Mutex::new(()),
         webhook_state: Mutex::new(WebhookState::default()),
         webhook_config: options.webhook_config,
         scan_event_tx: scan_event_tx.clone(),
         agent_status_config: options.agent_status_config,
         agent_status_cache: RwLock::new(None),
+        agent_status_refresh_lock: Mutex::new(()),
         aggregator_config: options.aggregator_config,
         aggregator_cache: RwLock::new(None),
+        aggregator_refresh_lock: Mutex::new(()),
         blocks_token_limit: options.blocks_token_limit,
         session_length_hours: options.session_length_hours,
         project_aliases: options.project_aliases,
     });
+
+    if options.background_poll {
+        start_background_pollers(state.clone());
+    }
 
     // Phase 20: start file-watcher if --watch was requested.
     // The watcher lives for the lifetime of the server; it is dropped when
@@ -169,6 +180,7 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         .route("/api/data", get(api::api_data))
         .route("/api/rescan", post(api::api_rescan))
         .route("/api/usage-windows", get(api::api_usage_windows))
+        .route("/api/claude-usage", get(api::api_claude_usage))
         .route("/api/health", get(api::api_health))
         .route("/api/heatmap", get(api::api_heatmap))
         .route("/api/stream", get(api::api_stream))
@@ -189,4 +201,82 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
     eprintln!("Press Ctrl+C to stop.");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+pub(crate) fn start_background_pollers(state: Arc<AppState>) {
+    if state.oauth_enabled {
+        let state = state.clone();
+        spawn_background_loop("oauth usage", state.oauth_refresh_interval, move || {
+            let state = state.clone();
+            async move {
+                let _ = api::refresh_usage_windows(&state).await;
+                Ok(())
+            }
+        });
+    }
+
+    if state.agent_status_config.enabled {
+        let state = state.clone();
+        spawn_background_loop(
+            "agent status",
+            state.agent_status_config.refresh_interval,
+            move || {
+                let state = state.clone();
+                async move {
+                    let _ = api::refresh_agent_status(&state).await?;
+                    Ok(())
+                }
+            },
+        );
+    }
+
+    if state.aggregator_config.enabled {
+        let state = state.clone();
+        spawn_background_loop(
+            "community signal",
+            state.aggregator_config.refresh_interval,
+            move || {
+                let state = state.clone();
+                async move {
+                    let _ = api::refresh_community_signal(&state).await?;
+                    Ok(())
+                }
+            },
+        );
+    }
+
+    if state.openai_enabled {
+        let state = state.clone();
+        spawn_background_loop(
+            "OpenAI reconciliation",
+            state.openai_refresh_interval,
+            move || {
+                let state = state.clone();
+                async move {
+                    let _ = api::refresh_openai_reconciliation(&state, None).await;
+                    Ok(())
+                }
+            },
+        );
+    }
+}
+
+pub(crate) fn spawn_background_loop<F, Fut>(
+    name: &'static str,
+    interval_secs: u64,
+    refresh: F,
+) -> tokio::task::JoinHandle<()>
+where
+    F: Fn() -> Fut + Send + Sync + 'static,
+    Fut: std::future::Future<Output = Result<(), axum::http::StatusCode>> + Send + 'static,
+{
+    tokio::spawn(async move {
+        let interval_secs = interval_secs.max(1);
+        loop {
+            if let Err(status) = refresh().await {
+                tracing::warn!("background poller '{}' failed: {}", name, status);
+            }
+            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+        }
+    })
 }

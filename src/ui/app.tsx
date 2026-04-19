@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { FilterBar } from './components/FilterBar';
 import { RateWindowCard, BudgetCard, RateWindowUnavailable } from './components/RateWindowCard';
 import { AgentStatusCard } from './components/AgentStatusCard';
+import { ClaudeUsagePanel } from './components/ClaudeUsagePanel';
 import { EstimationMeta } from './components/EstimationMeta';
 import { ReconciliationBlock } from './components/ReconciliationBlock';
 import { StatsCards } from './components/StatsCards';
@@ -30,6 +31,7 @@ import { CostReconciliationPanel } from './components/CostReconciliationPanel';
 
 import type {
   UsageWindowsResponse,
+  ClaudeUsageResponse,
   SubagentSummary,
   EntrypointSummary,
   ServiceTierSummary,
@@ -92,6 +94,7 @@ function toggleTheme(): void {
 let previousSessionPercent: number | null = null;
 let loadDataInFlight = false;
 let loadUsageWindowsInFlight = false;
+let loadClaudeUsageInFlight = false;
 let loadHeatmapInFlight = false;
 let loadAgentStatusInFlight = false;
 let loadCommunitySignalInFlight = false;
@@ -525,6 +528,18 @@ function renderUsageWindows(data: UsageWindowsResponse): void {
     : '';
 }
 
+function renderClaudeUsage(data: ClaudeUsageResponse): void {
+  const container = $('claude-usage');
+  if (!container) return;
+  if (!data.last_run && !data.latest_snapshot) {
+    container.style.display = 'none';
+    render(null, container);
+    return;
+  }
+  container.style.display = '';
+  render(<ClaudeUsagePanel data={data} />, container);
+}
+
 // ── Secondary tables ─────────────────────────────────────────────────
 function renderSubagentSummary(summary: SubagentSummary): void {
   const container = $('subagent-summary');
@@ -666,6 +681,20 @@ async function loadUsageWindows(): Promise<void> {
   } catch { /* silent */ }
   finally {
     loadUsageWindowsInFlight = false;
+  }
+}
+
+async function loadClaudeUsage(): Promise<void> {
+  if (loadClaudeUsageInFlight) return;
+  loadClaudeUsageInFlight = true;
+  try {
+    const resp = await fetch('/api/claude-usage');
+    if (!resp.ok) return;
+    const data: ClaudeUsageResponse = await resp.json();
+    renderClaudeUsage(data);
+  } catch { /* silent */ }
+  finally {
+    loadClaudeUsageInFlight = false;
   }
 }
 
@@ -904,9 +933,10 @@ window.addEventListener('popstate', () => {
 loadData();
 setInterval(loadData, 30000);
 loadUsageWindows();
+loadClaudeUsage();
 loadAgentStatus();
 loadCommunitySignal();
-setInterval(() => { loadUsageWindows(); loadAgentStatus(); loadCommunitySignal(); }, 60000);
+setInterval(() => { loadUsageWindows(); loadClaudeUsage(); loadAgentStatus(); loadCommunitySignal(); }, 60000);
 loadHeatmap('all');
 setInterval(() => loadHeatmap('all'), 30000);
 loadBillingBlocks();

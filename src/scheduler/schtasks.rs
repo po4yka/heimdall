@@ -15,7 +15,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::{InstallStatus, Interval, Scheduler};
+use super::{InstallStatus, Interval, SCAN_JOB, ScheduledJob, Scheduler};
 
 /// Windows task name registered in Task Scheduler.
 pub const TASK_NAME: &str = "HeimdallScan";
@@ -28,6 +28,16 @@ const MINUTE_OFFSET: u8 = 17;
 ///
 /// Returns a `Vec<String>` (not `Vec<&str>`) so callers own the data.
 pub fn build_create_args(bin_path: &Path, db_path: &Path, interval: Interval) -> Vec<String> {
+    build_create_args_for_job(bin_path, db_path, interval, SCAN_JOB)
+}
+
+pub fn build_create_args_for_job(
+    bin_path: &Path,
+    db_path: &Path,
+    interval: Interval,
+    job: ScheduledJob,
+) -> Vec<String> {
+    let command = job.command.join(" ");
     let schedule = match interval {
         Interval::Hourly => "HOURLY",
         Interval::Daily => "DAILY",
@@ -43,15 +53,16 @@ pub fn build_create_args(bin_path: &Path, db_path: &Path, interval: Interval) ->
         "/Create".to_string(),
         "/F".to_string(), // /F = force overwrite if task exists
         "/TN".to_string(),
-        TASK_NAME.to_string(),
+        job.windows_task_name.to_string(),
         "/SC".to_string(),
         schedule.to_string(),
         "/ST".to_string(),
         start_time,
         "/TR".to_string(),
         format!(
-            "\"{}\" scan --db-path \"{}\"",
+            "\"{}\" {} --db-path \"{}\"",
             bin_path.display(),
+            command,
             db_path.display()
         ),
     ]
@@ -59,22 +70,30 @@ pub fn build_create_args(bin_path: &Path, db_path: &Path, interval: Interval) ->
 
 /// Build the `schtasks /Delete` argv.
 pub fn build_delete_args() -> Vec<String> {
+    build_delete_args_for_job(SCAN_JOB)
+}
+
+pub fn build_delete_args_for_job(job: ScheduledJob) -> Vec<String> {
     vec![
         "schtasks".to_string(),
         "/Delete".to_string(),
         "/F".to_string(), // /F = no confirmation prompt
         "/TN".to_string(),
-        TASK_NAME.to_string(),
+        job.windows_task_name.to_string(),
     ]
 }
 
 /// Build the `schtasks /Query` argv for checking task existence.
 pub fn build_query_args() -> Vec<String> {
+    build_query_args_for_job(SCAN_JOB)
+}
+
+pub fn build_query_args_for_job(job: ScheduledJob) -> Vec<String> {
     vec![
         "schtasks".to_string(),
         "/Query".to_string(),
         "/TN".to_string(),
-        TASK_NAME.to_string(),
+        job.windows_task_name.to_string(),
         "/FO".to_string(),
         "LIST".to_string(),
     ]
@@ -110,13 +129,19 @@ pub struct SchtasksScheduler {
     /// `true` = task is considered installed; `false` = not installed.
     #[allow(dead_code)]
     simulated_status: Option<bool>,
+    job: ScheduledJob,
 }
 
 impl SchtasksScheduler {
     /// Create a production instance.
     pub fn new() -> Self {
+        Self::for_job(SCAN_JOB)
+    }
+
+    pub fn for_job(job: ScheduledJob) -> Self {
         Self {
             simulated_status: None,
+            job,
         }
     }
 
@@ -125,6 +150,7 @@ impl SchtasksScheduler {
     pub fn with_simulated_status(installed: bool) -> Self {
         Self {
             simulated_status: Some(installed),
+            job: SCAN_JOB,
         }
     }
 }
@@ -137,7 +163,7 @@ impl Default for SchtasksScheduler {
 
 impl Scheduler for SchtasksScheduler {
     fn install(&self, interval: Interval, bin_path: &Path, db_path: &Path) -> Result<()> {
-        let args = build_create_args(bin_path, db_path, interval);
+        let args = build_create_args_for_job(bin_path, db_path, interval, self.job);
         // In tests (cfg(test)) we never actually exec — just verify the args.
         #[cfg(not(test))]
         run_schtasks(&args)?;
@@ -147,7 +173,7 @@ impl Scheduler for SchtasksScheduler {
     }
 
     fn uninstall(&self) -> Result<()> {
-        let args = build_delete_args();
+        let args = build_delete_args_for_job(self.job);
         #[cfg(not(test))]
         {
             // Ignore "task does not exist" error (exit 1 with specific message).
@@ -166,7 +192,7 @@ impl Scheduler for SchtasksScheduler {
                     return Ok(InstallStatus::Installed {
                         next_run_hint: format!(
                             "next run at :{:02} via Task Scheduler ({})",
-                            MINUTE_OFFSET, TASK_NAME
+                            MINUTE_OFFSET, self.job.windows_task_name
                         ),
                         config_path: None,
                     });
@@ -179,13 +205,13 @@ impl Scheduler for SchtasksScheduler {
         // Production: query schtasks.
         #[cfg(not(test))]
         {
-            let args = build_query_args();
+            let args = build_query_args_for_job(self.job);
             match run_schtasks(&args) {
                 Ok(_) => {
                     return Ok(InstallStatus::Installed {
                         next_run_hint: format!(
                             "next run at :{:02} via Task Scheduler ({})",
-                            MINUTE_OFFSET, TASK_NAME
+                            MINUTE_OFFSET, self.job.windows_task_name
                         ),
                         config_path: None,
                     });
@@ -206,6 +232,7 @@ impl Scheduler for SchtasksScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scheduler::USAGE_MONITOR_JOB;
 
     // ── build_create_args ─────────────────────────────────────────────────────
 
@@ -217,6 +244,19 @@ mod tests {
             Interval::Hourly,
         );
         assert!(args.contains(&TASK_NAME.to_string()));
+    }
+
+    #[test]
+    fn usage_monitor_args_use_distinct_task_and_subcommand() {
+        let args = build_create_args_for_job(
+            Path::new("C:\\bin\\claude-usage-tracker.exe"),
+            Path::new("C:\\Users\\user\\.claude\\usage.db"),
+            Interval::Daily,
+            USAGE_MONITOR_JOB,
+        );
+        assert!(args.contains(&USAGE_MONITOR_JOB.windows_task_name.to_string()));
+        let tr = args.last().cloned().unwrap_or_default();
+        assert!(tr.contains("usage-monitor capture --db-path"));
     }
 
     #[test]

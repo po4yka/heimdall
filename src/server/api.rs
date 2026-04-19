@@ -16,6 +16,8 @@ use crate::tz::TzParams;
 use crate::agent_status;
 use crate::agent_status::models::AgentStatusSnapshot;
 use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
+use crate::models::ClaudeUsageResponse;
+use crate::models::OpenAiReconciliation;
 use crate::oauth;
 use crate::oauth::models::UsageWindowsResponse;
 use crate::openai;
@@ -31,11 +33,13 @@ pub struct AppState {
     pub oauth_enabled: bool,
     pub oauth_refresh_interval: u64,
     pub oauth_cache: RwLock<Option<(Instant, UsageWindowsResponse)>>,
+    pub oauth_refresh_lock: Mutex<()>,
     pub openai_enabled: bool,
     pub openai_admin_key_env: String,
     pub openai_refresh_interval: u64,
     pub openai_lookback_days: i64,
-    pub openai_cache: RwLock<Option<(Instant, crate::models::OpenAiReconciliation)>>,
+    pub openai_cache: RwLock<Option<(Instant, OpenAiReconciliation)>>,
+    pub openai_refresh_lock: Mutex<()>,
     pub db_lock: Mutex<()>,
     pub webhook_state: Mutex<WebhookState>,
     pub webhook_config: WebhookConfig,
@@ -46,10 +50,12 @@ pub struct AppState {
     pub agent_status_config: AgentStatusConfig,
     /// Cache: (fetched_at, snapshot, claude_etag).
     pub agent_status_cache: RwLock<Option<(Instant, AgentStatusSnapshot, Option<String>)>>,
+    pub agent_status_refresh_lock: Mutex<()>,
     /// Community-signal aggregator config (opt-in, off by default).
     pub aggregator_config: AggregatorConfig,
     /// Community-signal cache: (fetched_at, signal).
     pub aggregator_cache: RwLock<Option<(Instant, CommunitySignal)>>,
+    pub aggregator_refresh_lock: Mutex<()>,
     /// Token quota for the /api/billing-blocks endpoint (from config [blocks.token_limit]).
     pub blocks_token_limit: Option<i64>,
     /// Effective session length in hours for /api/billing-blocks (from config, Phase 13).
@@ -83,7 +89,7 @@ pub async fn api_data(
 
     if state.openai_enabled {
         result.openai_reconciliation =
-            Some(fetch_openai_reconciliation(&state, openai_local_cost_nanos).await);
+            Some(refresh_openai_reconciliation(&state, Some(openai_local_cost_nanos)).await);
     }
 
     maybe_send_cost_threshold_webhook(&state, &result).await;
@@ -110,10 +116,10 @@ pub async fn api_data(
     Ok(Json(value))
 }
 
-async fn fetch_openai_reconciliation(
+pub(crate) async fn refresh_openai_reconciliation(
     state: &Arc<AppState>,
-    local_cost_nanos: i64,
-) -> crate::models::OpenAiReconciliation {
+    local_cost_nanos: Option<i64>,
+) -> OpenAiReconciliation {
     {
         let cache = state.openai_cache.read().await;
         if let Some((fetched_at, ref data)) = *cache
@@ -123,6 +129,20 @@ async fn fetch_openai_reconciliation(
         }
     }
 
+    let _refresh_guard = state.openai_refresh_lock.lock().await;
+    {
+        let cache = state.openai_cache.read().await;
+        if let Some((fetched_at, ref data)) = *cache
+            && fetched_at.elapsed().as_secs() < state.openai_refresh_interval
+        {
+            return data.clone();
+        }
+    }
+
+    let local_cost_nanos = match local_cost_nanos {
+        Some(nanos) => nanos,
+        None => fetch_openai_local_cost_nanos(state).await.unwrap_or(0),
+    };
     let estimated_local_cost = local_cost_nanos as f64 / 1_000_000_000.0;
     let reconciliation = match std::env::var(&state.openai_admin_key_env) {
         Ok(admin_key) if !admin_key.trim().is_empty() => {
@@ -133,7 +153,7 @@ async fn fetch_openai_reconciliation(
             )
             .await
         }
-        _ => crate::models::OpenAiReconciliation {
+        _ => OpenAiReconciliation {
             available: false,
             lookback_days: state.openai_lookback_days,
             start_date: (chrono::Utc::now().date_naive()
@@ -154,12 +174,40 @@ async fn fetch_openai_reconciliation(
         },
     };
 
+    let cached = {
+        let cache = state.openai_cache.read().await;
+        cache.as_ref().map(|(_, data)| data.clone())
+    };
+    let to_store = if reconciliation.available {
+        reconciliation.clone()
+    } else {
+        cached.unwrap_or_else(|| reconciliation.clone())
+    };
+
     {
         let mut cache = state.openai_cache.write().await;
-        *cache = Some((Instant::now(), reconciliation.clone()));
+        *cache = Some((Instant::now(), to_store.clone()));
     }
 
-    reconciliation
+    to_store
+}
+
+async fn fetch_openai_local_cost_nanos(state: &Arc<AppState>) -> Result<i64, StatusCode> {
+    let db_path = state.db_path.clone();
+    let openai_start_date = (chrono::Utc::now().date_naive()
+        - chrono::Duration::days(state.openai_lookback_days.saturating_sub(1)))
+    .to_string();
+
+    tokio::task::spawn_blocking(move || -> anyhow::Result<i64> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        let local_cost_nanos =
+            db::get_provider_estimated_cost_nanos_since(&conn, "codex", &openai_start_date)?;
+        Ok(local_cost_nanos)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 pub async fn api_rescan(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
@@ -189,38 +237,72 @@ pub async fn api_rescan(State(state): State<Arc<AppState>>) -> Result<Json<Value
 pub async fn api_usage_windows(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
+    let resp = refresh_usage_windows(&state).await;
+    let value = serde_json::to_value(resp).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
+}
+
+pub(crate) async fn refresh_usage_windows(state: &Arc<AppState>) -> UsageWindowsResponse {
     if !state.oauth_enabled {
-        let value = serde_json::to_value(UsageWindowsResponse::unavailable())
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        return Ok(Json(value));
+        return UsageWindowsResponse::unavailable();
     }
 
-    // Check cache
     {
         let cache = state.oauth_cache.read().await;
         if let Some((fetched_at, ref data)) = *cache
             && fetched_at.elapsed().as_secs() < state.oauth_refresh_interval
         {
-            let value =
-                serde_json::to_value(data).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            return Ok(Json(value));
+            return data.clone();
         }
     }
 
-    // Cache miss or expired: fetch fresh data
-    let resp = oauth::poll_usage().await;
-
-    if let Some(session) = resp.session.as_ref() {
-        maybe_send_session_webhook(&state, session.used_percent, session.resets_in_minutes).await;
+    let _refresh_guard = state.oauth_refresh_lock.lock().await;
+    {
+        let cache = state.oauth_cache.read().await;
+        if let Some((fetched_at, ref data)) = *cache
+            && fetched_at.elapsed().as_secs() < state.oauth_refresh_interval
+        {
+            return data.clone();
+        }
     }
 
-    // Update cache
+    let resp = oauth::poll_usage().await;
+    if let Some(session) = resp.session.as_ref() {
+        maybe_send_session_webhook(state, session.used_percent, session.resets_in_minutes).await;
+    }
+
+    let cached = {
+        let cache = state.oauth_cache.read().await;
+        cache.as_ref().map(|(_, data)| data.clone())
+    };
+    let to_store = if resp.available {
+        resp.clone()
+    } else {
+        cached.unwrap_or_else(|| resp.clone())
+    };
+
     {
         let mut cache = state.oauth_cache.write().await;
-        *cache = Some((Instant::now(), resp.clone()));
+        *cache = Some((Instant::now(), to_store.clone()));
     }
 
-    let value = serde_json::to_value(resp).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    to_store
+}
+
+pub async fn api_claude_usage(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, StatusCode> {
+    let db_path = state.db_path.clone();
+    let response = tokio::task::spawn_blocking(move || -> anyhow::Result<ClaudeUsageResponse> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        db::get_latest_claude_usage_response(&conn)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let value = serde_json::to_value(response).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(value))
 }
 
@@ -235,106 +317,137 @@ pub async fn api_health() -> &'static str {
 pub async fn api_agent_status(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
+    let snapshot = refresh_agent_status(&state).await?;
+    let value = serde_json::to_value(&snapshot).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
+}
+
+pub(crate) async fn refresh_agent_status(
+    state: &Arc<AppState>,
+) -> Result<AgentStatusSnapshot, StatusCode> {
+    refresh_agent_status_with(state, |config, cached_etag| async move {
+        tokio::task::spawn_blocking(move || agent_status::poll(&config, cached_etag.as_deref()))
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    })
+    .await
+}
+
+pub(crate) async fn refresh_agent_status_with<F, Fut>(
+    state: &Arc<AppState>,
+    fetcher: F,
+) -> Result<AgentStatusSnapshot, StatusCode>
+where
+    F: FnOnce(AgentStatusConfig, Option<String>) -> Fut,
+    Fut: std::future::Future<Output = Result<(AgentStatusSnapshot, Option<String>), StatusCode>>,
+{
     if !state.agent_status_config.enabled {
-        let empty = AgentStatusSnapshot::default();
-        let value = serde_json::to_value(empty).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        return Ok(Json(value));
+        return Ok(AgentStatusSnapshot::default());
     }
 
-    // Check cache
     {
         let cache = state.agent_status_cache.read().await;
         if let Some((fetched_at, ref data, _)) = *cache
             && fetched_at.elapsed().as_secs() < state.agent_status_config.refresh_interval
         {
-            let value =
-                serde_json::to_value(data).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            return Ok(Json(value));
+            return Ok(data.clone());
         }
     }
 
-    // Cache miss or expired: fetch fresh data in a blocking task.
+    let _refresh_guard = state.agent_status_refresh_lock.lock().await;
+    {
+        let cache = state.agent_status_cache.read().await;
+        if let Some((fetched_at, ref data, _)) = *cache
+            && fetched_at.elapsed().as_secs() < state.agent_status_config.refresh_interval
+        {
+            return Ok(data.clone());
+        }
+    }
+
     let config = state.agent_status_config.clone();
-    let cached_etag: Option<String> = {
+    let cached_etag = {
         let cache = state.agent_status_cache.read().await;
         cache.as_ref().and_then(|(_, _, etag)| etag.clone())
     };
+    let (mut snapshot, new_etag) = fetcher(config, cached_etag).await?;
+    let is_fresh = snapshot.claude.is_some() || snapshot.openai.is_some();
 
+    if is_fresh {
+        persist_agent_status_snapshot(state, &mut snapshot).await;
+        maybe_send_agent_status_webhooks(state, &snapshot).await;
+        let mut cache = state.agent_status_cache.write().await;
+        *cache = Some((Instant::now(), snapshot.clone(), new_etag));
+        return Ok(snapshot);
+    }
+
+    let cached = {
+        let cache = state.agent_status_cache.read().await;
+        cache
+            .as_ref()
+            .map(|(_, data, etag)| (data.clone(), etag.clone()))
+    };
+    if let Some((snapshot, etag)) = cached {
+        let mut cache = state.agent_status_cache.write().await;
+        *cache = Some((Instant::now(), snapshot.clone(), etag));
+        return Ok(snapshot);
+    }
+
+    let mut cache = state.agent_status_cache.write().await;
+    *cache = Some((Instant::now(), snapshot.clone(), None));
+    Ok(snapshot)
+}
+
+async fn persist_agent_status_snapshot(state: &Arc<AppState>, snapshot: &mut AgentStatusSnapshot) {
     let db_path = state.db_path.clone();
-    let (snapshot, new_etag) = tokio::task::spawn_blocking(move || {
-        let (mut snap, etag) = agent_status::poll(&config, cached_etag.as_deref());
-        let is_fresh = snap.claude.is_some() || snap.openai.is_some();
-        if is_fresh {
-            // Persist history and enrich with uptime. Errors are non-fatal.
-            if let Ok(conn) = db::open_db(&db_path) {
-                let _ = db::init_db(&conn);
-                let ts_epoch = chrono::Utc::now().timestamp();
+    let mut snapshot_out = std::mem::take(snapshot);
+    let updated = tokio::task::spawn_blocking(move || {
+        if let Ok(conn) = db::open_db(&db_path) {
+            let _ = db::init_db(&conn);
+            let ts_epoch = chrono::Utc::now().timestamp();
 
-                // Persist Claude components.
-                if let Some(ref claude) = snap.claude {
-                    let samples: Vec<(String, String, String)> = claude
-                        .components
-                        .iter()
-                        .map(|c| (c.id.clone(), c.name.clone(), c.status.clone()))
-                        .collect();
-                    let _ = db::insert_agent_status_samples(&conn, "claude", &samples, ts_epoch);
+            if let Some(ref claude) = snapshot_out.claude {
+                let samples: Vec<(String, String, String)> = claude
+                    .components
+                    .iter()
+                    .map(|c| (c.id.clone(), c.name.clone(), c.status.clone()))
+                    .collect();
+                let _ = db::insert_agent_status_samples(&conn, "claude", &samples, ts_epoch);
+            }
+
+            if let Some(ref openai) = snapshot_out.openai {
+                let samples: Vec<(String, String, String)> = openai
+                    .components
+                    .iter()
+                    .map(|c| (c.id.clone(), c.name.clone(), c.status.clone()))
+                    .collect();
+                let _ = db::insert_agent_status_samples(&conn, "openai", &samples, ts_epoch);
+            }
+
+            if let Err(e) = db::prune_agent_status_history(&conn, 90) {
+                tracing::debug!("agent_status prune error: {}", e);
+            }
+
+            if let Some(ref mut claude) = snapshot_out.claude {
+                for c in &mut claude.components {
+                    let id = c.id.clone();
+                    c.uptime_30d = db::uptime_pct(&conn, "claude", &id, 30).ok().flatten();
+                    c.uptime_7d = db::uptime_pct(&conn, "claude", &id, 7).ok().flatten();
                 }
+            }
 
-                // Persist OpenAI components (use name as stable id — no UUID from the shim).
-                if let Some(ref openai) = snap.openai {
-                    let samples: Vec<(String, String, String)> = openai
-                        .components
-                        .iter()
-                        .map(|c| (c.id.clone(), c.name.clone(), c.status.clone()))
-                        .collect();
-                    let _ = db::insert_agent_status_samples(&conn, "openai", &samples, ts_epoch);
-                }
-
-                // Prune rows older than 90 days (cheap; run every poll).
-                if let Err(e) = db::prune_agent_status_history(&conn, 90) {
-                    tracing::debug!("agent_status prune error: {}", e);
-                }
-
-                // Enrich Claude components with uptime.
-                if let Some(ref mut claude) = snap.claude {
-                    for c in &mut claude.components {
-                        let id = c.id.clone();
-                        c.uptime_30d = db::uptime_pct(&conn, "claude", &id, 30).ok().flatten();
-                        c.uptime_7d = db::uptime_pct(&conn, "claude", &id, 7).ok().flatten();
-                    }
-                }
-
-                // Enrich OpenAI components with uptime.
-                if let Some(ref mut openai) = snap.openai {
-                    for c in &mut openai.components {
-                        let id = c.id.clone();
-                        c.uptime_30d = db::uptime_pct(&conn, "openai", &id, 30).ok().flatten();
-                        c.uptime_7d = db::uptime_pct(&conn, "openai", &id, 7).ok().flatten();
-                    }
+            if let Some(ref mut openai) = snapshot_out.openai {
+                for c in &mut openai.components {
+                    let id = c.id.clone();
+                    c.uptime_30d = db::uptime_pct(&conn, "openai", &id, 30).ok().flatten();
+                    c.uptime_7d = db::uptime_pct(&conn, "openai", &id, 7).ok().flatten();
                 }
             }
         }
-        (snap, etag)
+        snapshot_out
     })
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Fire agent-status webhooks on severity-threshold transitions.
-    maybe_send_agent_status_webhooks(&state, &snapshot).await;
-
-    // Update cache (preserve existing snapshot on 304 / empty).
-    {
-        let mut cache = state.agent_status_cache.write().await;
-        let is_empty = snapshot.claude.is_none() && snapshot.openai.is_none();
-        if !is_empty {
-            *cache = Some((Instant::now(), snapshot.clone(), new_etag));
-        } else if cache.is_none() {
-            *cache = Some((Instant::now(), snapshot.clone(), None));
-        }
-    }
-
-    let value = serde_json::to_value(&snapshot).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(value))
+    .unwrap_or_else(|_| std::mem::take(snapshot));
+    *snapshot = updated;
 }
 
 async fn maybe_send_agent_status_webhooks(state: &Arc<AppState>, snapshot: &AgentStatusSnapshot) {
@@ -857,6 +970,10 @@ fn preserve_runtime_history(
         return Ok(());
     }
 
+    let live_conn = db::open_db(db_path)?;
+    db::init_db(&live_conn)?;
+    drop(live_conn);
+
     let conn = db::open_db(temp_path)?;
     db::init_db(&conn)?;
 
@@ -879,6 +996,18 @@ fn preserve_runtime_history(
              (ts_epoch, provider, component_id, component_name, status)
          SELECT ts_epoch, provider, component_id, component_name, status
          FROM live_db.agent_status_history;",
+    )?;
+
+    conn.execute_batch(
+        "INSERT OR IGNORE INTO claude_usage_runs
+             (id, captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary)
+         SELECT id, captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary
+         FROM live_db.claude_usage_runs;
+
+         INSERT OR IGNORE INTO claude_usage_factors
+             (id, run_id, factor_key, display_label, percent, description, advice_text, display_order)
+         SELECT id, run_id, factor_key, display_label, percent, description, advice_text, display_order
+         FROM live_db.claude_usage_factors;",
     )?;
 
     conn.execute(
@@ -963,39 +1092,63 @@ async fn maybe_send_cost_threshold_webhook(
 pub async fn api_community_signal(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !state.aggregator_config.enabled {
+    let Some(signal) = refresh_community_signal(&state).await? else {
         return Ok(Json(serde_json::json!({ "enabled": false })));
+    };
+
+    let value = serde_json::to_value(&signal).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
+}
+
+pub(crate) async fn refresh_community_signal(
+    state: &Arc<AppState>,
+) -> Result<Option<CommunitySignal>, StatusCode> {
+    if !state.aggregator_config.enabled {
+        return Ok(None);
     }
 
-    // Check cache.
     {
         let cache = state.aggregator_cache.read().await;
         if let Some((fetched_at, ref data)) = *cache
             && fetched_at.elapsed().as_secs() < state.aggregator_config.refresh_interval
         {
-            let value =
-                serde_json::to_value(data).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            return Ok(Json(value));
+            return Ok(Some(data.clone()));
         }
     }
 
-    // Cache miss: fetch fresh data in a blocking task.
+    let _refresh_guard = state.aggregator_refresh_lock.lock().await;
+    {
+        let cache = state.aggregator_cache.read().await;
+        if let Some((fetched_at, ref data)) = *cache
+            && fetched_at.elapsed().as_secs() < state.aggregator_config.refresh_interval
+        {
+            return Ok(Some(data.clone()));
+        }
+    }
+
     let config = state.aggregator_config.clone();
     let signal = tokio::task::spawn_blocking(move || status_aggregator::poll(&config))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Fire divergence webhooks (leading-indicator guard).
-    maybe_send_community_spike_webhooks(&state, &signal).await;
+    maybe_send_community_spike_webhooks(state, &signal).await;
 
-    // Update cache.
+    let cached = {
+        let cache = state.aggregator_cache.read().await;
+        cache.as_ref().map(|(_, data)| data.clone())
+    };
+    let to_store = if signal.enabled {
+        signal.clone()
+    } else {
+        cached.unwrap_or_else(|| signal.clone())
+    };
+
     {
         let mut cache = state.aggregator_cache.write().await;
-        *cache = Some((Instant::now(), signal.clone()));
+        *cache = Some((Instant::now(), to_store.clone()));
     }
 
-    let value = serde_json::to_value(&signal).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(value))
+    Ok(Some(to_store))
 }
 
 /// Fire `community_signal_spike` webhook events when the crowd signal is at

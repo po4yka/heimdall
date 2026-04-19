@@ -86,7 +86,7 @@ Heimdall exposes 9 tools to Claude / Claude Desktop / Cursor at inference time v
 
 ### CLI subcommands
 
-- `scan`, `today`, `stats`, `dashboard`, `dashboard --watch`
+- `scan`, `today`, `stats`, `dashboard`, `dashboard --watch`, `dashboard --no-open`, `dashboard --background-poll`
 - `weekly [--start-of-week=<monday|sunday|...>] [--breakdown] [--json]`
 - `blocks [--session-length=<hours>] [--token-limit=<N|max>] [--provider=<name>] [--active] [--no-gaps] [--compact] [--json]`
 - `statusline [--refresh-interval=30] [--cost-source=<auto|local|hook|both>] [--visual-burn-rate=<off|bracket|emoji|both>] [--offline]`
@@ -95,7 +95,7 @@ Heimdall exposes 9 tools to Claude / Claude Desktop / Cursor at inference time v
 - `export --format=<csv|json|jsonl> --period=<today|week|month|year|all> --output=<path>` (optional `--provider`, `--project`, `--jq`)
 - `optimize --format=<text|json>`
 - `scheduler install|uninstall|status [--interval=<hourly|daily>]` (platform-native via launchd / cron / schtasks)
-- `daemon install|uninstall|status` (macOS-only always-on dashboard via launchd with `KeepAlive: true`)
+- `daemon install|uninstall|status` (macOS-only login-start dashboard via launchd with `KeepAlive: true`)
 - `hook install|uninstall|status` (wires `heimdall-hook` into `~/.claude/settings.json` PreToolUse)
 - `db reset [--yes]` (TTY-guarded destructive wipe — type `rebuild` interactively, or pass `--yes` in non-TTY)
 - `menubar` (SwiftBar-formatted output for macOS menu-bar widgets)
@@ -199,7 +199,7 @@ _The tap repository (`heimdall/homebrew-tap`) must be created and published by t
 
 ### Daemon mode (macOS only)
 
-Run the dashboard as a persistent background service that starts automatically at login:
+Run the dashboard as a persistent background service that starts automatically at user login:
 
 ```bash
 claude-usage-tracker daemon install
@@ -207,7 +207,7 @@ claude-usage-tracker daemon status
 claude-usage-tracker daemon uninstall
 ```
 
-The daemon runs `claude-usage-tracker dashboard --host localhost --port 8080 --watch` under launchd with `KeepAlive: true`. Logs are written to `~/Library/Logs/heimdall/`. Linux systemd and Windows Service support is deferred to a future release.
+The daemon runs `claude-usage-tracker dashboard --host localhost --port 8080 --watch --no-open --background-poll` under a per-user LaunchAgent with `KeepAlive: true`. That means the service starts at login, does not open a browser window, and begins warming remote monitoring/data-fetch caches even before the dashboard is opened manually. Logs are written to `~/Library/Logs/heimdall/`. Linux systemd user services and Windows Task Scheduler logon-trigger support are deferred to a future release.
 
 ### Scheduler (cross-platform)
 

@@ -26,6 +26,34 @@ use std::str::FromStr;
 
 use anyhow::Result;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScheduledJob {
+    pub slug: &'static str,
+    pub launchd_label: &'static str,
+    pub launchd_filename: &'static str,
+    pub cron_tag: &'static str,
+    pub windows_task_name: &'static str,
+    pub command: &'static [&'static str],
+}
+
+pub const SCAN_JOB: ScheduledJob = ScheduledJob {
+    slug: "scan",
+    launchd_label: "dev.heimdall.scan",
+    launchd_filename: "dev.heimdall.scan.plist",
+    cron_tag: "# heimdall-scheduler:v1",
+    windows_task_name: "HeimdallScan",
+    command: &["scan"],
+};
+
+pub const USAGE_MONITOR_JOB: ScheduledJob = ScheduledJob {
+    slug: "usage-monitor",
+    launchd_label: "dev.heimdall.usage-monitor",
+    launchd_filename: "dev.heimdall.usage-monitor.plist",
+    cron_tag: "# heimdall-usage-monitor:v1",
+    windows_task_name: "HeimdallUsageMonitor",
+    command: &["usage-monitor", "capture"],
+};
+
 // ── Common types ──────────────────────────────────────────────────────────────
 
 /// How often the scan job should run.
@@ -93,17 +121,22 @@ pub trait Scheduler {
 
 /// Return the platform-appropriate scheduler with default (production) paths.
 pub fn current() -> Box<dyn Scheduler> {
+    current_for(SCAN_JOB)
+}
+
+/// Return the platform-appropriate scheduler for the given Heimdall job.
+pub fn current_for(job: ScheduledJob) -> Box<dyn Scheduler> {
     #[cfg(target_os = "macos")]
     {
-        Box::new(launchd::LaunchdScheduler::new(None))
+        Box::new(launchd::LaunchdScheduler::for_job(None, job))
     }
     #[cfg(target_os = "linux")]
     {
-        Box::new(cron::CronScheduler::new(None, None))
+        Box::new(cron::CronScheduler::for_job(None, None, job))
     }
     #[cfg(target_os = "windows")]
     {
-        Box::new(schtasks::SchtasksScheduler::new())
+        Box::new(schtasks::SchtasksScheduler::for_job(job))
     }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     {

@@ -14,12 +14,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use super::{InstallStatus, Interval, Scheduler};
+use super::{InstallStatus, Interval, SCAN_JOB, ScheduledJob, Scheduler};
 
 /// Label used as the plist `<key>Label</key>` and as the service identifier.
 pub const PLIST_LABEL: &str = "dev.heimdall.scan";
 /// File name of the plist placed under `LaunchAgents/`.
-const PLIST_FILENAME: &str = "dev.heimdall.scan.plist";
+pub const PLIST_FILENAME: &str = "dev.heimdall.scan.plist";
 /// Minute offset used in `StartCalendarInterval` to avoid :00 pile-up.
 const MINUTE_OFFSET: u8 = 17;
 
@@ -30,12 +30,17 @@ pub struct LaunchdScheduler {
     /// When `Some`, file writes target `<root>/Library/LaunchAgents/` instead
     /// of `~/Library/LaunchAgents/`.  Shell-outs are skipped.
     root: Option<PathBuf>,
+    job: ScheduledJob,
 }
 
 impl LaunchdScheduler {
     /// Create a production instance (writes to real `~/Library/LaunchAgents`).
     pub fn new(root: Option<PathBuf>) -> Self {
-        Self { root }
+        Self::for_job(root, SCAN_JOB)
+    }
+
+    pub fn for_job(root: Option<PathBuf>, job: ScheduledJob) -> Self {
+        Self { root, job }
     }
 
     /// Resolve the directory where the plist should live.
@@ -51,7 +56,7 @@ impl LaunchdScheduler {
 
     /// Full path to the plist file.
     pub fn plist_path(&self) -> PathBuf {
-        self.agents_dir().join(PLIST_FILENAME)
+        self.agents_dir().join(self.job.launchd_filename)
     }
 
     /// Whether we are running in test/dry-run mode (skip shell-outs).
@@ -66,8 +71,23 @@ impl LaunchdScheduler {
 ///
 /// This function is pure (no I/O) so it can be unit-tested directly.
 pub fn generate_plist(bin_path: &Path, db_path: &Path, interval: Interval) -> String {
+    generate_plist_for_job(SCAN_JOB, bin_path, db_path, interval)
+}
+
+pub fn generate_plist_for_job(
+    job: ScheduledJob,
+    bin_path: &Path,
+    db_path: &Path,
+    interval: Interval,
+) -> String {
     let bin_str = bin_path.display();
     let db_str = db_path.display();
+    let command_entries = job
+        .command
+        .iter()
+        .map(|arg| format!("        <string>{arg}</string>"))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     // For hourly: fire at minute :17 every hour.
     // For daily:  fire at 02:17 every day (low-traffic hour).
@@ -96,13 +116,13 @@ pub fn generate_plist(bin_path: &Path, db_path: &Path, interval: Interval) -> St
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>
+        <key>Label</key>
     <string>{label}</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>{bin}</string>
-        <string>scan</string>
+{command_entries}
         <string>--db-path</string>
         <string>{db}</string>
     </array>
@@ -123,8 +143,9 @@ pub fn generate_plist(bin_path: &Path, db_path: &Path, interval: Interval) -> St
 </dict>
 </plist>
 "#,
-        label = PLIST_LABEL,
+        label = job.launchd_label,
         bin = bin_str,
+        command_entries = command_entries,
         db = db_str,
         entries = calendar_entries,
     )
@@ -141,7 +162,7 @@ impl Scheduler for LaunchdScheduler {
         std::fs::create_dir_all(&agents_dir)?;
 
         let plist_path = self.plist_path();
-        let plist_xml = generate_plist(bin_path, db_path, interval);
+        let plist_xml = generate_plist_for_job(self.job, bin_path, db_path, interval);
         std::fs::write(&plist_path, &plist_xml)?;
 
         if !self.is_isolated() {
@@ -224,6 +245,7 @@ unsafe fn libc_uid() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scheduler::USAGE_MONITOR_JOB;
     use tempfile::TempDir;
 
     // ── plist generation tests ────────────────────────────────────────────────
@@ -306,6 +328,19 @@ mod tests {
             xml.contains("<string>--db-path</string>"),
             "plist must include '--db-path' argument"
         );
+    }
+
+    #[test]
+    fn plist_for_usage_monitor_uses_distinct_label_and_subcommand() {
+        let xml = generate_plist_for_job(
+            USAGE_MONITOR_JOB,
+            Path::new("/bin/claude-usage-tracker"),
+            Path::new("/tmp/usage.db"),
+            Interval::Daily,
+        );
+        assert!(xml.contains(USAGE_MONITOR_JOB.launchd_label));
+        assert!(xml.contains("<string>usage-monitor</string>"));
+        assert!(xml.contains("<string>capture</string>"));
     }
 
     // ── install/uninstall/status round-trip (isolated, no shell-out) ─────────

@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-use super::{InstallStatus, Interval, Scheduler};
+use super::{InstallStatus, Interval, SCAN_JOB, ScheduledJob, Scheduler};
 
 /// Comment marker that identifies Heimdall-owned crontab lines.
 pub const CRON_TAG: &str = "# heimdall-scheduler:v1";
@@ -37,6 +37,7 @@ pub struct CronScheduler {
     /// Unused on Linux; kept for API symmetry with the launchd backend.
     #[allow(dead_code)]
     root: Option<PathBuf>,
+    job: ScheduledJob,
 }
 
 impl CronScheduler {
@@ -46,7 +47,19 @@ impl CronScheduler {
     /// - `crontab_file`: if `Some`, use this file as the crontab source instead
     ///   of shelling out.  Pass `None` in production.
     pub fn new(root: Option<PathBuf>, crontab_file: Option<PathBuf>) -> Self {
-        Self { root, crontab_file }
+        Self::for_job(root, crontab_file, SCAN_JOB)
+    }
+
+    pub fn for_job(
+        root: Option<PathBuf>,
+        crontab_file: Option<PathBuf>,
+        job: ScheduledJob,
+    ) -> Self {
+        Self {
+            crontab_file,
+            root,
+            job,
+        }
     }
 
     /// Read the current crontab text.
@@ -110,12 +123,30 @@ pub fn cron_expression(interval: Interval) -> String {
 /// 17 * * * * /path/to/bin scan --db-path /path/to/db
 /// ```
 pub fn build_heimdall_block(bin_path: &Path, db_path: &Path, interval: Interval) -> String {
+    build_heimdall_block_for_job(SCAN_JOB, bin_path, db_path, interval)
+}
+
+pub fn build_heimdall_block_for_job(
+    job: ScheduledJob,
+    bin_path: &Path,
+    db_path: &Path,
+    interval: Interval,
+) -> String {
     format!(
-        "{}\n{} {} scan --db-path {}\n",
-        CRON_TAG,
+        "{}\n{} {}\n",
+        job.cron_tag,
         cron_expression(interval),
+        job_command(bin_path, db_path, job),
+    )
+}
+
+fn job_command(bin_path: &Path, db_path: &Path, job: ScheduledJob) -> String {
+    let command = job.command.join(" ");
+    format!(
+        "{} {} --db-path {}",
         bin_path.display(),
-        db_path.display(),
+        command,
+        db_path.display()
     )
 }
 
@@ -125,11 +156,15 @@ pub fn build_heimdall_block(bin_path: &Path, db_path: &Path, interval: Interval)
 /// before the next blank line or EOF.  Lines without the tag are preserved
 /// byte-for-byte.
 pub fn remove_heimdall_entries(crontab: &str) -> String {
+    remove_heimdall_entries_for_job(crontab, SCAN_JOB)
+}
+
+pub fn remove_heimdall_entries_for_job(crontab: &str, job: ScheduledJob) -> String {
     let mut output = String::with_capacity(crontab.len());
     let mut skip = false;
 
     for line in crontab.lines() {
-        if line.contains(CRON_TAG) {
+        if line.contains(job.cron_tag) {
             skip = true;
             continue;
         }
@@ -158,12 +193,22 @@ pub fn merge_heimdall_entry(
     db_path: &Path,
     interval: Interval,
 ) -> String {
-    let mut clean = remove_heimdall_entries(existing_crontab);
+    merge_heimdall_entry_for_job(existing_crontab, bin_path, db_path, interval, SCAN_JOB)
+}
+
+pub fn merge_heimdall_entry_for_job(
+    existing_crontab: &str,
+    bin_path: &Path,
+    db_path: &Path,
+    interval: Interval,
+    job: ScheduledJob,
+) -> String {
+    let mut clean = remove_heimdall_entries_for_job(existing_crontab, job);
     // Ensure there is a trailing newline before we append.
     if !clean.is_empty() && !clean.ends_with('\n') {
         clean.push('\n');
     }
-    clean.push_str(&build_heimdall_block(bin_path, db_path, interval));
+    clean.push_str(&build_heimdall_block_for_job(job, bin_path, db_path, interval));
     clean
 }
 
@@ -172,24 +217,24 @@ pub fn merge_heimdall_entry(
 impl Scheduler for CronScheduler {
     fn install(&self, interval: Interval, bin_path: &Path, db_path: &Path) -> Result<()> {
         let existing = self.read_crontab()?;
-        let updated = merge_heimdall_entry(&existing, bin_path, db_path, interval);
+        let updated = merge_heimdall_entry_for_job(&existing, bin_path, db_path, interval, self.job);
         self.write_crontab(&updated)?;
         Ok(())
     }
 
     fn uninstall(&self) -> Result<()> {
         let existing = self.read_crontab()?;
-        if !existing.contains(CRON_TAG) {
+        if !existing.contains(self.job.cron_tag) {
             return Ok(());
         }
-        let updated = remove_heimdall_entries(&existing);
+        let updated = remove_heimdall_entries_for_job(&existing, self.job);
         self.write_crontab(&updated)?;
         Ok(())
     }
 
     fn status(&self) -> Result<InstallStatus> {
         let crontab = self.read_crontab()?;
-        if !crontab.contains(CRON_TAG) {
+        if !crontab.contains(self.job.cron_tag) {
             return Ok(InstallStatus::NotInstalled);
         }
         let hint = format!("next run at :{:02} via cron", MINUTE_OFFSET);
@@ -205,6 +250,7 @@ impl Scheduler for CronScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scheduler::USAGE_MONITOR_JOB;
     use tempfile::NamedTempFile;
 
     // ── cron_expression ───────────────────────────────────────────────────────
@@ -242,6 +288,18 @@ mod tests {
         );
         assert!(block.contains("/opt/bin/claude-usage-tracker"));
         assert!(block.contains("/home/bob/.claude/usage.db"));
+    }
+
+    #[test]
+    fn usage_monitor_block_uses_distinct_tag_and_subcommand() {
+        let block = build_heimdall_block_for_job(
+            USAGE_MONITOR_JOB,
+            Path::new("/opt/bin/claude-usage-tracker"),
+            Path::new("/home/bob/.claude/usage.db"),
+            Interval::Daily,
+        );
+        assert!(block.contains(USAGE_MONITOR_JOB.cron_tag));
+        assert!(block.contains("usage-monitor capture --db-path"));
     }
 
     // ── remove_heimdall_entries ───────────────────────────────────────────────

@@ -136,7 +136,7 @@ impl LaunchdDaemonScheduler {
 /// Pure (no I/O) so it can be unit-tested directly.
 ///
 /// The plist runs:
-///   `<bin> dashboard --host localhost --port 8080 --watch`
+///   `<bin> dashboard --host localhost --port 8080 --watch --no-open --background-poll`
 ///
 /// with `RunAtLoad = true` and `KeepAlive = true` so launchd restarts the
 /// process if it exits.
@@ -163,6 +163,8 @@ pub fn generate_daemon_plist(bin_path: &Path, logs_dir: &Path) -> String {
         <string>--port</string>
         <string>8080</string>
         <string>--watch</string>
+        <string>--no-open</string>
+        <string>--background-poll</string>
     </array>
 
     <key>RunAtLoad</key>
@@ -380,6 +382,14 @@ mod tests {
         assert!(
             xml.contains("<string>--watch</string>"),
             "plist must pass --watch"
+        );
+        assert!(
+            xml.contains("<string>--no-open</string>"),
+            "plist must pass --no-open"
+        );
+        assert!(
+            xml.contains("<string>--background-poll</string>"),
+            "plist must pass --background-poll"
         );
     }
 

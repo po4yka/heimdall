@@ -205,6 +205,41 @@ pub struct OpenAiReconciliation {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClaudeUsageFactor {
+    pub factor_key: String,
+    pub display_label: String,
+    pub percent: f64,
+    pub description: String,
+    pub advice_text: String,
+    pub display_order: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClaudeUsageRunMeta {
+    pub id: i64,
+    pub captured_at: String,
+    pub status: String,
+    pub exit_code: Option<i32>,
+    pub invocation_mode: String,
+    pub period: String,
+    pub parser_version: String,
+    pub error_summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClaudeUsageSnapshot {
+    pub run: ClaudeUsageRunMeta,
+    pub factors: Vec<ClaudeUsageFactor>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClaudeUsageResponse {
+    pub available: bool,
+    pub last_run: Option<ClaudeUsageRunMeta>,
+    pub latest_snapshot: Option<ClaudeUsageSnapshot>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DailyModelRow {
     pub day: String,

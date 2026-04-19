@@ -41,6 +41,10 @@ pub struct Config {
     #[serde(default)]
     pub oauth: OAuthConfig,
 
+    /// Scheduled Claude `/usage` capture settings.
+    #[serde(default)]
+    pub claude_usage_monitor: ClaudeUsageMonitorConfig,
+
     /// Webhook notification settings.
     #[serde(default)]
     pub webhooks: WebhookConfig,
@@ -314,6 +318,28 @@ impl Default for OAuthConfig {
         Self {
             enabled: true,
             refresh_interval: 60,
+        }
+    }
+}
+
+/// Claude `/usage` monitoring configuration.
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(default)]
+pub struct ClaudeUsageMonitorConfig {
+    /// Optional explicit path to the Claude CLI binary. When absent, PATH is used.
+    pub claude_binary: Option<PathBuf>,
+    /// Optional working directory used for headless `/usage` capture.
+    pub working_dir: Option<PathBuf>,
+    /// Default install interval for `usage-monitor install` (daily|hourly).
+    pub default_interval: String,
+}
+
+impl Default for ClaudeUsageMonitorConfig {
+    fn default() -> Self {
+        Self {
+            claude_binary: None,
+            working_dir: None,
+            default_interval: "daily".into(),
         }
     }
 }
@@ -795,6 +821,39 @@ output = 8.0
         let config = load_config_from(&path);
         assert!(!config.oauth.enabled);
         assert_eq!(config.oauth.refresh_interval, 120);
+    }
+
+    #[test]
+    fn test_claude_usage_monitor_defaults() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        std::fs::File::create(&path).unwrap();
+        let config = load_config_from(&path);
+        assert!(config.claude_usage_monitor.claude_binary.is_none());
+        assert!(config.claude_usage_monitor.working_dir.is_none());
+        assert_eq!(config.claude_usage_monitor.default_interval, "daily");
+    }
+
+    #[test]
+    fn test_claude_usage_monitor_custom() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(
+            f,
+            "[claude_usage_monitor]\nclaude_binary = \"/opt/bin/claude\"\nworking_dir = \"/tmp\"\ndefault_interval = \"hourly\"\n"
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(
+            config.claude_usage_monitor.claude_binary,
+            Some(PathBuf::from("/opt/bin/claude"))
+        );
+        assert_eq!(
+            config.claude_usage_monitor.working_dir,
+            Some(PathBuf::from("/tmp"))
+        );
+        assert_eq!(config.claude_usage_monitor.default_interval, "hourly");
     }
 
     #[test]

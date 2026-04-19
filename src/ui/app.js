@@ -1576,6 +1576,20 @@
     if (minutes >= 60) return Math.floor(minutes / 60) + "h " + minutes % 60 + "m";
     return minutes + "m";
   }
+  function fmtRelativeTime(iso) {
+    if (!iso) return "never";
+    const ts = Date.parse(iso);
+    if (Number.isNaN(ts)) return iso;
+    const diffMs = Date.now() - ts;
+    if (diffMs <= 0) return "just now";
+    const minutes = Math.floor(diffMs / 6e4);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
   function anyHasCredits(rows) {
     return rows.some((r4) => r4.credits != null);
   }
@@ -1913,6 +1927,119 @@
         " UTC"
       ] })
     ] }) });
+  }
+
+  // src/ui/components/ClaudeUsagePanel.tsx
+  function statusColor(status) {
+    if (status === "failed") return "var(--accent)";
+    if (status === "unparsed") return "var(--warning)";
+    return "var(--text-secondary)";
+  }
+  function ClaudeUsagePanel({ data }) {
+    const snapshot = data.latest_snapshot ?? null;
+    const lastRun = data.last_run ?? null;
+    const lastSuccess = snapshot?.run.captured_at ?? null;
+    return /* @__PURE__ */ u2("div", { class: "card card-flat bento-full table-card", "aria-label": "Claude usage monitor", children: [
+      /* @__PURE__ */ u2(
+        "div",
+        {
+          style: {
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "16px",
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+            marginBottom: snapshot ? "18px" : "0"
+          },
+          children: [
+            /* @__PURE__ */ u2("div", { children: [
+              /* @__PURE__ */ u2("h2", { style: { marginBottom: "8px" }, children: "Claude /usage" }),
+              /* @__PURE__ */ u2("div", { class: "stat-sub", children: [
+                "Last success ",
+                fmtRelativeTime(lastSuccess),
+                lastRun ? ` \xB7 Last run ${fmtRelativeTime(lastRun.captured_at)}` : ""
+              ] })
+            ] }),
+            lastRun && /* @__PURE__ */ u2(
+              "div",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "12px",
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: statusColor(lastRun.status)
+                },
+                children: [
+                  "[",
+                  lastRun.status,
+                  "]"
+                ]
+              }
+            )
+          ]
+        }
+      ),
+      !snapshot && /* @__PURE__ */ u2("div", { class: "stat-sub", children: lastRun?.error_summary || "No parsed Claude /usage snapshot has been captured yet." }),
+      snapshot && /* @__PURE__ */ u2("div", { style: { display: "grid", gap: "14px" }, children: [
+        snapshot.factors.map((factor) => /* @__PURE__ */ u2(
+          "div",
+          {
+            style: {
+              borderTop: "1px solid var(--border)",
+              paddingTop: "14px"
+            },
+            children: [
+              /* @__PURE__ */ u2(
+                "div",
+                {
+                  style: {
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: "16px",
+                    marginBottom: "10px",
+                    flexWrap: "wrap"
+                  },
+                  children: [
+                    /* @__PURE__ */ u2("div", { style: { fontWeight: 500 }, children: factor.display_label }),
+                    /* @__PURE__ */ u2(
+                      "div",
+                      {
+                        style: {
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "14px",
+                          whiteSpace: "nowrap"
+                        },
+                        children: [
+                          factor.percent.toFixed(1),
+                          "%"
+                        ]
+                      }
+                    )
+                  ]
+                }
+              ),
+              /* @__PURE__ */ u2(
+                SegmentedProgressBar,
+                {
+                  value: factor.percent,
+                  max: 100,
+                  size: "compact",
+                  "aria-label": `${factor.display_label} percent`
+                }
+              ),
+              factor.advice_text && /* @__PURE__ */ u2("div", { class: "stat-sub", style: { marginTop: "10px" }, children: factor.advice_text })
+            ]
+          },
+          factor.factor_key
+        )),
+        lastRun?.status !== "success" && lastRun?.error_summary && /* @__PURE__ */ u2("div", { class: "stat-sub", style: { marginTop: "4px" }, children: [
+          "Latest run note: ",
+          lastRun.error_summary
+        ] })
+      ] })
+    ] });
   }
 
   // src/ui/components/EstimationMeta.tsx
@@ -7030,6 +7157,7 @@ ${row.project}` : row.project;
   var previousSessionPercent = null;
   var loadDataInFlight = false;
   var loadUsageWindowsInFlight = false;
+  var loadClaudeUsageInFlight = false;
   var loadHeatmapInFlight = false;
   var loadAgentStatusInFlight = false;
   var loadCommunitySignalInFlight = false;
@@ -7398,6 +7526,17 @@ ${row.project}` : row.project;
     }
     planBadge.value = data.identity?.plan ? data.identity.plan.charAt(0).toUpperCase() + data.identity.plan.slice(1) : "";
   }
+  function renderClaudeUsage(data) {
+    const container = $2("claude-usage");
+    if (!container) return;
+    if (!data.last_run && !data.latest_snapshot) {
+      container.style.display = "none";
+      R(null, container);
+      return;
+    }
+    container.style.display = "";
+    R(/* @__PURE__ */ u2(ClaudeUsagePanel, { data }), container);
+  }
   function renderSubagentSummary(summary) {
     const container = $2("subagent-summary");
     if (!container) return;
@@ -7526,6 +7665,19 @@ ${row.project}` : row.project;
     } catch {
     } finally {
       loadUsageWindowsInFlight = false;
+    }
+  }
+  async function loadClaudeUsage() {
+    if (loadClaudeUsageInFlight) return;
+    loadClaudeUsageInFlight = true;
+    try {
+      const resp = await fetch("/api/claude-usage");
+      if (!resp.ok) return;
+      const data = await resp.json();
+      renderClaudeUsage(data);
+    } catch {
+    } finally {
+      loadClaudeUsageInFlight = false;
     }
   }
   function renderAgentStatus(snapshot) {
@@ -7709,10 +7861,12 @@ ${row.project}` : row.project;
   loadData();
   setInterval(loadData, 3e4);
   loadUsageWindows();
+  loadClaudeUsage();
   loadAgentStatus();
   loadCommunitySignal();
   setInterval(() => {
     loadUsageWindows();
+    loadClaudeUsage();
     loadAgentStatus();
     loadCommunitySignal();
   }, 6e4);

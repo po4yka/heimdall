@@ -28,6 +28,37 @@ export interface UsageWindowsResponse {
   error?: string;
 }
 
+export interface ClaudeUsageFactor {
+  factor_key: string;
+  display_label: string;
+  percent: number;
+  description: string;
+  advice_text: string;
+  display_order: number;
+}
+
+export interface ClaudeUsageRunMeta {
+  id: number;
+  captured_at: string;
+  status: string;
+  exit_code: number | null;
+  invocation_mode: string;
+  period: string;
+  parser_version: string;
+  error_summary?: string | null;
+}
+
+export interface ClaudeUsageSnapshot {
+  run: ClaudeUsageRunMeta;
+  factors: ClaudeUsageFactor[];
+}
+
+export interface ClaudeUsageResponse {
+  available: boolean;
+  last_run?: ClaudeUsageRunMeta | null;
+  latest_snapshot?: ClaudeUsageSnapshot | null;
+}
+
 export interface SubagentSummary {
   parent_turns: number;
   parent_input: number;
