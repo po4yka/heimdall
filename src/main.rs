@@ -210,6 +210,23 @@ enum Commands {
         #[command(subcommand)]
         action: McpAction,
     },
+    /// Utilities for Heimdall's config file
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Emit the JSON schema for Heimdall's config to stdout
+    Schema,
+    /// Print the resolved effective config (for debugging)
+    Show {
+        /// Output format: toml | json
+        #[arg(long, default_value = "toml", value_parser = ["toml", "json"])]
+        format: String,
+    },
 }
 
 /// Parse the MCP transport string.
@@ -396,9 +413,13 @@ fn main() -> Result<()> {
         )
         .init();
 
-    let cfg = config::load_config();
+    let cfg = config::load_config_resolved();
     apply_pricing_overrides(&cfg);
     maybe_load_litellm(&cfg);
+
+    // Resolve merged configs (commands.* overrides flat defaults).
+    let resolved_blocks = cfg.resolved_blocks();
+    let resolved_statusline = cfg.resolved_statusline();
 
     // Extract config values before match (avoids partial move issues)
     let cfg_db = cfg.db_path;
@@ -415,11 +436,11 @@ fn main() -> Result<()> {
     let cfg_display_currency = cfg.display.currency.unwrap_or_else(|| "USD".into());
     let cfg_agent_status = cfg.agent_status;
     let cfg_aggregator = cfg.aggregator;
-    let cfg_blocks_token_limit = cfg.blocks.token_limit;
-    let cfg_statusline_low = cfg.statusline.context_low_threshold;
-    let cfg_statusline_medium = cfg.statusline.context_medium_threshold;
-    let cfg_burn_rate_normal_max = cfg.statusline.burn_rate_normal_max;
-    let cfg_burn_rate_moderate_max = cfg.statusline.burn_rate_moderate_max;
+    let cfg_blocks_token_limit = resolved_blocks.token_limit;
+    let cfg_statusline_low = resolved_statusline.context_low_threshold;
+    let cfg_statusline_medium = resolved_statusline.context_medium_threshold;
+    let cfg_burn_rate_normal_max = resolved_statusline.burn_rate_normal_max;
+    let cfg_burn_rate_moderate_max = resolved_statusline.burn_rate_moderate_max;
 
     let default_db = |cli_db: Option<PathBuf>| -> PathBuf {
         cli_db
@@ -621,6 +642,9 @@ fn main() -> Result<()> {
         #[cfg(feature = "mcp")]
         Commands::Mcp { action } => {
             cmd_mcp(action, &default_db)?;
+        }
+        Commands::Config { action } => {
+            cmd_config(action)?;
         }
     }
     Ok(())
@@ -1060,6 +1084,40 @@ fn cmd_daemon(action: DaemonAction) -> Result<()> {
                 std::process::exit(1);
             }
         },
+    }
+    Ok(())
+}
+
+// TODO: CI script emits schemas/heimdall.config.schema.json from
+// `heimdall config schema` on each release to catch schema drift.
+
+fn cmd_config(action: ConfigAction) -> Result<()> {
+    match action {
+        ConfigAction::Schema => {
+            let schema = schemars::schema_for!(config::Config);
+            println!("{}", serde_json::to_string_pretty(&schema)?);
+        }
+        ConfigAction::Show { format } => {
+            let cfg = config::load_config_resolved();
+            match format.as_str() {
+                "json" => {
+                    println!("{}", serde_json::to_string_pretty(&cfg)?);
+                }
+                _ => {
+                    // toml (default)
+                    match toml::to_string_pretty(&cfg) {
+                        Ok(s) => print!("{}", s),
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: could not serialize to TOML: {}. Falling back to JSON.",
+                                e
+                            );
+                            println!("{}", serde_json::to_string_pretty(&cfg)?);
+                        }
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }

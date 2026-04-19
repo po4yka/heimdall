@@ -15,7 +15,7 @@ path = "src/hook/main.rs"
 
 [features]
 default = ["mcp"]
-mcp = ["dep:rmcp", "dep:schemars"]
+mcp = ["dep:rmcp"]
 
 [dependencies]
 anyhow = "1"
@@ -39,7 +39,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"
 rmcp = { version = "1.5.0", optional = true, features = ["server", "macros", "schemars", "transport-async-rw"] }
-schemars = { version = "1", optional = true }
+schemars = "1"
 jaq-core = "3.0.0"
 jaq-std = "3.0.0"
 jaq-json = { version = "2.0.0", features = ["std"] }

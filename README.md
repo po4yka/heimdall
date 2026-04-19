@@ -91,7 +91,7 @@ Reads local transcripts written by every supported tool, then presents an intera
 
 ### Extensibility
 
-- **Config file** -- `~/.claude/usage-tracker.toml` for all settings. Dual-path resolver adds `$HEIMDALL_CONFIG` and `~/.config/heimdall/config.toml`.
+- **Config file** -- `~/.claude/usage-tracker.{json,toml}` for all settings (JSON ships a `$schema` for IDE autocomplete). Dual-path resolver adds `$HEIMDALL_CONFIG` and `~/.config/heimdall/config.{json,toml}`. JSON is preferred at each path when both exist.
 - **Custom pricing overrides** -- per-model rate customization in config.
 - **Webhook notifications** -- POST to URL on session depletion, cost threshold, agent status transition, or community-signal spike divergence.
 - **JSON API** -- all dashboard data available via REST endpoints, incl. SSE stream.
@@ -256,7 +256,37 @@ Filter errors exit with status 2. Empty results (null or no match) produce no ou
 
 ## Configuration
 
-Create `~/.claude/usage-tracker.toml` (all fields optional). The dual-path resolver also checks `$HEIMDALL_CONFIG` and `~/.config/heimdall/config.toml`.
+Create `~/.claude/usage-tracker.toml` or `~/.claude/usage-tracker.json` (all fields optional). The dual-path resolver also checks `$HEIMDALL_CONFIG` and `~/.config/heimdall/config.{json,toml}`. When both formats exist at the same location, JSON takes precedence.
+
+### JSON format with IDE autocomplete
+
+Heimdall also accepts JSON config (`~/.claude/usage-tracker.json`). Add a `$schema` key
+for VS Code / IntelliJ autocomplete:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/po4yka/heimdall/main/schemas/heimdall.config.schema.json",
+  "blocks": { "token_limit": 1000000 },
+  "statusline": { "context_low_threshold": 0.5, "context_medium_threshold": 0.8 }
+}
+```
+
+Per-command overrides nest under `commands.<name>` and win over flat defaults:
+
+```json
+{
+  "blocks": { "token_limit": 500000 },
+  "commands": { "blocks": { "token_limit": 1000000 } }
+}
+```
+
+The `commands.blocks.token_limit` wins.
+
+Generate/refresh the schema locally:
+
+```bash
+claude-usage-tracker config schema > schemas/heimdall.config.schema.json
+```
 
 ```toml
 # Custom project directories (overrides platform defaults)

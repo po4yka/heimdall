@@ -1,0 +1,539 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Config",
+  "description": "Top-level Heimdall configuration.\n\nLoaded from `~/.claude/usage-tracker.toml` (or `.json`).  All fields are\noptional; omitted fields fall back to built-in defaults.\n\nJSON format: set `$schema` for IDE autocomplete:\n```json\n{\n  \"$schema\": \"https://raw.githubusercontent.com/po4yka/heimdall/main/schemas/heimdall.config.schema.json\",\n  \"display\": { \"currency\": \"EUR\" },\n  \"blocks\": { \"token_limit\": 1000000 }\n}\n```",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "description": "JSON Schema URL for IDE autocomplete.  Ignored at runtime.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "agent_status": {
+      "description": "Upstream coding-agent status monitoring.",
+      "$ref": "#/$defs/AgentStatusConfig",
+      "default": {
+        "alert_min_severity": "major",
+        "claude_enabled": true,
+        "enabled": true,
+        "openai_enabled": true,
+        "refresh_interval": 60
+      }
+    },
+    "blocks": {
+      "description": "Billing-block quota settings.",
+      "$ref": "#/$defs/BlocksConfig",
+      "default": {
+        "token_limit": null
+      }
+    },
+    "commands": {
+      "description": "Per-command config overrides.  Values here win over the flat top-level\nfields for the named subcommand.  Currently `blocks` and `statusline`\nare supported.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CommandsOverrides"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "db_path": {
+      "description": "Override the default SQLite database path (`~/.claude/usage.db`).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "display": {
+      "description": "Display settings (currency, formatting).",
+      "$ref": "#/$defs/Display",
+      "default": {
+        "currency": "USD"
+      }
+    },
+    "host": {
+      "description": "Dashboard bind host (default: localhost).",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "oauth": {
+      "description": "OAuth settings for real-time rate window tracking.",
+      "$ref": "#/$defs/OAuthConfig",
+      "default": {
+        "enabled": true,
+        "refresh_interval": 60
+      }
+    },
+    "openai": {
+      "description": "Optional OpenAI organization usage reconciliation for Codex API-backed usage.",
+      "$ref": "#/$defs/OpenAiConfig",
+      "default": {
+        "admin_key_env": "OPENAI_ADMIN_KEY",
+        "enabled": true,
+        "lookback_days": 30,
+        "refresh_interval": 300
+      }
+    },
+    "port": {
+      "description": "Dashboard bind port (default: 8080).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint16",
+      "default": null,
+      "maximum": 65535,
+      "minimum": 0
+    },
+    "pricing": {
+      "description": "Custom per-model pricing overrides. Keys are model names (e.g. `claude-opus-4-6`).",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PricingOverride"
+      },
+      "default": {}
+    },
+    "pricing_source": {
+      "description": "Pricing source settings (static vs litellm refresh).",
+      "$ref": "#/$defs/PricingConfig",
+      "default": {
+        "refresh_hours": null,
+        "source": null
+      }
+    },
+    "projects_dirs": {
+      "description": "Additional directories to scan for JSONL usage files.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
+    "status_aggregator": {
+      "description": "Optional community-signal aggregator (opt-in, off by default).",
+      "$ref": "#/$defs/AggregatorConfig",
+      "default": {
+        "api_key_env": "STATUSGATOR_API_KEY",
+        "claude_services": [
+          "claude-ai",
+          "claude"
+        ],
+        "enabled": false,
+        "openai_services": [
+          "openai",
+          "chatgpt"
+        ],
+        "provider": "statusgator",
+        "refresh_interval": 300,
+        "spike_webhook": true
+      }
+    },
+    "statusline": {
+      "description": "Statusline display settings.",
+      "$ref": "#/$defs/StatuslineConfig",
+      "default": {
+        "burn_rate_moderate_max": 10000.0,
+        "burn_rate_normal_max": 4000.0,
+        "context_low_threshold": 0.5,
+        "context_medium_threshold": 0.8
+      }
+    },
+    "webhooks": {
+      "description": "Webhook notification settings.",
+      "$ref": "#/$defs/WebhookConfig",
+      "default": {
+        "agent_status": false,
+        "cost_threshold": null,
+        "session_depleted": false,
+        "spike_webhook": false,
+        "url": null
+      }
+    }
+  },
+  "$defs": {
+    "AgentStatusConfig": {
+      "description": "Configuration for upstream coding-agent status monitoring.",
+      "type": "object",
+      "properties": {
+        "alert_min_severity": {
+          "description": "Minimum severity for webhook alerts (default: Major).",
+          "$ref": "#/$defs/AlertSeverity",
+          "default": "major"
+        },
+        "claude_enabled": {
+          "description": "Enable Claude status polling (default: true).",
+          "type": "boolean",
+          "default": true
+        },
+        "enabled": {
+          "description": "Enable polling (default: true).",
+          "type": "boolean",
+          "default": true
+        },
+        "openai_enabled": {
+          "description": "Enable OpenAI status polling (default: true).",
+          "type": "boolean",
+          "default": true
+        },
+        "refresh_interval": {
+          "description": "Seconds between polls (default: 60).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 60,
+          "minimum": 0
+        }
+      }
+    },
+    "AggregatorConfig": {
+      "description": "Configuration for the optional community-signal aggregator (opt-in feature).\n\nTOML section: `[status_aggregator]`\nFeature is **off by default** (`enabled = false`).",
+      "type": "object",
+      "properties": {
+        "api_key_env": {
+          "description": "Environment variable that holds the API key (key never stored in TOML).",
+          "type": "string",
+          "default": "STATUSGATOR_API_KEY"
+        },
+        "claude_services": {
+          "description": "StatusGator service slugs for Claude.",
+          "type": "array",
+          "default": [
+            "claude-ai",
+            "claude"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "enabled": {
+          "description": "Enable community signal polling (default: false — explicit opt-in required).",
+          "type": "boolean",
+          "default": false
+        },
+        "openai_services": {
+          "description": "StatusGator service slugs for OpenAI.",
+          "type": "array",
+          "default": [
+            "openai",
+            "chatgpt"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "provider": {
+          "description": "Backend provider name (default: \"statusgator\").",
+          "type": "string",
+          "default": "statusgator"
+        },
+        "refresh_interval": {
+          "description": "Seconds between polls (default: 300 — respects StatusGator free-tier rate).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 300,
+          "minimum": 0
+        },
+        "spike_webhook": {
+          "description": "Fire a webhook when crowd=Spike AND official indicator is below Major.",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "AlertSeverity": {
+      "description": "Alert severity floor for agent-status webhooks.",
+      "type": "string",
+      "enum": [
+        "minor",
+        "major",
+        "critical"
+      ]
+    },
+    "BlocksConfig": {
+      "description": "Billing-block quota configuration.\n\nExample TOML:\n```toml\n[blocks]\ntoken_limit = 1000000  # optional; CLI --token-limit takes precedence\n```",
+      "type": "object",
+      "properties": {
+        "token_limit": {
+          "description": "Token quota for the active billing block used by the dashboard.\nThe CLI `--token-limit` flag takes precedence over this value.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64",
+          "default": null
+        }
+      }
+    },
+    "CommandsOverrides": {
+      "description": "Per-command configuration overrides.  Fields here win over the flat\ntop-level equivalents for the relevant subcommand.\n\nExample JSON:\n```json\n{ \"commands\": { \"blocks\": { \"token_limit\": 1000000 } } }\n```",
+      "type": "object",
+      "properties": {
+        "blocks": {
+          "description": "Overrides for the `blocks` subcommand.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BlocksConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "statusline": {
+          "description": "Overrides for the `statusline` subcommand.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatuslineOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      }
+    },
+    "Display": {
+      "description": "Display settings — controls how costs are rendered to the user.",
+      "type": "object",
+      "properties": {
+        "currency": {
+          "description": "ISO 4217 currency code for cost display (default: USD, no conversion).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": "USD"
+        }
+      }
+    },
+    "OAuthConfig": {
+      "description": "OAuth polling configuration.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Enable OAuth usage polling (default: true, auto-detects credentials).",
+          "type": "boolean",
+          "default": true
+        },
+        "refresh_interval": {
+          "description": "Seconds between API polls (default: 60).",
+          "type": "integer",
+          "format": "uint64",
+          "default": 60,
+          "minimum": 0
+        }
+      }
+    },
+    "OpenAiConfig": {
+      "description": "OpenAI organization usage reconciliation configuration.",
+      "type": "object",
+      "properties": {
+        "admin_key_env": {
+          "description": "Environment variable name that stores the OpenAI admin key.",
+          "type": "string",
+          "default": "OPENAI_ADMIN_KEY"
+        },
+        "enabled": {
+          "description": "Enable OpenAI organization usage reconciliation (default: true if OPENAI_ADMIN_KEY exists).",
+          "type": "boolean",
+          "default": true
+        },
+        "lookback_days": {
+          "description": "Number of trailing days to compare against local Codex estimates.",
+          "type": "integer",
+          "format": "int64",
+          "default": 30
+        },
+        "refresh_interval": {
+          "description": "Seconds between API refreshes.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 300,
+          "minimum": 0
+        }
+      }
+    },
+    "PricingConfig": {
+      "description": "Pricing source settings — controls where model pricing data is loaded from.",
+      "type": "object",
+      "properties": {
+        "refresh_hours": {
+          "description": "How many hours before re-fetching the LiteLLM cache (default: 24).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "default": null,
+          "minimum": 0
+        },
+        "source": {
+          "description": "Pricing source: \"static\" (default) or \"litellm\".",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "PricingOverride": {
+      "description": "Per-model pricing override entry.",
+      "type": "object",
+      "properties": {
+        "cache_read": {
+          "description": "Cache read price per million tokens (USD, optional).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "cache_write": {
+          "description": "Cache write price per million tokens (USD, optional).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "input": {
+          "description": "Input token price per million tokens (USD).",
+          "type": "number",
+          "format": "double"
+        },
+        "output": {
+          "description": "Output token price per million tokens (USD).",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "input",
+        "output"
+      ]
+    },
+    "StatuslineConfig": {
+      "description": "Statusline display configuration.\n\nExample TOML:\n```toml\n[statusline]\ncontext_low_threshold = 0.5    # below → no marker\ncontext_medium_threshold = 0.8 # below → [WARN], above → [CRIT]\nburn_rate_normal_max = 4000    # tokens/min at or below → Normal\nburn_rate_moderate_max = 10000 # tokens/min at or below → Moderate\n```",
+      "type": "object",
+      "properties": {
+        "burn_rate_moderate_max": {
+          "description": "tokens/min at or below this value → Moderate tier; above → High (default: 10000).",
+          "type": "number",
+          "format": "double",
+          "default": 10000.0
+        },
+        "burn_rate_normal_max": {
+          "description": "tokens/min at or below this value → Normal tier (default: 4000).",
+          "type": "number",
+          "format": "double",
+          "default": 4000.0
+        },
+        "context_low_threshold": {
+          "description": "Fractional fill below which no severity marker is shown (default: 0.5).",
+          "type": "number",
+          "format": "double",
+          "default": 0.5
+        },
+        "context_medium_threshold": {
+          "description": "Fractional fill above which [CRIT] is shown; between low and this → [WARN] (default: 0.8).",
+          "type": "number",
+          "format": "double",
+          "default": 0.8
+        }
+      }
+    },
+    "StatuslineOverride": {
+      "description": "Statusline overrides with all fields optional (unlike `StatuslineConfig`\nwhich carries non-optional f64 defaults).",
+      "type": "object",
+      "properties": {
+        "burn_rate_moderate_max": {
+          "description": "tokens/min at or below this value → Moderate tier; above → High.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "burn_rate_normal_max": {
+          "description": "tokens/min at or below this value → Normal tier.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "context_low_threshold": {
+          "description": "Fractional fill below which no severity marker is shown.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "context_medium_threshold": {
+          "description": "Fractional fill above which [CRIT] is shown; between low and this → [WARN].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        }
+      }
+    },
+    "WebhookConfig": {
+      "description": "Webhook notification configuration.",
+      "type": "object",
+      "properties": {
+        "agent_status": {
+          "description": "Notify on agent status transitions (default: true when URL is set).",
+          "type": "boolean",
+          "default": true
+        },
+        "cost_threshold": {
+          "description": "Notify when daily cost exceeds this amount (USD).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double",
+          "default": null
+        },
+        "session_depleted": {
+          "description": "Notify on session depletion events.",
+          "type": "boolean",
+          "default": false
+        },
+        "spike_webhook": {
+          "description": "Notify on community signal spike when official status is below Major\n(default: true — fires only when the feature is enabled).",
+          "type": "boolean",
+          "default": true
+        },
+        "url": {
+          "description": "URL to POST webhook events to.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    }
+  }
+}

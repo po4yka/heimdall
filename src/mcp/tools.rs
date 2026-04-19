@@ -751,8 +751,8 @@ fn query_cost_reconciliation(db_path: &Path, period: &str) -> Result<serde_json:
 }
 
 fn query_quota(db_path: &Path) -> Result<serde_json::Value> {
-    let cfg = crate::config::load_config();
-    let Some(token_limit) = cfg.blocks.token_limit else {
+    let cfg = crate::config::load_config_resolved();
+    let Some(token_limit) = cfg.resolved_blocks().token_limit else {
         return Ok(serde_json::json!({ "enabled": false }));
     };
 

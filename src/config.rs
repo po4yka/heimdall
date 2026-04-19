@@ -1,20 +1,39 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-/// Configuration loaded from ~/.claude/usage-tracker.toml
-#[derive(Debug, Default, Deserialize)]
+/// Top-level Heimdall configuration.
+///
+/// Loaded from `~/.claude/usage-tracker.toml` (or `.json`).  All fields are
+/// optional; omitted fields fall back to built-in defaults.
+///
+/// JSON format: set `$schema` for IDE autocomplete:
+/// ```json
+/// {
+///   "$schema": "https://raw.githubusercontent.com/po4yka/heimdall/main/schemas/heimdall.config.schema.json",
+///   "display": { "currency": "EUR" },
+///   "blocks": { "token_limit": 1000000 }
+/// }
+/// ```
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct Config {
+    /// Additional directories to scan for JSONL usage files.
     pub projects_dirs: Vec<PathBuf>,
+
+    /// Override the default SQLite database path (`~/.claude/usage.db`).
     pub db_path: Option<PathBuf>,
+
+    /// Dashboard bind host (default: localhost).
     pub host: Option<String>,
+
+    /// Dashboard bind port (default: 8080).
     pub port: Option<u16>,
 
-    /// Custom pricing overrides. Keys are model names (e.g., "claude-opus-4-6"),
-    /// values override the built-in rates.
+    /// Custom per-model pricing overrides. Keys are model names (e.g. `claude-opus-4-6`).
     #[serde(default)]
     pub pricing: HashMap<String, PricingOverride>,
 
@@ -35,29 +54,116 @@ pub struct Config {
     pub display: Display,
 
     /// Pricing source settings (static vs litellm refresh).
-    /// TOML section: [pricing_source]
     #[serde(default)]
     pub pricing_source: PricingConfig,
 
     /// Upstream coding-agent status monitoring.
-    /// TOML section: [agent_status]
     #[serde(default)]
     pub agent_status: AgentStatusConfig,
 
     /// Optional community-signal aggregator (opt-in, off by default).
-    /// TOML section: [status_aggregator]
     #[serde(default, rename = "status_aggregator")]
     pub aggregator: AggregatorConfig,
 
     /// Billing-block quota settings.
-    /// TOML section: [blocks]
     #[serde(default)]
     pub blocks: BlocksConfig,
 
     /// Statusline display settings.
-    /// TOML section: [statusline]
     #[serde(default)]
     pub statusline: StatuslineConfig,
+
+    /// Per-command config overrides.  Values here win over the flat top-level
+    /// fields for the named subcommand.  Currently `blocks` and `statusline`
+    /// are supported.
+    #[serde(default)]
+    pub commands: Option<CommandsOverrides>,
+
+    /// JSON Schema URL for IDE autocomplete.  Ignored at runtime.
+    /// Skipped when `None` during serialisation so `config show --format=toml`
+    /// does not emit a bare `"$schema"` quoted key.
+    #[serde(
+        rename = "$schema",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub schema: Option<String>,
+}
+
+impl Config {
+    /// Return the effective `BlocksConfig`, merging flat `blocks` with any
+    /// `commands.blocks` override.  `commands.blocks.*` wins for each field
+    /// that is `Some`.
+    pub fn resolved_blocks(&self) -> BlocksConfig {
+        let base = self.blocks.clone();
+        let Some(ref cmds) = self.commands else {
+            return base;
+        };
+        let Some(ref override_cfg) = cmds.blocks else {
+            return base;
+        };
+        BlocksConfig {
+            token_limit: override_cfg.token_limit.or(base.token_limit),
+        }
+    }
+
+    /// Return the effective `StatuslineConfig`, merging flat `statusline` with
+    /// any `commands.statusline` override.  `commands.statusline.*` wins for
+    /// each field that is `Some`.
+    pub fn resolved_statusline(&self) -> StatuslineConfig {
+        let base = self.statusline.clone();
+        let Some(ref cmds) = self.commands else {
+            return base;
+        };
+        let Some(ref override_cfg) = cmds.statusline else {
+            return base;
+        };
+        StatuslineConfig {
+            context_low_threshold: override_cfg
+                .context_low_threshold
+                .unwrap_or(base.context_low_threshold),
+            context_medium_threshold: override_cfg
+                .context_medium_threshold
+                .unwrap_or(base.context_medium_threshold),
+            burn_rate_normal_max: override_cfg
+                .burn_rate_normal_max
+                .unwrap_or(base.burn_rate_normal_max),
+            burn_rate_moderate_max: override_cfg
+                .burn_rate_moderate_max
+                .unwrap_or(base.burn_rate_moderate_max),
+        }
+    }
+}
+
+/// Per-command configuration overrides.  Fields here win over the flat
+/// top-level equivalents for the relevant subcommand.
+///
+/// Example JSON:
+/// ```json
+/// { "commands": { "blocks": { "token_limit": 1000000 } } }
+/// ```
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(default)]
+pub struct CommandsOverrides {
+    /// Overrides for the `blocks` subcommand.
+    pub blocks: Option<BlocksConfig>,
+    /// Overrides for the `statusline` subcommand.
+    pub statusline: Option<StatuslineOverride>,
+}
+
+/// Statusline overrides with all fields optional (unlike `StatuslineConfig`
+/// which carries non-optional f64 defaults).
+#[derive(Debug, Default, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(default)]
+pub struct StatuslineOverride {
+    /// Fractional fill below which no severity marker is shown.
+    pub context_low_threshold: Option<f64>,
+    /// Fractional fill above which [CRIT] is shown; between low and this → [WARN].
+    pub context_medium_threshold: Option<f64>,
+    /// tokens/min at or below this value → Normal tier.
+    pub burn_rate_normal_max: Option<f64>,
+    /// tokens/min at or below this value → Moderate tier; above → High.
+    pub burn_rate_moderate_max: Option<f64>,
 }
 
 /// Billing-block quota configuration.
@@ -67,7 +173,7 @@ pub struct Config {
 /// [blocks]
 /// token_limit = 1000000  # optional; CLI --token-limit takes precedence
 /// ```
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct BlocksConfig {
     /// Token quota for the active billing block used by the dashboard.
@@ -85,7 +191,7 @@ pub struct BlocksConfig {
 /// burn_rate_normal_max = 4000    # tokens/min at or below → Normal
 /// burn_rate_moderate_max = 10000 # tokens/min at or below → Moderate
 /// ```
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct StatuslineConfig {
     /// Fractional fill below which no severity marker is shown (default: 0.5).
@@ -109,7 +215,8 @@ impl Default for StatuslineConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+/// OAuth polling configuration.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct OAuthConfig {
     /// Enable OAuth usage polling (default: true, auto-detects credentials).
@@ -127,7 +234,8 @@ impl Default for OAuthConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+/// OpenAI organization usage reconciliation configuration.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct OpenAiConfig {
     /// Enable OpenAI organization usage reconciliation (default: true if OPENAI_ADMIN_KEY exists).
@@ -151,7 +259,8 @@ impl Default for OpenAiConfig {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+/// Webhook notification configuration.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct WebhookConfig {
     /// URL to POST webhook events to.
@@ -174,7 +283,7 @@ fn default_true() -> bool {
 }
 
 /// Alert severity floor for agent-status webhooks.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Default, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AlertSeverity {
     Minor,
@@ -184,7 +293,7 @@ pub enum AlertSeverity {
 }
 
 /// Configuration for upstream coding-agent status monitoring.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct AgentStatusConfig {
     /// Enable polling (default: true).
@@ -235,7 +344,7 @@ fn default_openai_services() -> Vec<String> {
 ///
 /// TOML section: `[status_aggregator]`
 /// Feature is **off by default** (`enabled = false`).
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct AggregatorConfig {
     /// Enable community signal polling (default: false — explicit opt-in required).
@@ -274,18 +383,23 @@ impl Default for AggregatorConfig {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+/// Per-model pricing override entry.
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct PricingOverride {
+    /// Input token price per million tokens (USD).
     pub input: f64,
+    /// Output token price per million tokens (USD).
     pub output: f64,
+    /// Cache write price per million tokens (USD, optional).
     #[serde(default)]
     pub cache_write: Option<f64>,
+    /// Cache read price per million tokens (USD, optional).
     #[serde(default)]
     pub cache_read: Option<f64>,
 }
 
 /// Display settings — controls how costs are rendered to the user.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct Display {
     /// ISO 4217 currency code for cost display (default: USD, no conversion).
@@ -301,7 +415,7 @@ impl Default for Display {
 }
 
 /// Pricing source settings — controls where model pricing data is loaded from.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
 #[serde(default)]
 pub struct PricingConfig {
     /// Pricing source: "static" (default) or "litellm".
@@ -325,6 +439,8 @@ impl PricingConfig {
     }
 }
 
+// ── Config file discovery ──────────────────────────────────────────────────────
+
 fn config_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -333,14 +449,15 @@ fn config_path() -> PathBuf {
 }
 
 /// Resolve the config file path using priority order:
-/// 1. `$HEIMDALL_CONFIG` environment variable
-/// 2. `~/.config/heimdall/config.toml`
-/// 3. `~/.claude/usage-tracker.toml`
+/// 1. `$HEIMDALL_CONFIG` environment variable (used as-is)
+/// 2. `~/.config/heimdall/config.json` then `~/.config/heimdall/config.toml`
+/// 3. `~/.claude/usage-tracker.json` then `~/.claude/usage-tracker.toml`
 /// 4. Returns `None` if none of the above exist (callers use defaults).
 ///
-/// Ported from Claude-Guardian's `_find_config_path()` pattern.
+/// Within each directory, `.json` is preferred over `.toml` so that users who
+/// switch to the schema-backed JSON format get the correct file loaded.
 pub fn resolve_config_path() -> Option<PathBuf> {
-    // 1. Explicit env override
+    // 1. Explicit env override — accept whatever extension the user provides.
     if let Ok(env_path) = std::env::var("HEIMDALL_CONFIG") {
         let p = PathBuf::from(env_path);
         if p.exists() {
@@ -348,21 +465,27 @@ pub fn resolve_config_path() -> Option<PathBuf> {
         }
     }
 
-    // 2. XDG-style ~/.config/heimdall/config.toml
     if let Some(home) = dirs::home_dir() {
-        let xdg = home.join(".config").join("heimdall").join("config.toml");
-        if xdg.exists() {
-            return Some(xdg);
+        // 2. XDG-style ~/.config/heimdall/ — JSON wins over TOML.
+        let xdg_base = home.join(".config").join("heimdall");
+        if xdg_base.join("config.json").exists() {
+            return Some(xdg_base.join("config.json"));
+        }
+        if xdg_base.join("config.toml").exists() {
+            return Some(xdg_base.join("config.toml"));
         }
 
-        // 3. Legacy ~/.claude/usage-tracker.toml
-        let legacy = home.join(".claude").join("usage-tracker.toml");
-        if legacy.exists() {
-            return Some(legacy);
+        // 3. Legacy ~/.claude/ — JSON wins over TOML.
+        let claude_base = home.join(".claude");
+        if claude_base.join("usage-tracker.json").exists() {
+            return Some(claude_base.join("usage-tracker.json"));
+        }
+        if claude_base.join("usage-tracker.toml").exists() {
+            return Some(claude_base.join("usage-tracker.toml"));
         }
     }
 
-    // 4. No config found — callers use bundled defaults
+    // 4. No config found — callers use bundled defaults.
     None
 }
 
@@ -372,8 +495,8 @@ pub fn load_config() -> Config {
 }
 
 /// Load config using the dual-config resolver (for the hook binary).
-/// Applies the priority: HEIMDALL_CONFIG > ~/.config/heimdall/config.toml
-/// > ~/.claude/usage-tracker.toml > bundled defaults.
+/// Applies the priority: HEIMDALL_CONFIG > ~/.config/heimdall/config.{json,toml}
+/// > ~/.claude/usage-tracker.{json,toml} > bundled defaults.
 pub fn load_config_resolved() -> Config {
     match resolve_config_path() {
         Some(path) => load_config_from(&path),
@@ -381,12 +504,26 @@ pub fn load_config_resolved() -> Config {
     }
 }
 
-/// Load config from a specific path, or return defaults if not found.
+/// Detect whether a path is a JSON config file based on its extension.
+fn is_json_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("json"))
+        .unwrap_or(false)
+}
+
+/// Load config from a specific path, dispatching to JSON or TOML parser based
+/// on the file extension.  Returns defaults if the file is absent or unparseable.
 pub fn load_config_from(path: &Path) -> Config {
-    match std::fs::read_to_string(path) {
-        Ok(contents) => match toml::from_str::<Config>(&contents) {
+    let contents = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(_) => return Config::default(),
+    };
+
+    if is_json_path(path) {
+        match serde_json::from_str::<Config>(&contents) {
             Ok(config) => {
-                debug!("Loaded config from {}", path.display());
+                debug!("Loaded JSON config from {}", path.display());
                 config
             }
             Err(e) => {
@@ -397,8 +534,22 @@ pub fn load_config_from(path: &Path) -> Config {
                 );
                 Config::default()
             }
-        },
-        Err(_) => Config::default(),
+        }
+    } else {
+        match toml::from_str::<Config>(&contents) {
+            Ok(config) => {
+                debug!("Loaded TOML config from {}", path.display());
+                config
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: failed to parse {}: {}. Using defaults.",
+                    path.display(),
+                    e
+                );
+                Config::default()
+            }
+        }
     }
 }
 
@@ -827,5 +978,162 @@ spike_webhook = false
         unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
 
         assert_eq!(config.port, Some(7777));
+    }
+
+    // ── Phase 10: JSON config + per-command overrides ────────────────────────
+
+    #[test]
+    fn test_json_config_parses() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.json");
+        std::fs::write(
+            &path,
+            r#"{"display": {"currency": "EUR"}, "blocks": {"token_limit": 1000000}}"#,
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.display.currency.as_deref(), Some("EUR"));
+        assert_eq!(config.blocks.token_limit, Some(1_000_000));
+    }
+
+    #[test]
+    fn test_json_schema_key_ignored() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.json");
+        std::fs::write(
+            &path,
+            r#"{"$schema": "https://example.com/schema.json", "port": 9999}"#,
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.port, Some(9999));
+        assert_eq!(
+            config.schema.as_deref(),
+            Some("https://example.com/schema.json")
+        );
+    }
+
+    #[test]
+    fn test_toml_still_loads() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(f, "port = 4242\n[display]\ncurrency = \"GBP\"\n").unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.port, Some(4242));
+        assert_eq!(config.display.currency.as_deref(), Some("GBP"));
+    }
+
+    #[test]
+    fn test_json_wins_over_toml_via_env() {
+        let _guard = super::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let tmp = TempDir::new().unwrap();
+
+        // JSON config: port 1111
+        let json_path = tmp.path().join("config.json");
+        std::fs::write(&json_path, r#"{"port": 1111}"#).unwrap();
+
+        // TOML config: port 2222
+        let toml_path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&toml_path).unwrap();
+        write!(f, "port = 2222\n").unwrap();
+
+        // Point HEIMDALL_CONFIG at the JSON file explicitly
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", &json_path) };
+        let config = load_config_resolved();
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+
+        assert_eq!(config.port, Some(1111));
+    }
+
+    #[test]
+    fn test_commands_blocks_overrides_flat_blocks() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.json");
+        std::fs::write(
+            &path,
+            r#"{
+                "blocks": {"token_limit": 500000},
+                "commands": {"blocks": {"token_limit": 1000000}}
+            }"#,
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        // Flat value
+        assert_eq!(config.blocks.token_limit, Some(500_000));
+        // Resolved value: commands.blocks wins
+        let resolved = config.resolved_blocks();
+        assert_eq!(resolved.token_limit, Some(1_000_000));
+    }
+
+    #[test]
+    fn test_commands_blocks_toml_overrides_flat() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(
+            f,
+            "[blocks]\ntoken_limit = 500000\n\n[commands.blocks]\ntoken_limit = 1000000\n"
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.blocks.token_limit, Some(500_000));
+        assert_eq!(config.resolved_blocks().token_limit, Some(1_000_000));
+    }
+
+    #[test]
+    fn test_resolved_blocks_no_commands_returns_flat() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.json");
+        std::fs::write(&path, r#"{"blocks": {"token_limit": 777}}"#).unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.resolved_blocks().token_limit, Some(777));
+    }
+
+    #[test]
+    fn test_resolved_statusline_commands_override() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.json");
+        std::fs::write(
+            &path,
+            r#"{
+                "statusline": {"context_low_threshold": 0.3},
+                "commands": {"statusline": {"context_low_threshold": 0.7}}
+            }"#,
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert!((config.statusline.context_low_threshold - 0.3).abs() < 1e-9);
+        let resolved = config.resolved_statusline();
+        assert!((resolved.context_low_threshold - 0.7).abs() < 1e-9);
+        // Other fields fall back to flat (which uses default since not set)
+        assert!((resolved.context_medium_threshold - 0.8).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_schema_generates_valid_json_with_expected_keys() {
+        let schema = schemars::schema_for!(Config);
+        let json = serde_json::to_string_pretty(&schema).expect("schema serializes");
+        // Must be valid JSON (already proven by to_string_pretty succeeding)
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json).expect("schema round-trips as JSON");
+        // Must contain top-level properties key
+        assert!(
+            parsed.get("properties").is_some(),
+            "schema must have 'properties'"
+        );
+        // Must contain blocks and statusline
+        let props = parsed["properties"].as_object().unwrap();
+        assert!(props.contains_key("blocks"), "schema must have 'blocks'");
+        assert!(
+            props.contains_key("statusline"),
+            "schema must have 'statusline'"
+        );
+        assert!(
+            props.contains_key("commands"),
+            "schema must have 'commands'"
+        );
     }
 }
