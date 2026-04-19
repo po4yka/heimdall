@@ -28,7 +28,7 @@ use crate::statusline::cache::{
     CacheEntry, acquire_lock, is_fresh, read_cache, transcript_mtime, write_cache,
 };
 use crate::statusline::compute::{CostSource, compute};
-use crate::statusline::input::parse_stdin_with_timeout;
+use crate::statusline::input::{HookInput, parse_stdin_with_timeout};
 use crate::statusline::render::render_status_line_with_opts;
 
 pub use compute::CostSource as StatuslineCostSource;
@@ -103,7 +103,15 @@ pub fn run(opts: &StatuslineOpts) {
 
 fn run_inner(opts: &StatuslineOpts) -> anyhow::Result<String> {
     let stdin_timeout = Duration::from_secs(5);
-    let lock_timeout = Duration::from_secs(1);
+    let input = parse_stdin_with_timeout(stdin_timeout)?;
+    run_inner_with_input(opts, &input, Duration::from_secs(1))
+}
+
+fn run_inner_with_input(
+    opts: &StatuslineOpts,
+    input: &HookInput,
+    lock_timeout: Duration,
+) -> anyhow::Result<String> {
     let ttl = Duration::from_secs(opts.refresh_interval);
 
     // NOTE: --offline is a forward-compat contract.  The current compute()
@@ -114,9 +122,6 @@ fn run_inner(opts: &StatuslineOpts) -> anyhow::Result<String> {
         offline = opts.offline,
         "statusline compute offline={}", opts.offline
     );
-
-    // 1. Parse stdin.
-    let input = parse_stdin_with_timeout(stdin_timeout)?;
 
     let transcript_path = Path::new(&input.transcript_path);
     let current_mtime = transcript_mtime(transcript_path).unwrap_or(0);
@@ -173,4 +178,131 @@ fn resolve_db_path(cli_db: Option<&Path>) -> PathBuf {
     }
     let cfg = load_config_resolved();
     cfg.db_path.unwrap_or_else(default_db_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scanner::db::{init_db, open_db};
+    use crate::statusline::input::{ContextWindow, HookCost};
+    use std::fs;
+    use std::sync::{Mutex, MutexGuard};
+    use tempfile::TempDir;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct CacheEnvGuard {
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl CacheEnvGuard {
+        fn new(path: &Path) -> Self {
+            let lock = match ENV_LOCK.lock() {
+                Ok(lock) => lock,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            // SAFETY: tests serialize all XDG_CACHE_HOME mutation through a
+            // process-wide mutex, so no concurrent environment access occurs.
+            unsafe {
+                std::env::set_var("XDG_CACHE_HOME", path);
+            }
+            Self { _lock: lock }
+        }
+    }
+
+    impl Drop for CacheEnvGuard {
+        fn drop(&mut self) {
+            // SAFETY: paired with `CacheEnvGuard::new`, still under the same
+            // process-wide mutex while the guard is alive.
+            unsafe {
+                std::env::remove_var("XDG_CACHE_HOME");
+            }
+        }
+    }
+
+    fn make_opts(db_path: PathBuf, refresh_interval: u64) -> StatuslineOpts {
+        StatuslineOpts {
+            refresh_interval,
+            cost_source: CostSource::Auto,
+            offline: true,
+            db_path: Some(db_path),
+            context_low_threshold: 0.5,
+            context_medium_threshold: 0.8,
+            burn_rate_normal_max: 100.0,
+            burn_rate_moderate_max: 250.0,
+            visual_burn_rate: VisualBurnRate::Bracket,
+        }
+    }
+
+    fn make_input(transcript_path: &Path) -> HookInput {
+        HookInput {
+            session_id: "session-1".to_string(),
+            transcript_path: transcript_path.display().to_string(),
+            model: Some("claude-sonnet-4-6".to_string()),
+            cost: Some(HookCost {
+                total_cost_usd: 0.25,
+                total_duration_ms: None,
+                total_api_duration_ms: None,
+            }),
+            context_window: Some(ContextWindow {
+                total_input_tokens: Some(45_231),
+                context_window_size: Some(200_000),
+            }),
+        }
+    }
+
+    fn init_test_db(dir: &TempDir) -> PathBuf {
+        let db_path = dir.path().join("heimdall.db");
+        let conn = open_db(&db_path).expect("open db");
+        init_db(&conn).expect("init db");
+        drop(conn);
+        db_path
+    }
+
+    #[test]
+    fn run_inner_writes_cache_and_reuses_fresh_output_before_lock() {
+        let cache_dir = TempDir::new().expect("cache dir");
+        let _cache_env = CacheEnvGuard::new(cache_dir.path());
+        let work_dir = TempDir::new().expect("work dir");
+        let db_path = init_test_db(&work_dir);
+        let transcript_path = work_dir.path().join("transcript.jsonl");
+        fs::write(&transcript_path, "{\"type\":\"assistant\"}\n").expect("write transcript");
+
+        let opts = make_opts(db_path, 60);
+        let input = make_input(&transcript_path);
+
+        let first =
+            run_inner_with_input(&opts, &input, Duration::from_millis(20)).expect("first run");
+        assert!(first.contains("claude-sonnet-4-6"));
+        assert!(first.contains("$0.2500"));
+        assert!(first.contains("45.2K tokens (23%)"));
+
+        let cached = read_cache().expect("cache entry");
+        assert_eq!(cached.session_id, input.session_id);
+        assert_eq!(cached.output, first);
+
+        let _lock = acquire_lock(Duration::from_millis(20)).expect("held lock");
+        let second =
+            run_inner_with_input(&opts, &input, Duration::from_millis(20)).expect("cache hit");
+        assert_eq!(second, first);
+    }
+
+    #[test]
+    fn run_inner_returns_stub_when_lock_is_held_and_cache_misses() {
+        let cache_dir = TempDir::new().expect("cache dir");
+        let _cache_env = CacheEnvGuard::new(cache_dir.path());
+        let work_dir = TempDir::new().expect("work dir");
+        let db_path = init_test_db(&work_dir);
+        let transcript_path = work_dir.path().join("transcript.jsonl");
+        fs::write(&transcript_path, "{\"type\":\"assistant\"}\n").expect("write transcript");
+
+        let opts = make_opts(db_path, 60);
+        let input = make_input(&transcript_path);
+        let _lock = acquire_lock(Duration::from_millis(20)).expect("held lock");
+
+        let line = run_inner_with_input(&opts, &input, Duration::from_millis(10))
+            .expect("lock fallback");
+        assert_eq!(line, "...");
+        assert!(read_cache().is_none());
+    }
 }
