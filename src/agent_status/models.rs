@@ -50,7 +50,7 @@ impl StatusIndicator {
 }
 
 /// Per-component health snapshot.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ComponentStatus {
     /// Stable component identifier used as the history key.
     /// For Claude: the Statuspage component UUID (e.g. `yyzkbfz2thpt`).
@@ -67,7 +67,7 @@ pub struct ComponentStatus {
 }
 
 /// Summary of an active incident.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IncidentSummary {
     pub name: String,
     pub impact: String,
@@ -77,7 +77,7 @@ pub struct IncidentSummary {
 }
 
 /// Aggregated health for one provider.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProviderStatus {
     pub indicator: StatusIndicator,
     pub description: String,

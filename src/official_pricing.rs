@@ -630,7 +630,7 @@ pub struct PricingSyncRun {
     pub error_text: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct OfficialModelPricing {
     pub source_slug: String,
     pub provider: String,
@@ -710,28 +710,35 @@ pub struct PricingSyncSummary {
     pub pricing_version: Option<String>,
 }
 
-pub fn sync_pricing(conn: &Connection) -> Result<PricingSyncSummary> {
-    sync_pricing_with_fetch(conn, SOURCES, |source| fetch_source_body(source.url))
+#[derive(Debug, Clone)]
+struct FetchedSourceBody {
+    http_status: u16,
+    content_type: String,
+    etag: String,
+    last_modified: String,
+    raw_body: String,
+    normalized_body: String,
 }
 
-fn sync_pricing_with_fetch<F>(
-    conn: &Connection,
-    sources: &[PricingSourceDef],
-    mut fetch: F,
-) -> Result<PricingSyncSummary>
-where
-    F: FnMut(&PricingSourceDef) -> std::result::Result<String, String>,
-{
+pub fn sync_pricing(conn: &Connection, options: &OfficialSyncOptions) -> Result<PricingSyncSummary> {
     let old_latest = db::load_latest_pricing_models(conn)?;
     let old_catalog = build_effective_catalog(&old_latest);
 
     let mut successful_sources = 0;
+    let mut metadata_runs = 0;
+    let mut metadata_records = 0;
 
-    for source in sources {
+    for source in SOURCES {
         let fetched_at = Utc::now().to_rfc3339();
-        match fetch(source) {
-            Ok(raw_body) => {
-                let parsed = parse_source(source, &raw_body);
+        match fetch_source(source.url) {
+            Ok(fetched) => {
+                let parsed = parse_source(source, &fetched.raw_body);
+                let records = build_records_for_pricing_source(
+                    source,
+                    &fetched.normalized_body,
+                    &parsed,
+                    &fetched_at,
+                );
                 let (status, error_text) = if parsed.is_empty() {
                     (
                         STATUS_PARSE_ERROR.to_string(),
@@ -742,6 +749,35 @@ where
                     (STATUS_SUCCESS.to_string(), String::new())
                 };
 
+                let metadata_run_id = db::insert_official_sync_run(
+                    conn,
+                    &OfficialSyncRunRecord {
+                        fetched_at: fetched_at.clone(),
+                        source_slug: source.slug.to_string(),
+                        source_kind: OfficialSourceKind::Pricing.as_str().to_string(),
+                        source_url: source.url.to_string(),
+                        provider: source.provider.to_string(),
+                        authority: OfficialSourceAuthority::ProviderDocs.as_str().to_string(),
+                        format: OfficialSourceFormat::Html.as_str().to_string(),
+                        cadence: OfficialSourceCadence::Daily.as_str().to_string(),
+                        status: status.clone(),
+                        http_status: Some(i64::from(fetched.http_status)),
+                        content_type: fetched.content_type.clone(),
+                        etag: fetched.etag.clone(),
+                        last_modified: fetched.last_modified.clone(),
+                        raw_body: fetched.raw_body.clone(),
+                        normalized_body: fetched.normalized_body.clone(),
+                        error_text: error_text.clone(),
+                        parser_version: PARSER_VERSION.to_string(),
+                        raw_body_sha256: sha256_hex(&fetched.raw_body),
+                        normalized_body_sha256: sha256_hex(&fetched.normalized_body),
+                        extracted_sha256: hash_records(&records),
+                    },
+                )?;
+                db::insert_official_extracted_records(conn, metadata_run_id, &records)?;
+                metadata_runs += 1;
+                metadata_records += records.len();
+
                 let run_id = db::insert_pricing_sync_run(
                     conn,
                     &PricingSyncRun {
@@ -750,7 +786,7 @@ where
                         source_url: source.url.to_string(),
                         provider: source.provider.to_string(),
                         status: status.clone(),
-                        raw_body,
+                        raw_body: fetched.raw_body,
                         error_text,
                     },
                 )?;
@@ -759,6 +795,32 @@ where
                 }
             }
             Err(err) => {
+                db::insert_official_sync_run(
+                    conn,
+                    &OfficialSyncRunRecord {
+                        fetched_at: fetched_at.clone(),
+                        source_slug: source.slug.to_string(),
+                        source_kind: OfficialSourceKind::Pricing.as_str().to_string(),
+                        source_url: source.url.to_string(),
+                        provider: source.provider.to_string(),
+                        authority: OfficialSourceAuthority::ProviderDocs.as_str().to_string(),
+                        format: OfficialSourceFormat::Html.as_str().to_string(),
+                        cadence: OfficialSourceCadence::Daily.as_str().to_string(),
+                        status: STATUS_FETCH_ERROR.to_string(),
+                        http_status: None,
+                        content_type: String::new(),
+                        etag: String::new(),
+                        last_modified: String::new(),
+                        raw_body: String::new(),
+                        normalized_body: String::new(),
+                        error_text: err.clone(),
+                        parser_version: PARSER_VERSION.to_string(),
+                        raw_body_sha256: String::new(),
+                        normalized_body_sha256: String::new(),
+                        extracted_sha256: String::new(),
+                    },
+                )?;
+                metadata_runs += 1;
                 db::insert_pricing_sync_run(
                     conn,
                     &PricingSyncRun {
@@ -775,6 +837,174 @@ where
         }
     }
 
+    for source in CONTENT_SOURCES {
+        let fetched_at = Utc::now().to_rfc3339();
+        match fetch_source(source.url) {
+            Ok(fetched) => {
+                let records = build_records_for_content_source(
+                    source,
+                    &fetched.normalized_body,
+                    &fetched_at,
+                );
+                let status = if records.is_empty() {
+                    STATUS_PARSE_ERROR
+                } else {
+                    successful_sources += 1;
+                    STATUS_SUCCESS
+                };
+
+                let run_id = db::insert_official_sync_run(
+                    conn,
+                    &OfficialSyncRunRecord {
+                        fetched_at,
+                        source_slug: source.slug.to_string(),
+                        source_kind: source.kind.as_str().to_string(),
+                        source_url: source.url.to_string(),
+                        provider: source.provider.to_string(),
+                        authority: source.authority.as_str().to_string(),
+                        format: source.format.as_str().to_string(),
+                        cadence: source.cadence.as_str().to_string(),
+                        status: status.to_string(),
+                        http_status: Some(i64::from(fetched.http_status)),
+                        content_type: fetched.content_type,
+                        etag: fetched.etag,
+                        last_modified: fetched.last_modified,
+                        raw_body_sha256: sha256_hex(&fetched.raw_body),
+                        normalized_body_sha256: sha256_hex(&fetched.normalized_body),
+                        extracted_sha256: hash_records(&records),
+                        raw_body: fetched.raw_body,
+                        normalized_body: fetched.normalized_body,
+                        error_text: if status == STATUS_PARSE_ERROR {
+                            "no recognizable metadata rows found".to_string()
+                        } else {
+                            String::new()
+                        },
+                        parser_version: PARSER_VERSION.to_string(),
+                    },
+                )?;
+                db::insert_official_extracted_records(conn, run_id, &records)?;
+                metadata_runs += 1;
+                metadata_records += records.len();
+            }
+            Err(err) => {
+                db::insert_official_sync_run(
+                    conn,
+                    &OfficialSyncRunRecord {
+                        fetched_at,
+                        source_slug: source.slug.to_string(),
+                        source_kind: source.kind.as_str().to_string(),
+                        source_url: source.url.to_string(),
+                        provider: source.provider.to_string(),
+                        authority: source.authority.as_str().to_string(),
+                        format: source.format.as_str().to_string(),
+                        cadence: source.cadence.as_str().to_string(),
+                        status: STATUS_FETCH_ERROR.to_string(),
+                        http_status: None,
+                        content_type: String::new(),
+                        etag: String::new(),
+                        last_modified: String::new(),
+                        raw_body: String::new(),
+                        normalized_body: String::new(),
+                        error_text: err,
+                        parser_version: PARSER_VERSION.to_string(),
+                        raw_body_sha256: String::new(),
+                        normalized_body_sha256: String::new(),
+                        extracted_sha256: String::new(),
+                    },
+                )?;
+                metadata_runs += 1;
+            }
+        }
+    }
+
+    for source in STATUS_SOURCES {
+        let (run_count, record_count, success_count) = sync_status_source(conn, source)?;
+        metadata_runs += run_count;
+        metadata_records += record_count;
+        successful_sources += success_count;
+    }
+
+    for source in EXCHANGE_RATE_SOURCES {
+        let fetched_at = Utc::now().to_rfc3339();
+        match fetch_source(source.url) {
+            Ok(fetched) => {
+                let records = parse_exchange_rates(source, &fetched.raw_body, &fetched_at);
+                let status = if records.is_empty() {
+                    STATUS_PARSE_ERROR
+                } else {
+                    successful_sources += 1;
+                    STATUS_SUCCESS
+                };
+                let run_id = db::insert_official_sync_run(
+                    conn,
+                    &OfficialSyncRunRecord {
+                        fetched_at,
+                        source_slug: source.slug.to_string(),
+                        source_kind: OfficialSourceKind::ExchangeRates.as_str().to_string(),
+                        source_url: source.url.to_string(),
+                        provider: source.provider.to_string(),
+                        authority: source.authority.as_str().to_string(),
+                        format: source.format.as_str().to_string(),
+                        cadence: source.cadence.as_str().to_string(),
+                        status: status.to_string(),
+                        http_status: Some(i64::from(fetched.http_status)),
+                        content_type: fetched.content_type,
+                        etag: fetched.etag,
+                        last_modified: fetched.last_modified,
+                        raw_body_sha256: sha256_hex(&fetched.raw_body),
+                        normalized_body_sha256: sha256_hex(&fetched.normalized_body),
+                        extracted_sha256: hash_records(&records),
+                        raw_body: fetched.raw_body,
+                        normalized_body: fetched.normalized_body,
+                        error_text: if status == STATUS_PARSE_ERROR {
+                            "no exchange rates found".to_string()
+                        } else {
+                            String::new()
+                        },
+                        parser_version: PARSER_VERSION.to_string(),
+                    },
+                )?;
+                db::insert_official_extracted_records(conn, run_id, &records)?;
+                metadata_runs += 1;
+                metadata_records += records.len();
+            }
+            Err(err) => {
+                db::insert_official_sync_run(
+                    conn,
+                    &OfficialSyncRunRecord {
+                        fetched_at,
+                        source_slug: source.slug.to_string(),
+                        source_kind: OfficialSourceKind::ExchangeRates.as_str().to_string(),
+                        source_url: source.url.to_string(),
+                        provider: source.provider.to_string(),
+                        authority: source.authority.as_str().to_string(),
+                        format: source.format.as_str().to_string(),
+                        cadence: source.cadence.as_str().to_string(),
+                        status: STATUS_FETCH_ERROR.to_string(),
+                        http_status: None,
+                        content_type: String::new(),
+                        etag: String::new(),
+                        last_modified: String::new(),
+                        raw_body: String::new(),
+                        normalized_body: String::new(),
+                        error_text: err,
+                        parser_version: PARSER_VERSION.to_string(),
+                        raw_body_sha256: String::new(),
+                        normalized_body_sha256: String::new(),
+                        extracted_sha256: String::new(),
+                    },
+                )?;
+                metadata_runs += 1;
+            }
+        }
+    }
+
+    let (usage_runs, usage_records, usage_successes) =
+        sync_openai_usage_reconciliation(conn, options)?;
+    metadata_runs += usage_runs;
+    metadata_records += usage_records;
+    successful_sources += usage_successes;
+
     let new_latest = db::load_latest_pricing_models(conn)?;
     let new_catalog = build_effective_catalog(&new_latest);
     let changed_models = diff_catalogs(&old_catalog, &new_catalog);
@@ -790,8 +1020,14 @@ where
     }
 
     Ok(PricingSyncSummary {
-        total_sources: sources.len(),
+        total_sources: SOURCES.len()
+            + CONTENT_SOURCES.len()
+            + STATUS_SOURCES.len()
+            + EXCHANGE_RATE_SOURCES.len()
+            + 1,
         successful_sources,
+        metadata_runs,
+        metadata_records,
         changed_models,
         repriced_turns,
         repriced_sessions,
@@ -884,7 +1120,7 @@ fn source_priority(slug: &str) -> i64 {
         .unwrap_or_default()
 }
 
-fn fetch_source_body(url: &str) -> std::result::Result<String, String> {
+fn fetch_source(url: &str) -> std::result::Result<FetchedSourceBody, String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -902,9 +1138,55 @@ fn fetch_source_body(url: &str) -> std::result::Result<String, String> {
             .send()
             .await
             .map_err(|err| err.to_string())?;
-        let response = response.error_for_status().map_err(|err| err.to_string())?;
-        response.text().await.map_err(|err| err.to_string())
+        let status = response.status();
+        let headers = response.headers().clone();
+        let body = response.text().await.map_err(|err| err.to_string())?;
+        if !status.is_success() {
+            return Err(format!("HTTP {} for {}", status.as_u16(), url));
+        }
+        let normalized_body = strip_markup(&body);
+        Ok(FetchedSourceBody {
+            http_status: status.as_u16(),
+            content_type: headers
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
+                .to_string(),
+            etag: headers
+                .get(reqwest::header::ETAG)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
+                .to_string(),
+            last_modified: headers
+                .get(reqwest::header::LAST_MODIFIED)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
+                .to_string(),
+            raw_body: body,
+            normalized_body,
+        })
     })
+}
+
+fn hash_records(records: &[OfficialExtractedRecord]) -> String {
+    if records.is_empty() {
+        return String::new();
+    }
+    let joined = records
+        .iter()
+        .map(|record| record.payload_json.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    sha256_hex(&joined)
+}
+
+fn sha256_hex(input: &str) -> String {
+    let digest = Sha256::digest(input.as_bytes());
+    digest.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn to_json<T: Serialize>(value: &T) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string())
 }
 
 fn parse_source(source: &PricingSourceDef, raw_body: &str) -> Vec<OfficialModelPricing> {
