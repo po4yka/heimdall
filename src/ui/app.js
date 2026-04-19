@@ -2024,7 +2024,6 @@
   function ApexChart({ options, id }) {
     const ref = A2(null);
     const chartRef = A2(null);
-    const prevThemeRef = A2(void 0);
     const themeMode2 = options.theme?.mode ?? "";
     const optionsKey = T2(() => {
       const s4 = options.series;
@@ -2035,13 +2034,12 @@
           if (!d5 || !d5.length) return "0";
           return `${d5.length}:${d5[0]}:${d5[d5.length - 1]}`;
         });
-        return `${type}-${parts.join(",")}`;
+        return `${type}-${themeMode2}-${parts.join(",")}`;
       }
-      return `${type}-${s4?.length ?? 0}`;
-    }, [options]);
+      return `${type}-${themeMode2}-${s4?.length ?? 0}`;
+    }, [options, themeMode2]);
     y2(() => {
       if (chartRef.current) chartRef.current.destroy();
-      prevThemeRef.current = themeMode2;
       if (!ref.current || !options) {
         return () => {
           chartRef.current?.destroy();
@@ -2065,18 +2063,6 @@
         chartRef.current = null;
       };
     }, [optionsKey]);
-    y2(() => {
-      if (!chartRef.current) return;
-      if (themeMode2 === prevThemeRef.current) return;
-      prevThemeRef.current = themeMode2;
-      chartRef.current.updateOptions({
-        theme: { mode: themeMode2 },
-        chart: { background: "transparent" },
-        grid: { borderColor: cssVar("--border") },
-        xaxis: { labels: { style: { colors: cssVar("--text-secondary") } } },
-        yaxis: { labels: { style: { colors: cssVar("--text-secondary") } } }
-      });
-    }, [themeMode2]);
     return /* @__PURE__ */ u2("div", { ref, id, style: { width: "100%", height: "100%" } });
   }
 
