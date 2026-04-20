@@ -13,6 +13,36 @@ public enum ProviderID: String, Codable, CaseIterable, Sendable, Identifiable {
     }
 }
 
+public enum MergeMenuTab: String, Codable, CaseIterable, Sendable, Identifiable {
+    case overview
+    case claude
+    case codex
+
+    public var id: String { self.rawValue }
+
+    public var title: String {
+        switch self {
+        case .overview:
+            return "Overview"
+        case .claude:
+            return "Claude"
+        case .codex:
+            return "Codex"
+        }
+    }
+
+    public var providerID: ProviderID? {
+        switch self {
+        case .overview:
+            return nil
+        case .claude:
+            return .claude
+        case .codex:
+            return .codex
+        }
+    }
+}
+
 public enum UsageSourcePreference: String, Codable, CaseIterable, Sendable {
     case auto
     case oauth
@@ -79,6 +109,14 @@ public struct ProviderRateWindow: Codable, Sendable {
     public var resetsInMinutes: Int?
     public var windowMinutes: Int?
     public var resetLabel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case usedPercent = "used_percent"
+        case resetsAt = "resets_at"
+        case resetsInMinutes = "resets_in_minutes"
+        case windowMinutes = "window_minutes"
+        case resetLabel = "reset_label"
+    }
 }
 
 public struct ProviderIdentity: Codable, Sendable {
@@ -87,12 +125,26 @@ public struct ProviderIdentity: Codable, Sendable {
     public var accountOrganization: String?
     public var loginMethod: String?
     public var plan: String?
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case accountEmail = "account_email"
+        case accountOrganization = "account_organization"
+        case loginMethod = "login_method"
+        case plan
+    }
 }
 
 public struct ProviderStatusSummary: Codable, Sendable {
     public var indicator: String
     public var description: String
     public var pageURL: String
+
+    enum CodingKeys: String, CodingKey {
+        case indicator
+        case description
+        case pageURL = "page_url"
+    }
 }
 
 public struct CostHistoryPoint: Codable, Sendable, Identifiable {
@@ -101,6 +153,12 @@ public struct CostHistoryPoint: Codable, Sendable, Identifiable {
     public var costUSD: Double
 
     public var id: String { self.day }
+
+    enum CodingKeys: String, CodingKey {
+        case day
+        case totalTokens = "total_tokens"
+        case costUSD = "cost_usd"
+    }
 }
 
 public struct ProviderCostSummary: Codable, Sendable {
@@ -109,6 +167,14 @@ public struct ProviderCostSummary: Codable, Sendable {
     public var last30DaysTokens: Int
     public var last30DaysCostUSD: Double
     public var daily: [CostHistoryPoint]
+
+    enum CodingKeys: String, CodingKey {
+        case todayTokens = "today_tokens"
+        case todayCostUSD = "today_cost_usd"
+        case last30DaysTokens = "last_30_days_tokens"
+        case last30DaysCostUSD = "last_30_days_cost_usd"
+        case daily
+    }
 }
 
 public struct ClaudeUsageFactorSnapshot: Codable, Sendable, Identifiable {
@@ -118,6 +184,13 @@ public struct ClaudeUsageFactorSnapshot: Codable, Sendable, Identifiable {
     public var adviceText: String
 
     public var id: String { self.factorKey }
+
+    enum CodingKeys: String, CodingKey {
+        case factorKey = "factor_key"
+        case displayLabel = "display_label"
+        case percent
+        case adviceText = "advice_text"
+    }
 }
 
 public struct ClaudeUsageSnapshotPayload: Codable, Sendable {
@@ -142,11 +215,33 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
 
     public var id: String { self.provider }
     public var providerID: ProviderID? { ProviderID(rawValue: self.provider) }
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case available
+        case sourceUsed = "source_used"
+        case identity
+        case primary
+        case secondary
+        case tertiary
+        case credits
+        case status
+        case costSummary = "cost_summary"
+        case claudeUsage = "claude_usage"
+        case lastRefresh = "last_refresh"
+        case stale
+        case error
+    }
 }
 
 public struct ProviderSnapshotEnvelope: Codable, Sendable {
     public var providers: [ProviderSnapshot]
     public var fetchedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case providers
+        case fetchedAt = "fetched_at"
+    }
 }
 
 public struct CostSummaryEnvelope: Codable, Sendable {
@@ -174,4 +269,58 @@ public struct WidgetSnapshot: Codable, Sendable {
         self.generatedAt = generatedAt
         self.entries = entries
     }
+}
+
+public struct DashboardAdjunctSnapshot: Codable, Sendable {
+    public var provider: ProviderID
+    public var source: UsageSourcePreference
+    public var headline: String
+    public var detailLines: [String]
+    public var statusText: String?
+    public var isLoginRequired: Bool
+    public var lastUpdated: String?
+
+    public init(
+        provider: ProviderID,
+        source: UsageSourcePreference,
+        headline: String,
+        detailLines: [String],
+        statusText: String? = nil,
+        isLoginRequired: Bool = false,
+        lastUpdated: String? = nil
+    ) {
+        self.provider = provider
+        self.source = source
+        self.headline = headline
+        self.detailLines = detailLines
+        self.statusText = statusText
+        self.isLoginRequired = isLoginRequired
+        self.lastUpdated = lastUpdated
+    }
+}
+
+public struct ProviderMenuProjection: Sendable, Identifiable {
+    public var provider: ProviderID
+    public var title: String
+    public var sourceLabel: String
+    public var statusLabel: String?
+    public var identityLabel: String?
+    public var lastRefreshLabel: String
+    public var costLabel: String
+    public var laneSummaries: [String]
+    public var creditsLabel: String?
+    public var incidentLabel: String?
+    public var stale: Bool
+    public var error: String?
+    public var historyFractions: [Double]
+    public var claudeFactors: [ClaudeUsageFactorSnapshot]
+    public var adjunct: DashboardAdjunctSnapshot?
+
+    public var id: String { self.provider.rawValue }
+}
+
+public struct OverviewMenuProjection: Sendable {
+    public var items: [ProviderMenuProjection]
+    public var combinedCostLabel: String
+    public var refreshedAtLabel: String
 }

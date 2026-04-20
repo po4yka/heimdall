@@ -23,9 +23,7 @@ public struct HeimdallAPIClient: Sendable {
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)
         }
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(ProviderSnapshotEnvelope.self, from: data)
+        return try JSONDecoder().decode(ProviderSnapshotEnvelope.self, from: data)
     }
 
     public func fetchCostSummary(provider: ProviderID) async throws -> CostSummaryEnvelope {
@@ -43,8 +41,6 @@ public struct HeimdallAPIClient: Sendable {
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)
         }
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(T.self, from: data)
+        return try JSONDecoder().decode(T.self, from: data)
     }
 }

@@ -6,15 +6,29 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Providers") {
+            Section("Claude") {
                 Toggle("Enable Claude", isOn: self.$model.config.claude.enabled)
                 Picker("Claude Source", selection: self.$model.config.claude.source) {
                     ForEach(UsageSourcePreference.allCases, id: \.self) { source in
                         Text(source.rawValue.capitalized).tag(source)
                     }
                 }
+                Picker("Claude Cookie Source", selection: self.$model.config.claude.cookieSource) {
+                    ForEach(UsageSourcePreference.allCases, id: \.self) { source in
+                        Text(source.rawValue.capitalized).tag(source)
+                    }
+                }
+                Toggle("Enable Claude Web Extras", isOn: self.$model.config.claude.dashboardExtrasEnabled)
+            }
+
+            Section("Codex") {
                 Toggle("Enable Codex", isOn: self.$model.config.codex.enabled)
                 Picker("Codex Source", selection: self.$model.config.codex.source) {
+                    ForEach(UsageSourcePreference.allCases, id: \.self) { source in
+                        Text(source.rawValue.capitalized).tag(source)
+                    }
+                }
+                Picker("Codex Cookie Source", selection: self.$model.config.codex.cookieSource) {
                     ForEach(UsageSourcePreference.allCases, id: \.self) { source in
                         Text(source.rawValue.capitalized).tag(source)
                     }
@@ -39,7 +53,7 @@ struct SettingsView: View {
                     self.model.saveConfig()
                 }
                 Button("Refresh Data") {
-                    Task { await self.model.refresh(force: true) }
+                    Task { await self.model.refresh(force: true, provider: nil) }
                 }
             }
         }
