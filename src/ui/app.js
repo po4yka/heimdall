@@ -5590,10 +5590,17 @@
         if (cancelled || !ref.current) return;
         const apexCharts = window.ApexCharts;
         if (!apexCharts) return;
-        const parent = ref.current.parentElement;
-        let h5 = parent?.clientHeight ?? 0;
-        if (h5 <= 0) h5 = parent?.classList.contains("tall") ? 300 : 240;
-        const opts = { ...options, chart: { ...options.chart, height: h5 } };
+        const chartCfg = options.chart;
+        const isSparkline = chartCfg?.sparkline?.enabled === true;
+        let opts;
+        if (isSparkline) {
+          opts = options;
+        } else {
+          const parent = ref.current.parentElement;
+          let h5 = parent?.clientHeight ?? 0;
+          if (h5 <= 0) h5 = parent?.classList.contains("tall") ? 300 : 240;
+          opts = { ...options, chart: { ...options.chart, height: h5 } };
+        }
         chartRef.current = new apexCharts(ref.current, opts);
         void chartRef.current.render();
       });
@@ -6925,7 +6932,7 @@ ${row.project}` : row.project;
       },
       series: [{ data: last7.map((d5) => d5.input + d5.output) }],
       stroke: { width: 1.5, curve: "smooth" },
-      colors: [cssVar("--accent")],
+      colors: [cssVar("--text-secondary")],
       tooltip: { enabled: false }
     };
     return /* @__PURE__ */ u4("div", { children: [

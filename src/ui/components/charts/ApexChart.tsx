@@ -29,10 +29,20 @@ export function ApexChart({ options, id }: { options: ApexOptions; id?: string }
       const apexCharts = (window as Window & { ApexCharts?: ApexChartConstructor })
         .ApexCharts;
       if (!apexCharts) return;
-      const parent = ref.current.parentElement;
-      let h = parent?.clientHeight ?? 0;
-      if (h <= 0) h = parent?.classList.contains('tall') ? 300 : 240;
-      const opts = { ...options, chart: { ...options.chart, height: h } };
+      // Sparkline mode already specifies its own tiny height in options; do
+      // not override it with the parent's clientHeight (the chart would
+      // expand to fill the card and visually escape its container).
+      const chartCfg = options.chart as { sparkline?: { enabled?: boolean } } | undefined;
+      const isSparkline = chartCfg?.sparkline?.enabled === true;
+      let opts: ApexOptions;
+      if (isSparkline) {
+        opts = options;
+      } else {
+        const parent = ref.current.parentElement;
+        let h = parent?.clientHeight ?? 0;
+        if (h <= 0) h = parent?.classList.contains('tall') ? 300 : 240;
+        opts = { ...options, chart: { ...options.chart, height: h } };
+      }
       chartRef.current = new apexCharts(ref.current, opts);
       void chartRef.current.render();
     });

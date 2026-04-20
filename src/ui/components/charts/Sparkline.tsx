@@ -11,7 +11,7 @@ export function Sparkline({ daily }: { daily: DailyAgg[] }) {
              background: 'transparent', fontFamily: 'inherit' },
     series: [{ data: last7.map(d => d.input + d.output) }],
     stroke: { width: 1.5, curve: 'smooth' },
-    colors: [cssVar('--accent')],
+    colors: [cssVar('--text-secondary')],
     tooltip: { enabled: false },
   };
 
