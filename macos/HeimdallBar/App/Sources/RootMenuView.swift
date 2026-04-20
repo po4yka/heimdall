@@ -6,11 +6,14 @@ struct RootMenuView: View {
     @Bindable var model: AppModel
 
     var body: some View {
+        let overview = self.model.overviewProjection()
+
         VStack(alignment: .leading, spacing: 12) {
             MenuChromeHeader(
                 title: "HeimdallBar",
-                status: self.model.overviewProjection().refreshStatusLabel,
-                isRefreshing: self.model.overviewProjection().isRefreshing
+                status: overview.refreshStatusLabel,
+                isRefreshing: overview.isRefreshing,
+                attentionLabel: self.attentionLabel(for: overview)
             )
 
             if self.model.visibleTabs.count > 1 {
@@ -20,7 +23,6 @@ struct RootMenuView: View {
                 )
             }
 
-            let overview = self.model.overviewProjection()
             if self.model.selectedMergeTab == .overview {
                 OverviewMenuCard(projection: overview)
             } else if let provider = self.model.selectedMergeTab.providerID {
@@ -43,7 +45,26 @@ struct RootMenuView: View {
             }
         }
         .padding(12)
-        .frame(width: 368)
+        .frame(width: 356)
+    }
+
+    private func attentionLabel(for overview: OverviewMenuProjection) -> String? {
+        guard let item = overview.items.max(by: { self.severityRank(for: $0.visualState) < self.severityRank(for: $1.visualState) }),
+              self.severityRank(for: item.visualState) > 0 else {
+            return nil
+        }
+        return "Needs attention: \(item.title) \(item.stateLabel.lowercased())"
+    }
+
+    private func severityRank(for state: ProviderVisualState) -> Int {
+        switch state {
+        case .error: return 5
+        case .incident: return 4
+        case .degraded: return 3
+        case .stale: return 2
+        case .refreshing: return 1
+        case .healthy: return 0
+        }
     }
 }
 
@@ -56,7 +77,8 @@ struct ProviderMenuView: View {
             MenuChromeHeader(
                 title: self.provider.title,
                 status: self.model.projection(for: self.provider).refreshStatusLabel,
-                isRefreshing: self.model.projection(for: self.provider).isRefreshing
+                isRefreshing: self.model.projection(for: self.provider).isRefreshing,
+                attentionLabel: self.providerAttentionLabel
             )
             ProviderMenuCard(projection: self.model.projection(for: self.provider))
             SessionActionGroup(model: self.model, providers: [self.provider])
@@ -67,6 +89,16 @@ struct ProviderMenuView: View {
         }
         .padding(12)
         .frame(width: 352)
+    }
+
+    private var providerAttentionLabel: String? {
+        let projection = self.model.projection(for: self.provider)
+        switch projection.visualState {
+        case .healthy, .refreshing:
+            return nil
+        default:
+            return "\(projection.title) is \(projection.stateLabel.lowercased())"
+        }
     }
 }
 
@@ -84,7 +116,10 @@ struct ProviderMenuCard: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Text(self.projection.sourceLabel)
+            Text(self.primaryMetricText)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text(self.secondaryMetricText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let sourceExplanationLabel = self.projection.sourceExplanationLabel {
@@ -101,9 +136,11 @@ struct ProviderMenuCard: View {
                 Text(identityLabel)
                     .font(.caption)
             }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                ForEach(self.projection.laneDetails) { detail in
-                    LaneStatusCard(detail: detail)
+            if self.projection.laneDetails.count > 1 {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(self.projection.laneDetails.dropFirst()) { detail in
+                        LaneStatusCard(detail: detail)
+                    }
                 }
             }
             if !self.projection.historyFractions.isEmpty {
@@ -150,6 +187,26 @@ struct ProviderMenuCard: View {
         .menuCardBackground(opacity: self.cardBackgroundOpacity)
     }
 
+    private var primaryMetricText: String {
+        guard let primaryLane = self.projection.laneDetails.first else {
+            return "Session unavailable"
+        }
+        if let remaining = primaryLane.remainingPercent {
+            return "\(remaining)% left"
+        }
+        return "Session unavailable"
+    }
+
+    private var secondaryMetricText: String {
+        guard let primaryLane = self.projection.laneDetails.first else {
+            return self.projection.costLabel
+        }
+        if let resetDetail = primaryLane.resetDetail, let paceLabel = primaryLane.paceLabel, primaryLane.remainingPercent != nil {
+            return "Session · \(paceLabel.lowercased()) · \(resetDetail)"
+        }
+        return primaryLane.summary
+    }
+
     private var cardBackgroundOpacity: Double {
         switch self.projection.visualState {
         case .healthy:
@@ -157,13 +214,13 @@ struct ProviderMenuCard: View {
         case .refreshing:
             return 0.07
         case .stale:
-            return 0.04
+            return 0.055
         case .degraded:
-            return 0.09
+            return 0.11
         case .incident:
-            return 0.12
+            return 0.14
         case .error:
-            return 0.1
+            return 0.13
         }
     }
 }
@@ -173,7 +230,7 @@ struct OverviewMenuCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(self.projection.items) { item in
+            ForEach(self.sortedItems) { item in
                 OverviewProviderCard(item: item)
             }
             if !self.projection.historyFractions.isEmpty {
@@ -181,7 +238,7 @@ struct OverviewMenuCard: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(self.projection.combinedCostLabel)
-                    .font(.caption)
+                    .font(.headline)
                     .foregroundStyle(.primary)
                 Text(self.projection.activitySummaryLabel)
                     .font(.caption)
@@ -196,27 +253,82 @@ struct OverviewMenuCard: View {
         .padding(10)
         .menuCardBackground(opacity: 0.05)
     }
+
+    private var sortedItems: [ProviderMenuProjection] {
+        self.projection.items.sorted {
+            let lhs = self.severityRank(for: $0.visualState)
+            let rhs = self.severityRank(for: $1.visualState)
+            if lhs == rhs {
+                return $0.title < $1.title
+            }
+            return lhs > rhs
+        }
+    }
+
+    private func severityRank(for state: ProviderVisualState) -> Int {
+        switch state {
+        case .error: return 5
+        case .incident: return 4
+        case .degraded: return 3
+        case .stale: return 2
+        case .refreshing: return 1
+        case .healthy: return 0
+        }
+    }
 }
 
 private struct MenuChromeHeader: View {
     let title: String
     let status: String
     let isRefreshing: Bool
+    let attentionLabel: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Text(self.title)
-                    .font(.headline.weight(.semibold))
+                    .font(.system(size: 17, weight: .semibold))
                 Spacer()
                 if self.isRefreshing {
                     ProgressView()
                         .controlSize(.small)
+                } else {
+                    Text(self.status)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
             }
-            Text(self.status)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            if let attentionLabel {
+                Text(attentionLabel)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(self.attentionColor)
+            }
+        }
+    }
+
+    private var attentionColor: Color {
+        self.attentionLabel == nil ? .secondary : .orange
+    }
+}
+
+private struct TopMetricRow: View {
+    let title: String
+    let value: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(self.title)
+                    .font(.headline)
+                Text(self.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Text(self.value)
+                .font(.title3.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.primary)
         }
     }
 }
@@ -239,6 +351,8 @@ private struct StateBadge: View {
         switch self.state {
         case .incident, .error:
             return .white
+        case .stale, .degraded:
+            return .orange
         default:
             return .primary
         }
@@ -251,11 +365,12 @@ private struct StateBadge: View {
         case .refreshing:
             return Color.blue.opacity(0.14)
         case .stale:
-            return Color.secondary.opacity(0.12)
+            return Color.orange.opacity(0.12)
         case .degraded:
-            return Color.orange.opacity(0.18)
-        case .incident:
             return Color.orange
+                .opacity(0.18)
+        case .incident:
+            return Color.red.opacity(0.85)
         case .error:
             return Color.red
         }
@@ -318,33 +433,59 @@ private struct MenuActionRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button(self.primaryRefreshTitle) {
+            Button(action: {
                 Task { await self.model.refresh(force: true, provider: self.primaryRefreshProvider) }
-            }
-            .keyboardShortcut("r")
-
-            if self.tab.providerID != nil {
-                Button("Refresh All") {
-                    Task { await self.model.refresh(force: true, provider: nil) }
+            }) {
+                HStack {
+                    Image(systemName: "arrow.clockwise")
+                    Text(self.primaryRefreshTitle)
+                    Spacer()
+                    if self.primaryRefreshProvider == nil {
+                        Text("⌘R")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
+            .buttonStyle(PrimaryDashboardButtonStyle())
+            .keyboardShortcut("r", modifiers: .command)
 
-            Button("Open Dashboard") {
+            if self.tab.providerID != nil {
+                Button(action: {
+                    Task { await self.model.refresh(force: true, provider: nil) }
+                }) {
+                    SecondaryActionLabel(title: "Refresh All", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(SecondaryDashboardButtonStyle())
+            }
+
+            Button(action: {
                 if let url = URL(string: "http://127.0.0.1:\(self.model.config.helperPort)") {
                     NSWorkspace.shared.open(url)
                 }
+            }) {
+                SecondaryActionLabel(title: "Open Dashboard", systemImage: "safari")
             }
+            .buttonStyle(SecondaryDashboardButtonStyle())
 
             SettingsLink {
-                Text("Open Settings")
+                SecondaryActionLabel(title: "Open Settings", systemImage: "gearshape")
             }
+            .buttonStyle(SecondaryDashboardButtonStyle())
 
-            Button("Quit") {
+            Divider()
+                .padding(.top, 2)
+
+            Button(action: {
                 Task {
                     await self.model.prepareForExit()
                     NSApplication.shared.terminate(nil)
                 }
+            }) {
+                Text("Quit")
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .buttonStyle(.plain)
         }
     }
 
@@ -385,6 +526,7 @@ private struct SessionActionGroup: View {
                         }
                     }
                 }
+                .menuStyle(.borderlessButton)
             }
         }
         .disabled(self.model.isImportingSession)
@@ -458,15 +600,38 @@ private struct OverviewProviderCard: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            Text(self.item.laneDetails.first?.summary ?? "Session data unavailable")
-                .font(.caption)
-                .foregroundStyle(.primary)
+            TopMetricRow(
+                title: self.metricTitle,
+                value: self.metricValue,
+                detail: self.metricDetail
+            )
             Text(self.item.costLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(10)
         .menuCardBackground(opacity: 0.045)
+    }
+
+    private var metricTitle: String {
+        self.item.laneDetails.first?.remainingPercent == nil ? "Needs attention" : "Session"
+    }
+
+    private var metricValue: String {
+        if let remaining = self.item.laneDetails.first?.remainingPercent {
+            return "\(remaining)%"
+        }
+        return "Unavailable"
+    }
+
+    private var metricDetail: String {
+        guard let lane = self.item.laneDetails.first else {
+            return "No live session data"
+        }
+        if let reset = lane.resetDetail, lane.remainingPercent != nil {
+            return reset
+        }
+        return lane.summary
     }
 }
 
@@ -490,5 +655,52 @@ private struct MenuCardBackgroundModifier: ViewModifier {
 private extension View {
     func menuCardBackground(opacity: Double, cornerRadius: CGFloat = 10) -> some View {
         self.modifier(MenuCardBackgroundModifier(opacity: opacity, cornerRadius: cornerRadius))
+    }
+}
+
+private struct SecondaryActionLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: self.systemImage)
+                .frame(width: 14)
+                .foregroundStyle(.secondary)
+            Text(self.title)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct PrimaryDashboardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .foregroundStyle(Color.white)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.accentColor.opacity(configuration.isPressed ? 0.8 : 0.92))
+            )
+    }
+}
+
+private struct SecondaryDashboardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0.045))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
     }
 }
