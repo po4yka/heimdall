@@ -1094,6 +1094,11 @@
     return ["cost", "calls", "tokens"].includes(p5) ? p5 : "cost";
   }
   var versionDonutMetric = y3(readVersionMetric());
+  function readHeatmapMetric() {
+    const p5 = readSearchParam("hm_metric");
+    return p5 === "calls" ? "calls" : "cost";
+  }
+  var heatmapMetric = y3(readHeatmapMetric());
   function readAgentStatusExpanded() {
     const p5 = readSearchParam("agent_status_expanded");
     return p5 === "1" || p5 === "true";
@@ -1135,6 +1140,7 @@
     projectSearchQuery.value = readSearchParam("project") ?? "";
     selectedBucket.value = readBucket();
     versionDonutMetric.value = readVersionMetric();
+    heatmapMetric.value = readHeatmapMetric();
     agent_status_expanded.value = readAgentStatusExpanded();
     official_sync_expanded.value = readOfficialSyncExpanded();
     mobile_filters_expanded.value = readFiltersExpanded();
@@ -1153,6 +1159,7 @@
     }
     if (projectSearchQuery.value) params.set("project", projectSearchQuery.value);
     if (versionDonutMetric.value !== "cost") params.set("version_metric", versionDonutMetric.value);
+    if (heatmapMetric.value !== "cost") params.set("hm_metric", heatmapMetric.value);
     if (selectedBucket.value !== "day") params.set("bucket", selectedBucket.value);
     if (agent_status_expanded.value) params.set("agent_status_expanded", "1");
     if (official_sync_expanded.value) params.set("official_sync_expanded", "1");
@@ -1265,7 +1272,9 @@
       onURLUpdate();
       onFilterChange();
     };
-    const hasCodexData = rawData.value?.provider_breakdown?.some((p5) => p5.provider === "codex") ?? false;
+    const hasCodexData = rawData.value?.provider_breakdown?.some(
+      (p5) => p5.provider === "codex"
+    ) ?? false;
     const onSearchInput = (e4) => {
       const value = e4.currentTarget.value;
       projectSearchQuery.value = value.toLowerCase().trim();
@@ -1319,22 +1328,41 @@
           ] }),
           /* @__PURE__ */ u4("div", { id: "filter-sections", class: "filter-sections", children: [
             /* @__PURE__ */ u4("div", { class: "filter-label", children: "Models" }),
-            /* @__PURE__ */ u4("div", { id: "model-checkboxes", role: "group", "aria-label": "Model filters", children: sortedModels.map((model) => {
-              const checked = selectedModels.value.has(model);
-              return /* @__PURE__ */ u4("label", { class: `model-cb-label${checked ? " checked" : ""}`, "data-model": model, children: [
-                /* @__PURE__ */ u4(
-                  "input",
-                  {
-                    type: "checkbox",
-                    value: model,
-                    checked,
-                    onChange: (e4) => toggleModel(model, e4.currentTarget.checked),
-                    "aria-label": model
-                  }
-                ),
-                /* @__PURE__ */ u4("span", { class: "model-cb-text", children: model })
-              ] }, model);
-            }) }),
+            /* @__PURE__ */ u4(
+              "div",
+              {
+                id: "model-checkboxes",
+                role: "group",
+                "aria-label": "Model filters",
+                children: sortedModels.map((model) => {
+                  const checked = selectedModels.value.has(model);
+                  return /* @__PURE__ */ u4(
+                    "label",
+                    {
+                      class: `model-cb-label${checked ? " checked" : ""}`,
+                      "data-model": model,
+                      children: [
+                        /* @__PURE__ */ u4(
+                          "input",
+                          {
+                            type: "checkbox",
+                            value: model,
+                            checked,
+                            onChange: (e4) => toggleModel(
+                              model,
+                              e4.currentTarget.checked
+                            ),
+                            "aria-label": model
+                          }
+                        ),
+                        /* @__PURE__ */ u4("span", { class: "model-cb-text", children: model })
+                      ]
+                    },
+                    model
+                  );
+                })
+              }
+            ),
             /* @__PURE__ */ u4("button", { class: "filter-btn", type: "button", onClick: selectAll, children: "All" }),
             /* @__PURE__ */ u4("button", { class: "filter-btn", type: "button", onClick: clearAll, children: "None" }),
             /* @__PURE__ */ u4("div", { class: "filter-sep" }),
@@ -1366,17 +1394,25 @@
             hasCodexData && /* @__PURE__ */ u4(S, { children: [
               /* @__PURE__ */ u4("div", { class: "filter-sep" }),
               /* @__PURE__ */ u4("div", { class: "filter-label", children: "Provider" }),
-              /* @__PURE__ */ u4("div", { class: "range-group", role: "group", "aria-label": "Provider", children: PROVIDERS.map((provider) => /* @__PURE__ */ u4(
-                "button",
+              /* @__PURE__ */ u4(
+                "div",
                 {
-                  class: `range-btn${selectedProvider.value === provider ? " active" : ""}`,
-                  type: "button",
-                  "data-provider": provider,
-                  onClick: () => setProvider(provider),
-                  children: PROVIDER_LABEL[provider]
-                },
-                provider
-              )) })
+                  class: "range-group",
+                  role: "group",
+                  "aria-label": "Provider",
+                  children: PROVIDERS.map((provider) => /* @__PURE__ */ u4(
+                    "button",
+                    {
+                      class: `range-btn${selectedProvider.value === provider ? " active" : ""}`,
+                      type: "button",
+                      "data-provider": provider,
+                      onClick: () => setProvider(provider),
+                      children: PROVIDER_LABEL[provider]
+                    },
+                    provider
+                  ))
+                }
+              )
             ] }),
             /* @__PURE__ */ u4("div", { class: "filter-sep" }),
             /* @__PURE__ */ u4("label", { for: "project-search", class: "filter-label", children: "Project" }),
@@ -1396,7 +1432,16 @@
                 class: "project-search-input"
               }
             ),
-            projectSearchQuery.value && /* @__PURE__ */ u4("button", { class: "filter-btn", id: "project-clear-btn", type: "button", onClick: clearSearch, children: "Clear" })
+            projectSearchQuery.value && /* @__PURE__ */ u4(
+              "button",
+              {
+                class: "filter-btn",
+                id: "project-clear-btn",
+                type: "button",
+                onClick: clearSearch,
+                children: "Clear"
+              }
+            )
           ] })
         ]
       }
@@ -1821,6 +1866,14 @@
     if (abs >= 1) return "$" + c4.toFixed(2);
     return "$" + c4.toFixed(4);
   }
+  function fmtTzOffset(minutes) {
+    if (minutes === 0) return "UTC";
+    const sign = minutes < 0 ? "-" : "+";
+    const abs = Math.abs(minutes);
+    const hh = Math.floor(abs / 60);
+    const mm = abs % 60;
+    return `UTC${sign}${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+  }
   function fmtResetTime(minutes) {
     if (minutes == null || minutes <= 0) return "now";
     if (minutes >= 1440) return Math.floor(minutes / 1440) + "d " + Math.floor(minutes % 1440 / 60) + "h";
@@ -1865,136 +1918,142 @@
 
   // src/ui/components/charts/ActivityHeatmap.tsx
   var DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  function cellOpacity(costNanos, maxCostNanos) {
-    if (maxCostNanos <= 0 || costNanos <= 0) return 0.05;
-    const ratio = costNanos / maxCostNanos;
+  var METRIC_LABELS = {
+    cost: "Cost",
+    calls: "Calls"
+  };
+  var LEGEND_STEPS = [0.05, 0.2, 0.4, 0.6, 0.9];
+  function cellOpacity(value, max2) {
+    if (max2 <= 0 || value <= 0) return 0.05;
+    const ratio = value / max2;
     return Math.min(0.05 + 0.85 * ratio, 0.9);
   }
-  function ActivityHeatmap({ data }) {
-    const { cells, max_cost_nanos, active_days, total_cost_nanos, period } = data;
-    const lookup = /* @__PURE__ */ new Map();
-    for (const c4 of cells) {
-      lookup.set(`${c4.dow},${c4.hour}`, c4);
+  function formatPeak(value, metric) {
+    if (metric === "cost") {
+      if (value >= 1e3) return fmtCostCompact(value);
+      return fmtCostBig(value);
     }
-    const avgPerDay = active_days > 0 ? fmtCost(total_cost_nanos / 1e9 / active_days) : "--";
-    return /* @__PURE__ */ u4("div", { children: [
+    return fmt(value);
+  }
+  function ActivityHeatmap({ data, metric, onMetricChange }) {
+    const {
+      cells,
+      max_cost_nanos,
+      max_call_count,
+      active_days,
+      total_cost_nanos,
+      period,
+      tz_offset_min
+    } = data;
+    const lookup = /* @__PURE__ */ new Map();
+    for (const c4 of cells) lookup.set(`${c4.dow},${c4.hour}`, c4);
+    const avgPerDayUsd = active_days > 0 ? total_cost_nanos / 1e9 / active_days : 0;
+    const avgPerDay = active_days > 0 ? fmtCostBig(avgPerDayUsd) : "\u2014";
+    const metricMaxRaw = metric === "cost" ? max_cost_nanos : max_call_count;
+    const metricMaxDisplay = metric === "cost" ? metricMaxRaw / 1e9 : metricMaxRaw;
+    let peakKey = null;
+    let peakVal = 0;
+    for (const c4 of cells) {
+      const v4 = metric === "cost" ? c4.cost_nanos : c4.call_count;
+      if (v4 > peakVal) {
+        peakVal = v4;
+        peakKey = `${c4.dow},${c4.hour}`;
+      }
+    }
+    return /* @__PURE__ */ u4("div", { class: "heatmap-panel", children: [
+      /* @__PURE__ */ u4("div", { class: "heatmap-header", children: [
+        /* @__PURE__ */ u4("span", { class: "heatmap-title", children: [
+          "ACTIVITY / 7x24 / ",
+          period.toUpperCase()
+        ] }),
+        /* @__PURE__ */ u4("span", { class: "heatmap-subtitle", children: [
+          active_days,
+          " active ",
+          active_days === 1 ? "day" : "days",
+          " \xB7 ",
+          avgPerDay,
+          " per active day",
+          " \xB7 ",
+          fmtTzOffset(tz_offset_min)
+        ] }),
+        /* @__PURE__ */ u4("div", { class: "range-group heatmap-metric", "aria-label": "Heatmap metric", children: Object.keys(METRIC_LABELS).map((m4) => /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: `range-btn${metric === m4 ? " active" : ""}`,
+            "aria-pressed": metric === m4,
+            onClick: () => onMetricChange(m4),
+            children: METRIC_LABELS[m4]
+          },
+          m4
+        )) })
+      ] }),
       /* @__PURE__ */ u4(
         "div",
         {
-          style: {
-            display: "flex",
-            alignItems: "baseline",
-            gap: "12px",
-            marginBottom: "8px",
-            flexWrap: "wrap"
-          },
+          class: "heatmap-grid",
+          role: "figure",
+          "aria-label": "Activity heatmap: 7 days by 24 hours",
           children: [
-            /* @__PURE__ */ u4(
-              "span",
-              {
-                class: "section-title",
-                style: {
-                  padding: 0,
-                  fontFamily: "var(--font-mono)",
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase"
-                },
-                children: [
-                  "ACTIVITY / 7x24 / ",
-                  period.toUpperCase()
-                ]
-              }
-            ),
-            /* @__PURE__ */ u4(
-              "span",
-              {
-                style: {
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "var(--text-secondary)",
-                  letterSpacing: "0.04em"
-                },
-                children: [
-                  active_days,
-                  " active ",
-                  active_days === 1 ? "day" : "days",
-                  " \xB7 ",
-                  avgPerDay,
-                  " per active day"
-                ]
-              }
-            )
+            /* @__PURE__ */ u4("div", {}),
+            /* @__PURE__ */ u4("div", { class: "heatmap-hour-labels", "aria-hidden": "true", children: [
+              /* @__PURE__ */ u4("span", { children: "00" }),
+              /* @__PURE__ */ u4("span", { children: "06" }),
+              /* @__PURE__ */ u4("span", { children: "12" }),
+              /* @__PURE__ */ u4("span", { children: "18" })
+            ] }),
+            Array.from({ length: 7 }, (_4, dow) => {
+              const isWeekend = dow === 0 || dow === 6;
+              return [
+                /* @__PURE__ */ u4("div", { class: "heatmap-dow-label", children: DOW_LABELS[dow] }, `label-${dow}`),
+                ...Array.from({ length: 24 }, (_5, hour) => {
+                  const key = `${dow},${hour}`;
+                  const cell = lookup.get(key);
+                  const costNanos = cell?.cost_nanos ?? 0;
+                  const callCount = cell?.call_count ?? 0;
+                  const raw = metric === "cost" ? costNanos : callCount;
+                  const opacity = cellOpacity(raw, metricMaxRaw);
+                  const bg = withAlpha("--text-display", opacity);
+                  const costUsd = costNanos / 1e9;
+                  const title = `${DOW_LABELS[dow]} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${callCount} call${callCount !== 1 ? "s" : ""}`;
+                  const isPeak = key === peakKey && peakVal > 0;
+                  const classes = [
+                    "heatmap-cell",
+                    isWeekend ? "heatmap-cell--weekend" : "",
+                    isPeak ? "heatmap-cell--peak" : ""
+                  ].filter(Boolean).join(" ");
+                  return /* @__PURE__ */ u4(
+                    "div",
+                    {
+                      role: "img",
+                      "aria-label": title,
+                      title,
+                      class: classes,
+                      style: { background: bg }
+                    },
+                    key
+                  );
+                })
+              ];
+            })
           ]
         }
       ),
-      /* @__PURE__ */ u4(
-        "div",
-        {
-          style: {
-            display: "grid",
-            gridTemplateColumns: "28px repeat(24, 1fr)",
-            gap: "2px"
+      /* @__PURE__ */ u4("div", { class: "heatmap-legend", "aria-hidden": "true", children: [
+        /* @__PURE__ */ u4("span", { children: "Less" }),
+        /* @__PURE__ */ u4("div", { class: "heatmap-legend-track", children: LEGEND_STEPS.map((op, i4) => /* @__PURE__ */ u4(
+          "div",
+          {
+            class: "heatmap-legend-step",
+            style: { background: withAlpha("--text-display", op) }
           },
-          children: [
-            /* @__PURE__ */ u4("div", {}),
-            Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u4(
-              "div",
-              {
-                style: {
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  color: "var(--text-secondary)",
-                  textAlign: "center",
-                  letterSpacing: "0.04em",
-                  // Show only 0, 6, 12, 18 to avoid crowding
-                  visibility: [0, 6, 12, 18].includes(h5) ? "visible" : "hidden"
-                },
-                children: String(h5).padStart(2, "0")
-              },
-              h5
-            )),
-            Array.from({ length: 7 }, (_4, dow) => /* @__PURE__ */ u4(S, { children: [
-              /* @__PURE__ */ u4(
-                "div",
-                {
-                  style: {
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "9px",
-                    color: "var(--text-secondary)",
-                    display: "flex",
-                    alignItems: "center",
-                    letterSpacing: "0.04em"
-                  },
-                  children: DOW_LABELS[dow]
-                },
-                `label-${dow}`
-              ),
-              Array.from({ length: 24 }, (_5, hour) => {
-                const cell = lookup.get(`${dow},${hour}`);
-                const costNanos = cell?.cost_nanos ?? 0;
-                const callCount = cell?.call_count ?? 0;
-                const opacity = cellOpacity(costNanos, max_cost_nanos);
-                const bg = withAlpha("--text-display", opacity);
-                const costUsd = costNanos / 1e9;
-                const title = `${DOW_LABELS[dow]} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${callCount} call${callCount !== 1 ? "s" : ""}`;
-                return /* @__PURE__ */ u4(
-                  "div",
-                  {
-                    title,
-                    style: {
-                      background: bg,
-                      borderRadius: "2px",
-                      aspectRatio: "1",
-                      minHeight: "10px"
-                    }
-                  },
-                  `${dow}-${hour}`
-                );
-              })
-            ] }))
-          ]
-        }
-      )
+          i4
+        )) }),
+        /* @__PURE__ */ u4("span", { children: [
+          "More",
+          peakVal > 0 ? ` (peak ${formatPeak(metricMaxDisplay, metric)})` : ""
+        ] })
+      ] })
     ] });
   }
 
@@ -5145,6 +5204,7 @@
       if (!sectionKey) return;
       setSectionCollapsed(sectionKey, !collapsed);
       syncDashboardUrl();
+      rerender((n3) => n3 + 1);
     };
     return /* @__PURE__ */ u4("div", { class: "table-card", children: [
       (title || exportFn) && /* @__PURE__ */ u4("div", { class: "section-header", children: [
@@ -5804,7 +5864,7 @@
   }
 
   // src/ui/components/charts/ModelChart.tsx
-  var METRIC_LABELS = {
+  var METRIC_LABELS2 = {
     cost: "Cost",
     tokens: "Tokens",
     calls: "Calls"
@@ -5850,7 +5910,7 @@
       tokens: byModel.reduce((sum2, row) => sum2 + totalTokens(row), 0),
       calls: byModel.reduce((sum2, row) => sum2 + row.turns, 0)
     };
-    const enabledMetrics = Object.keys(METRIC_LABELS).filter((metric2) => totals[metric2] > 0);
+    const enabledMetrics = Object.keys(METRIC_LABELS2).filter((metric2) => totals[metric2] > 0);
     const metric = enabledMetrics.includes(selectedMetric) ? selectedMetric : enabledMetrics[0] ?? "cost";
     const sorted = [...byModel].map((row) => ({
       row,
@@ -5915,7 +5975,7 @@
         custom: ({ seriesIndex }) => {
           const row = rows[seriesIndex];
           if (!row) return "";
-          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${esc(row.label)}</strong><br/>${esc(METRIC_LABELS[metric])}: ${esc(formatMetricValue(row.value, metric))} (${esc(formatShare(row.share))} share)<br/>Cost: ${esc(formatMetricValue(row.cost, "cost"))} &nbsp;&bull;&nbsp; Calls: ${esc(formatMetricValue(row.calls, "calls"))} &nbsp;&bull;&nbsp; Tokens: ${esc(formatMetricValue(row.tokens, "tokens"))}</div>`;
+          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${esc(row.label)}</strong><br/>${esc(METRIC_LABELS2[metric])}: ${esc(formatMetricValue(row.value, metric))} (${esc(formatShare(row.share))} share)<br/>Cost: ${esc(formatMetricValue(row.cost, "cost"))} &nbsp;&bull;&nbsp; Calls: ${esc(formatMetricValue(row.calls, "calls"))} &nbsp;&bull;&nbsp; Tokens: ${esc(formatMetricValue(row.tokens, "tokens"))}</div>`;
         }
       },
       plotOptions: {
@@ -5929,7 +5989,7 @@
       }
     };
     return /* @__PURE__ */ u4("div", { class: "model-chart-panel", children: [
-      /* @__PURE__ */ u4("div", { class: "range-group", "aria-label": "Model metric", children: Object.keys(METRIC_LABELS).map((nextMetric) => /* @__PURE__ */ u4(
+      /* @__PURE__ */ u4("div", { class: "range-group", "aria-label": "Model metric", children: Object.keys(METRIC_LABELS2).map((nextMetric) => /* @__PURE__ */ u4(
         "button",
         {
           type: "button",
@@ -5937,14 +5997,14 @@
           disabled: totals[nextMetric] <= 0,
           "aria-pressed": metric === nextMetric,
           onClick: () => setSelectedMetric(nextMetric),
-          children: METRIC_LABELS[nextMetric]
+          children: METRIC_LABELS2[nextMetric]
         },
         nextMetric
       )) }),
       /* @__PURE__ */ u4("div", { class: "model-chart-ring", children: [
         /* @__PURE__ */ u4(ApexChart, { options, id: "chart-model-apex" }),
         /* @__PURE__ */ u4("div", { class: "model-chart-center", "aria-hidden": "true", children: /* @__PURE__ */ u4("div", { class: "model-chart-center-inner", children: [
-          /* @__PURE__ */ u4("div", { class: "model-chart-center-kicker", children: METRIC_LABELS[metric] }),
+          /* @__PURE__ */ u4("div", { class: "model-chart-center-kicker", children: METRIC_LABELS2[metric] }),
           /* @__PURE__ */ u4("div", { class: "model-chart-center-total", children: formatMetricValue(total, metric, true) }),
           hasOther ? /* @__PURE__ */ u4("div", { class: "model-chart-center-meta", children: "Top 5 + Other" }) : null
         ] }) })
@@ -5956,7 +6016,7 @@
           class: `model-share-row${onSelectModel && !row.isOther ? " interactive" : ""}`,
           onClick: onSelectModel && !row.isOther ? () => onSelectModel(row.label) : void 0,
           disabled: !onSelectModel || row.isOther,
-          "aria-label": row.isOther ? `${row.label} ${METRIC_LABELS[metric]} summary` : `Filter to ${row.label}`,
+          "aria-label": row.isOther ? `${row.label} ${METRIC_LABELS2[metric]} summary` : `Filter to ${row.label}`,
           children: [
             /* @__PURE__ */ u4("div", { class: "model-share-row-head", children: [
               /* @__PURE__ */ u4("div", { class: "model-share-label", children: [
@@ -5966,7 +6026,7 @@
               /* @__PURE__ */ u4("div", { class: "model-share-value", children: formatMetricValue(row.value, metric) })
             ] }),
             /* @__PURE__ */ u4("div", { class: "model-share-row-meta", children: [
-              /* @__PURE__ */ u4("div", { class: "model-share-bar", "aria-label": `${row.label} ${METRIC_LABELS[metric]} share`, children: /* @__PURE__ */ u4("div", { class: "model-share-bar-fill", style: { width: `${Math.min(100, row.share)}%`, background: row.color } }) }),
+              /* @__PURE__ */ u4("div", { class: "model-share-bar", "aria-label": `${row.label} ${METRIC_LABELS2[metric]} share`, children: /* @__PURE__ */ u4("div", { class: "model-share-bar-fill", style: { width: `${Math.min(100, row.share)}%`, background: row.color } }) }),
               /* @__PURE__ */ u4("div", { class: "model-share-percent", children: formatShare(row.share) })
             ] })
           ]
@@ -7462,7 +7522,7 @@ ${row.project}` : row.project;
   }
 
   // src/ui/components/charts/VersionDonut.tsx
-  var METRIC_LABELS2 = {
+  var METRIC_LABELS3 = {
     cost: "Cost",
     calls: "Calls",
     tokens: "Tokens"
@@ -7548,7 +7608,7 @@ ${row.project}` : row.project;
         custom: ({ seriesIndex }) => {
           const r4 = donutRows[seriesIndex];
           if (!r4) return "";
-          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${esc(r4.label)}</strong><br/>${esc(METRIC_LABELS2[metric])}: ${esc(formatMetricValue2(r4.value, metric))} (${esc(formatShare2(r4.share))} share)<br/>Cost: ${esc(fmtCost(r4.cost))} &nbsp;&bull;&nbsp; Calls: ${esc(fmt(r4.calls))} &nbsp;&bull;&nbsp; Tokens: ${esc(fmt(r4.tokens))}</div>`;
+          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${esc(r4.label)}</strong><br/>${esc(METRIC_LABELS3[metric])}: ${esc(formatMetricValue2(r4.value, metric))} (${esc(formatShare2(r4.share))} share)<br/>Cost: ${esc(fmtCost(r4.cost))} &nbsp;&bull;&nbsp; Calls: ${esc(fmt(r4.calls))} &nbsp;&bull;&nbsp; Tokens: ${esc(fmt(r4.tokens))}</div>`;
         }
       },
       plotOptions: {
@@ -7562,14 +7622,14 @@ ${row.project}` : row.project;
       }
     };
     return /* @__PURE__ */ u4("div", { class: "model-chart-panel", children: [
-      /* @__PURE__ */ u4("div", { class: "range-group", "aria-label": "Version metric", children: Object.keys(METRIC_LABELS2).map((m4) => /* @__PURE__ */ u4(
+      /* @__PURE__ */ u4("div", { class: "range-group", "aria-label": "Version metric", children: Object.keys(METRIC_LABELS3).map((m4) => /* @__PURE__ */ u4(
         "button",
         {
           type: "button",
           class: `range-btn${metric === m4 ? " active" : ""}`,
           "aria-pressed": metric === m4,
           onClick: () => onMetricChange(m4),
-          children: METRIC_LABELS2[m4]
+          children: METRIC_LABELS3[m4]
         },
         m4
       )) }),
@@ -7578,7 +7638,7 @@ ${row.project}` : row.project;
         /* @__PURE__ */ u4("div", { class: "model-chart-center", "aria-hidden": "true", children: /* @__PURE__ */ u4("div", { class: "model-chart-center-inner", children: [
           /* @__PURE__ */ u4("div", { class: "model-chart-center-kicker", children: [
             "Total ",
-            METRIC_LABELS2[metric]
+            METRIC_LABELS3[metric]
           ] }),
           /* @__PURE__ */ u4("div", { class: "model-chart-center-total", children: formatMetricValue2(total, metric, true) }),
           hasOther ? /* @__PURE__ */ u4("div", { class: "model-chart-center-meta", children: [
@@ -8186,7 +8246,22 @@ ${row.project}` : row.project;
       return;
     }
     setSectionVisibility("activity-heatmap", true);
-    R(/* @__PURE__ */ u4(ActivityHeatmap, { data }), container);
+    const handleMetricChange = (next) => {
+      heatmapMetric.value = next;
+      syncDashboardUrl();
+      renderActivityHeatmap(data);
+    };
+    R(
+      /* @__PURE__ */ u4(
+        ActivityHeatmap,
+        {
+          data,
+          metric: heatmapMetric.value,
+          onMetricChange: handleMetricChange
+        }
+      ),
+      container
+    );
   }
   function renderCostReconciliation() {
     const container = $2("cost-reconciliation");

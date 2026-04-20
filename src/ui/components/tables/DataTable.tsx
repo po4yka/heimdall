@@ -162,6 +162,7 @@ export function DataTable<T>({
     if (!sectionKey) return;
     setSectionCollapsed(sectionKey, !collapsed);
     syncDashboardUrl();
+    rerender(n => n + 1);
   };
 
   return (
