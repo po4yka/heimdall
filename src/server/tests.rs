@@ -20,7 +20,11 @@ mod tests {
     use crate::models::OpenAiReconciliation;
     use crate::oauth::models::{BudgetInfo, Identity, Plan, UsageWindowsResponse, WindowInfo};
     use crate::scanner;
-    use crate::server::api::{AppState, api_agent_status, api_community_signal, api_rescan};
+    use crate::server::api::{
+        AppState, api_agent_status, api_claude_usage, api_community_signal,
+        api_live_provider_history, api_live_provider_refresh, api_live_providers, api_rescan,
+        api_usage_windows,
+    };
     use crate::server::assets;
     use crate::server::{ServeOptions, build_router, build_state, start_background_pollers_with};
     use crate::webhooks::WebhookState;
@@ -551,6 +555,96 @@ mod tests {
         let result = api_rescan(State(state), req).await;
 
         assert_eq!(result.unwrap_err(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_sensitive_helper_endpoints_reject_non_loopback_client() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let state = Arc::new(base_state(db_path, projects));
+        let remote: SocketAddr = "192.168.1.20:43120".parse().unwrap();
+
+        let usage_req = {
+            let mut req = Request::builder()
+                .uri("/api/usage-windows")
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(remote));
+            req
+        };
+        let claude_req = {
+            let mut req = Request::builder()
+                .uri("/api/claude-usage")
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(remote));
+            req
+        };
+        let live_req = {
+            let mut req = Request::builder()
+                .uri("/api/live-providers")
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(remote));
+            req
+        };
+        let refresh_req = {
+            let mut req = Request::builder()
+                .uri("/api/live-providers/refresh")
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(remote));
+            req
+        };
+        let history_req = {
+            let mut req = Request::builder()
+                .uri("/api/live-providers/history")
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(remote));
+            req
+        };
+
+        let usage = api_usage_windows(State(state.clone()), usage_req).await;
+        let claude_usage = api_claude_usage(State(state.clone()), claude_req).await;
+        let live = api_live_providers(
+            State(state.clone()),
+            axum::extract::Query(crate::server::api::LiveProviderQuery {
+                provider: None,
+                scope: None,
+            }),
+            live_req,
+        )
+        .await;
+        let refresh = api_live_provider_refresh(
+            State(state.clone()),
+            axum::extract::Query(crate::server::api::LiveProviderQuery {
+                provider: None,
+                scope: None,
+            }),
+            refresh_req,
+        )
+        .await;
+        let history = api_live_provider_history(
+            State(state),
+            axum::extract::Query(crate::server::api::LiveProviderQuery {
+                provider: Some("claude".into()),
+                scope: None,
+            }),
+            history_req,
+        )
+        .await;
+
+        assert_eq!(usage.unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(claude_usage.unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(live.unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(refresh.unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(history.unwrap_err(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

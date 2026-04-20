@@ -86,7 +86,7 @@ public enum WidgetSnapshotBuilder {
             ),
             freshness: freshness,
             auth: auth,
-            identity: snapshot?.identity,
+            identity: self.redactedIdentity(snapshot?.identity),
             lanes: lanes,
             credits: presentation.displayCredits,
             cost: cost,
@@ -135,6 +135,17 @@ public enum WidgetSnapshotBuilder {
             diagnosticCode: auth.diagnosticCode,
             failureReason: auth.failureReason,
             lastValidatedAt: auth.lastValidatedAt
+        )
+    }
+
+    private static func redactedIdentity(_ identity: ProviderIdentity?) -> ProviderIdentity? {
+        guard let identity else { return nil }
+        return ProviderIdentity(
+            provider: identity.provider,
+            accountEmail: nil,
+            accountOrganization: nil,
+            loginMethod: identity.loginMethod,
+            plan: identity.plan
         )
     }
 

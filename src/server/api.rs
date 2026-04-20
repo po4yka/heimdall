@@ -272,7 +272,9 @@ pub async fn api_rescan(
 
 pub async fn api_usage_windows(
     State(state): State<Arc<AppState>>,
+    request: Request,
 ) -> Result<Json<Value>, StatusCode> {
+    enforce_loopback_request(&request)?;
     let resp = refresh_usage_windows(&state).await;
     let value = serde_json::to_value(resp).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(value))
@@ -338,7 +340,9 @@ where
 
 pub async fn api_claude_usage(
     State(state): State<Arc<AppState>>,
+    request: Request,
 ) -> Result<Json<Value>, StatusCode> {
+    enforce_loopback_request(&request)?;
     let db_path = state.db_path.clone();
     let response = tokio::task::spawn_blocking(move || -> anyhow::Result<ClaudeUsageResponse> {
         let conn = db::open_db(&db_path)?;
@@ -366,7 +370,9 @@ pub struct LiveProviderQuery {
 pub async fn api_live_providers(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LiveProviderQuery>,
+    request: Request,
 ) -> Result<Json<LiveProvidersResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
     let scope = parse_live_provider_scope(query.scope.as_deref())?;
     let response = live_providers::load_snapshots(&state, query.provider.as_deref(), scope, false)
         .await
@@ -377,7 +383,9 @@ pub async fn api_live_providers(
 pub async fn api_live_provider_refresh(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LiveProviderQuery>,
+    request: Request,
 ) -> Result<Json<LiveProvidersResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
     let scope = parse_live_provider_scope(query.scope.as_deref())?;
     if query.provider.is_none() || scope == live_providers::ResponseScope::All {
         let mut cache = state.live_provider_cache.write().await;
@@ -392,7 +400,9 @@ pub async fn api_live_provider_refresh(
 pub async fn api_live_provider_history(
     State(state): State<Arc<AppState>>,
     Query(query): Query<LiveProviderQuery>,
+    request: Request,
 ) -> Result<Json<LiveProviderHistoryResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
     let provider = query.provider.unwrap_or_else(|| "claude".into());
     let summary = live_providers::load_provider_history(&state, &provider)
         .await
@@ -408,6 +418,18 @@ fn parse_live_provider_scope(
         "provider" => Ok(live_providers::ResponseScope::ProviderOnly),
         _ => Err(StatusCode::BAD_REQUEST),
     }
+}
+
+fn enforce_loopback_request(request: &Request) -> Result<(), StatusCode> {
+    if let Some(addr) = request
+        .extensions()
+        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+        .map(|info| info.0)
+        && !addr.ip().is_loopback()
+    {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(())
 }
 
 /// `GET /api/agent-status` — returns the latest upstream provider health snapshot.

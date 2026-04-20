@@ -31,34 +31,53 @@ public actor HeimdallHelperController {
             self.ownedHelper = nil
         }
 
+        guard let executable = Self.resolveExecutable(),
+              let fingerprint = Self.fingerprint(for: executable) else {
+            return false
+        }
+
         let serverIsHealthy = await self.hasHealthyServer(on: port)
         let compatibility = serverIsHealthy ? await Self.liveProvidersProbeResult(port: port) : .unavailable
+        let trustedExistingServer = Self.hasTrustedListener(
+            on: port,
+            expectedExecutable: executable,
+            expectedFingerprint: fingerprint
+        )
 
-        if serverIsHealthy, compatibility == .incompatible {
+        if serverIsHealthy, compatibility == .incompatible, trustedExistingServer {
             await Self.stopProcessListening(on: port)
         }
 
         if serverIsHealthy, compatibility == .compatible {
             if let ownedHelper = self.ownedHelper {
                 let resolved = Self.resolveExecutable()
-                let fingerprint = resolved.flatMap(Self.fingerprint(for:))
+                let resolvedFingerprint = resolved.flatMap(Self.fingerprint(for:))
                 if ownedHelper.port == port,
                    resolved?.path == ownedHelper.executable.path,
-                   fingerprint == ownedHelper.fingerprint {
+                   resolvedFingerprint == ownedHelper.fingerprint {
                     return true
                 }
 
                 await self.stopOwnedHelper()
-                if await self.hasHealthyServer(on: port) {
+                if await self.hasHealthyServer(on: port),
+                   Self.hasTrustedListener(
+                       on: port,
+                       expectedExecutable: executable,
+                       expectedFingerprint: fingerprint
+                   ) {
                     return true
                 }
-            } else {
+            } else if trustedExistingServer {
                 return true
+            } else {
+                return false
             }
         }
 
         if serverIsHealthy, compatibility == .unavailable {
-            return await self.waitForReadyServer(on: port, attempts: 30, intervalNanoseconds: 200_000_000)
+            return trustedExistingServer
+                ? await self.waitForReadyServer(on: port, attempts: 30, intervalNanoseconds: 200_000_000)
+                : false
         }
 
         if let ownedHelper = self.ownedHelper,
@@ -66,8 +85,7 @@ public actor HeimdallHelperController {
             await self.stopOwnedHelper()
         }
 
-        guard let executable = Self.resolveExecutable(),
-              let fingerprint = Self.fingerprint(for: executable) else {
+        if !serverIsHealthy, !Self.listeningPIDs(on: port).isEmpty {
             return false
         }
 
@@ -249,6 +267,40 @@ public actor HeimdallHelperController {
         return providers.allSatisfy { $0["auth"] is [String: Any] }
     }
 
+    static func hasTrustedListener(
+        on port: Int,
+        expectedExecutable: URL,
+        expectedFingerprint: HelperBinaryFingerprint
+    ) -> Bool {
+        self.hasTrustedListener(
+            on: port,
+            expectedExecutable: expectedExecutable,
+            expectedFingerprint: expectedFingerprint,
+            pidsProvider: Self.listeningPIDs(on:),
+            pathProvider: Self.executablePath(for:)
+        )
+    }
+
+    static func hasTrustedListener(
+        on port: Int,
+        expectedExecutable: URL,
+        expectedFingerprint: HelperBinaryFingerprint,
+        pidsProvider: (Int) -> [Int32],
+        pathProvider: (Int32) -> String?
+    ) -> Bool {
+        let expectedPath = expectedExecutable.resolvingSymlinksInPath().path
+        return pidsProvider(port).contains { pid in
+            guard let path = pathProvider(pid) else {
+                return false
+            }
+            let normalizedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+            guard normalizedPath == expectedPath else {
+                return false
+            }
+            return Self.fingerprint(for: URL(fileURLWithPath: normalizedPath)) == expectedFingerprint
+        }
+    }
+
     private static func stopProcessListening(on port: Int) async {
         for pid in Self.listeningPIDs(on: port) {
             _ = Darwin.kill(pid_t(pid), SIGTERM)
@@ -293,5 +345,14 @@ public actor HeimdallHelperController {
         return string
             .split(whereSeparator: \.isNewline)
             .compactMap { Int32($0) }
+    }
+
+    private static func executablePath(for pid: Int32) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN * 4))
+        let result = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard result > 0 else {
+            return nil
+        }
+        return String(cString: buffer)
     }
 }

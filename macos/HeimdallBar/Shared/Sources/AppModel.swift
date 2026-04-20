@@ -216,18 +216,26 @@ public final class AppModel {
 
     public func runAuthRecoveryAction(_ action: AuthRecoveryAction, for provider: ProviderID) async {
         do {
-            if let detail = action.detail, action.command == nil {
+            guard let launch = Self.recoveryLaunch(for: action.actionID, provider: provider) else {
+                if let detail = action.detail {
+                    self.lastError = detail
+                } else {
+                    self.lastError = "Unsupported \(provider.title) auth recovery action."
+                }
+                return
+            }
+            if let detail = action.detail, action.command == nil, launch.command.isEmpty {
                 self.lastError = detail
                 return
             }
             try Self.launchAuthCommand(
                 provider: provider,
-                title: action.label,
-                command: action.command ?? Self.defaultCommand(for: action, provider: provider)
+                title: launch.title,
+                command: launch.command
             )
             self.lastError = nil
         } catch {
-            self.lastError = "Failed to start \(provider.title) auth recovery. Run `\(action.command ?? Self.defaultCommand(for: action, provider: provider))` manually."
+            self.lastError = "Failed to start \(provider.title) auth recovery. Run `\(Self.recoveryLaunch(for: action.actionID, provider: provider)?.command ?? Self.defaultCommand(for: action, provider: provider))` manually."
         }
     }
 
@@ -387,8 +395,8 @@ public final class AppModel {
     }
 
     private static func defaultCommand(for action: AuthRecoveryAction, provider: ProviderID) -> String {
-        if let command = action.command, !command.isEmpty {
-            return command
+        if let launch = self.recoveryLaunch(for: action.actionID, provider: provider) {
+            return launch.command
         }
         switch (provider, action.actionID) {
         case (.claude, "claude-doctor"):
@@ -399,6 +407,28 @@ public final class AppModel {
             return "codex login --device-auth"
         case (.codex, _):
             return "codex login"
+        }
+    }
+
+    private struct RecoveryLaunch {
+        let title: String
+        let command: String
+    }
+
+    private static func recoveryLaunch(for actionID: String, provider: ProviderID) -> RecoveryLaunch? {
+        switch (provider, actionID) {
+        case (.claude, "claude-run"):
+            return RecoveryLaunch(title: "Run Claude", command: "claude")
+        case (.claude, "claude-login"):
+            return RecoveryLaunch(title: "Run Claude Login", command: "claude login")
+        case (.claude, "claude-doctor"):
+            return RecoveryLaunch(title: "Run Claude Doctor", command: "claude doctor")
+        case (.codex, "codex-login"):
+            return RecoveryLaunch(title: "Run Codex Login", command: "codex login")
+        case (.codex, "codex-login-device"):
+            return RecoveryLaunch(title: "Run Device Login", command: "codex login --device-auth")
+        default:
+            return nil
         }
     }
 

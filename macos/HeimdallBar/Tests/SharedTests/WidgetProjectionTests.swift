@@ -63,6 +63,7 @@ struct WidgetProjectionTests {
         #expect(typed.lanes.count == 2)
         #expect(typed.lanes.first?.remainingPercent == 64)
         #expect(typed.auth?.diagnosticCode == "env-override")
+        #expect(typed.identity?.accountEmail == nil)
         #expect(typed.cost.todayCostUSD == 4.8)
         #expect(typed.issues.contains(where: { $0.code == "auth-incompatible" }))
     }

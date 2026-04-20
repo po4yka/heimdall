@@ -73,6 +73,33 @@ struct HeimdallHelperControllerTests {
         #expect(!HeimdallHelperController.liveProvidersPayloadIncludesAuth(incompatible))
     }
 
+    @Test
+    func trustedListenerRequiresMatchingExecutablePathAndFingerprint() throws {
+        let temp = try Self.makeTempDirectory()
+        let executable = temp.appendingPathComponent("claude-usage-tracker")
+        FileManager.default.createFile(atPath: executable.path, contents: Data("trusted".utf8))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        let fingerprint = try #require(HeimdallHelperController.fingerprint(for: executable))
+
+        let trusted = HeimdallHelperController.hasTrustedListener(
+            on: 8787,
+            expectedExecutable: executable,
+            expectedFingerprint: fingerprint,
+            pidsProvider: { _ in [42] },
+            pathProvider: { _ in executable.path }
+        )
+        let untrusted = HeimdallHelperController.hasTrustedListener(
+            on: 8787,
+            expectedExecutable: executable,
+            expectedFingerprint: fingerprint,
+            pidsProvider: { _ in [42] },
+            pathProvider: { _ in "/tmp/other-process" }
+        )
+
+        #expect(trusted)
+        #expect(!untrusted)
+    }
+
     private static func makeTempDirectory() throws -> URL {
         let base = FileManager.default.temporaryDirectory
         let url = base.appendingPathComponent(UUID().uuidString, isDirectory: true)

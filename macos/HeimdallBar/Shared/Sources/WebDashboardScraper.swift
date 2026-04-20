@@ -598,7 +598,7 @@ public final class WebDashboardScraper {
         let entry = CachedScrapeEntry(
             provider: provider,
             sessionFingerprint: sessionFingerprint,
-            result: result,
+            result: self.redacted(result),
             savedAt: ISO8601DateFormatter().string(from: Date())
         )
         do {
@@ -611,6 +611,29 @@ public final class WebDashboardScraper {
         } catch {
             // Best-effort cache only.
         }
+    }
+
+    private static func redacted(_ result: ScrapeResultPayload) -> ScrapeResultPayload {
+        let redactedLines = result.detailLines.filter { !$0.lowercased().hasPrefix("signed in as ") }
+        let redactedExtras = result.webExtras.map { extras in
+            DashboardWebExtras(
+                signedInEmail: nil,
+                accountPlan: extras.accountPlan,
+                creditsRemaining: extras.creditsRemaining,
+                creditsPurchaseURL: extras.creditsPurchaseURL,
+                quotaLanes: extras.quotaLanes,
+                sourceURL: extras.sourceURL,
+                fetchedAt: extras.fetchedAt
+            )
+        }
+        return ScrapeResultPayload(
+            statusText: result.statusText,
+            headline: result.headline,
+            detailLines: redactedLines,
+            webExtras: redactedExtras,
+            isLoginRequired: result.isLoginRequired,
+            fetchedAt: result.fetchedAt
+        )
     }
 
     private static func cacheURL(for provider: ProviderID) -> URL? {

@@ -123,22 +123,9 @@ public struct BrowserSessionImporter {
         at sourceURL: URL,
         provider: ProviderID
     ) throws -> [ImportedSessionCookie] {
-        let tempDirectory = self.fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try self.fileManager.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-        defer { try? self.fileManager.removeItem(at: tempDirectory) }
-
-        let tempDBURL = tempDirectory.appendingPathComponent("Cookies", isDirectory: false)
-        try self.fileManager.copyItem(at: sourceURL, to: tempDBURL)
-
-        for suffix in ["-wal", "-shm"] {
-            let sidecar = URL(fileURLWithPath: sourceURL.path + suffix)
-            if self.fileManager.fileExists(atPath: sidecar.path) {
-                try? self.fileManager.copyItem(at: sidecar, to: URL(fileURLWithPath: tempDBURL.path + suffix))
-            }
-        }
-
         var database: OpaquePointer?
-        guard sqlite3_open_v2(tempDBURL.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+        let databaseURI = "file:\(sourceURL.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sourceURL.path)?mode=ro&immutable=1"
+        guard sqlite3_open_v2(databaseURI, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK else {
             throw BrowserSessionImporterError.openDatabase(sourceURL.path)
         }
         defer { sqlite3_close(database) }
