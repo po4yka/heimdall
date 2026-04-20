@@ -1,0 +1,8 @@
+{
+  "tokens": {
+    "access_token": "access_fixture_token",
+    "refresh_token": "refresh_fixture_token",
+    "id_token": "header.eyJlbWFpbCI6ImZpeHR1cmVAZXhhbXBsZS5jb20iLCJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9wbGFuX3R5cGUiOiJwcm8ifX0.sig",
+    "account_id": "acct_fixture_123"
+  }
+}

@@ -46,4 +46,31 @@ public struct KeychainStore: Sendable {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(createStatus))
         }
     }
+
+    public func delete(account: String) throws {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: self.service,
+            kSecAttrAccount: account,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        }
+    }
+
+    public func loadJSON<T: Decodable>(_ type: T.Type, account: String) -> T? {
+        guard let data = self.load(account: account) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try? decoder.decode(T.self, from: data)
+    }
+
+    public func saveJSON<T: Encodable>(_ value: T, account: String) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let data = try encoder.encode(value)
+        try self.save(data, account: account)
+    }
 }

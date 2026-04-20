@@ -1,6 +1,14 @@
 name: HeimdallBar
 options:
   minimumXcodeGenVersion: 2.38.0
+schemes:
+  HeimdallBarShared:
+    build:
+      targets:
+        HeimdallBarShared: all
+    test:
+      targets:
+        - HeimdallBarSharedTests
 settings:
   base:
     SWIFT_VERSION: 6.0
@@ -28,6 +36,11 @@ targets:
       path: App/HeimdallBar.entitlements
     sources:
       - path: App/Sources
+    postBuildScripts:
+      - name: Bundle Heimdall helper
+        basedOnDependencyAnalysis: false
+        script: |
+          "$SRCROOT/../../script/bundle_heimdall_helper.sh" "$TARGET_BUILD_DIR/$WRAPPER_NAME" "$CONFIGURATION"
     dependencies:
       - target: HeimdallBarShared
       - target: HeimdallBarWidget
@@ -37,6 +50,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBar
         PRODUCT_NAME: HeimdallBar
         INFOPLIST_KEY_LSUIElement: YES
+      configs:
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
   HeimdallBarWidget:
     type: app-extension
     platform: macOS
@@ -53,6 +69,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBar.widget
         PRODUCT_NAME: HeimdallBarWidget
         APPLICATION_EXTENSION_API_ONLY: YES
+      configs:
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
   HeimdallBarCLI:
     type: tool
     platform: macOS
@@ -65,3 +84,18 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBar.cli
         PRODUCT_NAME: heimdallbar
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path @loader_path @loader_path/../Frameworks"
+      configs:
+        Release:
+          ENABLE_HARDENED_RUNTIME: YES
+  HeimdallBarSharedTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/SharedTests
+    dependencies:
+      - target: HeimdallBarShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBarSharedTests
+        PRODUCT_NAME: HeimdallBarSharedTests
+        GENERATE_INFOPLIST_FILE: YES

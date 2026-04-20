@@ -13,65 +13,91 @@ public enum MenuProjectionBuilder {
     }
 
     public static func projection(
-        for provider: ProviderID,
-        snapshot: ProviderSnapshot?,
+        from presentation: ProviderPresentationState,
         config: HeimdallBarConfig,
-        adjunct: DashboardAdjunctSnapshot?
+        isRefreshing: Bool,
+        lastGlobalError: String?
     ) -> ProviderMenuProjection {
-        guard let snapshot else {
-            return ProviderMenuProjection(
-                provider: provider,
-                title: provider.title,
-                sourceLabel: "Source: unavailable",
-                statusLabel: nil,
-                identityLabel: nil,
-                lastRefreshLabel: "Last refresh: waiting for data",
-                costLabel: "Today: unavailable",
-                laneSummaries: ["Session unavailable", "Weekly unavailable"],
-                creditsLabel: nil,
-                incidentLabel: nil,
-                stale: true,
-                error: nil,
-                historyFractions: [],
-                claudeFactors: [],
-                adjunct: adjunct
-            )
-        }
-
-        let history = historyFractions(snapshot.costSummary.daily)
-        let statusLabel = snapshot.status.map { "[\($0.indicator.uppercased())] \($0.description)" }
+        let provider = presentation.provider
+        let snapshot = presentation.snapshot
+        let adjunct = presentation.adjunct
+        let resolution = presentation.resolution
+        let history = snapshot.map { historyFractions($0.costSummary.daily) } ?? []
+        let statusLabel = snapshot?.status.map { "[\($0.indicator.uppercased())] \($0.description)" }
         let incidentLabel = statusLabel.flatMap { $0.contains("major") || $0.contains("critical") ? $0 : nil }
-        let identityLabel = identityLabel(snapshot.identity)
-        let creditsLabel = snapshot.credits.map { String(format: "Credits: %.2f", $0) }
+        let identityLabel = presentation.displayIdentityLabel
+        let creditsLabel = presentation.displayCredits.map { value in
+            resolution.effectiveSource == .web
+                ? String(format: "Web credits: %.2f", value)
+                : String(format: "Credits: %.2f", value)
+        }
+        let lanePrimary = presentation.primary
+        let laneSecondary = presentation.secondary
+        let laneTertiary = presentation.tertiary
+        let lastRefreshLabel = if let lastRefresh = snapshot?.lastRefresh {
+            "Updated \(relativeLabel(lastRefresh))"
+        } else if let lastUpdated = adjunct?.lastUpdated {
+            "Web data \(relativeLabel(lastUpdated))"
+        } else {
+            "Waiting for data"
+        }
+        let costLabel = if let snapshot {
+            String(
+                format: "Today: $%.2f · 30d: $%.2f",
+                snapshot.costSummary.todayCostUSD,
+                snapshot.costSummary.last30DaysCostUSD
+            )
+        } else {
+            "Today: unavailable"
+        }
+        let visualState = self.visualState(
+            statusIndicator: snapshot?.status?.indicator,
+            stale: snapshot?.stale ?? false,
+            error: snapshot?.error ?? lastGlobalError,
+            isRefreshing: isRefreshing
+        )
+        let refreshStatusLabel = self.refreshStatusLabel(
+            visualState: visualState,
+            isRefreshing: isRefreshing,
+            lastRefreshLabel: lastRefreshLabel,
+            error: snapshot?.error ?? lastGlobalError
+        )
+        let laneDetails = [
+            laneDetail(title: "Session", window: lanePrimary, config: config),
+            laneDetail(title: "Weekly", window: laneSecondary, config: config),
+        ] + (laneTertiary.map { [laneDetail(title: "Extra", window: $0, config: config)] } ?? [])
 
         return ProviderMenuProjection(
             provider: provider,
             title: provider.title,
-            sourceLabel: "Source: \(snapshot.sourceUsed)",
+            sourceLabel: resolution.sourceLabel,
+            sourceExplanationLabel: resolution.explanation,
+            warningLabels: resolution.warnings + fallbackChainWarnings(resolution.fallbackChain),
+            visualState: visualState,
+            stateLabel: stateLabel(for: visualState),
             statusLabel: statusLabel,
             identityLabel: identityLabel,
-            lastRefreshLabel: "Last refresh: \(relativeLabel(snapshot.lastRefresh))",
-            costLabel: String(
-                format: "Today: $%.2f · 30d: $%.2f",
-                snapshot.costSummary.todayCostUSD,
-                snapshot.costSummary.last30DaysCostUSD
-            ),
-            laneSummaries: [
-                laneSummary(title: "Session", window: snapshot.primary, config: config),
-                laneSummary(title: "Weekly", window: snapshot.secondary, config: config),
-            ] + (snapshot.tertiary.map { [laneSummary(title: "Extra", window: $0, config: config)] } ?? []),
+            lastRefreshLabel: lastRefreshLabel,
+            refreshStatusLabel: refreshStatusLabel,
+            costLabel: costLabel,
+            laneDetails: laneDetails,
             creditsLabel: creditsLabel,
             incidentLabel: incidentLabel,
-            stale: snapshot.stale,
-            error: snapshot.error,
+            stale: snapshot?.stale ?? false,
+            isRefreshing: isRefreshing,
+            error: snapshot?.error,
             historyFractions: history,
-            claudeFactors: snapshot.claudeUsage?.factors ?? [],
+            claudeFactors: snapshot?.claudeUsage?.factors ?? [],
             adjunct: adjunct
         )
     }
 
-    public static func overview(from items: [ProviderMenuProjection]) -> OverviewMenuProjection {
-        let refreshedLabel = items.map(\.lastRefreshLabel).first ?? "Last refresh: waiting for data"
+    public static func overview(
+        from items: [ProviderMenuProjection],
+        isRefreshing: Bool,
+        lastGlobalError: String?
+    ) -> OverviewMenuProjection {
+        let refreshedLabel = items.map(\.lastRefreshLabel).first ?? "Waiting for data"
         let totalCost = items
             .compactMap { item in
                 item.costLabel.split(separator: "·").first?
@@ -80,21 +106,54 @@ public enum MenuProjectionBuilder {
             }
             .compactMap(Double.init)
             .reduce(0.0, +)
+        let historyFractions = mergedHistory(items: items)
+        let warningLabels = items
+            .flatMap(\.warningLabels)
+            .uniqued()
+        let hottestProvider = items.max(by: { lhs, rhs in
+            numericTodayCost(lhs.costLabel) < numericTodayCost(rhs.costLabel)
+        })
+        let activitySummaryLabel = if let hottestProvider {
+            "Most active: \(hottestProvider.title) · \(hottestProvider.stateLabel.lowercased())"
+        } else {
+            "Waiting for provider activity"
+        }
+        let refreshStatusLabel: String = if isRefreshing {
+            "Refreshing all providers…"
+        } else if let lastGlobalError {
+            "Last refresh failed: \(lastGlobalError)"
+        } else {
+            refreshedLabel
+        }
 
         return OverviewMenuProjection(
             items: items,
             combinedCostLabel: String(format: "Combined today: $%.2f", totalCost),
-            refreshedAtLabel: refreshedLabel
+            refreshedAtLabel: refreshedLabel,
+            activitySummaryLabel: activitySummaryLabel,
+            historyFractions: historyFractions,
+            warningLabels: warningLabels,
+            isRefreshing: isRefreshing,
+            refreshStatusLabel: refreshStatusLabel
         )
     }
 
     public static func menuTitle(
-        for snapshot: ProviderSnapshot?,
+        for presentation: ProviderPresentationState?,
         provider: ProviderID?,
         config: HeimdallBarConfig
     ) -> String {
-        guard let snapshot, let primary = snapshot.primary else {
-            return provider?.title ?? "Heimdall"
+        guard let presentation, let snapshot = presentation.snapshot, let primary = presentation.primary else {
+            if let presentation, let primary = presentation.primary {
+                let value = config.showUsedValues ? primary.usedPercent : max(0, 100 - primary.usedPercent)
+                let suffix = config.showUsedValues ? "used" : "left"
+                let label = provider?.title ?? presentation.provider.title
+                return "\(label) \(Int(value.rounded()))% \(suffix)"
+            }
+            if let presentation, presentation.resolution.requestedSource == .web {
+                return provider?.title ?? presentation.provider.title
+            }
+            return provider?.title ?? presentation?.provider.title ?? "Heimdall"
         }
 
         let value = config.showUsedValues ? primary.usedPercent : max(0, 100 - primary.usedPercent)
@@ -103,16 +162,23 @@ public enum MenuProjectionBuilder {
         return "\(label) \(Int(value.rounded()))% \(suffix)"
     }
 
-    private static func laneSummary(
+    private static func laneDetail(
         title: String,
         window: ProviderRateWindow?,
         config: HeimdallBarConfig
-    ) -> String {
+    ) -> LaneDetailProjection {
         guard let window else {
-            return "\(title): unavailable"
+            return LaneDetailProjection(
+                title: title,
+                summary: "\(title): unavailable",
+                remainingPercent: nil,
+                resetDetail: nil,
+                paceLabel: nil
+            )
         }
 
         let value = config.showUsedValues ? window.usedPercent : max(0, 100 - window.usedPercent)
+        let remainingPercent = Int(max(0, 100 - window.usedPercent).rounded())
         let modeLabel = config.showUsedValues ? "used" : "left"
         let resetLabel: String
         switch config.resetDisplayMode {
@@ -125,12 +191,18 @@ public enum MenuProjectionBuilder {
         case .absolute:
             resetLabel = window.resetsAt ?? window.resetLabel ?? "reset unknown"
         }
-        return "\(title): \(Int(value.rounded()))% \(modeLabel) · \(resetLabel)"
+        let paceLabel = paceLabel(forRemainingPercent: remainingPercent)
+        return LaneDetailProjection(
+            title: title,
+            summary: "\(title): \(Int(value.rounded()))% \(modeLabel) · pace \(paceLabel.lowercased()) · \(resetLabel)",
+            remainingPercent: remainingPercent,
+            resetDetail: resetLabel,
+            paceLabel: paceLabel
+        )
     }
 
     private static func relativeLabel(_ timestamp: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        guard let date = formatter.date(from: timestamp) else { return timestamp }
+        guard let date = parseISO8601(timestamp) else { return "just now" }
         let delta = max(0, Int(Date().timeIntervalSince(date)))
         if delta < 60 {
             return "\(delta)s ago"
@@ -144,11 +216,14 @@ public enum MenuProjectionBuilder {
         return "\(delta / 86_400)d ago"
     }
 
-    private static func identityLabel(_ identity: ProviderIdentity?) -> String? {
-        guard let identity else { return nil }
-        return [identity.accountEmail, identity.plan]
-            .compactMap { $0 }
-            .joined(separator: " · ")
+    private static func parseISO8601(_ timestamp: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: timestamp) {
+            return date
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: timestamp)
     }
 
     private static func historyFractions(_ points: [CostHistoryPoint]) -> [Double] {
@@ -156,5 +231,120 @@ public enum MenuProjectionBuilder {
         let maxValue = recent.map(\.costUSD).max() ?? 0
         guard maxValue > 0 else { return recent.map { _ in 0 } }
         return recent.map { min(1, $0.costUSD / maxValue) }
+    }
+
+    private static func fallbackChainWarnings(_ chain: [String]) -> [String] {
+        guard chain.count > 1 else { return [] }
+        return ["Resolution chain: \(chain.joined(separator: " -> "))"]
+    }
+
+    private static func mergedHistory(items: [ProviderMenuProjection]) -> [Double] {
+        guard let count = items.map(\.historyFractions.count).max(), count > 0 else { return [] }
+        var merged = Array(repeating: 0.0, count: count)
+        var totals = Array(repeating: 0, count: count)
+        for item in items {
+            for (index, value) in item.historyFractions.enumerated() {
+                merged[index] += value
+                totals[index] += 1
+            }
+        }
+        return zip(merged, totals).map { total, count in
+            guard count > 0 else { return 0 }
+            return min(1, total / Double(count))
+        }
+    }
+
+    private static func numericTodayCost(_ label: String) -> Double {
+        guard let todayLabel = label.split(separator: "·").first else {
+            return 0
+        }
+        let normalized = String(todayLabel)
+            .replacingOccurrences(of: "Today: $", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        return Double(normalized) ?? 0
+    }
+
+    private static func visualState(
+        statusIndicator: String?,
+        stale: Bool,
+        error: String?,
+        isRefreshing: Bool
+    ) -> ProviderVisualState {
+        if error?.isEmpty == false {
+            return .error
+        }
+        if stale {
+            return .stale
+        }
+        let indicator = statusIndicator?.lowercased() ?? ""
+        if indicator.contains("critical") || indicator.contains("major") {
+            return .incident
+        }
+        if indicator.contains("minor")
+            || indicator.contains("degraded")
+            || indicator.contains("maintenance")
+            || indicator.contains("partial")
+        {
+            return .degraded
+        }
+        if isRefreshing {
+            return .refreshing
+        }
+        return .healthy
+    }
+
+    private static func stateLabel(for state: ProviderVisualState) -> String {
+        switch state {
+        case .healthy: return "Operational"
+        case .refreshing: return "Refreshing"
+        case .stale: return "Stale"
+        case .degraded: return "Degraded"
+        case .incident: return "Incident"
+        case .error: return "Error"
+        }
+    }
+
+    private static func refreshStatusLabel(
+        visualState: ProviderVisualState,
+        isRefreshing: Bool,
+        lastRefreshLabel: String,
+        error: String?
+    ) -> String {
+        if isRefreshing {
+            return "Refreshing…"
+        }
+        if let error, !error.isEmpty {
+            return "Last refresh failed: \(error)"
+        }
+        switch visualState {
+        case .incident:
+            return "Incident active · \(lastRefreshLabel.lowercased())"
+        case .degraded:
+            return "Provider degraded · \(lastRefreshLabel.lowercased())"
+        case .stale:
+            return "Data is stale · \(lastRefreshLabel.lowercased())"
+        default:
+            return lastRefreshLabel
+        }
+    }
+
+    private static func paceLabel(forRemainingPercent remainingPercent: Int) -> String {
+        switch remainingPercent {
+        case ..<15:
+            return "Critical"
+        case ..<35:
+            return "Heavy"
+        case ..<65:
+            return "Steady"
+        default:
+            return "Comfortable"
+        }
+    }
+}
+
+private extension Array where Element: Hashable {
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return self.filter { seen.insert($0).inserted }
     }
 }

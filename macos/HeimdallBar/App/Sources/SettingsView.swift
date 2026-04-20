@@ -20,6 +20,7 @@ struct SettingsView: View {
                 }
                 Toggle("Enable Claude Web Extras", isOn: self.$model.config.claude.dashboardExtrasEnabled)
             }
+            ProviderWebSessionSection(model: self.model, provider: .claude)
 
             Section("Codex") {
                 Toggle("Enable Codex", isOn: self.$model.config.codex.enabled)
@@ -34,6 +35,13 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("Enable Codex OpenAI Web Extras", isOn: self.$model.config.codex.dashboardExtrasEnabled)
+            }
+            ProviderWebSessionSection(model: self.model, provider: .codex)
+
+            Section("Web Extras Policy") {
+                Text("OpenAI web extras use a hidden local WKWebView with imported browser cookies. Refreshes are cached and rate-limited, but they still cost battery and expose your local browser session to this app only on this machine.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Display") {
@@ -55,9 +63,72 @@ struct SettingsView: View {
                 Button("Refresh Data") {
                     Task { await self.model.refresh(force: true, provider: nil) }
                 }
+                Button("Refresh Browser Discovery") {
+                    Task { await self.model.refreshBrowserImports() }
+                }
             }
         }
         .formStyle(.grouped)
         .padding()
+        .task {
+            await self.model.refreshBrowserImports()
+        }
+    }
+}
+
+private struct ProviderWebSessionSection: View {
+    let model: AppModel
+    let provider: ProviderID
+
+    var body: some View {
+        Section("\(self.provider.title) Web Session") {
+            if let session = self.model.importedSession(for: self.provider) {
+                Text(statusLine(for: session))
+                Text("Source: \(session.browserSource.title) · \(session.profileName)")
+                    .foregroundStyle(.secondary)
+                Text("Cookies: \(session.cookies.count) · Imported: \(session.importedAt)")
+                    .foregroundStyle(.secondary)
+                if !session.cookies.isEmpty {
+                    Text("Domains: \(previewDomains(session))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button("Reset \(self.provider.title) Session") {
+                    Task { await self.model.resetBrowserSession(provider: self.provider) }
+                }
+                .disabled(self.model.isImportingSession)
+            } else {
+                Text("No imported browser session stored.")
+                    .foregroundStyle(.secondary)
+            }
+
+            if self.model.importCandidates(for: self.provider).isEmpty {
+                Text("No Safari, Chrome, Arc, or Brave cookie stores were discovered.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(self.model.importCandidates(for: self.provider)) { candidate in
+                    Button("Import from \(candidate.title)") {
+                        Task { await self.model.importBrowserSession(provider: self.provider, candidate: candidate) }
+                    }
+                    .disabled(self.model.isImportingSession)
+                }
+            }
+        }
+    }
+
+    private func statusLine(for session: ImportedBrowserSession) -> String {
+        if session.expired {
+            return "Stored session is expired."
+        }
+        if session.loginRequired {
+            return "Stored session is missing an active auth cookie."
+        }
+        return "Stored session is ready."
+    }
+
+    private func previewDomains(_ session: ImportedBrowserSession) -> String {
+        let domains = Array(Set(session.cookies.map(\.domain))).sorted()
+        return domains.prefix(3).joined(separator: ", ")
     }
 }

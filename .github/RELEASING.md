@@ -7,6 +7,17 @@ This document describes how to cut a new release and verify the resulting artifa
 - Write access to the `po4yka/heimdall` GitHub repository.
 - A local clone on the `main` branch with no uncommitted changes.
 - `gh` CLI authenticated (`gh auth status`).
+- For signed macOS app releases, configure these GitHub Actions secrets:
+  - `HEIMDALL_CODESIGN_IDENTITY`
+  - `HEIMDALL_APPLE_CERTIFICATE_BASE64`
+  - `HEIMDALL_APPLE_CERTIFICATE_PASSWORD`
+  - `HEIMDALL_NOTARY_APPLE_ID`
+  - `HEIMDALL_NOTARY_TEAM_ID`
+  - `HEIMDALL_NOTARY_APP_PASSWORD`
+
+If the Apple signing secrets are missing, the workflow still builds the macOS
+artifact with ad-hoc signatures for structure validation, but notarization is
+skipped. Production tags should always have the secrets configured.
 
 ---
 
@@ -74,8 +85,10 @@ gh run watch   # live tail the most recent run
 
 The matrix builds five Rust targets in parallel. The release workflow also
 builds a separate macOS app artifact for `HeimdallBar.app` plus the bundled
-`heimdallbar` CLI. The `consolidate-checksums` job runs after all matrix jobs
-complete and attaches the combined `SHA256SUMS.txt`.
+`heimdallbar` CLI, signs it, validates the embedded widget/helper/framework
+layout, and notarizes it when Apple credentials are present. The
+`consolidate-checksums` job runs after all matrix jobs complete and attaches
+the combined `SHA256SUMS.txt`.
 
 Expected total wall-clock time: **10--20 minutes** (Linux arm64 via `cross`
 takes the longest).
@@ -85,9 +98,11 @@ takes the longest).
 ## Post-release checklist
 
 - [ ] Confirm all five platform archives appear on the GitHub Releases page.
-- [ ] Confirm the `heimdallbar-<version>-macos-app.tar.gz` artifact appears on
-      the GitHub Releases page and contains `HeimdallBar.app` plus
-      `heimdallbar`.
+- [ ] Confirm the `heimdallbar-<version>-macos-app.zip` artifact appears on
+      the GitHub Releases page and contains:
+  - `HeimdallBar.app`
+  - `bin/heimdallbar`
+  - `Frameworks/HeimdallBarShared.framework`
 - [ ] Download `SHA256SUMS.txt` and verify at least one archive locally:
   ```bash
   sha256sum --check --ignore-missing SHA256SUMS.txt
@@ -104,9 +119,16 @@ takes the longest).
   ```
 - [ ] Smoke-test the native app artifact on macOS:
   ```bash
-  tar xzf heimdallbar-v0.x.y-macos-app.tar.gz
+  unzip heimdallbar-v0.x.y-macos-app.zip
   open heimdallbar-v0.x.y-macos-app/HeimdallBar.app
-  ./heimdallbar-v0.x.y-macos-app/heimdallbar config dump
+  DYLD_FRAMEWORK_PATH=heimdallbar-v0.x.y-macos-app/Frameworks \
+    ./heimdallbar-v0.x.y-macos-app/bin/heimdallbar config dump
+  spctl -a -vv heimdallbar-v0.x.y-macos-app/HeimdallBar.app
+  ```
+- [ ] If signing secrets were configured, confirm notarization completed and
+      stapling succeeded:
+  ```bash
+  xcrun stapler validate heimdallbar-v0.x.y-macos-app/HeimdallBar.app
   ```
 - [ ] Update the README install one-liner if the tarball naming changed.
 - [ ] If a pre-release tag (`v0.x.y-rc.1`, `v0.x.y-beta.1`) was used, verify
@@ -138,6 +160,20 @@ the other four working. If that happens:
    Linux ARM packaging.
 
 ---
+
+## macOS distribution notes
+
+- The workflow stages the macOS release with
+  [script/package_heimdallbar_distribution.sh](/Users/po4yka/GitRep/heimdall/script/package_heimdallbar_distribution.sh:1),
+  signs it with
+  [script/sign_heimdallbar_distribution.sh](/Users/po4yka/GitRep/heimdall/script/sign_heimdallbar_distribution.sh:1),
+  and validates it with
+  [script/validate_heimdallbar_distribution.sh](/Users/po4yka/GitRep/heimdall/script/validate_heimdallbar_distribution.sh:1).
+- Validation includes `codesign --verify`, helper/widget presence checks, and a
+  real `heimdallbar config dump` launch against the packaged framework layout.
+- The bundled `heimdallbar` CLI is shipped outside the `.app` bundle, so local
+  smoke tests should export `DYLD_FRAMEWORK_PATH=<artifact>/Frameworks` before
+  invoking it directly.
 
 ## Notes
 

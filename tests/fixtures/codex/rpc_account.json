@@ -1,0 +1,7 @@
+{
+  "account": {
+    "type": "chatgpt",
+    "email": "rpc-fixture@example.com",
+    "planType": "team"
+  }
+}

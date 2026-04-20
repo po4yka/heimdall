@@ -559,6 +559,7 @@ fn wait_for_rpc_id(rx: &mpsc::Receiver<String>, id: i64, timeout: Duration) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn parse_auth_supports_token_object() {
@@ -606,5 +607,118 @@ mod tests {
             snapshot.secondary.expect("secondary").used_percent.round() as i64,
             59
         );
+    }
+
+    #[test]
+    fn fixture_auth_payload_decodes_identity_fields() {
+        let auth = parse_auth(include_bytes!("../../tests/fixtures/codex/auth_tokens.json"))
+            .expect("fixture auth parses");
+
+        assert_eq!(auth.access_token, "access_fixture_token");
+        assert_eq!(
+            auth.refresh_token.as_deref(),
+            Some("refresh_fixture_token")
+        );
+        assert_eq!(auth.account_id.as_deref(), Some("acct_fixture_123"));
+
+        let identity = decode_identity(&auth).expect("fixture identity");
+        assert_eq!(identity.account_email.as_deref(), Some("fixture@example.com"));
+        assert_eq!(identity.plan.as_deref(), Some("pro"));
+    }
+
+    #[test]
+    fn fixture_oauth_payload_decodes_windows_and_credits() {
+        let response: CodexUsageResponse = serde_json::from_str(include_str!(
+            "../../tests/fixtures/codex/oauth_usage.json"
+        ))
+        .expect("fixture oauth usage parses");
+
+        assert_eq!(response.plan_type.as_deref(), Some("pro"));
+        assert_eq!(
+            oauth_credits_to_f64(response.credits.as_ref().expect("credits")),
+            Some(17.25)
+        );
+
+        let primary = oauth_window_to_live(
+            response
+                .rate_limit
+                .as_ref()
+                .and_then(|limit| limit.primary_window.as_ref())
+                .expect("primary"),
+        );
+        let secondary = oauth_window_to_live(
+            response
+                .rate_limit
+                .as_ref()
+                .and_then(|limit| limit.secondary_window.as_ref())
+                .expect("secondary"),
+        );
+        assert_eq!(primary.used_percent, 38.5);
+        assert_eq!(primary.window_minutes, Some(300));
+        assert_eq!(secondary.used_percent, 61.0);
+        assert_eq!(secondary.window_minutes, Some(10_080));
+    }
+
+    #[test]
+    fn fixture_rpc_payloads_decode_account_limits_and_credits() {
+        let account: RpcAccountResponse = serde_json::from_str(include_str!(
+            "../../tests/fixtures/codex/rpc_account.json"
+        ))
+        .expect("fixture rpc account parses");
+        let limits: RpcRateLimitsResponse = serde_json::from_str(include_str!(
+            "../../tests/fixtures/codex/rpc_rate_limits.json"
+        ))
+        .expect("fixture rpc limits parses");
+
+        match account.account.expect("account") {
+            RpcAccountDetails::ChatGpt { email, plan_type } => {
+                assert_eq!(email.as_deref(), Some("rpc-fixture@example.com"));
+                assert_eq!(plan_type.as_deref(), Some("team"));
+            }
+            RpcAccountDetails::ApiKey => panic!("expected chatgpt account"),
+        }
+
+        let primary = rpc_window_to_live(limits.rate_limits.primary.as_ref().expect("primary"));
+        let secondary = rpc_window_to_live(limits.rate_limits.secondary.as_ref().expect("secondary"));
+        assert_eq!(primary.used_percent, 42.0);
+        assert_eq!(primary.window_minutes, Some(300));
+        assert_eq!(secondary.used_percent, 73.0);
+        assert_eq!(secondary.window_minutes, Some(10_080));
+        assert_eq!(
+            rpc_credits_to_f64(limits.rate_limits.credits.as_ref().expect("credits")),
+            Some(11.9)
+        );
+    }
+
+    #[test]
+    fn fixture_cli_status_output_extracts_limits() {
+        let snapshot = parse_cli_status(include_str!("../../tests/fixtures/codex/cli_status.txt"))
+            .expect("fixture cli parses");
+
+        assert_eq!(snapshot.credits, Some(123.4));
+        assert_eq!(
+            snapshot.primary.expect("primary").used_percent.round() as i64,
+            28
+        );
+        assert_eq!(
+            snapshot.secondary.expect("secondary").used_percent.round() as i64,
+            59
+        );
+    }
+
+    #[test]
+    fn fixture_status_shape_matches_expected_rpc_result_wrapper() {
+        let payload = json!({
+            "result": serde_json::from_str::<Value>(include_str!(
+                "../../tests/fixtures/codex/rpc_rate_limits.json"
+            ))
+            .expect("fixture value")
+        });
+        let result = serde_json::from_value::<RpcRateLimitsResponse>(
+            payload.get("result").cloned().expect("result"),
+        )
+        .expect("wrapped rpc limits parse");
+        assert!(result.rate_limits.primary.is_some());
+        assert!(result.rate_limits.secondary.is_some());
     }
 }

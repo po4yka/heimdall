@@ -2,27 +2,37 @@ import Foundation
 
 public actor DashboardAdjunctController {
     private let keychainStore: KeychainStore
+    private let importer: BrowserSessionImporter
 
-    public init(keychainStore: KeychainStore = KeychainStore()) {
+    public init(
+        keychainStore: KeychainStore = KeychainStore(),
+        importer: BrowserSessionImporter = BrowserSessionImporter()
+    ) {
         self.keychainStore = keychainStore
+        self.importer = importer
     }
 
     public func loadAdjunct(
         provider: ProviderID,
         config: ProviderConfig,
-        snapshot: ProviderSnapshot?
+        snapshot: ProviderSnapshot?,
+        forceRefresh: Bool = false,
+        allowLiveNavigation: Bool = true
     ) async -> DashboardAdjunctSnapshot? {
         guard config.dashboardExtrasEnabled else { return nil }
 
-        let account = "\(provider.rawValue).web-session"
-        let storedSession = self.keychainStore.load(account: account)
+        let importedSession = self.importedSession(provider: provider)
         let source = config.cookieSource == .auto ? .web : config.cookieSource
-        let hasStoredSession = storedSession != nil
-        let headline = await MainActor.run { () -> String in
-            let scraper = WebDashboardScraper()
+        let scraper = await MainActor.run { WebDashboardScraper() }
+        await MainActor.run {
             scraper.warm()
-            return scraper.statusMessage(provider: provider, hasStoredSession: hasStoredSession)
         }
+        let scrapeResult = await scraper.fetch(
+            provider: provider,
+            importedSession: importedSession,
+            force: forceRefresh,
+            allowLiveNavigation: allowLiveNavigation
+        )
 
         var detailLines = [String]()
         if let snapshot {
@@ -32,26 +42,63 @@ public actor DashboardAdjunctController {
             }
         }
 
-        if hasStoredSession {
-            detailLines.append("Stored browser session found in Keychain.")
-            detailLines.append("Hidden WebKit refresh pipeline is ready for provider extras.")
-        } else {
-            detailLines.append("Import browser cookies to unlock web-only dashboard details.")
-            detailLines.append("Web extras stay opt-in and local to this machine.")
+        if let importedSession {
+            detailLines.append("Imported from \(importedSession.browserSource.title) · \(importedSession.profileName).")
+            detailLines.append("Cookie matches: \(importedSession.cookies.count) from \(importedSession.storageKind).")
+            detailLines.append("Imported at \(relativeLabel(importedSession.importedAt)).")
         }
+        detailLines.append(contentsOf: scrapeResult.detailLines)
 
         return DashboardAdjunctSnapshot(
             provider: provider,
             source: source,
-            headline: headline,
+            headline: scrapeResult.headline,
             detailLines: detailLines,
-            statusText: hasStoredSession ? "ready" : "login-required",
-            isLoginRequired: !hasStoredSession,
-            lastUpdated: ISO8601DateFormatter().string(from: Date())
+            webExtras: scrapeResult.webExtras,
+            statusText: scrapeResult.statusText,
+            isLoginRequired: scrapeResult.isLoginRequired,
+            lastUpdated: scrapeResult.fetchedAt
         )
     }
 
-    public func importBrowserSession(provider: ProviderID, payload: Data) throws {
-        try self.keychainStore.save(payload, account: "\(provider.rawValue).web-session")
+    public func importedSession(provider: ProviderID) -> ImportedBrowserSession? {
+        self.keychainStore.loadJSON(ImportedBrowserSession.self, account: account(for: provider))
+    }
+
+    public func discoverImportCandidates(provider _: ProviderID) -> [BrowserSessionImportCandidate] {
+        self.importer.discoverCandidates()
+    }
+
+    public func importBrowserSession(
+        provider: ProviderID,
+        candidate: BrowserSessionImportCandidate
+    ) throws -> ImportedBrowserSession {
+        let session = try self.importer.importSession(provider: provider, candidate: candidate)
+        try self.keychainStore.saveJSON(session, account: account(for: provider))
+        return session
+    }
+
+    public func resetImportedSession(provider: ProviderID) throws {
+        try self.keychainStore.delete(account: account(for: provider))
+    }
+
+    private func account(for provider: ProviderID) -> String {
+        "\(provider.rawValue).web-session"
+    }
+
+    private func relativeLabel(_ timestamp: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: timestamp) else { return timestamp }
+        let delta = max(0, Int(Date().timeIntervalSince(date)))
+        if delta < 60 {
+            return "\(delta)s ago"
+        }
+        if delta < 3600 {
+            return "\(delta / 60)m ago"
+        }
+        if delta < 86_400 {
+            return "\(delta / 3600)h ago"
+        }
+        return "\(delta / 86_400)d ago"
     }
 }

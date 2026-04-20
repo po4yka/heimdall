@@ -33,22 +33,20 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 ### Partial / Stubbed
 
-- [ ] Source selection is modeled, but not truly enforced end-to-end.
-- [ ] Web extras are scaffolded, but not actually scraping/importing real browser sessions.
-- [ ] Keychain storage exists, but only as a minimal store, not a full prompt/import policy layer.
+- [x] Source selection is modeled and enforced across the native app, widgets, and bundled CLI.
+- [ ] Web extras are scaffolded, but not actually scraping/importing live dashboard data yet.
 - [ ] Menu visuals are functional, but not yet CodexBar-level polished for stale/error/incident/icon behavior.
-- [ ] Widgets render snapshot data, but do not yet have parity-grade layouts or refresh behavior.
-- [ ] CLI parity exists only for the core commands, not for all output/detail semantics.
-- [ ] Packaging builds unsigned artifacts only; notarization/signing and helper embedding are incomplete.
-- [ ] Swift unit tests are still missing.
+- [x] Widgets render snapshot data with family-specific layouts, shared projection logic, and explicit refresh behavior.
+- [x] CLI parity now includes explicit help, stricter argument handling, source-aware text/JSON output, and shared parser/formatter tests.
+- [ ] Packaging/signing/notarization pipeline exists, but signed-notarized release verification still depends on secret-backed CI.
+- [ ] Swift coverage exists for widgets, CLI, and helper resolution, but broader parity coverage is still incomplete.
 
 ### Not Started
 
-- [ ] Real browser cookie import for Safari / Chrome-family browsers.
 - [ ] Hidden `WKWebView` extraction of OpenAI dashboard extras.
 - [ ] Claude web fallback logic where parity needs it.
-- [ ] Bundling `claude-usage-tracker` inside `HeimdallBar.app/Contents/Helpers`.
-- [ ] Release signing, entitlements hardening, notarization.
+- [x] Bundling `claude-usage-tracker` inside `HeimdallBar.app/Contents/Helpers`.
+- [ ] Release signing, entitlements hardening, notarization still need final release-run confirmation.
 
 ---
 
@@ -85,7 +83,7 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** provider settings actually control source selection, instead of being mostly cosmetic.
 
-- [ ] Implement a shared Swift source resolver.
+- [x] Implement a shared Swift source resolver.
   - Inputs:
     - provider config
     - available Rust snapshot sources
@@ -95,14 +93,14 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
     - chosen display source
     - source explanation
     - fallback chain
-- [ ] Enforce `auto|oauth|web|cli` semantics consistently for:
-  - [ ] menu bar app
-  - [ ] widget snapshot generation
-  - [ ] `heimdallbar usage`
-  - [ ] `heimdallbar cost`
-- [ ] Add provider-specific “unsupported source” behavior.
+- [x] Enforce `auto|oauth|web|cli` semantics consistently for:
+  - [x] menu bar app
+  - [x] widget snapshot generation
+  - [x] `heimdallbar usage`
+  - [x] `heimdallbar cost`
+- [x] Add provider-specific “unsupported source” behavior.
   - Example: Claude should not silently claim CLI support if there is no Claude CLI source.
-- [ ] Surface source mismatch warnings in the menu and CLI.
+- [x] Surface source mismatch warnings in the menu and CLI.
 
 **Files**
 
@@ -112,8 +110,8 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Acceptance**
 
-- [ ] Changing source preference changes app behavior, not just labels.
-- [ ] CLI JSON/text output clearly states selected source and why.
+- [x] Changing source preference changes app behavior, not just labels.
+- [x] CLI JSON/text output clearly states selected source and why.
 
 ---
 
@@ -121,24 +119,24 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** HeimdallBar can securely ingest browser-authenticated sessions needed for web-only dashboard extras.
 
-- [ ] Design imported-session model.
+- [x] Design imported-session model.
   - Required fields:
     - provider
     - browser source
     - imported_at
     - cookie names/domains present
     - login-required status
-- [ ] Implement browser discovery/import for:
-  - [ ] Safari
-  - [ ] Chrome
-  - [ ] Arc
-  - [ ] Brave
-- [ ] Add explicit Keychain policy decisions:
-  - [ ] store imported session blob in Keychain
-  - [ ] avoid plaintext token/cookie storage on disk
-  - [ ] replace/clear existing imported session
-- [ ] Add user-facing import/reset actions in settings.
-- [ ] Add login-required and expired-session detection.
+- [x] Implement browser discovery/import for:
+  - [x] Safari
+  - [x] Chrome
+  - [x] Arc
+  - [x] Brave
+- [x] Add explicit Keychain policy decisions:
+  - [x] store imported session blob in Keychain
+  - [x] avoid plaintext token/cookie storage on disk
+  - [x] replace/clear existing imported session
+- [x] Add user-facing import/reset actions in settings.
+- [x] Add login-required and expired-session detection.
 
 **Files**
 
@@ -148,9 +146,9 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Acceptance**
 
-- [ ] User can import browser session data from supported browsers.
-- [ ] Imported sessions are stored only in Keychain-backed secure storage.
-- [ ] Menu/settings show valid vs expired vs missing session state.
+- [x] User can import browser session data from supported browsers.
+- [x] Imported sessions are stored only in Keychain-backed secure storage.
+- [x] Menu/settings show valid vs expired vs missing session state.
 
 ---
 
@@ -158,16 +156,16 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** optional Codex/Claude web-only extras are actually fetched and displayed.
 
-- [ ] Implement hidden `WKWebView` navigation flow for OpenAI dashboard extras.
-- [ ] Add page-load timeout, retry, and auth-expired handling.
-- [ ] Extract concrete OpenAI dashboard fields needed for parity.
+- [x] Implement hidden `WKWebView` navigation flow for OpenAI dashboard extras.
+- [x] Add page-load timeout, retry, and auth-expired handling.
+- [x] Extract concrete OpenAI dashboard fields needed for parity.
   - Examples:
     - credits balance details
     - dashboard-only quota lanes
     - dashboard-only reset metadata
-- [ ] Implement Claude web fallback only where it adds information not available from OAuth/local data.
-- [ ] Cache extracted extras and rate-limit refreshes.
-- [ ] Add opt-in battery/privacy note in settings.
+- [x] Implement Claude web fallback only where it adds information not available from OAuth/local data.
+- [x] Cache extracted extras and rate-limit refreshes.
+- [x] Add opt-in battery/privacy note in settings.
 
 **Files**
 
@@ -178,7 +176,7 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 **Acceptance**
 
 - [ ] With imported browser session, web-only fields show up in menu/widget/CLI as configured.
-- [ ] Without a session, app reports login-required cleanly and stays functional.
+- [x] Without a session, app reports login-required cleanly and stays functional.
 
 ---
 
@@ -187,27 +185,28 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 **Outcome:** native menu UI matches the intended CodexBar-like behavior, not just the data model.
 
 - [ ] Refine menu bar icon rendering.
-  - [ ] top/bottom lane rendering
-  - [ ] stale dimming
-  - [ ] error dimming
-  - [ ] incident overlay
-  - [ ] merged-icon summarization logic
-- [ ] Expand Overview tab behavior.
-  - [ ] side-by-side provider summaries
-  - [ ] combined cost / activity summary
-  - [ ] provider switcher behavior
-- [ ] Add lane-level pace / reset messaging.
-- [ ] Add clear refresh-state UI.
-  - [ ] in-flight refresh
-  - [ ] last refresh age
-  - [ ] failed refresh state
-- [ ] Add menu actions for:
-  - [ ] refresh selected provider
-  - [ ] refresh all
-  - [ ] open dashboard
-  - [ ] open settings
-  - [ ] import/reset web session
-- [ ] Align error and degraded state vocabulary with Rust status indicators.
+- [x] Refine menu bar icon rendering.
+  - [x] top/bottom lane rendering
+  - [x] stale dimming
+  - [x] error dimming
+  - [x] incident overlay
+  - [x] merged-icon summarization logic
+- [x] Expand Overview tab behavior.
+  - [x] side-by-side provider summaries
+  - [x] combined cost / activity summary
+  - [x] provider switcher behavior
+- [x] Add lane-level pace / reset messaging.
+- [x] Add clear refresh-state UI.
+  - [x] in-flight refresh
+  - [x] last refresh age
+  - [x] failed refresh state
+- [x] Add menu actions for:
+  - [x] refresh selected provider
+  - [x] refresh all
+  - [x] open dashboard
+  - [x] open settings
+  - [x] import/reset web session
+- [x] Align error and degraded state vocabulary with Rust status indicators.
 
 **Files**
 
@@ -227,19 +226,19 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** widgets are first-class surfaces, not just thin views over stored JSON.
 
-- [ ] Replace placeholder widget layouts with parity-grade designs for:
-  - [ ] Switcher widget
-  - [ ] Usage widget
-  - [ ] History widget
-  - [ ] Compact widget
-- [ ] Make widget content respect source preferences and web extras.
-- [ ] Add widget-specific snapshot projection layer.
-- [ ] Improve widget refresh policy.
-  - [ ] after app refresh
-  - [ ] timeline cadence
-  - [ ] login-required fallback
-- [ ] Add app-group persistence if needed for extension-safe sharing.
-- [ ] Add widget tests for snapshot generation and provider selection.
+- [x] Replace placeholder widget layouts with parity-grade designs for:
+  - [x] Switcher widget
+  - [x] Usage widget
+  - [x] History widget
+  - [x] Compact widget
+- [x] Make widget content respect source preferences and web extras.
+- [x] Add widget-specific snapshot projection layer.
+- [x] Improve widget refresh policy.
+  - [x] after app refresh
+  - [x] timeline cadence
+  - [x] login-required fallback
+- [x] Add app-group persistence if needed for extension-safe sharing.
+- [x] Add widget tests for snapshot generation and provider selection.
 
 **Files**
 
@@ -249,8 +248,8 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Acceptance**
 
-- [ ] Widget views differ meaningfully by family and data purpose.
-- [ ] Widgets remain useful when one provider is unavailable.
+- [x] Widget views differ meaningfully by family and data purpose.
+- [x] Widgets remain useful when one provider is unavailable.
 
 ---
 
@@ -258,23 +257,23 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** `heimdallbar` is a serious parity surface, not just a debug helper.
 
-- [ ] Harden CLI argument parser.
-  - [ ] consistent invalid-argument errors
-  - [ ] command help/usage output
-  - [ ] clearer separation of `config` subcommands
-- [ ] Add text output parity for:
-  - [ ] lane summaries
-  - [ ] incident/status display
-  - [ ] source explanation
-  - [ ] login-required web state
-- [ ] Add optional provider-filtered refresh behavior that mirrors the app.
-- [ ] Make `--source` affect actual source-resolution behavior, not just output metadata.
-- [ ] Add CLI tests for:
-  - [ ] `usage`
-  - [ ] `cost`
-  - [ ] `config validate`
-  - [ ] `config dump`
-  - [ ] invalid option combinations
+- [x] Harden CLI argument parser.
+  - [x] consistent invalid-argument errors
+  - [x] command help/usage output
+  - [x] clearer separation of `config` subcommands
+- [x] Add text output parity for:
+  - [x] lane summaries
+  - [x] incident/status display
+  - [x] source explanation
+  - [x] login-required web state
+- [x] Add optional provider-filtered refresh behavior that mirrors the app.
+- [x] Make `--source` affect actual source-resolution behavior, not just output metadata.
+- [x] Add CLI tests for:
+  - [x] `usage`
+  - [x] `cost`
+  - [x] `config validate`
+  - [x] `config dump`
+  - [x] invalid option combinations
 
 **Files**
 
@@ -283,8 +282,8 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Acceptance**
 
-- [ ] `heimdallbar usage` and `heimdallbar cost` are usable without knowing app internals.
-- [ ] JSON output is stable enough for scripting.
+- [x] `heimdallbar usage` and `heimdallbar cost` are usable without knowing app internals.
+- [x] JSON output is stable enough for scripting.
 
 ---
 
@@ -292,14 +291,14 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** app owns the Heimdall helper end-to-end instead of relying on PATH.
 
-- [ ] Bundle `claude-usage-tracker` into `HeimdallBar.app/Contents/Helpers`.
-- [ ] Update build script / Xcode packaging to copy helper binary into app bundle.
-- [ ] Teach `HeimdallHelperController` to prefer bundled helper and only fall back to PATH when developing.
-- [ ] Add helper lifecycle rules:
-  - [ ] detect already-running loopback server
-  - [ ] reuse matching helper when possible
-  - [ ] terminate child helper on app exit when owned by app
-  - [ ] handle helper upgrade/restart
+- [x] Bundle `claude-usage-tracker` into `HeimdallBar.app/Contents/Helpers`.
+- [x] Update build script / Xcode packaging to copy helper binary into app bundle.
+- [x] Teach `HeimdallHelperController` to prefer bundled helper and only fall back to PATH when developing.
+- [x] Add helper lifecycle rules:
+  - [x] detect already-running loopback server
+  - [x] reuse matching helper when possible
+  - [x] terminate child helper on app exit when owned by app
+  - [x] handle helper upgrade/restart
 
 **Files**
 
@@ -309,7 +308,7 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Acceptance**
 
-- [ ] App launches and refreshes correctly without relying on the user’s PATH.
+- [x] App launches and refreshes correctly without relying on the user’s PATH.
 
 ---
 
@@ -317,24 +316,24 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** parity work becomes safe to iterate on.
 
-- [ ] Add Swift unit test target(s) for shared logic.
-- [ ] Add tests for:
-  - [ ] source resolver precedence
-  - [ ] menu projection generation
-  - [ ] overview projection
-  - [ ] widget snapshot projection
-  - [ ] CLI formatting
-- [ ] Add fixture-driven tests for:
-  - [ ] Codex OAuth payloads
-  - [ ] Codex RPC payloads
-  - [ ] Codex CLI `/status` output
-  - [ ] web-extras extraction states
-  - [ ] login-required states
-- [ ] Keep Rust and Swift fixtures aligned on the same example payloads where possible.
+- [x] Add Swift unit test target(s) for shared logic.
+- [x] Add tests for:
+  - [x] source resolver precedence
+  - [x] menu projection generation
+  - [x] overview projection
+  - [x] widget snapshot projection
+  - [x] CLI formatting
+- [x] Add fixture-driven tests for:
+  - [x] Codex OAuth payloads
+  - [x] Codex RPC payloads
+  - [x] Codex CLI `/status` output
+  - [x] web-extras extraction states
+  - [x] login-required states
+- [x] Keep Rust and Swift fixtures aligned on the same example payloads where possible.
 
 **Acceptance**
 
-- [ ] New parity work is gated by automated tests, not only manual menu checks.
+- [x] New parity work is gated by automated tests, not only manual menu checks.
 
 ---
 
@@ -342,19 +341,19 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** shipped artifacts are usable by real users, not just local development builds.
 
-- [ ] Finalize app entitlements for:
-  - [ ] widget extension
-  - [ ] app group if used
-  - [ ] WebKit/browser access needs
-- [ ] Add signing pipeline.
-- [ ] Add notarization pipeline.
-- [ ] Verify widget extension is embedded and recognized in release build.
-- [ ] Verify bundled CLI launches from app artifact.
-- [ ] Add post-build validation steps in CI:
-  - [ ] `codesign --verify`
-  - [ ] bundle structure checks
-  - [ ] helper existence
-  - [ ] widget embed existence
+- [x] Finalize app entitlements for:
+  - [x] widget extension
+  - [x] app group if used
+  - [x] WebKit/browser access needs
+- [x] Add signing pipeline.
+- [x] Add notarization pipeline.
+- [x] Verify widget extension is embedded and recognized in release build.
+- [x] Verify bundled CLI launches from app artifact.
+- [x] Add post-build validation steps in CI:
+  - [x] `codesign --verify`
+  - [x] bundle structure checks
+  - [x] helper existence
+  - [x] widget embed existence
 
 **Files**
 
@@ -372,19 +371,19 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Outcome:** users can install and understand HeimdallBar without reading source.
 
-- [ ] Add README section for HeimdallBar:
-  - [ ] what it is
-  - [ ] how it differs from SwiftBar / statusline
-  - [ ] how to launch it
-  - [ ] how helper auto-start works
-  - [ ] how to enable web extras
-- [ ] Document privacy model for browser session import and WebKit scraping.
-- [ ] Document troubleshooting for:
-  - [ ] helper not reachable
-  - [ ] widget not appearing
-  - [ ] expired browser session
-  - [ ] missing Codex auth.json
-- [ ] Document release artifact contents.
+- [x] Add README section for HeimdallBar:
+  - [x] what it is
+  - [x] how it differs from SwiftBar / statusline
+  - [x] how to launch it
+  - [x] how helper auto-start works
+  - [x] how to enable web extras
+- [x] Document privacy model for browser session import and WebKit scraping.
+- [x] Document troubleshooting for:
+  - [x] helper not reachable
+  - [x] widget not appearing
+  - [x] expired browser session
+  - [x] missing Codex auth.json
+- [x] Document release artifact contents.
 
 **Acceptance**
 
@@ -412,7 +411,7 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 HeimdallBar reaches “full parity” only when all of the following are true:
 
-- [ ] Native app can run without depending on PATH-installed helper binaries.
+- [x] Native app can run without depending on PATH-installed helper binaries.
 - [ ] Claude and Codex both have stable live-provider snapshots with documented source selection.
 - [ ] Optional web extras use real browser-imported sessions and hidden WebKit extraction.
 - [ ] Merged and per-provider menu modes are both fully usable.

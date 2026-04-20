@@ -13,40 +13,195 @@ enum CLIError: Error, LocalizedError {
     }
 }
 
-enum CLIOutputFormat: String {
-    case text
-    case json
+struct CLILiveState {
+    var envelope: ProviderSnapshotEnvelope
+    var sections: [CLIProviderSection]
 }
 
-struct CLIOptions {
-    var providers: [ProviderID] = ProviderID.allCases
-    var preferredSource: UsageSourcePreference = .auto
-    var format: CLIOutputFormat = .text
-    var pretty: Bool = false
-    var includeStatus: Bool = false
-    var refresh: Bool = false
+struct CLIJSONRefresh: Encodable {
+    var requestedRefresh: Bool
+    var responseScope: String
+    var requestedProvider: String?
+    var refreshedProviders: [String]
+    var cacheHit: Bool
+    var fetchedAt: String
+}
+
+struct CLIJSONSource: Encodable {
+    var requestedSource: String
+    var effectiveSource: String?
+    var effectiveSourceDetail: String?
+    var sourceLabel: String
+    var sourceExplanation: String
+    var sourceWarnings: [String]
+    var sourceFallbackChain: [String]
+    var usageAvailable: Bool
+    var requiresLogin: Bool
+    var isUnsupported: Bool
+    var usesFallback: Bool
+}
+
+struct CLIJSONWindow: Encodable {
+    var usedPercent: Double
+    var resetsAt: String?
+    var resetsInMinutes: Int?
+    var windowMinutes: Int?
+    var resetLabel: String?
+}
+
+struct CLIJSONStatus: Encodable {
+    var indicator: String
+    var description: String
+    var pageURL: String
+}
+
+struct CLIJSONWebQuotaLane: Encodable {
+    var title: String
+    var window: CLIJSONWindow
+}
+
+struct CLIJSONWebExtras: Encodable {
+    var signedInEmail: String?
+    var accountPlan: String?
+    var creditsRemaining: Double?
+    var creditsPurchaseURL: String?
+    var sourceURL: String?
+    var fetchedAt: String
+    var quotaLanes: [CLIJSONWebQuotaLane]
+}
+
+struct CLIJSONUsageProvider: Encodable {
+    var provider: String
+    var available: Bool
+    var sourceUsed: String?
+    var source: CLIJSONSource
+    var stateLabel: String
+    var refreshLabel: String
+    var warnings: [String]
+    var primary: CLIJSONWindow?
+    var secondary: CLIJSONWindow?
+    var tertiary: CLIJSONWindow?
+    var credits: Double?
+    var status: CLIJSONStatus?
+    var webExtras: CLIJSONWebExtras?
+    var todayCostUSD: Double
+    var last30DaysCostUSD: Double
+    var todayTokens: Int
+    var last30DaysTokens: Int
+}
+
+struct CLIJSONUsageResponse: Encodable {
+    var command: String
+    var preferredSource: String
+    var refresh: CLIJSONRefresh
+    var providers: [CLIJSONUsageProvider]
+}
+
+typealias CLIJSONCostProvider = CLIJSONUsageProvider
+
+struct CLIJSONCostResponse: Encodable {
+    var command: String
+    var preferredSource: String
+    var refresh: CLIJSONRefresh
+    var providers: [CLIJSONCostProvider]
 }
 
 struct HeimdallBarCLI {
     static func run(arguments: [String]) async throws {
-        let command = arguments.dropFirst().first ?? "usage"
-        let rest = Array(arguments.dropFirst(2))
+        let invocation = try CLIArgumentParser.parse(arguments: arguments)
+
+        if let helpTopic = invocation.helpTopic {
+            print(CLIArgumentParser.helpText(for: helpTopic))
+            return
+        }
+
+        guard let command = invocation.command else {
+            throw CLIError.invalidArguments("missing command")
+        }
 
         switch command {
-        case "usage":
-            try await self.runUsage(arguments: rest)
-        case "cost":
-            try await self.runCost(arguments: rest)
-        case "config":
-            try self.runConfig(arguments: rest)
-        default:
-            throw CLIError.invalidArguments("unknown command: \(command)")
+        case .usage:
+            try await self.runUsage(options: invocation.options)
+        case .cost:
+            try await self.runCost(options: invocation.options)
+        case .configValidate:
+            try self.runConfigValidate(options: invocation.options)
+        case .configDump:
+            try self.runConfigDump(options: invocation.options)
         }
     }
 
-    private static func runUsage(arguments: [String]) async throws {
-        let options = try self.parseOptions(arguments)
+    private static func runUsage(options: CLIOptions) async throws {
         let config = ConfigStore.shared.load()
+        let state = try await self.loadLiveState(options: options, config: config)
+        let refreshMetadata = self.refreshMetadata(from: state.envelope, requestedRefresh: options.refresh)
+
+        if options.format == .json {
+            let response = CLIJSONUsageResponse(
+                command: "usage",
+                preferredSource: options.preferredSource.rawValue,
+                refresh: refreshMetadata,
+                providers: state.sections.map { self.usageJSONProvider(from: $0, includeStatus: options.includeStatus) }
+            )
+            try self.writeJSON(response, pretty: options.pretty)
+            return
+        }
+
+        print(CLITextFormatter.usageText(
+            sections: state.sections,
+            refresh: self.refreshMetadataValue(from: refreshMetadata),
+            includeStatus: options.includeStatus
+        ))
+    }
+
+    private static func runCost(options: CLIOptions) async throws {
+        let config = ConfigStore.shared.load()
+        let state = try await self.loadLiveState(options: options, config: config)
+        let client = HeimdallAPIClient(port: config.helperPort)
+        let summaryMap = try await self.fetchCostSummaries(client: client, providers: options.providers)
+        let sections = state.sections.map { section in
+            var updated = section
+            updated.costSummary = summaryMap[section.provider] ?? section.costSummary
+            return updated
+        }
+        let refreshMetadata = self.refreshMetadata(from: state.envelope, requestedRefresh: options.refresh)
+
+        if options.format == .json {
+            let response = CLIJSONCostResponse(
+                command: "cost",
+                preferredSource: options.preferredSource.rawValue,
+                refresh: refreshMetadata,
+                providers: sections.map { self.usageJSONProvider(from: $0, includeStatus: options.includeStatus) }
+            )
+            try self.writeJSON(response, pretty: options.pretty)
+            return
+        }
+
+        print(CLITextFormatter.costText(
+            sections: sections,
+            refresh: self.refreshMetadataValue(from: refreshMetadata),
+            includeStatus: options.includeStatus
+        ))
+    }
+
+    private static func runConfigValidate(options: CLIOptions) throws {
+        try ConfigStore.shared.validate()
+        if options.format == .json {
+            try self.writeJSON(["valid": true], pretty: options.pretty)
+        } else {
+            print("valid")
+        }
+    }
+
+    private static func runConfigDump(options: CLIOptions) throws {
+        let config = ConfigStore.shared.load()
+        try self.writeJSON(config, pretty: options.pretty)
+    }
+
+    private static func loadLiveState(
+        options: CLIOptions,
+        config: HeimdallBarConfig
+    ) async throws -> CLILiveState {
         let client = HeimdallAPIClient(port: config.helperPort)
         let envelope = if options.refresh {
             try await client.refresh(provider: options.providers.count == 1 ? options.providers.first : nil)
@@ -54,190 +209,196 @@ struct HeimdallBarCLI {
             try await client.fetchSnapshots()
         }
 
-        let snapshots = envelope.providers.filter { snapshot in
-            guard let provider = snapshot.providerID else { return false }
-            return options.providers.contains(provider)
-        }
+        let adjunctController = DashboardAdjunctController()
+        let snapshotsByProvider = Dictionary(uniqueKeysWithValues: envelope.providers.compactMap { snapshot in
+            snapshot.providerID.map { ($0, snapshot) }
+        })
 
-        if options.format == .json {
-            try self.writeJSON([
-                "preferred_source": options.preferredSource.rawValue,
-                "providers": snapshots.map(self.snapshotDictionary(includeStatus: options.includeStatus)),
-            ], pretty: options.pretty)
-            return
-        }
-
-        for snapshot in snapshots {
-            print("== \(snapshot.provider.capitalized) (\(snapshot.sourceUsed)) ==")
-            print("Preferred source: \(options.preferredSource.rawValue)")
-            if let primary = snapshot.primary {
-                print("Session: \(Int((100 - primary.usedPercent).rounded()))% left")
-            }
-            if let secondary = snapshot.secondary {
-                print("Weekly: \(Int((100 - secondary.usedPercent).rounded()))% left")
-            }
-            if let tertiary = snapshot.tertiary {
-                print("Extra: \(Int((100 - tertiary.usedPercent).rounded()))% left")
-            }
-            if let credits = snapshot.credits {
-                print("Credits: \(String(format: "%.2f", credits))")
-            }
-            if options.includeStatus, let status = snapshot.status {
-                print("Status: [\(status.indicator)] \(status.description)")
-            }
-            print("Today: $\(String(format: "%.2f", snapshot.costSummary.todayCostUSD))")
-            print("Last 30d: $\(String(format: "%.2f", snapshot.costSummary.last30DaysCostUSD))")
-            print("")
-        }
-    }
-
-    private static func runCost(arguments: [String]) async throws {
-        let options = try self.parseOptions(arguments)
-        let config = ConfigStore.shared.load()
-        let client = HeimdallAPIClient(port: config.helperPort)
-
-        var summaries = [[String: Any]]()
+        var sections = [CLIProviderSection]()
         for provider in options.providers {
-            let summary = try await client.fetchCostSummary(provider: provider)
-            summaries.append([
-                "provider": summary.provider,
-                "today_cost_usd": summary.summary.todayCostUSD,
-                "today_tokens": summary.summary.todayTokens,
-                "last_30_days_cost_usd": summary.summary.last30DaysCostUSD,
-                "last_30_days_tokens": summary.summary.last30DaysTokens,
-                "preferred_source": options.preferredSource.rawValue,
-            ])
+            let providerConfig = Self.configuredProviderConfig(
+                config: config,
+                provider: provider,
+                overrideSource: options.preferredSource
+            )
+            let snapshot = snapshotsByProvider[provider]
+            let adjunct = await adjunctController.loadAdjunct(
+                provider: provider,
+                config: providerConfig,
+                snapshot: snapshot,
+                forceRefresh: options.refresh,
+                allowLiveNavigation: false
+            )
+            let presentation = SourceResolver.presentation(
+                for: provider,
+                config: providerConfig,
+                snapshot: snapshot,
+                adjunct: adjunct
+            )
+            let projection = MenuProjectionBuilder.projection(
+                from: presentation,
+                config: config,
+                isRefreshing: false,
+                lastGlobalError: nil
+            )
+            sections.append(
+                CLIProviderSection(
+                    provider: provider,
+                    requestedSource: options.preferredSource,
+                    presentation: presentation,
+                    projection: projection,
+                    costSummary: snapshot?.costSummary ?? ProviderCostSummary(
+                        todayTokens: 0,
+                        todayCostUSD: 0,
+                        last30DaysTokens: 0,
+                        last30DaysCostUSD: 0,
+                        daily: []
+                    )
+                )
+            )
         }
 
-        if options.format == .json {
-            try self.writeJSON(["providers": summaries], pretty: options.pretty)
-            return
-        }
-
-        for summary in summaries {
-            print("== \((summary["provider"] as? String ?? "").capitalized) ==")
-            print("Preferred source: \(summary["preferred_source"] as? String ?? "auto")")
-            print(String(format: "Today: $%.2f", summary["today_cost_usd"] as? Double ?? 0))
-            print("Today tokens: \(summary["today_tokens"] as? Int ?? 0)")
-            print(String(format: "Last 30d: $%.2f", summary["last_30_days_cost_usd"] as? Double ?? 0))
-            print("Last 30d tokens: \(summary["last_30_days_tokens"] as? Int ?? 0)")
-            print("")
-        }
+        return CLILiveState(envelope: envelope, sections: sections)
     }
 
-    private static func runConfig(arguments: [String]) throws {
-        let action = arguments.first ?? "validate"
-        let options = try self.parseOptions(Array(arguments.dropFirst()), allowProvider: false)
-        let store = ConfigStore.shared
-
-        switch action {
-        case "validate":
-            try store.validate()
-            if options.format == .json {
-                try self.writeJSON(["valid": true], pretty: options.pretty)
-            } else {
-                print("valid")
-            }
-        case "dump":
-            let config = store.load()
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = options.pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-            encoder.keyEncodingStrategy = .convertToSnakeCase
-            let data = try encoder.encode(config)
-            FileHandle.standardOutput.write(data)
-            FileHandle.standardOutput.write(Data("\n".utf8))
-        default:
-            throw CLIError.invalidArguments("config expects validate or dump")
+    private static func fetchCostSummaries(
+        client: HeimdallAPIClient,
+        providers: [ProviderID]
+    ) async throws -> [ProviderID: ProviderCostSummary] {
+        var summaries = [ProviderID: ProviderCostSummary]()
+        for provider in providers {
+            let response = try await client.fetchCostSummary(provider: provider)
+            summaries[provider] = response.summary
         }
+        return summaries
     }
 
-    private static func parseOptions(
-        _ arguments: [String],
-        allowProvider: Bool = true
-    ) throws -> CLIOptions {
-        var options = CLIOptions()
-        var index = 0
-
-        while index < arguments.count {
-            let argument = arguments[index]
-            switch argument {
-            case "--provider":
-                guard allowProvider else {
-                    throw CLIError.invalidArguments("--provider is not valid for this command")
-                }
-                index += 1
-                guard index < arguments.count else {
-                    throw CLIError.invalidArguments("--provider requires a value")
-                }
-                switch arguments[index] {
-                case "claude":
-                    options.providers = [.claude]
-                case "codex":
-                    options.providers = [.codex]
-                case "both":
-                    options.providers = ProviderID.allCases
-                default:
-                    throw CLIError.invalidArguments("unsupported provider: \(arguments[index])")
-                }
-            case "--source":
-                index += 1
-                guard index < arguments.count,
-                      let source = UsageSourcePreference(rawValue: arguments[index]) else {
-                    throw CLIError.invalidArguments("--source requires auto|oauth|web|cli")
-                }
-                options.preferredSource = source
-            case "--format":
-                index += 1
-                guard index < arguments.count,
-                      let format = CLIOutputFormat(rawValue: arguments[index]) else {
-                    throw CLIError.invalidArguments("--format requires text|json")
-                }
-                options.format = format
-            case "--pretty":
-                options.pretty = true
-                options.format = .json
-            case "--status":
-                options.includeStatus = true
-            case "--refresh":
-                options.refresh = true
-            default:
-                throw CLIError.invalidArguments("unknown option: \(argument)")
-            }
-            index += 1
-        }
-
-        return options
+    private static func configuredProviderConfig(
+        config: HeimdallBarConfig,
+        provider: ProviderID,
+        overrideSource: UsageSourcePreference
+    ) -> ProviderConfig {
+        var providerConfig = config.providerConfig(for: provider)
+        providerConfig.source = overrideSource
+        return providerConfig
     }
 
-    private static func snapshotDictionary(includeStatus: Bool) -> (ProviderSnapshot) -> [String: Any] {
-        { snapshot in
-            var value: [String: Any] = [
-                "provider": snapshot.provider,
-                "available": snapshot.available,
-                "source_used": snapshot.sourceUsed,
-                "today_cost_usd": snapshot.costSummary.todayCostUSD,
-                "last_30_days_cost_usd": snapshot.costSummary.last30DaysCostUSD,
-                "today_tokens": snapshot.costSummary.todayTokens,
-                "last_30_days_tokens": snapshot.costSummary.last30DaysTokens,
-                "stale": snapshot.stale,
-            ]
-            if let credits = snapshot.credits {
-                value["credits"] = credits
-            }
-            if includeStatus, let status = snapshot.status {
-                value["status"] = [
-                    "indicator": status.indicator,
-                    "description": status.description,
-                    "page_url": status.pageURL,
-                ]
-            }
-            return value
-        }
+    private static func usageJSONProvider(
+        from section: CLIProviderSection,
+        includeStatus: Bool
+    ) -> CLIJSONUsageProvider {
+        let snapshot = section.presentation.snapshot
+        return CLIJSONUsageProvider(
+            provider: section.provider.rawValue,
+            available: snapshot?.available ?? false,
+            sourceUsed: snapshot?.sourceUsed,
+            source: self.sourceMetadata(section.presentation),
+            stateLabel: section.projection.stateLabel,
+            refreshLabel: section.projection.refreshStatusLabel,
+            warnings: section.projection.warningLabels,
+            primary: self.windowPayload(section.presentation.primary),
+            secondary: self.windowPayload(section.presentation.secondary),
+            tertiary: self.windowPayload(section.presentation.tertiary),
+            credits: section.presentation.displayCredits,
+            status: includeStatus ? self.statusPayload(snapshot?.status) : nil,
+            webExtras: self.webExtrasPayload(section.presentation.webExtras),
+            todayCostUSD: section.costSummary.todayCostUSD,
+            last30DaysCostUSD: section.costSummary.last30DaysCostUSD,
+            todayTokens: section.costSummary.todayTokens,
+            last30DaysTokens: section.costSummary.last30DaysTokens
+        )
     }
 
-    private static func writeJSON(_ object: Any, pretty: Bool) throws {
-        let options: JSONSerialization.WritingOptions = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try JSONSerialization.data(withJSONObject: object, options: options)
+    private static func sourceMetadata(_ presentation: ProviderPresentationState) -> CLIJSONSource {
+        CLIJSONSource(
+            requestedSource: presentation.resolution.requestedSource.rawValue,
+            effectiveSource: presentation.resolution.effectiveSource?.rawValue,
+            effectiveSourceDetail: presentation.resolution.effectiveSourceDetail,
+            sourceLabel: presentation.resolution.sourceLabel,
+            sourceExplanation: presentation.resolution.explanation,
+            sourceWarnings: presentation.resolution.warnings,
+            sourceFallbackChain: presentation.resolution.fallbackChain,
+            usageAvailable: presentation.resolution.usageAvailable,
+            requiresLogin: presentation.resolution.requiresLogin,
+            isUnsupported: presentation.resolution.isUnsupported,
+            usesFallback: presentation.resolution.usesFallback
+        )
+    }
+
+    private static func windowPayload(_ window: ProviderRateWindow?) -> CLIJSONWindow? {
+        guard let window else { return nil }
+        return CLIJSONWindow(
+            usedPercent: window.usedPercent,
+            resetsAt: window.resetsAt,
+            resetsInMinutes: window.resetsInMinutes,
+            windowMinutes: window.windowMinutes,
+            resetLabel: window.resetLabel
+        )
+    }
+
+    private static func statusPayload(_ status: ProviderStatusSummary?) -> CLIJSONStatus? {
+        guard let status else { return nil }
+        return CLIJSONStatus(
+            indicator: status.indicator,
+            description: status.description,
+            pageURL: status.pageURL
+        )
+    }
+
+    private static func webExtrasPayload(_ extras: DashboardWebExtras?) -> CLIJSONWebExtras? {
+        guard let extras else { return nil }
+        return CLIJSONWebExtras(
+            signedInEmail: extras.signedInEmail,
+            accountPlan: extras.accountPlan,
+            creditsRemaining: extras.creditsRemaining,
+            creditsPurchaseURL: extras.creditsPurchaseURL,
+            sourceURL: extras.sourceURL,
+            fetchedAt: extras.fetchedAt,
+            quotaLanes: extras.quotaLanes.map { lane in
+                CLIJSONWebQuotaLane(
+                    title: lane.title,
+                    window: CLIJSONWindow(
+                        usedPercent: lane.window.usedPercent,
+                        resetsAt: lane.window.resetsAt,
+                        resetsInMinutes: lane.window.resetsInMinutes,
+                        windowMinutes: lane.window.windowMinutes,
+                        resetLabel: lane.window.resetLabel
+                    )
+                )
+            }
+        )
+    }
+
+    private static func refreshMetadata(
+        from envelope: ProviderSnapshotEnvelope,
+        requestedRefresh: Bool
+    ) -> CLIJSONRefresh {
+        CLIJSONRefresh(
+            requestedRefresh: requestedRefresh,
+            responseScope: envelope.responseScope,
+            requestedProvider: envelope.requestedProvider,
+            refreshedProviders: envelope.refreshedProviders,
+            cacheHit: envelope.cacheHit,
+            fetchedAt: envelope.fetchedAt
+        )
+    }
+
+    private static func refreshMetadataValue(from metadata: CLIJSONRefresh) -> CLIRefreshMetadata {
+        CLIRefreshMetadata(
+            requestedRefresh: metadata.requestedRefresh,
+            responseScope: metadata.responseScope,
+            requestedProvider: metadata.requestedProvider,
+            refreshedProviders: metadata.refreshedProviders,
+            cacheHit: metadata.cacheHit,
+            fetchedAt: metadata.fetchedAt
+        )
+    }
+
+    private static func writeJSON<T: Encodable>(_ object: T, pretty: Bool) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        let data = try encoder.encode(object)
         FileHandle.standardOutput.write(data)
         FileHandle.standardOutput.write(Data("\n".utf8))
     }
