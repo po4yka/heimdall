@@ -1455,7 +1455,7 @@
   function createTriggerRescan({
     button,
     fetchImpl,
-    loadData: loadData2,
+    loadData,
     showError,
     setTimer,
     logError = () => void 0
@@ -1472,7 +1472,7 @@
         }
         const data = await resp.json();
         button.textContent = "\u21BB Rescan (" + data.new + " new, " + data.updated + " updated)";
-        await loadData2(true);
+        await loadData(true);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         showError("Rescan failed: " + msg);
@@ -1685,6 +1685,31 @@
     ] });
   }
 
+  // src/ui/lib/csv.ts
+  function csvField(val) {
+    const s4 = String(val);
+    const needsPrefix = /^[=+\-@\t\r]/.test(s4);
+    const escaped = needsPrefix ? "'" + s4 : s4;
+    if (escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")) {
+      return '"' + escaped.replace(/"/g, '""') + '"';
+    }
+    return escaped;
+  }
+  function csvTimestamp() {
+    const d5 = /* @__PURE__ */ new Date();
+    return d5.getFullYear() + "-" + String(d5.getMonth() + 1).padStart(2, "0") + "-" + String(d5.getDate()).padStart(2, "0") + "_" + String(d5.getHours()).padStart(2, "0") + String(d5.getMinutes()).padStart(2, "0");
+  }
+  function downloadCSV(reportType, header, rows) {
+    const lines = [header.map(csvField).join(",")];
+    for (const row of rows) lines.push(row.map(csvField).join(","));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const a4 = document.createElement("a");
+    a4.href = URL.createObjectURL(blob);
+    a4.download = reportType + "_" + csvTimestamp() + ".csv";
+    a4.click();
+    setTimeout(() => URL.revokeObjectURL(a4.href), 1e3);
+  }
+
   // src/ui/lib/charts.ts
   var RANGE_LABELS = {
     "7d": "Last 7 Days",
@@ -1840,7 +1865,7 @@
     return codepoints.slice(0, head).join("") + "\u2026" + codepoints.slice(-safeTail).join("");
   }
 
-  // src/ui/components/ActivityHeatmap.tsx
+  // src/ui/components/charts/ActivityHeatmap.tsx
   var DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   function cellOpacity(costNanos, maxCostNanos) {
     if (maxCostNanos <= 0 || costNanos <= 0) return 0.05;
@@ -2216,7 +2241,7 @@
     ] }) });
   }
 
-  // src/ui/InlineRankBar.tsx
+  // src/ui/components/shared/InlineRankBar.tsx
   function InlineRankBar({
     value,
     max: max2,
@@ -5006,7 +5031,7 @@
     }, getMemoOptions(table.options, "debugTable", "getSortedRowModel", () => table._autoResetPageIndex()));
   }
 
-  // src/ui/components/DataTable.tsx
+  // src/ui/components/tables/DataTable.tsx
   function renderCell(cell) {
     const def = cell.column.columnDef.cell;
     if (typeof def === "function") {
@@ -5212,7 +5237,7 @@
     ] });
   }
 
-  // src/ui/components/BranchTable.tsx
+  // src/ui/components/tables/BranchTable.tsx
   function makeColumns(data) {
     const maxSessions = data.reduce((m4, r4) => Math.max(m4, r4.sessions), 0);
     return [
@@ -5550,7 +5575,7 @@
     ] });
   }
 
-  // src/ui/components/ApexChart.tsx
+  // src/ui/components/charts/ApexChart.tsx
   function ApexChart({ options, id }) {
     const ref = A2(null);
     const chartRef = A2(null);
@@ -5584,7 +5609,7 @@
     return /* @__PURE__ */ u4("div", { ref, id, style: { width: "100%", height: "100%" } });
   }
 
-  // src/ui/components/DailyChart.tsx
+  // src/ui/components/charts/DailyChart.tsx
   function DailyChart({ daily }) {
     const base = industrialChartOptions("bar");
     const options = {
@@ -5614,7 +5639,7 @@
     return /* @__PURE__ */ u4(ApexChart, { options, id: "chart-daily" });
   }
 
-  // src/ui/components/EntrypointTable.tsx
+  // src/ui/components/tables/EntrypointTable.tsx
   var columns = [
     {
       accessorKey: "provider",
@@ -5677,7 +5702,7 @@
     ] });
   }
 
-  // src/ui/components/HourlyChart.tsx
+  // src/ui/components/charts/HourlyChart.tsx
   function HourlyChart({ data }) {
     if (!data.length) return null;
     const maxTurns = Math.max(...data.map((d5) => d5.turns), 1);
@@ -5725,7 +5750,7 @@
     ] });
   }
 
-  // src/ui/components/McpSummaryTable.tsx
+  // src/ui/components/tables/McpSummaryTable.tsx
   function makeColumns2(data) {
     const maxInvocations = data.reduce((m4, r4) => Math.max(m4, r4.invocations), 0);
     return [
@@ -5768,7 +5793,7 @@
     return /* @__PURE__ */ u4(DataTable, { columns: makeColumns2(data), data, title: "MCP Server Usage", sectionKey: "mcp-summary" });
   }
 
-  // src/ui/components/ModelChart.tsx
+  // src/ui/components/charts/ModelChart.tsx
   var METRIC_LABELS = {
     cost: "Cost",
     tokens: "Tokens",
@@ -5939,7 +5964,26 @@
     ] });
   }
 
-  // src/ui/components/ModelCostTable.tsx
+  // src/ui/components/tables/cells.tsx
+  function renderNumberCell(value, formatter = fmt) {
+    return /* @__PURE__ */ u4("span", { class: "num", children: formatter(value) });
+  }
+  function renderCreditsCell(value) {
+    return /* @__PURE__ */ u4("span", { class: "num", children: fmtCredits(value) });
+  }
+  function renderCostCell(value, isBillable = true) {
+    return isBillable ? /* @__PURE__ */ u4("span", { class: "cost", children: fmtCost(value) }) : /* @__PURE__ */ u4("span", { class: "cost-na", children: "n/a" });
+  }
+  function renderTagCell(label, onSelect, className = "table-action-btn table-action-btn--tag") {
+    if (!onSelect) return /* @__PURE__ */ u4("span", { class: "model-tag", children: label });
+    return /* @__PURE__ */ u4("button", { type: "button", class: className, onClick: onSelect, children: /* @__PURE__ */ u4("span", { class: "model-tag", children: label }) });
+  }
+  function renderActionCell(label, title, onSelect, className = "table-action-btn") {
+    if (!onSelect) return /* @__PURE__ */ u4("span", { title, children: label });
+    return /* @__PURE__ */ u4("button", { type: "button", class: className, title, onClick: onSelect, children: label });
+  }
+
+  // src/ui/components/tables/ModelCostTable.tsx
   var defaultSort = [{ id: "cost", desc: true }];
   function CostShareBar({ value, max: max2, label }) {
     if (max2 <= 0 || value <= 0) return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
@@ -5983,39 +6027,38 @@
           enableSorting: false,
           cell: (info) => {
             const model = String(info.getValue());
-            if (!onSelectModel) return /* @__PURE__ */ u4("span", { class: "model-tag", children: model });
-            return /* @__PURE__ */ u4("button", { type: "button", class: "table-action-btn table-action-btn--tag", onClick: () => onSelectModel(model), children: /* @__PURE__ */ u4("span", { class: "model-tag", children: model }) });
+            return renderTagCell(model, onSelectModel ? () => onSelectModel(model) : void 0);
           }
         },
         {
           id: "turns",
           accessorKey: "turns",
           header: "Turns",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "input",
           accessorKey: "input",
           header: "Input",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "output",
           accessorKey: "output",
           header: "Output",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "cache_read",
           accessorKey: "cache_read",
           header: "Cached Input",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "cache_creation",
           accessorKey: "cache_creation",
           header: "Cache Creation",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "cost",
@@ -6023,7 +6066,7 @@
           header: "Est. Cost",
           cell: (info) => {
             const row = info.row.original;
-            return row.is_billable ? /* @__PURE__ */ u4("span", { class: "cost", children: fmtCost(Number(info.getValue() ?? 0)) }) : /* @__PURE__ */ u4("span", { class: "cost-na", children: "n/a" });
+            return renderCostCell(Number(info.getValue() ?? 0), row.is_billable);
           }
         },
         {
@@ -6100,7 +6143,7 @@
           sortUndefined: "last",
           cell: (info) => {
             const v4 = info.getValue();
-            return /* @__PURE__ */ u4("span", { class: "num", children: fmtCredits(v4) });
+            return renderCreditsCell(v4);
           }
         }] : []
       ],
@@ -6331,7 +6374,7 @@
     ] }) });
   }
 
-  // src/ui/components/ProjectChart.tsx
+  // src/ui/components/charts/ProjectChart.tsx
   function ProjectChart({
     byProject,
     onSelectProject
@@ -6394,7 +6437,7 @@
     return /* @__PURE__ */ u4(ApexChart, { options, id: "chart-project" });
   }
 
-  // src/ui/components/ProjectCostTable.tsx
+  // src/ui/components/tables/ProjectCostTable.tsx
   var defaultSort2 = [{ id: "cost", desc: true }];
   function useProjectColumns(showCredits, onSelectProject) {
     return T2(
@@ -6407,48 +6450,38 @@
           cell: (info) => {
             const row = info.row.original;
             const label = row.display_name || row.project;
-            if (!onSelectProject) return /* @__PURE__ */ u4("span", { title: row.project, children: label });
-            return /* @__PURE__ */ u4(
-              "button",
-              {
-                type: "button",
-                class: "table-action-btn",
-                title: row.project,
-                onClick: () => onSelectProject(row),
-                children: label
-              }
-            );
+            return renderActionCell(label, row.project, onSelectProject ? () => onSelectProject(row) : void 0);
           }
         },
         {
           id: "sessions",
           accessorKey: "sessions",
           header: "Sessions",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: Number(info.getValue() ?? 0) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), (value) => String(value))
         },
         {
           id: "turns",
           accessorKey: "turns",
           header: "Turns",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "input",
           accessorKey: "input",
           header: "Input",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "output",
           accessorKey: "output",
           header: "Output",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "cost",
           accessorKey: "cost",
           header: "Est. Cost",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "cost", children: fmtCost(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderCostCell(Number(info.getValue() ?? 0))
         },
         ...showCredits ? [{
           id: "credits",
@@ -6457,7 +6490,7 @@
           sortUndefined: "last",
           cell: (info) => {
             const v4 = info.getValue();
-            return /* @__PURE__ */ u4("span", { class: "num", children: fmtCredits(v4) });
+            return renderCreditsCell(v4);
           }
         }] : []
       ],
@@ -6603,7 +6636,7 @@
     ] });
   }
 
-  // src/ui/components/ServiceTiers.tsx
+  // src/ui/components/tables/ServiceTiers.tsx
   var columns2 = [
     {
       accessorKey: "provider",
@@ -6623,7 +6656,7 @@
     return /* @__PURE__ */ u4(DataTable, { columns: columns2, data, title: "Service Tiers", sectionKey: "service-tiers" });
   }
 
-  // src/ui/components/SessionsTable.tsx
+  // src/ui/components/tables/SessionsTable.tsx
   var defaultSort3 = [{ id: "last", desc: true }];
   var primaryOverflowStyle = {
     display: "block",
@@ -6710,8 +6743,7 @@ ${row.project}` : row.project;
           enableSorting: false,
           cell: (info) => {
             const model = String(info.getValue());
-            if (!onSelectModel) return /* @__PURE__ */ u4("span", { class: "model-tag", children: model });
-            return /* @__PURE__ */ u4("button", { type: "button", class: "table-action-btn table-action-btn--tag", onClick: () => onSelectModel(model), children: /* @__PURE__ */ u4("span", { class: "model-tag", children: model }) });
+            return renderTagCell(model, onSelectModel ? () => onSelectModel(model) : void 0);
           }
         },
         {
@@ -6735,13 +6767,13 @@ ${row.project}` : row.project;
           id: "input",
           accessorKey: "input",
           header: "Input",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "output",
           accessorKey: "output",
           header: "Output",
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(info.getValue() ?? 0)) })
+          cell: (info) => renderNumberCell(Number(info.getValue() ?? 0), fmt)
         },
         {
           id: "cost",
@@ -6749,7 +6781,7 @@ ${row.project}` : row.project;
           header: "Est. Cost",
           cell: (info) => {
             const row = info.row.original;
-            return row.is_billable ? /* @__PURE__ */ u4("span", { class: "cost", children: fmtCost(Number(info.getValue() ?? 0)) }) : /* @__PURE__ */ u4("span", { class: "cost-na", children: "n/a" });
+            return renderCostCell(Number(info.getValue() ?? 0), row.is_billable);
           }
         },
         ...showCredits ? [{
@@ -6759,7 +6791,7 @@ ${row.project}` : row.project;
           sortUndefined: "last",
           cell: (info) => {
             const v4 = info.getValue();
-            return /* @__PURE__ */ u4("span", { class: "num", children: fmtCredits(v4) });
+            return renderCreditsCell(v4);
           }
         }] : [],
         {
@@ -6842,7 +6874,7 @@ ${row.project}` : row.project;
     );
   }
 
-  // src/ui/components/Sparkline.tsx
+  // src/ui/components/charts/Sparkline.tsx
   function Sparkline({ daily }) {
     const last7 = daily.slice(-7);
     if (last7.length < 2) return null;
@@ -7313,7 +7345,7 @@ ${row.project}` : row.project;
     ] });
   }
 
-  // src/ui/components/ToolUsageTable.tsx
+  // src/ui/components/tables/ToolUsageTable.tsx
   function makeColumns3(data) {
     const maxInvocations = data.reduce((m4, r4) => Math.max(m4, r4.invocations), 0);
     return [
@@ -7387,7 +7419,7 @@ ${row.project}` : row.project;
     return /* @__PURE__ */ u4(DataTable, { columns: makeColumns3(data), data, title: "Tool Usage", sectionKey: "tool-summary" });
   }
 
-  // src/ui/components/VersionDonut.tsx
+  // src/ui/components/charts/VersionDonut.tsx
   var METRIC_LABELS2 = {
     cost: "Cost",
     calls: "Calls",
@@ -7485,7 +7517,7 @@ ${row.project}` : row.project;
     ] });
   }
 
-  // src/ui/components/VersionTable.tsx
+  // src/ui/components/tables/VersionTable.tsx
   var columns3 = [
     {
       accessorKey: "provider",
@@ -7516,7 +7548,7 @@ ${row.project}` : row.project;
     return /* @__PURE__ */ u4(DataTable, { columns: columns3, data, title });
   }
 
-  // src/ui/components/WeeklyChart.tsx
+  // src/ui/components/charts/WeeklyChart.tsx
   function WeeklyChart({ weekly }) {
     if (!weekly?.length) {
       return /* @__PURE__ */ u4("div", { style: { padding: "24px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: "12px" }, children: "No weekly data available." });
@@ -7560,7 +7592,7 @@ ${row.project}` : row.project;
     return /* @__PURE__ */ u4(ApexChart, { options, id: "chart-weekly" });
   }
 
-  // src/ui/lib/dashboardAggregation.ts
+  // src/ui/dashboard/aggregation.ts
   function formatLocalDate(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -7761,7 +7793,7 @@ ${row.project}` : row.project;
     };
   }
 
-  // src/ui/dashboardView.tsx
+  // src/ui/dashboard/view.tsx
   var SECTION_TAB_MAP = {
     "usage-windows": "overview",
     "claude-usage": "overview",
@@ -8007,7 +8039,7 @@ ${row.project}` : row.project;
     setSectionVisibility("hourly-chart", true);
     R(/* @__PURE__ */ u4(HourlyChart, { data }), container);
   }
-  function renderUsageWindows(data, previousSessionPercent2, setPreviousSessionPercent, setStatusMessage, clearStatusMessage) {
+  function renderUsageWindows(data, previousSessionPercent, setPreviousSessionPercent, setStatusMessage, clearStatusMessage) {
     const container = $2("usage-windows");
     if (!container) return;
     if (!data.available) {
@@ -8043,10 +8075,10 @@ ${row.project}` : row.project;
     );
     if (data.session) {
       const currentPercent = 100 - data.session.used_percent;
-      if (previousSessionPercent2 !== null) {
-        if (previousSessionPercent2 > 0.01 && currentPercent <= 0.01) {
+      if (previousSessionPercent !== null) {
+        if (previousSessionPercent > 0.01 && currentPercent <= 0.01) {
           setStatusMessage(`Session depleted - resets in ${data.session.resets_in_minutes ?? 0}m`, true);
-        } else if (previousSessionPercent2 <= 0.01 && currentPercent > 0.01) {
+        } else if (previousSessionPercent <= 0.01 && currentPercent > 0.01) {
           clearStatusMessage();
         }
       }
@@ -8094,7 +8126,7 @@ ${row.project}` : row.project;
     setSectionVisibility("cost-reconciliation", true);
     R(/* @__PURE__ */ u4(CostReconciliationPanel, { data }), container);
   }
-  function renderDashboardView(data, focusSingleModel2, focusProjectQuery2, exportSessionsCSV2, exportProjectsCSV2) {
+  function renderDashboardView(data, focusSingleModel, focusProjectQuery, exportSessionsCSV2, exportProjectsCSV2) {
     const cutoff = getRangeCutoff(selectedRange.value);
     const filteredDaily = data.daily_by_model.filter(
       (row) => selectedModels.value.has(row.model) && (!cutoff || row.day >= cutoff) && matchesProvider(row)
@@ -8148,13 +8180,13 @@ ${row.project}` : row.project;
       R(/* @__PURE__ */ u4(DailyChart, { daily }), $2("chart-daily"));
       setSectionVisibility("daily-chart-card", daily.length > 0);
     }
-    R(/* @__PURE__ */ u4(ModelChart, { byModel, onSelectModel: focusSingleModel2 }), $2("chart-model"));
+    R(/* @__PURE__ */ u4(ModelChart, { byModel, onSelectModel: focusSingleModel }), $2("chart-model"));
     R(
       /* @__PURE__ */ u4(
         ProjectChart,
         {
           byProject,
-          onSelectProject: (project) => focusProjectQuery2(project.display_name || project.project)
+          onSelectProject: (project) => focusProjectQuery(project.display_name || project.project)
         }
       ),
       $2("chart-project")
@@ -8163,14 +8195,14 @@ ${row.project}` : row.project;
     setSectionVisibility("project-chart-card", byProject.length > 0);
     lastFilteredSessions.value = filteredSessions;
     lastByProject.value = byProject;
-    R(/* @__PURE__ */ u4(ModelCostTable, { byModel, onSelectModel: focusSingleModel2 }), $2("model-cost-mount"));
+    R(/* @__PURE__ */ u4(ModelCostTable, { byModel, onSelectModel: focusSingleModel }), $2("model-cost-mount"));
     R(
       /* @__PURE__ */ u4(
         SessionsTable,
         {
           onExportCSV: exportSessionsCSV2,
-          onSelectProject: (session) => focusProjectQuery2(session.display_name || session.project),
-          onSelectModel: focusSingleModel2
+          onSelectProject: (session) => focusProjectQuery(session.display_name || session.project),
+          onSelectModel: focusSingleModel
         }
       ),
       $2("sessions-mount")
@@ -8181,7 +8213,7 @@ ${row.project}` : row.project;
         {
           byProject: lastByProject.value.slice(0, 30),
           onExportCSV: exportProjectsCSV2,
-          onSelectProject: (project) => focusProjectQuery2(project.display_name || project.project)
+          onSelectProject: (project) => focusProjectQuery(project.display_name || project.project)
         }
       ),
       $2("project-cost-mount")
@@ -8201,95 +8233,105 @@ ${row.project}` : row.project;
     refreshSectionVisibility();
   }
 
-  // src/ui/lib/csv.ts
-  function csvField(val) {
-    const s4 = String(val);
-    const needsPrefix = /^[=+\-@\t\r]/.test(s4);
-    const escaped = needsPrefix ? "'" + s4 : s4;
-    if (escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")) {
-      return '"' + escaped.replace(/"/g, '""') + '"';
+  // src/ui/dashboard/runtime.ts
+  function createRuntimeState() {
+    return {
+      previousSessionPercent: null,
+      lastCommunitySignal: null,
+      lastAgentStatusSnapshot: null,
+      inFlight: {
+        loadData: false,
+        loadUsageWindows: false,
+        loadClaudeUsage: false,
+        loadHeatmap: false,
+        loadAgentStatus: false,
+        loadCommunitySignal: false,
+        loadBillingBlocks: false,
+        loadContextWindow: false,
+        loadCostReconciliation: false
+      }
+    };
+  }
+  async function runExclusive(state, guard, task, force = false) {
+    if (state.inFlight[guard] && !force) return;
+    state.inFlight[guard] = true;
+    try {
+      await task();
+    } finally {
+      state.inFlight[guard] = false;
     }
-    return escaped;
   }
-  function csvTimestamp() {
-    const d5 = /* @__PURE__ */ new Date();
-    return d5.getFullYear() + "-" + String(d5.getMonth() + 1).padStart(2, "0") + "-" + String(d5.getDate()).padStart(2, "0") + "_" + String(d5.getHours()).padStart(2, "0") + String(d5.getMinutes()).padStart(2, "0");
+  async function fetchJson(url) {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    return await response.json();
   }
-  function downloadCSV(reportType, header, rows) {
-    const lines = [header.map(csvField).join(",")];
-    for (const row of rows) lines.push(row.map(csvField).join(","));
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const a4 = document.createElement("a");
-    a4.href = URL.createObjectURL(blob);
-    a4.download = reportType + "_" + csvTimestamp() + ".csv";
-    a4.click();
-    setTimeout(() => URL.revokeObjectURL(a4.href), 1e3);
+  function toggleModelSelection(allModels, currentSelection, model) {
+    const isSoleSelection = currentSelection.size === 1 && currentSelection.has(model);
+    return isSoleSelection ? new Set(allModels) : /* @__PURE__ */ new Set([model]);
   }
-
-  // src/ui/lib/theme.ts
-  function getTheme() {
-    const stored = localStorage.getItem("theme");
-    if (stored === "light" || stored === "dark") return stored;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  }
-  function applyTheme(theme) {
-    if (theme === "light") {
-      document.documentElement.setAttribute("data-theme", "light");
-    } else {
-      document.documentElement.removeAttribute("data-theme");
-    }
-    themeMode.value = theme;
-  }
-
-  // src/ui/app.tsx
-  applyTheme(getTheme());
-  function toggleTheme() {
-    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-    const next = current === "light" ? "dark" : "light";
-    localStorage.setItem("theme", next);
-    applyTheme(next);
-    if (rawData.value) applyFilter();
-  }
-  var previousSessionPercent = null;
-  var loadDataInFlight = false;
-  var loadUsageWindowsInFlight = false;
-  var loadClaudeUsageInFlight = false;
-  var loadHeatmapInFlight = false;
-  var loadAgentStatusInFlight = false;
-  var loadCommunitySignalInFlight = false;
-  var lastCommunitySignal = null;
-  var lastAgentStatusSnapshot = null;
-  var loadBillingBlocksInFlight = false;
-  var loadContextWindowInFlight = false;
-  var loadCostReconciliationInFlight = false;
-  function handleDashboardTabChange(tab) {
-    if (activeDashboardTab.value === tab) return;
-    activeDashboardTab.value = tab;
-    syncDashboardUrl();
-    refreshSectionVisibility();
-  }
-  function applyFilter() {
-    if (!rawData.value) return;
-    renderDashboardView(
-      rawData.value,
-      focusSingleModel,
-      focusProjectQuery,
-      exportSessionsCSV,
-      exportProjectsCSV
-    );
-  }
-  function focusSingleModel(model) {
-    if (!rawData.value) return;
-    const isSoleSelection = selectedModels.value.size === 1 && selectedModels.value.has(model);
-    selectedModels.value = isSoleSelection ? new Set(rawData.value.all_models) : /* @__PURE__ */ new Set([model]);
-    syncDashboardUrl();
-    applyFilter();
-  }
-  function focusProjectQuery(project) {
+  function toggleProjectSearch(currentQuery, project) {
     const normalized = project.toLowerCase().trim();
-    projectSearchQuery.value = projectSearchQuery.value === normalized ? "" : normalized;
-    syncDashboardUrl();
-    applyFilter();
+    return currentQuery === normalized ? "" : normalized;
+  }
+  function exportProjectRowsCSV(filename, rowsData) {
+    const header = [
+      "Project",
+      "Sessions",
+      "Turns",
+      "Input",
+      "Output",
+      "Cached Input",
+      "Cache Creation",
+      "Reasoning Output",
+      "Est. Cost"
+    ];
+    const rows = rowsData.map((project) => [
+      project.project,
+      project.sessions,
+      project.turns,
+      project.input,
+      project.output,
+      project.cache_read,
+      project.cache_creation,
+      project.reasoning_output,
+      project.cost.toFixed(4)
+    ]);
+    downloadCSV(filename, header, rows);
+  }
+  function buildProjectAggregates(data) {
+    const byProject = data ? data.sessions_all.reduce((acc, session) => {
+      if (!selectedModels.value.has(session.model)) return acc;
+      const current = acc.get(session.project) ?? {
+        project: session.project,
+        display_name: session.display_name || session.project,
+        input: 0,
+        output: 0,
+        cache_read: 0,
+        cache_creation: 0,
+        reasoning_output: 0,
+        turns: 0,
+        sessions: 0,
+        cost: 0,
+        credits: null
+      };
+      current.input += session.input;
+      current.output += session.output;
+      current.cache_read += session.cache_read;
+      current.cache_creation += session.cache_creation;
+      current.reasoning_output += session.reasoning_output;
+      current.turns += session.turns;
+      current.sessions += 1;
+      current.cost += session.cost;
+      if (session.credits != null) {
+        current.credits = (current.credits ?? 0) + session.credits;
+      }
+      acc.set(session.project, current);
+      return acc;
+    }, /* @__PURE__ */ new Map()) : /* @__PURE__ */ new Map();
+    return Array.from(byProject.values()).sort(
+      (left, right) => right.input + right.output - (left.input + left.output)
+    );
   }
   function exportSessionsCSV() {
     const header = [
@@ -8324,257 +8366,277 @@ ${row.project}` : row.project;
     ]) : [];
     downloadCSV("sessions", header, rows);
   }
-  function exportProjectRowsCSV(filename, rowsData) {
-    const header = [
-      "Project",
-      "Sessions",
-      "Turns",
-      "Input",
-      "Output",
-      "Cached Input",
-      "Cache Creation",
-      "Reasoning Output",
-      "Est. Cost"
-    ];
-    const rows = rowsData.map((project) => [
-      project.project,
-      project.sessions,
-      project.turns,
-      project.input,
-      project.output,
-      project.cache_read,
-      project.cache_creation,
-      project.reasoning_output,
-      project.cost.toFixed(4)
-    ]);
-    downloadCSV(filename, header, rows);
-  }
   function exportProjectsCSV() {
-    const byProject = rawData.value ? rawData.value.sessions_all.reduce((acc, session) => {
-      if (!selectedModels.value.has(session.model)) return acc;
-      const current = acc.get(session.project) ?? {
-        project: session.project,
-        display_name: session.display_name || session.project,
-        input: 0,
-        output: 0,
-        cache_read: 0,
-        cache_creation: 0,
-        reasoning_output: 0,
-        turns: 0,
-        sessions: 0,
-        cost: 0,
-        credits: null
-      };
-      current.input += session.input;
-      current.output += session.output;
-      current.cache_read += session.cache_read;
-      current.cache_creation += session.cache_creation;
-      current.reasoning_output += session.reasoning_output;
-      current.turns += session.turns;
-      current.sessions += 1;
-      current.cost += session.cost;
-      if (session.credits != null) {
-        current.credits = (current.credits ?? 0) + session.credits;
+    exportProjectRowsCSV("projects", buildProjectAggregates(rawData.value));
+  }
+  function createUsageWindowsLoader(state) {
+    return () => runExclusive(state, "loadUsageWindows", async () => {
+      try {
+        const data = await fetchJson("/api/usage-windows");
+        if (!data) return;
+        renderUsageWindows(
+          data,
+          state.previousSessionPercent,
+          (value) => {
+            state.previousSessionPercent = value;
+          },
+          (message, isError = false) => {
+            setStatus(
+              "rate-windows",
+              isError ? "error" : "success",
+              message,
+              isError ? void 0 : 4e3
+            );
+          },
+          () => clearStatus("rate-windows")
+        );
+      } catch {
       }
-      acc.set(session.project, current);
-      return acc;
-    }, /* @__PURE__ */ new Map()) : /* @__PURE__ */ new Map();
-    exportProjectRowsCSV(
-      "projects",
-      Array.from(byProject.values()).sort(
-        (left, right) => right.input + right.output - (left.input + left.output)
-      )
+    });
+  }
+  function createClaudeUsageLoader(state) {
+    return () => runExclusive(state, "loadClaudeUsage", async () => {
+      try {
+        const data = await fetchJson("/api/claude-usage");
+        if (data) renderClaudeUsage(data);
+      } catch {
+      }
+    });
+  }
+  function createAgentStatusLoader(state) {
+    return () => runExclusive(state, "loadAgentStatus", async () => {
+      try {
+        const data = await fetchJson("/api/agent-status");
+        if (!data) return;
+        state.lastAgentStatusSnapshot = data;
+        renderAgentStatus(data, state.lastCommunitySignal);
+      } catch {
+      }
+    });
+  }
+  function createCommunitySignalLoader(state) {
+    return () => runExclusive(state, "loadCommunitySignal", async () => {
+      try {
+        const data = await fetchJson("/api/community-signal");
+        if (!data) return;
+        state.lastCommunitySignal = data.enabled ? data : null;
+        if (state.lastAgentStatusSnapshot) {
+          renderAgentStatus(state.lastAgentStatusSnapshot, state.lastCommunitySignal);
+        }
+      } catch {
+      }
+    });
+  }
+  function createBillingBlocksLoader(state, applyFilter) {
+    return () => runExclusive(state, "loadBillingBlocks", async () => {
+      try {
+        const data = await fetchJson("/api/billing-blocks");
+        billingBlocksData.value = data;
+        if (data && rawData.value) applyFilter();
+      } catch {
+        billingBlocksData.value = null;
+      }
+    });
+  }
+  function createContextWindowLoader(state, applyFilter) {
+    return () => runExclusive(state, "loadContextWindow", async () => {
+      try {
+        const data = await fetchJson("/api/context-window");
+        contextWindowData.value = data;
+        if (data && rawData.value) applyFilter();
+      } catch {
+        contextWindowData.value = null;
+      }
+    });
+  }
+  function createCostReconciliationLoader(state) {
+    return () => runExclusive(state, "loadCostReconciliation", async () => {
+      try {
+        const data = await fetchJson("/api/cost-reconciliation?period=month");
+        costReconciliationData.value = data;
+        if (data) renderCostReconciliation();
+      } catch {
+        costReconciliationData.value = null;
+      }
+    });
+  }
+  function currentTimezoneOffsetMinutes() {
+    return typeof window !== "undefined" && typeof window.Date !== "undefined" ? (/* @__PURE__ */ new Date()).getTimezoneOffset() * -1 : 0;
+  }
+  function createHeatmapLoader(state) {
+    return (period = "month") => runExclusive(state, "loadHeatmap", async () => {
+      try {
+        const tzOffset = currentTimezoneOffsetMinutes();
+        const data = await fetchJson(
+          `/api/heatmap?period=${encodeURIComponent(period)}&tz_offset_min=${tzOffset}`
+        );
+        if (data) renderActivityHeatmap(data);
+      } catch {
+      }
+    });
+  }
+  function createDataLoader(state, applyFilter) {
+    return (force = false) => runExclusive(
+      state,
+      "loadData",
+      async () => {
+        const isSubsequentFetch = rawData.value !== null;
+        if (isSubsequentFetch) {
+          loadState.value = "refreshing";
+          setStatus("header-refresh", "loading", "REFRESHING");
+        }
+        try {
+          const response = await fetch("/api/data");
+          if (!response.ok) {
+            setStatus("global", "error", `Failed to load data: HTTP ${response.status}`);
+            return;
+          }
+          const data = await response.json();
+          if (data.error) {
+            setStatus("global", "error", data.error);
+            return;
+          }
+          clearStatus("global");
+          clearStatus("header-refresh");
+          rawData.value = data;
+          if (!isSubsequentFetch) {
+            restoreDashboardStateFromUrl(data.all_models);
+          }
+          applyFilter();
+        } catch {
+          setStatus("global", "error", "Network error loading data");
+          clearStatus("header-refresh");
+        } finally {
+          loadState.value = "idle";
+        }
+      },
+      force
     );
   }
-  async function loadUsageWindows() {
-    if (loadUsageWindowsInFlight) return;
-    loadUsageWindowsInFlight = true;
-    try {
-      const resp = await fetch("/api/usage-windows");
-      if (!resp.ok) return;
-      const data = await resp.json();
-      renderUsageWindows(
-        data,
-        previousSessionPercent,
-        (value) => {
-          previousSessionPercent = value;
-        },
-        (message, isError = false) => {
-          setStatus(
-            "rate-windows",
-            isError ? "error" : "success",
-            message,
-            isError ? void 0 : 4e3
-          );
-        },
-        () => clearStatus("rate-windows")
+  function startDashboardPolling(loaders) {
+    window.addEventListener("popstate", () => {
+      if (!rawData.value) return;
+      restoreDashboardStateFromUrl(rawData.value.all_models);
+      loaders.applyFilter();
+    });
+    void loaders.loadData();
+    setInterval(loaders.loadData, 3e4);
+    void loaders.loadUsageWindows();
+    void loaders.loadClaudeUsage();
+    void loaders.loadAgentStatus();
+    void loaders.loadCommunitySignal();
+    setInterval(() => {
+      void loaders.loadUsageWindows();
+      void loaders.loadClaudeUsage();
+      void loaders.loadAgentStatus();
+      void loaders.loadCommunitySignal();
+    }, 6e4);
+    void loaders.loadHeatmap("all");
+    setInterval(() => void loaders.loadHeatmap("all"), 3e4);
+    void loaders.loadBillingBlocks();
+    setInterval(() => void loaders.loadBillingBlocks(), 3e4);
+    void loaders.loadContextWindow();
+    setInterval(() => void loaders.loadContextWindow(), 3e4);
+    void loaders.loadCostReconciliation();
+    setInterval(() => void loaders.loadCostReconciliation(), 3e4);
+  }
+  function createDashboardRuntime() {
+    const state = createRuntimeState();
+    const applyFilter = () => {
+      if (!rawData.value) return;
+      renderDashboardView(
+        rawData.value,
+        focusSingleModel,
+        focusProjectQuery,
+        exportSessionsCSV,
+        exportProjectsCSV
       );
-    } catch {
-    } finally {
-      loadUsageWindowsInFlight = false;
-    }
-  }
-  async function loadClaudeUsage() {
-    if (loadClaudeUsageInFlight) return;
-    loadClaudeUsageInFlight = true;
-    try {
-      const resp = await fetch("/api/claude-usage");
-      if (!resp.ok) return;
-      const data = await resp.json();
-      renderClaudeUsage(data);
-    } catch {
-    } finally {
-      loadClaudeUsageInFlight = false;
-    }
-  }
-  async function loadAgentStatus() {
-    if (loadAgentStatusInFlight) return;
-    loadAgentStatusInFlight = true;
-    try {
-      const resp = await fetch("/api/agent-status");
-      if (!resp.ok) return;
-      const data = await resp.json();
-      lastAgentStatusSnapshot = data;
-      renderAgentStatus(data, lastCommunitySignal);
-    } catch {
-    } finally {
-      loadAgentStatusInFlight = false;
-    }
-  }
-  async function loadCommunitySignal() {
-    if (loadCommunitySignalInFlight) return;
-    loadCommunitySignalInFlight = true;
-    try {
-      const resp = await fetch("/api/community-signal");
-      if (!resp.ok) return;
-      const data = await resp.json();
-      lastCommunitySignal = data.enabled ? data : null;
-      if (lastAgentStatusSnapshot) {
-        renderAgentStatus(lastAgentStatusSnapshot, lastCommunitySignal);
-      }
-    } catch {
-    } finally {
-      loadCommunitySignalInFlight = false;
-    }
-  }
-  async function loadBillingBlocks() {
-    if (loadBillingBlocksInFlight) return;
-    loadBillingBlocksInFlight = true;
-    try {
-      const resp = await fetch("/api/billing-blocks");
-      if (!resp.ok) {
-        billingBlocksData.value = null;
-        return;
-      }
-      const data = await resp.json();
-      billingBlocksData.value = data;
-      if (rawData.value) applyFilter();
-    } catch {
-      billingBlocksData.value = null;
-    } finally {
-      loadBillingBlocksInFlight = false;
-    }
-  }
-  async function loadContextWindow() {
-    if (loadContextWindowInFlight) return;
-    loadContextWindowInFlight = true;
-    try {
-      const resp = await fetch("/api/context-window");
-      if (!resp.ok) {
-        contextWindowData.value = null;
-        return;
-      }
-      const data = await resp.json();
-      contextWindowData.value = data;
-      if (rawData.value) applyFilter();
-    } catch {
-      contextWindowData.value = null;
-    } finally {
-      loadContextWindowInFlight = false;
-    }
-  }
-  async function loadCostReconciliation() {
-    if (loadCostReconciliationInFlight) return;
-    loadCostReconciliationInFlight = true;
-    try {
-      const resp = await fetch("/api/cost-reconciliation?period=month");
-      if (!resp.ok) {
-        costReconciliationData.value = null;
-        return;
-      }
-      const data = await resp.json();
-      costReconciliationData.value = data;
-      renderCostReconciliation();
-    } catch {
-      costReconciliationData.value = null;
-    } finally {
-      loadCostReconciliationInFlight = false;
-    }
-  }
-  async function loadHeatmap(period = "month") {
-    if (loadHeatmapInFlight) return;
-    loadHeatmapInFlight = true;
-    try {
-      const tzOffset = typeof window !== "undefined" && typeof window.Date !== "undefined" ? (/* @__PURE__ */ new Date()).getTimezoneOffset() * -1 : 0;
-      const resp = await fetch(
-        `/api/heatmap?period=${encodeURIComponent(period)}&tz_offset_min=${tzOffset}`
-      );
-      if (!resp.ok) return;
-      const data = await resp.json();
-      renderActivityHeatmap(data);
-    } catch {
-    } finally {
-      loadHeatmapInFlight = false;
-    }
-  }
-  async function loadData(force = false) {
-    if (loadDataInFlight && !force) return;
-    loadDataInFlight = true;
-    const isSubsequentFetch = rawData.value !== null;
-    if (isSubsequentFetch) {
-      loadState.value = "refreshing";
-      setStatus("header-refresh", "loading", "REFRESHING");
-    }
-    try {
-      const resp = await fetch("/api/data");
-      if (!resp.ok) {
-        setStatus("global", "error", `Failed to load data: HTTP ${resp.status}`);
-        return;
-      }
-      const data = await resp.json();
-      if (data.error) {
-        setStatus("global", "error", data.error);
-        return;
-      }
-      clearStatus("global");
-      clearStatus("header-refresh");
-      rawData.value = data;
-      if (isSubsequentFetch === false) {
-        restoreDashboardStateFromUrl(data.all_models);
-      }
+    };
+    const focusSingleModel = (model) => {
+      if (!rawData.value) return;
+      selectedModels.value = toggleModelSelection(rawData.value.all_models, selectedModels.value, model);
+      syncDashboardUrl();
       applyFilter();
-    } catch {
-      setStatus("global", "error", "Network error loading data");
-      clearStatus("header-refresh");
-    } finally {
-      loadState.value = "idle";
-      loadDataInFlight = false;
+    };
+    const focusProjectQuery = (project) => {
+      projectSearchQuery.value = toggleProjectSearch(projectSearchQuery.value, project);
+      syncDashboardUrl();
+      applyFilter();
+    };
+    const loadUsageWindows = createUsageWindowsLoader(state);
+    const loadClaudeUsage = createClaudeUsageLoader(state);
+    const loadAgentStatus = createAgentStatusLoader(state);
+    const loadCommunitySignal = createCommunitySignalLoader(state);
+    const loadBillingBlocks = createBillingBlocksLoader(state, applyFilter);
+    const loadContextWindow = createContextWindowLoader(state, applyFilter);
+    const loadCostReconciliation = createCostReconciliationLoader(state);
+    const loadHeatmap = createHeatmapLoader(state);
+    const loadData = createDataLoader(state, applyFilter);
+    return {
+      applyFilter,
+      handleDashboardTabChange(tab) {
+        if (activeDashboardTab.value === tab) return;
+        activeDashboardTab.value = tab;
+        syncDashboardUrl();
+        refreshSectionVisibility();
+      },
+      loadData,
+      start() {
+        startDashboardPolling({
+          applyFilter,
+          loadAgentStatus,
+          loadBillingBlocks,
+          loadClaudeUsage,
+          loadCommunitySignal,
+          loadContextWindow,
+          loadCostReconciliation,
+          loadData,
+          loadHeatmap,
+          loadUsageWindows
+        });
+      }
+    };
+  }
+
+  // src/ui/lib/theme.ts
+  function getTheme() {
+    const stored = localStorage.getItem("theme");
+    if (stored === "light" || stored === "dark") return stored;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  function applyTheme(theme) {
+    if (theme === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
     }
+    themeMode.value = theme;
+  }
+
+  // src/ui/app.tsx
+  applyTheme(getTheme());
+  var runtime = createDashboardRuntime();
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    const next = current === "light" ? "dark" : "light";
+    localStorage.setItem("theme", next);
+    applyTheme(next);
+    if (rawData.value) runtime.applyFilter();
   }
   var headerMount = document.getElementById("header-mount");
   if (headerMount) {
-    R(/* @__PURE__ */ u4(Header, { onDataReload: loadData, onThemeToggle: toggleTheme }), headerMount);
+    R(/* @__PURE__ */ u4(Header, { onDataReload: runtime.loadData, onThemeToggle: toggleTheme }), headerMount);
   }
   var filterBarMount = document.getElementById("filter-bar-mount");
   if (filterBarMount) {
     R(
-      /* @__PURE__ */ u4(FilterBar, { onFilterChange: applyFilter, onURLUpdate: syncDashboardUrl }),
+      /* @__PURE__ */ u4(FilterBar, { onFilterChange: runtime.applyFilter, onURLUpdate: syncDashboardUrl }),
       filterBarMount
     );
   }
   var dashboardTabsMount = document.getElementById("dashboard-tabs-mount");
   if (dashboardTabsMount) {
-    R(/* @__PURE__ */ u4(DashboardTabs, { onTabChange: handleDashboardTabChange }), dashboardTabsMount);
+    R(/* @__PURE__ */ u4(DashboardTabs, { onTabChange: runtime.handleDashboardTabChange }), dashboardTabsMount);
   }
   var footerEl = document.querySelector("footer");
   if (footerEl?.parentElement) {
@@ -8584,31 +8646,7 @@ ${row.project}` : row.project;
   if (globalStatusMount) {
     R(/* @__PURE__ */ u4(InlineStatus, { placement: "global" }), globalStatusMount);
   }
-  window.addEventListener("popstate", () => {
-    if (!rawData.value) return;
-    restoreDashboardStateFromUrl(rawData.value.all_models);
-    applyFilter();
-  });
-  loadData();
-  setInterval(loadData, 3e4);
-  loadUsageWindows();
-  loadClaudeUsage();
-  loadAgentStatus();
-  loadCommunitySignal();
-  setInterval(() => {
-    loadUsageWindows();
-    loadClaudeUsage();
-    loadAgentStatus();
-    loadCommunitySignal();
-  }, 6e4);
-  loadHeatmap("all");
-  setInterval(() => loadHeatmap("all"), 3e4);
-  loadBillingBlocks();
-  setInterval(loadBillingBlocks, 3e4);
-  loadContextWindow();
-  setInterval(loadContextWindow, 3e4);
-  loadCostReconciliation();
-  setInterval(loadCostReconciliation, 3e4);
+  runtime.start();
 })();
 /*! Bundled license information:
 

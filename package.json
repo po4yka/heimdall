@@ -4,7 +4,7 @@
     "build:ts": "esbuild src/ui/app.tsx --outfile=src/ui/app.js --bundle --format=iife --target=es2020 --jsx=automatic --jsx-import-source=preact",
     "build:css": "tailwindcss -i src/ui/input.css -o src/ui/style.css --minify",
     "build:ui": "npm run build:ts && npm run build:css",
-    "test:ui": "vitest run src/ui/**/*.test.ts",
+    "test:ui": "vitest run src/ui",
     "watch:ts": "esbuild src/ui/app.tsx --outfile=src/ui/app.js --bundle --format=iife --target=es2020 --jsx=automatic --jsx-import-source=preact --watch",
     "typecheck": "tsc --noEmit"
   },

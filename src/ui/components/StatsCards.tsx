@@ -1,7 +1,7 @@
 import { fmt, fmtCost, fmtCostBig } from '../lib/format';
 import { RANGE_LABELS } from '../lib/charts';
 import { selectedRange } from '../state/store';
-import { Sparkline } from './Sparkline';
+import { Sparkline } from './charts/Sparkline';
 import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { BillingBlocksCard } from './BillingBlocksCard';
 import { ContextWindowCard } from './ContextWindowCard';
