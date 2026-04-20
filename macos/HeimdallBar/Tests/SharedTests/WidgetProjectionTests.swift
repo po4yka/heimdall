@@ -4,123 +4,106 @@ import Testing
 
 struct WidgetProjectionTests {
     @Test
-    func widgetProjectionCarriesUsageWarningsAndHistory() {
-        let projection = ProviderMenuProjection(
-            provider: .codex,
-            title: "Codex",
-            sourceLabel: "WEB",
-            sourceExplanationLabel: "Using imported dashboard session.",
-            authHeadline: "Authenticated, but incompatible with selected source",
-            authDetail: "Browser session is missing for requested web source.",
-            authDiagnosticCode: "authenticated-incompatible-source",
-            authSummaryLabel: "Chatgpt · File",
-            authRecoveryActions: [],
-            warningLabels: ["Login required to refresh web extras."],
-            visualState: .incident,
-            stateLabel: "Incident",
-            statusLabel: "OpenAI degraded",
-            identityLabel: "user@example.com",
-            lastRefreshLabel: "Updated 2m ago",
-            refreshStatusLabel: "Refresh overdue",
-            costLabel: "$4.80 today",
-            laneDetails: [
-                LaneDetailProjection(
-                    title: "Session",
-                    summary: "64% remaining",
-                    remainingPercent: 64,
-                    resetDetail: "resets in 18m",
-                    paceLabel: "Stable"
-                ),
-                LaneDetailProjection(
-                    title: "Weekly",
-                    summary: "42% remaining",
-                    remainingPercent: 42,
-                    resetDetail: "resets tomorrow",
-                    paceLabel: "Fast"
-                ),
-            ],
-            creditsLabel: "$12.40 credits",
-            incidentLabel: "OpenAI degraded",
+    func widgetSnapshotBuilderDerivesTypedProviderPayload() {
+        let snapshot = ProviderSnapshot(
+            provider: "codex",
+            available: true,
+            sourceUsed: "cli",
+            lastAttemptedSource: "cli",
+            resolvedViaFallback: false,
+            refreshDurationMs: 150,
+            sourceAttempts: [ProviderSourceAttempt(source: "cli", outcome: "success", message: nil)],
+            identity: ProviderIdentity(provider: "codex", accountEmail: "user@example.com", accountOrganization: nil, loginMethod: "chatgpt", plan: "pro"),
+            primary: ProviderRateWindow(usedPercent: 36, resetsAt: "2026-04-20T10:00:00Z", resetsInMinutes: 18, windowMinutes: 300, resetLabel: nil),
+            secondary: ProviderRateWindow(usedPercent: 58, resetsAt: "2026-04-24T10:00:00Z", resetsInMinutes: 4000, windowMinutes: 10_080, resetLabel: nil),
+            tertiary: nil,
+            credits: 12.4,
+            status: ProviderStatusSummary(indicator: "minor", description: "OpenAI degraded", pageURL: "https://status.openai.com"),
+            auth: ProviderAuthHealth(
+                loginMethod: "api-key",
+                credentialBackend: "env",
+                authMode: "api-key",
+                isAuthenticated: true,
+                isRefreshable: false,
+                isSourceCompatible: false,
+                requiresRelogin: false,
+                managedRestriction: nil,
+                diagnosticCode: "env-override",
+                failureReason: "OPENAI_API_KEY is active.",
+                lastValidatedAt: "2026-04-20T10:00:00Z",
+                recoveryActions: []
+            ),
+            costSummary: ProviderCostSummary(
+                todayTokens: 1234,
+                todayCostUSD: 4.8,
+                last30DaysTokens: 5678,
+                last30DaysCostUSD: 48.2,
+                daily: [
+                    CostHistoryPoint(day: "2026-04-18", totalTokens: 200, costUSD: 1.2),
+                    CostHistoryPoint(day: "2026-04-19", totalTokens: 300, costUSD: 2.4),
+                    CostHistoryPoint(day: "2026-04-20", totalTokens: 734, costUSD: 4.8),
+                ]
+            ),
+            claudeUsage: nil,
+            lastRefresh: "2026-04-20T10:00:00Z",
             stale: false,
-            isRefreshing: false,
-            error: nil,
-            historyFractions: [0.1, 0.5, 0.8],
-            claudeFactors: [],
+            error: nil
+        )
+
+        let typed = WidgetSnapshotBuilder.providerSnapshot(
+            provider: .codex,
+            config: ProviderConfig(enabled: true, source: .cli, cookieSource: .auto, dashboardExtrasEnabled: false),
+            snapshot: snapshot,
             adjunct: nil
         )
-        let costSummary = ProviderCostSummary(
-            todayTokens: 1234,
-            todayCostUSD: 4.8,
-            last30DaysTokens: 5678,
-            last30DaysCostUSD: 48.2,
-            daily: []
-        )
 
-        let entry = WidgetProjectionBuilder.entry(from: projection, costSummary: costSummary)
-
-        #expect(entry.provider == .codex)
-        #expect(entry.visualState == .incident)
-        #expect(entry.loginRequired)
-        #expect(entry.warningLabel == "Login required to refresh web extras.")
-        #expect(entry.usageLines.count == 2)
-        #expect(entry.usageLines.first?.valueLabel == "64%")
-        #expect(entry.usageLines.first?.detailLabel == "pace stable · resets in 18m")
-        #expect(entry.historyFractions == [0.1, 0.5, 0.8])
-        #expect(entry.todayCostLabel == "$4.80 today")
-        #expect(entry.last30DaysCostLabel == "$48.20 in 30d")
-        #expect(entry.todayTokensLabel == "1234 tokens today")
+        #expect(typed.provider == .codex)
+        #expect(typed.source.requested == .cli)
+        #expect(typed.source.effective == .cli)
+        #expect(typed.lanes.count == 2)
+        #expect(typed.lanes.first?.remainingPercent == 64)
+        #expect(typed.auth?.diagnosticCode == "env-override")
+        #expect(typed.cost.todayCostUSD == 4.8)
+        #expect(typed.issues.contains(where: { $0.code == "auth-incompatible" }))
     }
 
     @Test
-    func widgetSelectionReturnsRequestedProviderAndCadenceOverrides() {
-        let claude = WidgetProviderEntry(
-            provider: .claude,
-            title: "Claude",
-            visualState: .healthy,
-            statusLabel: "Healthy",
-            refreshLabel: "Updated just now",
-            usageLines: [],
-            creditsLabel: nil,
-            warningLabel: nil,
-            unavailableLabel: nil,
-            loginRequired: false,
-            historyFractions: [],
-            costSummary: ProviderCostSummary(todayTokens: 0, todayCostUSD: 0, last30DaysTokens: 0, last30DaysCostUSD: 0, daily: []),
-            todayCostLabel: "$0.00 today",
-            last30DaysCostLabel: "$0.00 in 30d",
-            todayTokensLabel: "Tokens unavailable",
-            activityLabel: "No recent activity",
-            sourceLabel: "OAUTH",
-            updatedAt: "Updated just now"
-        )
-        let codex = WidgetProviderEntry(
-            provider: .codex,
-            title: "Codex",
-            visualState: .error,
-            statusLabel: "Error",
-            refreshLabel: "Login required",
-            usageLines: [],
-            creditsLabel: nil,
-            warningLabel: "Login required.",
-            unavailableLabel: "No usable provider data.",
-            loginRequired: true,
-            historyFractions: [],
-            costSummary: ProviderCostSummary(todayTokens: 0, todayCostUSD: 0, last30DaysTokens: 0, last30DaysCostUSD: 0, daily: []),
-            todayCostLabel: "$0.00 today",
-            last30DaysCostLabel: "$0.00 in 30d",
-            todayTokensLabel: "Tokens unavailable",
-            activityLabel: "No recent activity",
-            sourceLabel: "WEB",
-            updatedAt: "Updated 10m ago"
-        )
+    func widgetSelectionSortsBySeverityAndUsesCadenceOverrides() {
         let snapshot = WidgetSnapshot(
             generatedAt: ISO8601DateFormatter().string(from: Date()),
-            refreshIntervalSeconds: 1200,
-            entries: [claude, codex]
+            defaultRefreshIntervalSeconds: 1200,
+            providers: [
+                "claude": WidgetProviderSnapshot(
+                    provider: .claude,
+                    source: WidgetProviderSourceSnapshot(requested: .oauth, effective: .oauth, detail: nil, usesFallback: false, isUnsupported: false, usageAvailable: true),
+                    freshness: WidgetProviderFreshnessSnapshot(visualState: .healthy, available: true, stale: false, lastRefreshAt: nil, error: nil, statusIndicator: nil, statusDescription: nil),
+                    auth: WidgetProviderAuthSnapshot(loginMethod: "subscription-oauth", credentialBackend: "keychain", authMode: "subscription-oauth", isAuthenticated: true, isSourceCompatible: true, requiresRelogin: false, diagnosticCode: "authenticated-compatible", failureReason: nil, lastValidatedAt: nil),
+                    identity: nil,
+                    lanes: [],
+                    credits: nil,
+                    cost: WidgetProviderCostSnapshot(todayTokens: 200, todayCostUSD: 2.5, last30DaysTokens: 0, last30DaysCostUSD: 0, daily: []),
+                    issues: [],
+                    adjunct: nil
+                ),
+                "codex": WidgetProviderSnapshot(
+                    provider: .codex,
+                    source: WidgetProviderSourceSnapshot(requested: .web, effective: nil, detail: nil, usesFallback: false, isUnsupported: false, usageAvailable: false),
+                    freshness: WidgetProviderFreshnessSnapshot(visualState: .incident, available: false, stale: true, lastRefreshAt: nil, error: nil, statusIndicator: "major", statusDescription: "Major outage"),
+                    auth: WidgetProviderAuthSnapshot(loginMethod: "chatgpt", credentialBackend: "file", authMode: "chatgpt", isAuthenticated: true, isSourceCompatible: true, requiresRelogin: true, diagnosticCode: "requires-relogin", failureReason: "Login expired.", lastValidatedAt: nil),
+                    identity: nil,
+                    lanes: [],
+                    credits: nil,
+                    cost: WidgetProviderCostSnapshot(todayTokens: 100, todayCostUSD: 1.0, last30DaysTokens: 0, last30DaysCostUSD: 0, daily: []),
+                    issues: [WidgetSnapshotIssue(code: "login-required", message: "Login expired.", severity: .warning)],
+                    adjunct: WidgetProviderAdjunctSnapshot(source: .web, isLoginRequired: true, hasWebExtras: false, lastUpdatedAt: nil)
+                ),
+            ]
         )
 
-        #expect(WidgetSelection.providerEntry(in: snapshot, provider: .codex)?.provider == .codex)
+        let ordered = WidgetSelection.orderedProviders(in: snapshot)
+        #expect(ordered.first?.provider == .codex)
         #expect(WidgetSelection.cadenceSeconds(snapshot: snapshot, provider: .claude) == 1200)
         #expect(WidgetSelection.cadenceSeconds(snapshot: snapshot, provider: .codex) == 300)
+        #expect(WidgetSelection.cadenceSeconds(snapshot: snapshot, provider: nil) == 300)
     }
 }

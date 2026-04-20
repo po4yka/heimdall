@@ -510,48 +510,123 @@ public struct ProviderPresentationState: Sendable {
     }
 }
 
-public struct WidgetProviderEntry: Codable, Sendable, Identifiable {
-    public var provider: ProviderID
-    public var title: String
+public enum WidgetIssueSeverity: String, Codable, Sendable {
+    case info
+    case warning
+    case error
+}
+
+public struct WidgetSnapshotIssue: Codable, Sendable, Identifiable {
+    public var code: String
+    public var message: String
+    public var severity: WidgetIssueSeverity
+
+    public var id: String { "\(self.code):\(self.message)" }
+}
+
+public struct WidgetProviderSourceSnapshot: Codable, Sendable {
+    public var requested: UsageSourcePreference
+    public var effective: UsageSourcePreference?
+    public var detail: String?
+    public var usesFallback: Bool
+    public var isUnsupported: Bool
+    public var usageAvailable: Bool
+}
+
+public struct WidgetProviderFreshnessSnapshot: Codable, Sendable {
     public var visualState: ProviderVisualState
-    public var statusLabel: String
-    public var refreshLabel: String
-    public var usageLines: [WidgetUsageLine]
-    public var creditsLabel: String?
-    public var warningLabel: String?
-    public var unavailableLabel: String?
-    public var loginRequired: Bool
-    public var historyFractions: [Double]
-    public var costSummary: ProviderCostSummary
-    public var todayCostLabel: String
-    public var last30DaysCostLabel: String
-    public var todayTokensLabel: String
-    public var activityLabel: String
-    public var sourceLabel: String
-    public var updatedAt: String
+    public var available: Bool
+    public var stale: Bool
+    public var lastRefreshAt: String?
+    public var error: String?
+    public var statusIndicator: String?
+    public var statusDescription: String?
+}
+
+public struct WidgetProviderAuthSnapshot: Codable, Sendable {
+    public var loginMethod: String?
+    public var credentialBackend: String?
+    public var authMode: String?
+    public var isAuthenticated: Bool
+    public var isSourceCompatible: Bool
+    public var requiresRelogin: Bool
+    public var diagnosticCode: String?
+    public var failureReason: String?
+    public var lastValidatedAt: String?
+}
+
+public struct WidgetProviderLaneSnapshot: Codable, Sendable, Identifiable {
+    public var slot: Int
+    public var title: String
+    public var usedPercent: Double
+    public var remainingPercent: Double
+    public var resetsAt: String?
+    public var resetsInMinutes: Int?
+    public var windowMinutes: Int?
+
+    public var id: String { "\(self.slot):\(self.title)" }
+}
+
+public struct WidgetProviderCostSnapshot: Codable, Sendable {
+    public var todayTokens: Int
+    public var todayCostUSD: Double
+    public var last30DaysTokens: Int
+    public var last30DaysCostUSD: Double
+    public var daily: [CostHistoryPoint]
+}
+
+public struct WidgetProviderAdjunctSnapshot: Codable, Sendable {
+    public var source: UsageSourcePreference
+    public var isLoginRequired: Bool
+    public var hasWebExtras: Bool
+    public var lastUpdatedAt: String?
+}
+
+public struct WidgetProviderSnapshot: Codable, Sendable, Identifiable {
+    public var provider: ProviderID
+    public var source: WidgetProviderSourceSnapshot
+    public var freshness: WidgetProviderFreshnessSnapshot
+    public var auth: WidgetProviderAuthSnapshot?
+    public var identity: ProviderIdentity?
+    public var lanes: [WidgetProviderLaneSnapshot]
+    public var credits: Double?
+    public var cost: WidgetProviderCostSnapshot
+    public var issues: [WidgetSnapshotIssue]
+    public var adjunct: WidgetProviderAdjunctSnapshot?
 
     public var id: String { self.provider.rawValue }
 }
 
 public struct WidgetSnapshot: Codable, Sendable {
+    public static let currentSchemaVersion = 1
+
+    public var schemaVersion: Int
     public var generatedAt: String
-    public var refreshIntervalSeconds: Int
-    public var entries: [WidgetProviderEntry]
+    public var defaultRefreshIntervalSeconds: Int
+    public var providers: [String: WidgetProviderSnapshot]
+    public var issues: [WidgetSnapshotIssue]
 
-    public init(generatedAt: String, refreshIntervalSeconds: Int, entries: [WidgetProviderEntry]) {
+    public init(
+        schemaVersion: Int = Self.currentSchemaVersion,
+        generatedAt: String,
+        defaultRefreshIntervalSeconds: Int,
+        providers: [String: WidgetProviderSnapshot],
+        issues: [WidgetSnapshotIssue] = []
+    ) {
+        self.schemaVersion = schemaVersion
         self.generatedAt = generatedAt
-        self.refreshIntervalSeconds = refreshIntervalSeconds
-        self.entries = entries
+        self.defaultRefreshIntervalSeconds = defaultRefreshIntervalSeconds
+        self.providers = providers
+        self.issues = issues
     }
-}
 
-public struct WidgetUsageLine: Codable, Sendable, Identifiable {
-    public var title: String
-    public var valueLabel: String
-    public var detailLabel: String?
-    public var fraction: Double?
+    public func providerSnapshot(for provider: ProviderID) -> WidgetProviderSnapshot? {
+        self.providers[provider.rawValue]
+    }
 
-    public var id: String { self.title }
+    public var allProviders: [WidgetProviderSnapshot] {
+        ProviderID.allCases.compactMap { self.providers[$0.rawValue] }
+    }
 }
 
 public struct DashboardAdjunctSnapshot: Codable, Sendable {

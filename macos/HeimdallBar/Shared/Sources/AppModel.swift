@@ -89,10 +89,16 @@ public final class AppModel {
             self.syncSelections()
             self.lastError = nil
             self.lastRefreshCompletedAt = Date()
-            try? WidgetSnapshotStore.save(self.makeWidgetSnapshot())
-            #if canImport(WidgetKit)
-            WidgetCenter.shared.reloadAllTimelines()
-            #endif
+            do {
+                let saveResult = try WidgetSnapshotStore.save(self.makeWidgetSnapshot())
+                #if canImport(WidgetKit)
+                if saveResult == .saved {
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
+                #endif
+            } catch {
+                self.lastError = error.localizedDescription
+            }
         } catch {
             self.lastError = error.localizedDescription
             self.lastRefreshCompletedAt = Date()
@@ -263,21 +269,16 @@ public final class AppModel {
     }
 
     public func makeWidgetSnapshot() -> WidgetSnapshot {
-        WidgetProjectionBuilder.snapshot(
-            entries: self.visibleProviders.compactMap { provider in
-                let projection = self.projection(for: provider)
-                let presentation = self.presentation(for: provider)
-                guard self.snapshot(for: provider) != nil || presentation.adjunct != nil else { return nil }
-                let costSummary = self.snapshot(for: provider)?.costSummary ?? ProviderCostSummary(
-                    todayTokens: 0,
-                    todayCostUSD: 0,
-                    last30DaysTokens: 0,
-                    last30DaysCostUSD: 0,
-                    daily: []
-                )
-                return WidgetProjectionBuilder.entry(from: projection, costSummary: costSummary)
-            },
-            refreshIntervalSeconds: self.config.refreshIntervalSeconds,
+        let snapshotsByProvider = Dictionary(uniqueKeysWithValues: self.snapshots.compactMap { snapshot in
+            snapshot.providerID.map { ($0, snapshot) }
+        })
+        let adjunctsByProvider = self.adjunctSnapshots
+
+        return WidgetSnapshotBuilder.snapshot(
+            providers: self.visibleProviders,
+            snapshots: snapshotsByProvider,
+            adjuncts: adjunctsByProvider,
+            config: self.config,
             generatedAt: ISO8601DateFormatter().string(from: Date())
         )
     }
