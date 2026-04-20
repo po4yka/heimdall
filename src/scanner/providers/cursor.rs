@@ -64,6 +64,7 @@ use tracing::warn;
 
 use crate::models::Turn;
 use crate::pricing;
+use crate::scanner::parser::{ParseResult, empty_parse_result, parse_provider_turns_result};
 use crate::scanner::provider::{Provider, SessionSource};
 use crate::scanner::providers::cursor_cache::{
     CursorCacheEntry, is_cache_fresh, load_cache, save_cache,
@@ -167,7 +168,6 @@ impl Provider for CursorProvider {
                 if path.file_name().is_some_and(|n| n == "state.vscdb") {
                     sources.push(SessionSource {
                         path: path.to_path_buf(),
-                        provider_name: self.name(),
                     });
                 }
             }
@@ -223,6 +223,20 @@ impl Provider for CursorProvider {
         }
 
         Ok(turns)
+    }
+
+    fn parse_source(&self, path: &Path, _skip_lines: i64) -> ParseResult {
+        match self.parse(path) {
+            Ok(turns) => parse_provider_turns_result(self.name(), turns, path, None),
+            Err(e) => {
+                warn!(
+                    "cursor: provider parse failed for {}: {}",
+                    path.display(),
+                    e
+                );
+                empty_parse_result()
+            }
+        }
     }
 }
 
@@ -516,7 +530,7 @@ mod tests {
         let sources = provider.discover_sessions().unwrap();
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].path, db_path);
-        assert_eq!(sources[0].provider_name, "cursor");
+        assert_eq!(sources[0].path, db_path);
     }
 
     #[test]

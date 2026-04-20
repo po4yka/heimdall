@@ -2,10 +2,13 @@
 ///
 /// Tag sentinel: `_heimdall_statusline_version` = `"v1"`.
 /// The `statusLine` key is a plain string at the root of the JSON object.
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+
+use crate::install_json::{
+    claude_settings_json_path, read_or_empty_object, write_object, write_object_backup,
+};
 
 pub const STATUSLINE_VERSION_KEY: &str = "_heimdall_statusline_version";
 pub const STATUSLINE_VERSION_VAL: &str = "v1";
@@ -28,18 +31,7 @@ pub enum StatuslineStatus {
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
 fn settings_json_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".claude")
-        .join("settings.json")
-}
-
-fn backup_path(settings: &Path) -> PathBuf {
-    let mut p = settings.to_path_buf();
-    let mut name = p.file_name().unwrap_or_default().to_os_string();
-    name.push(".heimdall-bak");
-    p.set_file_name(name);
-    p
+    claude_settings_json_path()
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -56,7 +48,7 @@ pub fn install_into(settings_path: &Path) -> Result<StatuslineActionResult> {
         return Ok(StatuslineActionResult::AlreadyInstalled);
     }
 
-    write_backup(settings_path, &root)?;
+    write_object_backup(settings_path, &root)?;
 
     let obj = root
         .as_object_mut()
@@ -70,7 +62,7 @@ pub fn install_into(settings_path: &Path) -> Result<StatuslineActionResult> {
         serde_json::Value::String(STATUSLINE_VERSION_VAL.to_string()),
     );
 
-    write_settings(settings_path, &root)?;
+    write_object(settings_path, &root)?;
     Ok(StatuslineActionResult::Installed)
 }
 
@@ -96,7 +88,7 @@ pub fn uninstall_from(settings_path: &Path) -> Result<StatuslineActionResult> {
         return Ok(StatuslineActionResult::NothingToUninstall);
     }
 
-    write_backup(settings_path, &root)?;
+    write_object_backup(settings_path, &root)?;
 
     let obj = root
         .as_object_mut()
@@ -104,7 +96,7 @@ pub fn uninstall_from(settings_path: &Path) -> Result<StatuslineActionResult> {
     obj.remove("statusLine");
     obj.remove(STATUSLINE_VERSION_KEY);
 
-    write_settings(settings_path, &root)?;
+    write_object(settings_path, &root)?;
     Ok(StatuslineActionResult::Uninstalled)
 }
 
@@ -135,38 +127,6 @@ fn is_installed(root: &serde_json::Value) -> bool {
         .and_then(|v| v.as_str())
         .map(|v| v == STATUSLINE_VERSION_VAL)
         .unwrap_or(false)
-}
-
-fn read_or_empty_object(path: &Path) -> Result<serde_json::Value> {
-    if !path.exists() {
-        return Ok(serde_json::json!({}));
-    }
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    if text.trim().is_empty() {
-        return Ok(serde_json::json!({}));
-    }
-    serde_json::from_str(&text).with_context(|| format!("parsing JSON from {}", path.display()))
-}
-
-fn write_settings(path: &Path, value: &serde_json::Value) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let text = serde_json::to_string_pretty(value)?;
-    let mut file =
-        std::fs::File::create(path).with_context(|| format!("writing {}", path.display()))?;
-    file.write_all(text.as_bytes())?;
-    Ok(())
-}
-
-fn write_backup(settings_path: &Path, value: &serde_json::Value) -> Result<()> {
-    let bak = backup_path(settings_path);
-    let text = serde_json::to_string_pretty(value)?;
-    let mut file =
-        std::fs::File::create(&bak).with_context(|| format!("writing backup {}", bak.display()))?;
-    file.write_all(text.as_bytes())?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -300,7 +260,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let settings = tmp_settings(&dir);
         install_into(&settings).unwrap();
-        assert!(backup_path(&settings).exists());
+        assert!(crate::install_json::backup_path(&settings).exists());
     }
 
     #[test]
@@ -308,8 +268,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let settings = tmp_settings(&dir);
         install_into(&settings).unwrap();
-        let _ = std::fs::remove_file(backup_path(&settings));
+        let _ = std::fs::remove_file(crate::install_json::backup_path(&settings));
         uninstall_from(&settings).unwrap();
-        assert!(backup_path(&settings).exists());
+        assert!(crate::install_json::backup_path(&settings).exists());
     }
 }

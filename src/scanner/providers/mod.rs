@@ -19,6 +19,7 @@ pub use xcode::XcodeProvider;
 
 use crate::scanner::provider::Provider;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
@@ -35,25 +36,25 @@ fn home_dir() -> PathBuf {
 ///   `parse()` directly; `parse_jsonl_file` is not involved.
 /// - Mixed-format / best-effort probe: Copilot — uses its trait `parse()`
 ///   directly; JSON and JSONL files are both probed.
-pub fn all() -> Vec<Box<dyn Provider>> {
+pub fn all() -> Vec<Arc<dyn Provider>> {
     let home = home_dir();
     #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
-    let mut providers: Vec<Box<dyn Provider>> = vec![
-        Box::new(ClaudeProvider::new(vec![
+    let mut providers: Vec<Arc<dyn Provider>> = vec![
+        Arc::new(ClaudeProvider::new(vec![
             home.join(".claude").join("projects"),
         ])),
-        Box::new(CodexProvider::new(vec![
+        Arc::new(CodexProvider::new(vec![
             home.join(".codex").join("sessions"),
             home.join(".codex").join("archived_sessions"),
         ])),
-        Box::new(CursorProvider::new()),
-        Box::new(OpenCodeProvider::new()),
-        Box::new(PiProvider::new()),
-        Box::new(CopilotProvider::new()),
-        Box::new(AmpProvider::new()),
+        Arc::new(CursorProvider::new()),
+        Arc::new(OpenCodeProvider::new()),
+        Arc::new(PiProvider::new()),
+        Arc::new(CopilotProvider::new()),
+        Arc::new(AmpProvider::new()),
     ];
     #[cfg(target_os = "macos")]
-    providers.push(Box::new(XcodeProvider::new(vec![home.join(
+    providers.push(Arc::new(XcodeProvider::new(vec![home.join(
         "Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/projects",
     )])));
     providers

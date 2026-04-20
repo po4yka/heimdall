@@ -4,34 +4,25 @@ use tracing::warn;
 
 use crate::config::AggregatorConfig;
 
-use super::backend::StatusAggregatorBackend;
 use super::models::{CommunitySignal, ServiceSignal, SignalLevel};
-
-/// StatusGator API v3 backend.
-pub struct StatusGatorBackend;
 
 const STATUSGATOR_BASE: &str = "https://statusgator.com/api/v3/services";
 const REQUEST_TIMEOUT_SECS: u64 = 5;
 
-impl StatusAggregatorBackend for StatusGatorBackend {
-    fn fetch(&self, config: &AggregatorConfig) -> CommunitySignal {
-        let api_key = match std::env::var(&config.key_env_var) {
-            Ok(k) if !k.trim().is_empty() => k.trim().to_owned(),
-            _ => {
-                warn!(
-                    "StatusGator: env var '{}' not set or empty; returning Unknown signals",
-                    config.key_env_var
-                );
-                return build_unknown_signal(config);
-            }
-        };
+/// Fetch a fresh community signal snapshot from StatusGator.
+pub fn fetch(config: &AggregatorConfig) -> CommunitySignal {
+    let api_key = match std::env::var(&config.key_env_var) {
+        Ok(k) if !k.trim().is_empty() => k.trim().to_owned(),
+        _ => {
+            warn!(
+                "StatusGator: env var '{}' not set or empty; returning Unknown signals",
+                config.key_env_var
+            );
+            return build_unknown_signal(config);
+        }
+    };
 
-        fetch_live(config, &api_key)
-    }
-
-    fn name(&self) -> &'static str {
-        "statusgator"
-    }
+    fetch_live(config, &api_key)
 }
 
 /// Blocking wrapper that drives async HTTP fetches on a single-thread runtime.
@@ -342,7 +333,7 @@ mod tests {
         AggregatorConfig {
             enabled: true,
             provider: "statusgator".to_owned(),
-            key_env_var: "HEIMDALL_STATUSGATOR_TEST_API_KEY".to_owned(),
+            key_env_var: "HEIMDALL_STATUSGATOR_TEST_TOKEN_ENV".to_owned(),
             refresh_interval: 300,
             claude_services: vec!["claude-ai".to_owned()],
             openai_services: vec!["openai".to_owned()],
@@ -510,7 +501,7 @@ mod tests {
             std::env::remove_var(&config.key_env_var);
         }
 
-        let signal = StatusGatorBackend.fetch(&config);
+        let signal = fetch(&config);
 
         assert!(signal.enabled);
         assert_eq!(signal.claude.len(), 1);
@@ -519,7 +510,7 @@ mod tests {
         assert!(
             signal.claude[0]
                 .detail
-                .contains("set HEIMDALL_STATUSGATOR_TEST_API_KEY to enable community signal")
+                .contains("set HEIMDALL_STATUSGATOR_TEST_TOKEN_ENV to enable community signal")
         );
     }
 

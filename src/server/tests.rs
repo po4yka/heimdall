@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::io::Write;
+    use std::net::SocketAddr;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Duration;
@@ -8,6 +9,7 @@ mod tests {
 
     use axum::Router;
     use axum::body::Body;
+    use axum::extract::State;
     use axum::http::{Request, StatusCode};
     use axum::response::Html;
     use axum::routing::get;
@@ -18,7 +20,7 @@ mod tests {
     use crate::models::OpenAiReconciliation;
     use crate::oauth::models::{BudgetInfo, Identity, Plan, UsageWindowsResponse, WindowInfo};
     use crate::scanner;
-    use crate::server::api::{AppState, api_agent_status, api_community_signal};
+    use crate::server::api::{AppState, api_agent_status, api_community_signal, api_rescan};
     use crate::server::assets;
     use crate::server::{ServeOptions, build_router, build_state, start_background_pollers_with};
     use crate::webhooks::WebhookState;
@@ -528,6 +530,25 @@ mod tests {
         assert!(data.get("new").is_some());
         assert!(data.get("updated").is_some());
         assert!(data.get("skipped").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_api_rescan_rejects_non_loopback_client() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let state = Arc::new(base_state(db_path, projects));
+        let remote: SocketAddr = "192.168.1.20:43120".parse().unwrap();
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/api/rescan")
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut()
+            .insert(axum::extract::ConnectInfo(remote));
+
+        let result = api_rescan(State(state), req).await;
+
+        assert_eq!(result.unwrap_err(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

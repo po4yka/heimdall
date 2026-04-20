@@ -32,10 +32,6 @@ use crate::statusline::input::{HookInput, parse_stdin_with_timeout};
 use crate::statusline::render::render_status_line_with_opts;
 
 pub use compute::CostSource as StatuslineCostSource;
-pub use install::{
-    StatuslineActionResult, StatuslineStatus, install, install_into, status, status_from,
-    uninstall, uninstall_from,
-};
 
 // ── Visual burn-rate style ────────────────────────────────────────────────────
 

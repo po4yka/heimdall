@@ -4,6 +4,7 @@ pub mod assets;
 mod tests;
 pub mod tz;
 
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -216,7 +217,11 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
     tracing::info!("Dashboard running at http://{}", addr);
     eprintln!("Dashboard running at http://{addr}");
     eprintln!("Press Ctrl+C to stop.");
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 

@@ -120,7 +120,6 @@ impl Provider for AmpProvider {
                 if path.extension().is_some_and(|ext| ext == "json") {
                     sources.push(SessionSource {
                         path: path.to_path_buf(),
-                        provider_name: self.name(),
                     });
                 }
             }
@@ -518,7 +517,7 @@ mod tests {
         let sources = provider.discover_sessions().unwrap();
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].path, path);
-        assert_eq!(sources[0].provider_name, "amp");
+        assert_eq!(sources[0].path, path);
     }
 
     #[test]

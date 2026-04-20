@@ -41,6 +41,7 @@ use tracing::{debug, warn};
 
 use crate::models::Turn;
 use crate::pricing;
+use crate::scanner::parser::{ParseResult, empty_parse_result, parse_provider_turns_result};
 use crate::scanner::provider::{Provider, SessionSource};
 
 /// Provider slug stored in `turns.provider`.
@@ -151,7 +152,6 @@ impl Provider for CopilotProvider {
                 {
                     sources.push(SessionSource {
                         path: path.to_path_buf(),
-                        provider_name: self.name(),
                     });
                 }
             }
@@ -161,6 +161,20 @@ impl Provider for CopilotProvider {
 
     fn parse(&self, path: &Path) -> Result<Vec<Turn>> {
         Ok(parse_copilot_file(path))
+    }
+
+    fn parse_source(&self, path: &Path, _skip_lines: i64) -> ParseResult {
+        match self.parse(path) {
+            Ok(turns) => parse_provider_turns_result(self.name(), turns, path, None),
+            Err(e) => {
+                warn!(
+                    "copilot: provider parse failed for {}: {}",
+                    path.display(),
+                    e
+                );
+                empty_parse_result()
+            }
+        }
     }
 }
 

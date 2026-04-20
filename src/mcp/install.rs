@@ -10,10 +10,11 @@
 ///   - `cursor`         → ~/.cursor/mcp.json
 ///
 /// Tag sentinel: `"_heimdall_mcp_version": "v1"` inside the `"heimdall"` entry.
-use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+
+use crate::install_json::{read_or_empty_object, write_object, write_object_backup_if_present};
 
 const SENTINEL_KEY: &str = "_heimdall_mcp_version";
 const SENTINEL_VAL: &str = "v1";
@@ -121,7 +122,7 @@ pub fn install(client: &str) -> Result<McpInstallResult> {
 }
 
 pub fn install_into(path: &std::path::Path) -> Result<McpInstallResult> {
-    let mut root = read_or_empty(path)?;
+    let mut root = read_or_empty_object(path)?;
 
     // Ensure mcpServers object exists.
     {
@@ -159,7 +160,7 @@ pub fn install_into(path: &std::path::Path) -> Result<McpInstallResult> {
         }
     }
 
-    backup(path, &root)?;
+    write_object_backup_if_present(path, &root)?;
 
     root.as_object_mut()
         .context("mcp.json root must be an object")?
@@ -168,7 +169,7 @@ pub fn install_into(path: &std::path::Path) -> Result<McpInstallResult> {
         .context("mcpServers must be an object")?
         .insert(SERVER_KEY.to_string(), make_entry());
 
-    write_json(path, &root)?;
+    write_object(path, &root)?;
     Ok(McpInstallResult::Installed {
         path: path.to_path_buf(),
     })
@@ -184,7 +185,7 @@ pub fn uninstall_from(path: &std::path::Path) -> Result<McpInstallResult> {
         return Ok(McpInstallResult::NothingToUninstall);
     }
 
-    let mut root = read_or_empty(path)?;
+    let mut root = read_or_empty_object(path)?;
 
     // Check for our sentinel (immutable borrows released before mutation).
     let has_sentinel = root
@@ -201,7 +202,7 @@ pub fn uninstall_from(path: &std::path::Path) -> Result<McpInstallResult> {
         return Ok(McpInstallResult::NothingToUninstall);
     }
 
-    backup(path, &root)?;
+    write_object_backup_if_present(path, &root)?;
 
     root.as_object_mut()
         .context("mcp.json root must be an object")?
@@ -210,7 +211,7 @@ pub fn uninstall_from(path: &std::path::Path) -> Result<McpInstallResult> {
         .context("mcpServers must be an object")?
         .remove(SERVER_KEY);
 
-    write_json(path, &root)?;
+    write_object(path, &root)?;
     Ok(McpInstallResult::Uninstalled {
         path: path.to_path_buf(),
     })
@@ -225,7 +226,7 @@ pub fn status_from(path: &std::path::Path) -> Result<McpInstallStatus> {
     if !path.exists() {
         return Ok(McpInstallStatus::Absent);
     }
-    let root = read_or_empty(path)?;
+    let root = read_or_empty_object(path)?;
     let servers = match root.get("mcpServers") {
         Some(s) => s,
         None => return Ok(McpInstallStatus::Absent),
@@ -246,47 +247,6 @@ pub fn status_from(path: &std::path::Path) -> Result<McpInstallStatus> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn read_or_empty(path: &std::path::Path) -> Result<serde_json::Value> {
-    if !path.exists() {
-        return Ok(serde_json::json!({}));
-    }
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    if text.trim().is_empty() {
-        return Ok(serde_json::json!({}));
-    }
-    serde_json::from_str(&text).with_context(|| format!("parsing JSON from {}", path.display()))
-}
-
-fn write_json(path: &std::path::Path, value: &serde_json::Value) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let text = serde_json::to_string_pretty(value)?;
-    let mut file =
-        std::fs::File::create(path).with_context(|| format!("writing {}", path.display()))?;
-    file.write_all(text.as_bytes())?;
-    Ok(())
-}
-
-fn backup(path: &std::path::Path, _value: &serde_json::Value) -> Result<()> {
-    if !path.exists() {
-        return Ok(());
-    }
-    if std::fs::metadata(path)
-        .map(|m| m.len() == 0)
-        .unwrap_or(true)
-    {
-        return Ok(());
-    }
-    let bak = path.with_extension(format!(
-        "{}.heimdall-bak",
-        path.extension().and_then(|s| s.to_str()).unwrap_or("json")
-    ));
-    std::fs::copy(path, &bak).with_context(|| format!("writing backup {}", bak.display()))?;
-    Ok(())
-}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

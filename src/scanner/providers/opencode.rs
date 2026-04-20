@@ -34,6 +34,7 @@ use tracing::warn;
 
 use crate::models::Turn;
 use crate::pricing;
+use crate::scanner::parser::{ParseResult, empty_parse_result, parse_provider_turns_result};
 use crate::scanner::provider::{Provider, SessionSource};
 
 /// Provider slug stored in `turns.provider`.
@@ -114,7 +115,6 @@ impl Provider for OpenCodeProvider {
                 {
                     sources.push(SessionSource {
                         path: path.to_path_buf(),
-                        provider_name: self.name(),
                     });
                 }
             }
@@ -124,6 +124,20 @@ impl Provider for OpenCodeProvider {
 
     fn parse(&self, path: &Path) -> Result<Vec<Turn>> {
         Ok(parse_opencode_db(path))
+    }
+
+    fn parse_source(&self, path: &Path, _skip_lines: i64) -> ParseResult {
+        match self.parse(path) {
+            Ok(turns) => parse_provider_turns_result(self.name(), turns, path, None),
+            Err(e) => {
+                warn!(
+                    "opencode: provider parse failed for {}: {}",
+                    path.display(),
+                    e
+                );
+                empty_parse_result()
+            }
+        }
     }
 }
 
@@ -492,7 +506,7 @@ mod tests {
         let sources = provider.discover_sessions().unwrap();
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].path, db_path);
-        assert_eq!(sources[0].provider_name, "opencode");
+        assert_eq!(sources[0].path, db_path);
     }
 
     #[test]

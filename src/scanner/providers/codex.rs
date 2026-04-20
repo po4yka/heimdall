@@ -55,7 +55,6 @@ impl Provider for CodexProvider {
                 if entry.path().extension().is_some_and(|ext| ext == "jsonl") {
                     sources.push(SessionSource {
                         path: entry.path().to_path_buf(),
-                        provider_name: self.name(),
                     });
                 }
             }
@@ -74,7 +73,7 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
     let mut tool_results: HashMap<String, bool> = HashMap::new();
     let mut turn_contexts: HashMap<String, CodexTurnContext> = HashMap::new();
     let mut turn_tools: HashMap<String, Vec<(String, String)>> = HashMap::new();
-    let mut line_count: i64 = 0;
+    let mut progress_marker: i64 = 0;
     let source_path = filepath.to_string_lossy().to_string();
     let fallback_timestamp = file_timestamp_rfc3339(filepath);
     let fallback_session_id = filepath
@@ -101,8 +100,8 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
 
     let reader = BufReader::new(file);
     for line_result in reader.lines() {
-        line_count += 1;
-        if line_count <= skip_lines {
+        progress_marker += 1;
+        if progress_marker <= skip_lines {
             continue;
         }
 
@@ -271,7 +270,7 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
 
                         let turn_id = current_turn_id
                             .clone()
-                            .unwrap_or_else(|| format!("line-{line_count}"));
+                            .unwrap_or_else(|| format!("line-{progress_marker}"));
                         let context = turn_contexts.get(&turn_id).cloned().unwrap_or_default();
                         let turn_timestamp = if !timestamp.is_empty() {
                             timestamp.clone()
@@ -387,7 +386,7 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
                     "function_call" | "custom_tool_call" => {
                         let turn_id = current_turn_id
                             .clone()
-                            .unwrap_or_else(|| format!("line-{line_count}"));
+                            .unwrap_or_else(|| format!("line-{progress_marker}"));
                         let call_id = payload
                             .get("call_id")
                             .and_then(|v| v.as_str())
@@ -434,7 +433,7 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
     ParseResult {
         session_metas: session_metas.into_values().collect(),
         turns,
-        line_count,
+        progress_marker,
         session_titles: HashMap::new(),
         tool_results,
     }

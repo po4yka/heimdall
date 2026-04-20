@@ -317,7 +317,7 @@ claude-usage-tracker optimize --format=json
 
 # MCP server
 claude-usage-tracker mcp serve              # stdio
-claude-usage-tracker mcp serve --transport=http --port=8081
+claude-usage-tracker mcp serve --transport=http --port=8081   # loopback-only
 
 # Config introspection
 claude-usage-tracker config schema > schemas/heimdall.config.schema.json
@@ -534,9 +534,9 @@ Automatically discovers sessions from:
 | GET | `/api/cost-reconciliation?period=<day\|week\|month>` | Hook-reported vs locally-calculated totals with signed divergence and per-day breakdown |
 | GET | `/api/agent-status` | Upstream provider health: Claude (status.claude.com) + OpenAI (status.openai.com). Cached; ETag conditional GET for Claude |
 | GET | `/api/community-signal` | StatusGator-backed crowdsourced leading indicator (opt-in) |
-| POST | `/api/rescan` | Atomic full rescan |
+| POST | `/api/rescan` | Atomic full rescan (loopback clients only) |
 | GET | `/api/stream` | Server-Sent Events broadcasting `scan_completed` from the file-watcher |
-| GET | `/api/mcp` | MCP HTTP transport (when `mcp serve --transport=http`) |
+| GET | `/api/mcp` | MCP HTTP transport (when `mcp serve --transport=http`, loopback-only bind) |
 | GET | `/api/health` | Health check |
 
 ## Architecture

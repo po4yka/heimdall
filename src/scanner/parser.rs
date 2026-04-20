@@ -7,8 +7,6 @@ use tracing::warn;
 use crate::models::{Session, SessionMeta, Turn};
 use crate::pricing;
 use crate::scanner::cowork::{is_cowork_session_path, resolve_cowork_label};
-use crate::scanner::provider::Provider;
-use crate::scanner::providers::cursor::PROVIDER_CURSOR;
 
 pub const PROVIDER_CLAUDE: &str = "claude";
 pub const PROVIDER_CODEX: &str = "codex";
@@ -70,7 +68,7 @@ pub fn raw_session_id(session_key: &str) -> &str {
 pub struct ParseResult {
     pub session_metas: Vec<SessionMeta>,
     pub turns: Vec<Turn>,
-    pub line_count: i64,
+    pub progress_marker: i64,
     #[allow(dead_code)]
     pub session_titles: HashMap<String, String>,
     pub tool_results: HashMap<String, bool>,
@@ -120,78 +118,22 @@ pub fn parse_jsonl_file(provider: &str, filepath: &Path, skip_lines: i64) -> Par
     }
 }
 
-/// Parse any registered provider source into the scanner's common `ParseResult`.
-///
-/// JSONL/JSON-backed providers reuse the existing dispatcher. Providers with
-/// custom backends (SQLite or best-effort JSON probes) are wrapped into the
-/// same shape the scan pipeline expects so they participate in normal ingest.
-pub fn parse_source_file(provider: &str, filepath: &Path, skip_lines: i64) -> ParseResult {
-    match provider {
-        PROVIDER_CURSOR => parse_provider_turns_result(
-            provider,
-            crate::scanner::providers::cursor::CursorProvider::new()
-                .parse(filepath)
-                .unwrap_or_else(|e| {
-                    warn!(
-                        "cursor: provider parse failed for {}: {}",
-                        filepath.display(),
-                        e
-                    );
-                    Vec::new()
-                }),
-            filepath,
-            None,
-        ),
-        PROVIDER_OPENCODE => parse_provider_turns_result(
-            provider,
-            crate::scanner::providers::opencode::OpenCodeProvider::new()
-                .parse(filepath)
-                .unwrap_or_else(|e| {
-                    warn!(
-                        "opencode: provider parse failed for {}: {}",
-                        filepath.display(),
-                        e
-                    );
-                    Vec::new()
-                }),
-            filepath,
-            None,
-        ),
-        PROVIDER_COPILOT => parse_provider_turns_result(
-            provider,
-            crate::scanner::providers::copilot::CopilotProvider::new()
-                .parse(filepath)
-                .unwrap_or_else(|e| {
-                    warn!(
-                        "copilot: provider parse failed for {}: {}",
-                        filepath.display(),
-                        e
-                    );
-                    Vec::new()
-                }),
-            filepath,
-            None,
-        ),
-        _ => parse_jsonl_file(provider, filepath, skip_lines),
-    }
-}
-
-fn parse_provider_turns_result(
+pub(crate) fn parse_provider_turns_result(
     provider: &str,
     turns: Vec<Turn>,
     filepath: &Path,
-    line_count: Option<i64>,
+    progress_marker: Option<i64>,
 ) -> ParseResult {
     ParseResult {
         session_metas: session_metas_from_turns(provider, &turns),
         turns,
-        line_count: line_count.unwrap_or(turns_len_fallback(filepath)),
+        progress_marker: progress_marker.unwrap_or(progress_marker_fallback(filepath)),
         session_titles: HashMap::new(),
         tool_results: HashMap::new(),
     }
 }
 
-fn turns_len_fallback(filepath: &Path) -> i64 {
+fn progress_marker_fallback(filepath: &Path) -> i64 {
     std::fs::metadata(filepath)
         .ok()
         .map(|m| m.len() as i64)
@@ -237,13 +179,13 @@ fn session_metas_from_turns(provider: &str, turns: &[Turn]) -> Vec<SessionMeta> 
 
 /// Wrap a `Vec<Turn>` from the Pi provider into a `ParseResult`.
 fn parse_pi_result(turns: Vec<crate::models::Turn>, filepath: &Path) -> ParseResult {
-    let line_count = std::fs::File::open(filepath)
+    let progress_marker = std::fs::File::open(filepath)
         .map(|f| {
             use std::io::BufRead;
             std::io::BufReader::new(f).lines().count() as i64
         })
         .unwrap_or(0);
-    parse_provider_turns_result(PROVIDER_PI, turns, filepath, Some(line_count))
+    parse_provider_turns_result(PROVIDER_PI, turns, filepath, Some(progress_marker))
 }
 
 /// Wrap a `Vec<Turn>` from the Amp provider into a `ParseResult`.
@@ -253,8 +195,8 @@ fn parse_pi_result(turns: Vec<crate::models::Turn>, filepath: &Path) -> ParseRes
 fn parse_amp_result(turns: Vec<crate::models::Turn>, _filepath: &Path) -> ParseResult {
     // Use turns.len() as the incremental-scan guard: if events are added to the
     // thread file, the count grows and triggers reprocessing on the next scan.
-    let line_count = turns.len() as i64;
-    parse_provider_turns_result(PROVIDER_AMP, turns, Path::new(""), Some(line_count))
+    let progress_marker = turns.len() as i64;
+    parse_provider_turns_result(PROVIDER_AMP, turns, Path::new(""), Some(progress_marker))
 }
 
 /// Rewrite a Claude-parsed result so it carries the Xcode provider tag on
@@ -284,7 +226,7 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
     let mut session_meta: HashMap<String, SessionMeta> = HashMap::new();
     let mut session_titles: HashMap<String, String> = HashMap::new();
     let mut tool_results: HashMap<String, bool> = HashMap::new();
-    let mut line_count: i64 = 0;
+    let mut progress_marker: i64 = 0;
     let source_path = filepath.to_string_lossy().to_string();
 
     let file = match std::fs::File::open(filepath) {
@@ -297,8 +239,8 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
 
     let reader = BufReader::new(file);
     for line_result in reader.lines() {
-        line_count += 1;
-        if line_count <= skip_lines {
+        progress_marker += 1;
+        if progress_marker <= skip_lines {
             continue;
         }
 
@@ -646,7 +588,7 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
     ParseResult {
         session_metas: metas,
         turns,
-        line_count,
+        progress_marker,
         session_titles,
         tool_results,
     }
@@ -656,7 +598,7 @@ pub(crate) fn empty_parse_result() -> ParseResult {
     ParseResult {
         session_metas: vec![],
         turns: vec![],
-        line_count: 0,
+        progress_marker: 0,
         session_titles: HashMap::new(),
         tool_results: HashMap::new(),
     }
@@ -997,7 +939,7 @@ mod tests {
         assert_eq!(result.turns[0].input_tokens, 100);
         assert_eq!(result.turns[0].provider, PROVIDER_CLAUDE);
         assert_eq!(result.turns[0].session_id, "claude:s1");
-        assert_eq!(result.line_count, 2);
+        assert_eq!(result.progress_marker, 2);
     }
 
     #[test]
@@ -1317,7 +1259,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_source_file_wraps_copilot_provider_results() {
+    fn provider_parse_source_wraps_copilot_provider_results() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("copilot.json");
         std::fs::write(
@@ -1335,11 +1277,8 @@ mod tests {
         )
         .unwrap();
 
-        let result = parse_source_file(
-            crate::scanner::providers::copilot::PROVIDER_COPILOT,
-            &path,
-            0,
-        );
+        let provider = crate::scanner::providers::copilot::CopilotProvider::new_with_dirs(vec![]);
+        let result = crate::scanner::provider::Provider::parse_source(&provider, &path, 0);
         assert_eq!(result.turns.len(), 1);
         assert_eq!(result.session_metas.len(), 1);
         assert_eq!(result.turns[0].provider, "copilot");
@@ -1347,7 +1286,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_source_file_wraps_cursor_provider_results() {
+    fn provider_parse_source_wraps_cursor_provider_results() {
         let dir = TempDir::new().unwrap();
         let hash_dir = dir.path().join("cafebabe1234");
         std::fs::create_dir_all(&hash_dir).unwrap();
@@ -1380,11 +1319,8 @@ mod tests {
         .unwrap();
         drop(conn);
 
-        let result = parse_source_file(
-            crate::scanner::providers::cursor::PROVIDER_CURSOR,
-            &db_path,
-            0,
-        );
+        let provider = crate::scanner::providers::cursor::CursorProvider::new();
+        let result = crate::scanner::provider::Provider::parse_source(&provider, &db_path, 0);
         assert_eq!(result.turns.len(), 1);
         assert_eq!(result.session_metas.len(), 1);
         assert_eq!(result.turns[0].provider, "cursor");
@@ -1392,7 +1328,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_source_file_wraps_opencode_provider_results() {
+    fn provider_parse_source_wraps_opencode_provider_results() {
         let dir = TempDir::new().unwrap();
         let db_path = dir.path().join("chat.sqlite");
         let conn = rusqlite::Connection::open(&db_path).unwrap();
@@ -1423,11 +1359,8 @@ mod tests {
         .unwrap();
         drop(conn);
 
-        let result = parse_source_file(
-            crate::scanner::providers::opencode::PROVIDER_OPENCODE,
-            &db_path,
-            0,
-        );
+        let provider = crate::scanner::providers::opencode::OpenCodeProvider::new_with_dirs(vec![]);
+        let result = crate::scanner::provider::Provider::parse_source(&provider, &db_path, 0);
         assert_eq!(result.turns.len(), 1);
         assert_eq!(result.session_metas.len(), 1);
         assert_eq!(result.turns[0].provider, "opencode");

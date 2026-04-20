@@ -1384,7 +1384,7 @@ fn cmd_hook(action: HookAction) -> Result<()> {
 }
 
 fn cmd_statusline_hook(action: StatuslineHookAction) -> Result<()> {
-    use statusline::{
+    use statusline::install::{
         StatuslineActionResult, StatuslineStatus, install as sl_install, status as sl_status,
         uninstall as sl_uninstall,
     };

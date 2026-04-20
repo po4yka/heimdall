@@ -12,6 +12,7 @@ pub mod watcher;
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::Result;
 use tracing::{debug, info, warn};
@@ -24,9 +25,8 @@ use db::{
     init_db, insert_tool_events, insert_tool_invocations, insert_turns, list_processed_files,
     open_db, recompute_session_totals, sync_session_titles, upsert_processed_file, upsert_sessions,
 };
-use parser::{
-    PROVIDER_CLAUDE, PROVIDER_CODEX, PROVIDER_XCODE, aggregate_sessions, parse_source_file,
-};
+use parser::{PROVIDER_CLAUDE, PROVIDER_CODEX, PROVIDER_XCODE, aggregate_sessions};
+use provider::Provider;
 use usage_limits::{discover_usage_limits_files, insert_usage_limits_snapshot, parse_usage_limits};
 
 fn home_dir() -> PathBuf {
@@ -56,50 +56,64 @@ pub fn scan(
     let conn = open_db(db_path)?;
     init_db(&conn)?;
 
-    // Collect `(provider_name, jsonl_file_path)` tuples. Two inputs:
+    // Collect `(provider, source_path)` tuples. Two inputs:
     //   - Explicit override via `--projects-dir`: walk each dir for .jsonl
     //     files and tag by `provider_for_dir`.
     //   - Registry default: consume `SessionSource`s directly from each
-    //     provider's `discover_sessions()`. The source already carries
-    //     both the file path and the provider slug, so no second walk
-    //     and no parent-directory round-trip is needed.
-    let mut jsonl_files: Vec<(String, PathBuf)> = Vec::new();
+    //     provider's `discover_sessions()` and keep the provider object
+    //     attached for the parse step.
+    let providers = providers::all();
+    let mut source_files: Vec<(Arc<dyn Provider>, PathBuf)> = Vec::new();
     if let Some(dirs) = projects_dirs {
+        let provider_lookup: std::collections::HashMap<&'static str, Arc<dyn Provider>> = providers
+            .iter()
+            .map(|provider| (provider.name(), Arc::clone(provider)))
+            .collect();
         for dir in dirs {
             if !dir.exists() {
                 continue;
             }
-            let provider = provider_for_dir(&dir).to_string();
+            let provider_name = provider_for_dir(&dir);
+            let Some(provider) = provider_lookup.get(provider_name).cloned() else {
+                warn!("provider {}: not registered", provider_name);
+                continue;
+            };
             if verbose {
-                info!("Scanning {} {} ...", provider, dir.display());
+                info!("Scanning {} {} ...", provider.name(), dir.display());
             }
             for entry in WalkDir::new(&dir).into_iter().filter_map(|e| e.ok()) {
                 if entry.path().extension().is_some_and(|ext| ext == "jsonl") {
-                    jsonl_files.push((provider.clone(), entry.path().to_path_buf()));
+                    source_files.push((Arc::clone(&provider), entry.path().to_path_buf()));
                 }
             }
         }
     } else {
-        for p in providers::all() {
-            let provider = p.name().to_string();
-            let sources = match p.discover_sessions() {
+        for provider in providers {
+            let sources = match provider.discover_sessions() {
                 Ok(s) => s,
                 Err(e) => {
-                    warn!("provider {}: discover_sessions failed: {}", provider, e);
+                    warn!(
+                        "provider {}: discover_sessions failed: {}",
+                        provider.name(),
+                        e
+                    );
                     continue;
                 }
             };
             if verbose && !sources.is_empty() {
-                info!("Scanning {} ({} sessions) ...", provider, sources.len());
+                info!(
+                    "Scanning {} ({} sessions) ...",
+                    provider.name(),
+                    sources.len()
+                );
             }
             for src in sources {
-                debug_assert_eq!(src.provider_name, p.name());
-                jsonl_files.push((provider.clone(), src.path));
+                source_files.push((Arc::clone(&provider), src.path));
             }
         }
     }
-    jsonl_files.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
-    let current_files: HashSet<String> = jsonl_files
+    source_files.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.name().cmp(b.0.name())));
+    let current_files: HashSet<String> = source_files
         .iter()
         .map(|(_, path)| path.to_string_lossy().to_string())
         .collect();
@@ -119,7 +133,7 @@ pub fn scan(
         any_changes = true;
     }
 
-    for (provider, filepath) in &jsonl_files {
+    for (provider, filepath) in &source_files {
         let filepath_str = filepath.to_string_lossy().to_string();
         let mtime = match std::fs::metadata(filepath) {
             Ok(m) => m
@@ -151,7 +165,7 @@ pub fn scan(
             any_changes = true;
         }
 
-        let parsed = parse_source_file(provider, filepath, 0);
+        let parsed = provider.parse_source(filepath, 0);
 
         if !parsed.turns.is_empty() || !parsed.session_metas.is_empty() {
             let sessions = aggregate_sessions(&parsed.session_metas, &parsed.turns);
@@ -195,7 +209,7 @@ pub fn scan(
             result.updated += 1;
         }
 
-        upsert_processed_file(&conn, &filepath_str, mtime, parsed.line_count)?;
+        upsert_processed_file(&conn, &filepath_str, mtime, parsed.progress_marker)?;
     }
 
     // Recompute session totals from turns for dedup correctness

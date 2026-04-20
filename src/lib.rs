@@ -13,6 +13,7 @@ pub mod currency;
 pub mod db;
 pub mod export;
 pub mod hook;
+pub mod install_json;
 pub mod jq;
 pub mod litellm;
 pub mod locale;

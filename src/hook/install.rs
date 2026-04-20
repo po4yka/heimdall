@@ -6,10 +6,13 @@
 ///
 /// Tag sentinel used to find/remove our entries:
 ///   `"description": "heimdall real-time ingest"`
-use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+
+use crate::install_json::{
+    claude_settings_json_path, read_or_empty_object, write_object, write_object_backup,
+};
 
 pub const HOOK_DESCRIPTION: &str = "heimdall real-time ingest";
 
@@ -42,18 +45,7 @@ pub fn resolve_hook_binary_path() -> Result<PathBuf> {
 }
 
 fn settings_json_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".claude")
-        .join("settings.json")
-}
-
-fn backup_path(settings: &std::path::Path) -> PathBuf {
-    let mut p = settings.to_path_buf();
-    let mut name = p.file_name().unwrap_or_default().to_os_string();
-    name.push(".heimdall-bak");
-    p.set_file_name(name);
-    p
+    claude_settings_json_path()
 }
 
 // ── Core operations ──────────────────────────────────────────────────────────
@@ -82,7 +74,7 @@ pub fn install_into(
     }
 
     // Backup before modification.
-    write_backup(settings_path, &root)?;
+    write_object_backup(settings_path, &root)?;
 
     // Build the new entry object.
     let entry = serde_json::json!({
@@ -110,7 +102,7 @@ pub fn install_into(
         .context("PreToolUse is not an array")?
         .push(entry);
 
-    write_settings(settings_path, &root)?;
+    write_object(settings_path, &root)?;
 
     Ok(HookActionResult::Installed {
         binary_path: hook_binary.to_path_buf(),
@@ -136,7 +128,7 @@ pub fn uninstall_from(settings_path: &std::path::Path) -> Result<HookActionResul
     }
 
     // Backup before modification.
-    write_backup(settings_path, &root)?;
+    write_object_backup(settings_path, &root)?;
 
     // Remove heimdall entries from PreToolUse.
     let removed = remove_heimdall_entries(&mut root);
@@ -144,7 +136,7 @@ pub fn uninstall_from(settings_path: &std::path::Path) -> Result<HookActionResul
         return Ok(HookActionResult::NothingToUninstall);
     }
 
-    write_settings(settings_path, &root)?;
+    write_object(settings_path, &root)?;
     Ok(HookActionResult::Uninstalled)
 }
 
@@ -172,38 +164,6 @@ pub fn status_from(settings_path: &std::path::Path) -> Result<HookStatus> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn read_or_empty_object(path: &std::path::Path) -> Result<serde_json::Value> {
-    if !path.exists() {
-        return Ok(serde_json::json!({}));
-    }
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    if text.trim().is_empty() {
-        return Ok(serde_json::json!({}));
-    }
-    serde_json::from_str(&text).with_context(|| format!("parsing JSON from {}", path.display()))
-}
-
-fn write_settings(path: &std::path::Path, value: &serde_json::Value) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let text = serde_json::to_string_pretty(value)?;
-    let mut file =
-        std::fs::File::create(path).with_context(|| format!("writing {}", path.display()))?;
-    file.write_all(text.as_bytes())?;
-    Ok(())
-}
-
-fn write_backup(settings_path: &std::path::Path, value: &serde_json::Value) -> Result<()> {
-    let bak = backup_path(settings_path);
-    let text = serde_json::to_string_pretty(value)?;
-    let mut file =
-        std::fs::File::create(&bak).with_context(|| format!("writing backup {}", bak.display()))?;
-    file.write_all(text.as_bytes())?;
-    Ok(())
-}
 
 /// Find the first heimdall-tagged entry in `hooks.PreToolUse`, if any.
 fn find_heimdall_entry(root: &serde_json::Value) -> Option<&serde_json::Value> {
@@ -436,7 +396,7 @@ mod tests {
 
         install_into(&settings, &bin).unwrap();
 
-        let bak = backup_path(&settings);
+        let bak = crate::install_json::backup_path(&settings);
         assert!(bak.exists(), "backup file should exist after install");
     }
 
@@ -448,7 +408,7 @@ mod tests {
 
         install_into(&settings, &bin).unwrap();
         // Remove the backup from install so we can verify uninstall creates it.
-        let bak = backup_path(&settings);
+        let bak = crate::install_json::backup_path(&settings);
         let _ = std::fs::remove_file(&bak);
 
         uninstall_from(&settings).unwrap();

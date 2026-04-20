@@ -32,7 +32,6 @@ impl Provider for XcodeProvider {
                 if entry.path().extension().is_some_and(|ext| ext == "jsonl") {
                     sources.push(SessionSource {
                         path: entry.path().to_path_buf(),
-                        provider_name: self.name(),
                     });
                 }
             }

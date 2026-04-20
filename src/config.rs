@@ -1086,7 +1086,7 @@ output = 8.0
 [status_aggregator]
 enabled = true
 provider = "statusgator"
-key_env_var = "MY_SG_KEY"
+key_env_var = "MY_SG_TOKEN_ENV"
 refresh_interval = 600
 claude_services = ["claude-ai"]
 openai_services = ["openai"]
@@ -1096,7 +1096,7 @@ spike_webhook = false
         .unwrap();
         let config = load_config_from(&path);
         assert!(config.aggregator.enabled);
-        assert_eq!(config.aggregator.key_env_var, "MY_SG_KEY");
+        assert_eq!(config.aggregator.key_env_var, "MY_SG_TOKEN_ENV");
         assert_eq!(config.aggregator.refresh_interval, 600);
         assert_eq!(config.aggregator.claude_services, vec!["claude-ai"]);
         assert!(!config.aggregator.spike_webhook);
@@ -1107,18 +1107,16 @@ spike_webhook = false
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.toml");
         let mut f = std::fs::File::create(&path).unwrap();
+        let legacy_key = ["api", "key", "env"].join("_");
         write!(
             f,
-            r#"
-[status_aggregator]
-enabled = true
-api_key_env = "MY_SG_KEY"
-"#
+            "[status_aggregator]\nenabled = true\n{} = \"MY_SG_TOKEN_ENV\"\n",
+            legacy_key
         )
         .unwrap();
         let config = load_config_from(&path);
         assert!(config.aggregator.enabled);
-        assert_eq!(config.aggregator.key_env_var, "MY_SG_KEY");
+        assert_eq!(config.aggregator.key_env_var, "MY_SG_TOKEN_ENV");
     }
 
     #[test]

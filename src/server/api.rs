@@ -1,8 +1,9 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use axum::extract::{Query, State};
+use axum::extract::{Query, Request, State};
 use axum::http::StatusCode;
 use axum::response::Json;
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -227,7 +228,19 @@ async fn fetch_openai_local_cost_nanos(state: &Arc<AppState>) -> Result<i64, Sta
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
-pub async fn api_rescan(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
+pub async fn api_rescan(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<Value>, StatusCode> {
+    if let Some(addr) = request
+        .extensions()
+        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+        .map(|info| info.0)
+        && !addr.ip().is_loopback()
+    {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     let _db_guard = state.db_lock.lock().await;
     let db_path = state.db_path.clone();
     let projects_dirs = state.projects_dirs.clone();

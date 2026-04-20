@@ -3,28 +3,29 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::models::Turn;
+use crate::scanner::parser::{ParseResult, parse_jsonl_file};
 
 /// A file path that a provider has identified as a parseable session log.
-/// `provider_name` duplicates the owning `Provider::name()` so callers that
-/// consume a flattened `Vec<SessionSource>` still know which provider
-/// emitted each entry without threading the provider alongside.
 #[derive(Debug, Clone)]
 pub struct SessionSource {
     pub path: std::path::PathBuf,
-    pub provider_name: &'static str,
 }
 
 /// Per-source-type plug-in contract. Registered in `providers::all()`.
 ///
 /// `scan()` uses `discover_sessions()` to enumerate per-provider files and then
-/// routes them through the parser dispatcher. Providers with custom backends
-/// (SQLite / mixed-format) are parsed via this trait method; JSONL-backed
-/// providers still reuse the shared parser helpers.
+/// calls `parse_source()` on the same provider object. JSONL-backed providers
+/// inherit the default dispatcher; custom backends override `parse_source()`
+/// to wrap their native parse results into the common scanner shape.
 #[allow(dead_code)]
 pub trait Provider: Send + Sync {
     fn name(&self) -> &'static str;
     fn discover_sessions(&self) -> Result<Vec<SessionSource>>;
     fn parse(&self, path: &Path) -> Result<Vec<Turn>>;
+
+    fn parse_source(&self, path: &Path, skip_lines: i64) -> ParseResult {
+        parse_jsonl_file(self.name(), path, skip_lines)
+    }
 }
 
 #[cfg(test)]

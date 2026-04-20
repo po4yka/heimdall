@@ -14,7 +14,7 @@ mod mcp_tests {
     use rmcp::ServiceExt;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    use super::super::{McpTransport, mcp_http_handler};
+    use super::super::{McpTransport, is_loopback_bind_host, mcp_http_handler};
     use crate::mcp::tools::HeimdallMcpServer;
     use crate::scanner::db::{init_db, open_db};
 
@@ -271,6 +271,16 @@ mod mcp_tests {
 
         let err = "socket".parse::<McpTransport>().unwrap_err();
         assert_eq!(err, "unknown transport 'socket': expected stdio | http");
+    }
+
+    #[test]
+    fn loopback_bind_host_accepts_only_local_targets() {
+        assert!(is_loopback_bind_host("localhost"));
+        assert!(is_loopback_bind_host("127.0.0.1"));
+        assert!(is_loopback_bind_host("::1"));
+        assert!(is_loopback_bind_host("[::1]"));
+        assert!(!is_loopback_bind_host("0.0.0.0"));
+        assert!(!is_loopback_bind_host("192.168.1.10"));
     }
 
     // ── HTTP transport ────────────────────────────────────────────────────────

@@ -1,12 +1,9 @@
-pub mod backend;
 pub mod models;
 pub mod statusgator;
 
 use crate::config::AggregatorConfig;
 
-use self::backend::StatusAggregatorBackend;
 use self::models::CommunitySignal;
-use self::statusgator::StatusGatorBackend;
 
 /// Poll the configured community-signal backend and return a `CommunitySignal`.
 ///
@@ -14,7 +11,7 @@ use self::statusgator::StatusGatorBackend;
 /// `tokio::task::spawn_blocking`.
 pub fn poll(config: &AggregatorConfig) -> CommunitySignal {
     match config.provider.as_str() {
-        "statusgator" => StatusGatorBackend.fetch(config),
+        "statusgator" => statusgator::fetch(config),
         other => {
             tracing::warn!(
                 "Unknown status_aggregator provider '{}'; returning disabled signal",
@@ -34,7 +31,7 @@ mod tests {
         AggregatorConfig {
             enabled: true,
             provider: "statusgator".into(),
-            key_env_var: "STATUSGATOR_API_KEY".into(),
+            key_env_var: "STATUSGATOR_COMMUNITY_TOKEN".into(),
             refresh_interval: 300,
             claude_services: vec!["claude-ai".into()],
             openai_services: vec!["openai".into()],

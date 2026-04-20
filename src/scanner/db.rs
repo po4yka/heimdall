@@ -78,7 +78,8 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS processed_files (
             path    TEXT PRIMARY KEY,
             mtime   REAL,
-            lines   INTEGER
+            lines   INTEGER,
+            progress_marker INTEGER
         );
 
         CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id);
@@ -268,6 +269,14 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     if !has_column(conn, "turns", "category") {
         conn.execute_batch("ALTER TABLE turns ADD COLUMN category TEXT NOT NULL DEFAULT '';")?;
     }
+    if !has_column(conn, "processed_files", "progress_marker") {
+        conn.execute_batch(
+            "ALTER TABLE processed_files ADD COLUMN progress_marker INTEGER;
+             UPDATE processed_files
+             SET progress_marker = lines
+             WHERE progress_marker IS NULL;",
+        )?;
+    }
 
     // Tool invocations table for multi-tool and MCP tracking
     conn.execute_batch(
@@ -454,7 +463,11 @@ fn prefix_existing_session_ids(conn: &Connection) -> Result<()> {
 }
 
 pub fn get_processed_file(conn: &Connection, path: &str) -> Result<Option<(f64, i64)>> {
-    let mut stmt = conn.prepare("SELECT mtime, lines FROM processed_files WHERE path = ?")?;
+    let mut stmt = conn.prepare(
+        "SELECT mtime, COALESCE(progress_marker, lines, 0)
+         FROM processed_files
+         WHERE path = ?",
+    )?;
     let result = stmt.query_row([path], |row| {
         Ok((row.get::<_, f64>(0)?, row.get::<_, i64>(1)?))
     });
@@ -465,10 +478,16 @@ pub fn get_processed_file(conn: &Connection, path: &str) -> Result<Option<(f64, 
     }
 }
 
-pub fn upsert_processed_file(conn: &Connection, path: &str, mtime: f64, lines: i64) -> Result<()> {
+pub fn upsert_processed_file(
+    conn: &Connection,
+    path: &str,
+    mtime: f64,
+    progress_marker: i64,
+) -> Result<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO processed_files (path, mtime, lines) VALUES (?1, ?2, ?3)",
-        rusqlite::params![path, mtime, lines],
+        "INSERT OR REPLACE INTO processed_files (path, mtime, lines, progress_marker)
+         VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![path, mtime, progress_marker, progress_marker],
     )?;
     Ok(())
 }
@@ -3148,11 +3167,34 @@ mod tests {
                 .is_none()
         );
         upsert_processed_file(&conn, "/tmp/test.jsonl", 1234.5, 100).unwrap();
-        let (mtime, lines) = get_processed_file(&conn, "/tmp/test.jsonl")
+        let (mtime, progress_marker) = get_processed_file(&conn, "/tmp/test.jsonl")
             .unwrap()
             .unwrap();
         assert!((mtime - 1234.5).abs() < 0.01);
-        assert_eq!(lines, 100);
+        assert_eq!(progress_marker, 100);
+    }
+
+    #[test]
+    fn test_processed_file_progress_marker_migrates_from_legacy_lines() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE processed_files (
+                path TEXT PRIMARY KEY,
+                mtime REAL,
+                lines INTEGER
+            );
+            INSERT INTO processed_files (path, mtime, lines)
+            VALUES ('/tmp/legacy.jsonl', 42.0, 7);",
+        )
+        .unwrap();
+
+        init_db(&conn).unwrap();
+
+        let (mtime, progress_marker) = get_processed_file(&conn, "/tmp/legacy.jsonl")
+            .unwrap()
+            .unwrap();
+        assert!((mtime - 42.0).abs() < 0.01);
+        assert_eq!(progress_marker, 7);
     }
 
     #[test]

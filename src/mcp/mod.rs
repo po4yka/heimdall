@@ -11,6 +11,7 @@ pub mod install;
 mod tests;
 mod tools;
 
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -70,9 +71,15 @@ pub async fn run_stdio(db_path: PathBuf) -> Result<()> {
 ///
 /// Mounts a `/mcp` route on a fresh axum listener (separate from the dashboard).
 /// Each POST is handled as a single-request MCP exchange; responses are SSE.
+/// HTTP transport is limited to loopback binds because the endpoint has no
+/// authentication layer.
 pub async fn run_http(host: &str, port: u16, db_path: PathBuf) -> Result<()> {
     use axum::Router;
     use axum::routing::post;
+
+    if !is_loopback_bind_host(host) {
+        anyhow::bail!("refusing non-loopback MCP HTTP bind '{host}'; use stdio or a loopback host");
+    }
 
     let db = Arc::new(db_path);
 
@@ -93,6 +100,17 @@ pub async fn run_http(host: &str, port: u16, db_path: PathBuf) -> Result<()> {
     eprintln!("MCP HTTP server at http://{addr}/mcp");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+fn is_loopback_bind_host(host: &str) -> bool {
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+
+    let trimmed = host.trim().trim_matches('[').trim_matches(']');
+    trimmed
+        .parse::<IpAddr>()
+        .is_ok_and(|addr| addr.is_loopback())
 }
 
 // ── HTTP handler ──────────────────────────────────────────────────────────────
