@@ -217,10 +217,7 @@ pub fn decode_identity(auth: &CodexAuth) -> Option<LiveProviderIdentity> {
         provider: "codex".into(),
         account_email: email,
         account_organization: None,
-        login_method: auth
-            .auth_mode
-            .clone()
-            .or_else(|| Some("chatgpt".into())),
+        login_method: auth.auth_mode.clone().or_else(|| Some("chatgpt".into())),
         plan,
     })
 }
@@ -570,7 +567,9 @@ pub fn build_auth_health(
             "Explain storage mode",
             "codex-explain-storage",
             None,
-            Some(format!("Codex CLI credential storage is configured as `{store}`.")),
+            Some(format!(
+                "Codex CLI credential storage is configured as `{store}`."
+            )),
         ));
     }
     if config.forced_login_method.is_some() || config.forced_chatgpt_workspace_id.is_some() {
@@ -608,7 +607,9 @@ pub fn build_auth_health(
     let backend = if auth.is_some() {
         "file"
     } else if matches!(config.credential_store.as_deref(), Some("keyring"))
-        || (config.credential_store.as_deref() == Some("auto") && available && source_used.starts_with("cli"))
+        || (config.credential_store.as_deref() == Some("auto")
+            && available
+            && source_used.starts_with("cli"))
     {
         "keyring"
     } else if config.credential_store.as_deref() == Some("auto") {
@@ -639,9 +640,10 @@ pub fn build_auth_health(
         .unwrap_or(false);
     let is_authenticated = auth.is_some() || available;
     let source_compatible = login_method == "chatgpt" && managed_restriction.is_none();
-    let requires_relogin = !is_authenticated || error
-        .map(|message| message.to_lowercase().contains("expired"))
-        .unwrap_or(false);
+    let requires_relogin = !is_authenticated
+        || error
+            .map(|message| message.to_lowercase().contains("expired"))
+            .unwrap_or(false);
     let diagnostic_code = if managed_restriction.is_some() {
         Some("managed-policy".into())
     } else if !is_authenticated {
@@ -660,7 +662,10 @@ pub fn build_auth_health(
             "Codex auth does not satisfy managed policy `{managed_restriction}`."
         ))
     } else if !is_authenticated {
-        Some("Codex credentials are missing from both file storage and the active CLI session.".into())
+        Some(
+            "Codex credentials are missing from both file storage and the active CLI session."
+                .into(),
+        )
     } else if !source_compatible {
         Some("Codex is authenticated with API key semantics, so ChatGPT credits and subscription quota features are unavailable.".into())
     } else if requires_relogin && is_refreshable {
@@ -860,27 +865,28 @@ mod tests {
 
     #[test]
     fn fixture_auth_payload_decodes_identity_fields() {
-        let auth = parse_auth(include_bytes!("../../tests/fixtures/codex/auth_tokens.json"))
-            .expect("fixture auth parses");
+        let auth = parse_auth(include_bytes!(
+            "../../tests/fixtures/codex/auth_tokens.json"
+        ))
+        .expect("fixture auth parses");
 
         assert_eq!(auth.access_token, "access_fixture_token");
-        assert_eq!(
-            auth.refresh_token.as_deref(),
-            Some("refresh_fixture_token")
-        );
+        assert_eq!(auth.refresh_token.as_deref(), Some("refresh_fixture_token"));
         assert_eq!(auth.account_id.as_deref(), Some("acct_fixture_123"));
 
         let identity = decode_identity(&auth).expect("fixture identity");
-        assert_eq!(identity.account_email.as_deref(), Some("fixture@example.com"));
+        assert_eq!(
+            identity.account_email.as_deref(),
+            Some("fixture@example.com")
+        );
         assert_eq!(identity.plan.as_deref(), Some("pro"));
     }
 
     #[test]
     fn fixture_oauth_payload_decodes_windows_and_credits() {
-        let response: CodexUsageResponse = serde_json::from_str(include_str!(
-            "../../tests/fixtures/codex/oauth_usage.json"
-        ))
-        .expect("fixture oauth usage parses");
+        let response: CodexUsageResponse =
+            serde_json::from_str(include_str!("../../tests/fixtures/codex/oauth_usage.json"))
+                .expect("fixture oauth usage parses");
 
         assert_eq!(response.plan_type.as_deref(), Some("pro"));
         assert_eq!(
@@ -910,10 +916,9 @@ mod tests {
 
     #[test]
     fn fixture_rpc_payloads_decode_account_limits_and_credits() {
-        let account: RpcAccountResponse = serde_json::from_str(include_str!(
-            "../../tests/fixtures/codex/rpc_account.json"
-        ))
-        .expect("fixture rpc account parses");
+        let account: RpcAccountResponse =
+            serde_json::from_str(include_str!("../../tests/fixtures/codex/rpc_account.json"))
+                .expect("fixture rpc account parses");
         let limits: RpcRateLimitsResponse = serde_json::from_str(include_str!(
             "../../tests/fixtures/codex/rpc_rate_limits.json"
         ))
@@ -928,7 +933,8 @@ mod tests {
         }
 
         let primary = rpc_window_to_live(limits.rate_limits.primary.as_ref().expect("primary"));
-        let secondary = rpc_window_to_live(limits.rate_limits.secondary.as_ref().expect("secondary"));
+        let secondary =
+            rpc_window_to_live(limits.rate_limits.secondary.as_ref().expect("secondary"));
         assert_eq!(primary.used_percent, 42.0);
         assert_eq!(primary.window_minutes, Some(300));
         assert_eq!(secondary.used_percent, 73.0);
@@ -1012,7 +1018,10 @@ mod tests {
             Some("missing-credentials")
         );
         assert_eq!(
-            health.recovery_actions.first().and_then(|action| action.command.as_deref()),
+            health
+                .recovery_actions
+                .first()
+                .and_then(|action| action.command.as_deref()),
             Some("codex login --device-auth")
         );
     }

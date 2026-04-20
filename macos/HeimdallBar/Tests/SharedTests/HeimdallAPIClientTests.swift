@@ -31,6 +31,7 @@ struct HeimdallAPIClientTests {
         StubURLProtocol.handler = { request, attempt in
             #expect(request.httpMethod == "POST")
             #expect(request.url?.query?.contains("provider=codex") == true)
+            #expect(request.timeoutInterval == 12)
             if attempt == 1 {
                 throw URLError(.timedOut)
             }
@@ -143,10 +144,10 @@ struct HeimdallAPIClientTests {
 }
 
 private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
-    static var handler: (@Sendable (URLRequest, Int) throws -> (HTTPURLResponse, Data))?
+    nonisolated(unsafe) static var handler: (@Sendable (URLRequest, Int) throws -> (HTTPURLResponse, Data))?
 
     private static let lock = NSLock()
-    private static var requests: [URLRequest] = []
+    nonisolated(unsafe) private static var requests: [URLRequest] = []
 
     static var requestCount: Int {
         self.lock.lock()

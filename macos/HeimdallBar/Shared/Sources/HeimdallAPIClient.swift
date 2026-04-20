@@ -4,6 +4,8 @@ public struct HeimdallAPIClient: Sendable {
     public var baseURL: URL
     private let session: URLSession
     private let retryPolicy: RetryPolicy
+    private static let defaultRequestTimeout: TimeInterval = 3
+    private static let forcedRefreshTimeout: TimeInterval = 12
 
     struct RetryPolicy: Sendable, Equatable {
         let attempts: Int
@@ -13,7 +15,7 @@ public struct HeimdallAPIClient: Sendable {
     public init(port: Int) {
         self.baseURL = URL(string: "http://127.0.0.1:\(port)")!
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 3
+        configuration.timeoutIntervalForRequest = Self.defaultRequestTimeout
         configuration.timeoutIntervalForResource = 8
         self.session = URLSession(configuration: configuration)
         self.retryPolicy = Self.localhostRetryPolicy
@@ -37,6 +39,7 @@ public struct HeimdallAPIClient: Sendable {
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
+        request.timeoutInterval = Self.forcedRefreshTimeout
         let (data, response) = try await self.data(for: request)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
             throw URLError(.badServerResponse)

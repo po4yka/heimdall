@@ -90,8 +90,33 @@ where
         ));
     }
 
-    let _refresh_guard = state.live_provider_refresh_lock.lock().await;
-    if !force_refresh && let Some(cached) = cached_response(state).await {
+    let mut waited_for_refresh = false;
+    let _refresh_guard = match state.live_provider_refresh_lock.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            if !force_refresh && let Some(cached) = cached_response_any(state).await {
+                return Ok(filter_response(
+                    &cached,
+                    requested_provider.as_deref(),
+                    scope,
+                    true,
+                ));
+            }
+            waited_for_refresh = true;
+            state.live_provider_refresh_lock.lock().await
+        }
+    };
+
+    if let Some(cached) = cached_response(state).await {
+        return Ok(filter_response(
+            &cached,
+            requested_provider.as_deref(),
+            scope,
+            true,
+        ));
+    }
+
+    if waited_for_refresh && let Some(cached) = cached_response_any(state).await {
         return Ok(filter_response(
             &cached,
             requested_provider.as_deref(),
@@ -217,6 +242,11 @@ async fn cached_response(state: &Arc<AppState>) -> Option<LiveProvidersResponse>
         }
         _ => None,
     }
+}
+
+async fn cached_response_any(state: &Arc<AppState>) -> Option<LiveProvidersResponse> {
+    let cache = state.live_provider_cache.read().await;
+    cache.as_ref().map(|(_, cached)| cached.clone())
 }
 
 async fn update_cache_after_fetch(
@@ -877,6 +907,42 @@ mod tests {
                 .iter()
                 .any(|snapshot| snapshot.provider == "codex")
         );
+    }
+
+    #[tokio::test]
+    async fn cached_read_does_not_wait_behind_inflight_refresh() {
+        let state = test_state();
+        {
+            let mut cache = state.live_provider_cache.write().await;
+            *cache = Some((Instant::now() - Duration::from_secs(300), {
+                let mut response = fixture_response("claude");
+                response.response_scope = "all".into();
+                response.requested_provider = None;
+                response
+            }));
+        }
+
+        let refresh_guard = state.live_provider_refresh_lock.lock().await;
+
+        let started = Instant::now();
+        let response = load_snapshots_with_fetcher(
+            &state,
+            Some("claude".to_string()),
+            ResponseScope::ProviderOnly,
+            false,
+            |_, _, _| async move {
+                panic!("cached read should not trigger a fetch while refresh is in flight")
+            },
+        )
+        .await
+        .unwrap();
+
+        assert!(started.elapsed() < Duration::from_millis(50));
+        assert!(response.cache_hit);
+        assert_eq!(response.providers.len(), 1);
+        assert_eq!(response.providers[0].provider, "claude");
+
+        drop(refresh_guard);
     }
 
     #[tokio::test]
