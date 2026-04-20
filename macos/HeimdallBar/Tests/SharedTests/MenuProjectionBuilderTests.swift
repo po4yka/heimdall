@@ -48,7 +48,7 @@ struct MenuProjectionBuilderTests {
         #expect(projection.warningLabels.contains("Requested oauth, but Heimdall resolved cli-rpc."))
         #expect(projection.warningLabels.contains("Resolution chain: oauth -> cli-rpc"))
         #expect(projection.laneDetails.first?.summary.contains("64% left") == true)
-        #expect(projection.refreshStatusLabel.contains("Provider incident active"))
+        #expect(projection.refreshStatusLabel.contains("Incident active"))
     }
 
     @Test
@@ -58,6 +58,11 @@ struct MenuProjectionBuilderTests {
             title: "Claude",
             sourceLabel: "Source: oauth",
             sourceExplanationLabel: nil,
+            authHeadline: nil,
+            authDetail: nil,
+            authDiagnosticCode: nil,
+            authSummaryLabel: nil,
+            authRecoveryActions: [],
             warningLabels: ["Shared warning"],
             visualState: .healthy,
             stateLabel: "Operational",
@@ -81,6 +86,11 @@ struct MenuProjectionBuilderTests {
             title: "Codex",
             sourceLabel: "Source: web",
             sourceExplanationLabel: nil,
+            authHeadline: "Authenticated, but incompatible with selected source",
+            authDetail: "Current auth cannot satisfy web source",
+            authDiagnosticCode: "authenticated-incompatible-source",
+            authSummaryLabel: "Api Key · Env",
+            authRecoveryActions: [],
             warningLabels: ["Shared warning", "Codex login required"],
             visualState: .degraded,
             stateLabel: "Degraded",
@@ -186,6 +196,20 @@ struct MenuProjectionBuilderTests {
                 indicator: "critical",
                 description: "OpenAI critical incident",
                 pageURL: "https://status.openai.com"
+            ),
+            auth: ProviderAuthHealth(
+                loginMethod: "chatgpt",
+                credentialBackend: "file",
+                authMode: "chatgpt",
+                isAuthenticated: true,
+                isRefreshable: true,
+                isSourceCompatible: true,
+                requiresRelogin: false,
+                managedRestriction: nil,
+                diagnosticCode: "authenticated-compatible",
+                failureReason: nil,
+                lastValidatedAt: nil,
+                recoveryActions: []
             ),
             costSummary: ProviderCostSummary(
                 todayTokens: 1500,

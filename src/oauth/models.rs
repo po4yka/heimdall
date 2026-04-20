@@ -8,7 +8,7 @@ pub struct CredentialsFile {
     pub claude_ai_oauth: Option<OAuthCredentials>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct OAuthCredentials {
     #[serde(rename = "accessToken")]

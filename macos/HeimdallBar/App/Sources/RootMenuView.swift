@@ -8,7 +8,7 @@ struct RootMenuView: View {
     var body: some View {
         let overview = self.model.overviewProjection()
 
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             MenuChromeHeader(
                 title: "HeimdallBar",
                 status: overview.refreshStatusLabel,
@@ -24,9 +24,9 @@ struct RootMenuView: View {
             }
 
             if self.model.selectedMergeTab == .overview {
-                OverviewMenuCard(projection: overview)
+                OverviewMenuCard(model: self.model, projection: overview)
             } else if let provider = self.model.selectedMergeTab.providerID {
-                ProviderMenuCard(projection: self.model.projection(for: provider))
+                ProviderMenuCard(model: self.model, projection: self.model.projection(for: provider))
                 SessionActionGroup(model: self.model, providers: [provider])
             }
 
@@ -44,8 +44,8 @@ struct RootMenuView: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(12)
-        .frame(width: 344)
+        .padding(10)
+        .frame(width: 336)
     }
 
     private func attentionLabel(for overview: OverviewMenuProjection) -> String? {
@@ -80,7 +80,7 @@ struct ProviderMenuView: View {
                 isRefreshing: self.model.projection(for: self.provider).isRefreshing,
                 attentionLabel: self.providerAttentionLabel
             )
-            ProviderMenuCard(projection: self.model.projection(for: self.provider))
+            ProviderMenuCard(model: self.model, projection: self.model.projection(for: self.provider))
             SessionActionGroup(model: self.model, providers: [self.provider])
 
             Divider()
@@ -88,7 +88,7 @@ struct ProviderMenuView: View {
             MenuActionRow(model: self.model, tab: self.provider == .claude ? .claude : .codex)
         }
         .padding(12)
-        .frame(width: 340)
+        .frame(width: 336)
     }
 
     private var providerAttentionLabel: String? {
@@ -103,25 +103,31 @@ struct ProviderMenuView: View {
 }
 
 struct ProviderMenuCard: View {
+    @Bindable var model: AppModel
     let projection: ProviderMenuProjection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(self.projection.title)
-                    .font(.headline)
+                    .font(.system(size: 13, weight: .semibold))
                 StateBadge(state: self.projection.visualState, label: self.projection.stateLabel)
                 Spacer()
                 Text(self.projection.refreshStatusLabel)
-                    .font(.caption2)
+                    .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
             Text(self.primaryMetricText)
-                .font(.title3.weight(.semibold))
+                .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
             Text(self.secondaryMetricText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            AuthStatusSection(model: self.model, provider: self.projection.provider, projection: self.projection)
+            if self.projection.laneDetails.count > 1 {
+                Divider()
+                    .padding(.vertical, 1)
+            }
             if let sourceExplanationLabel = self.projection.sourceExplanationLabel {
                 Text(sourceExplanationLabel)
                     .font(.caption2)
@@ -189,12 +195,12 @@ struct ProviderMenuCard: View {
 
     private var primaryMetricText: String {
         guard let primaryLane = self.projection.laneDetails.first else {
-            return "Session unavailable"
+            return self.unavailableValueLabel
         }
         if let remaining = primaryLane.remainingPercent {
             return "\(remaining)% left"
         }
-        return "Session unavailable"
+        return self.unavailableValueLabel
     }
 
     private var secondaryMetricText: String {
@@ -204,7 +210,7 @@ struct ProviderMenuCard: View {
         if let resetDetail = primaryLane.resetDetail, let paceLabel = primaryLane.paceLabel, primaryLane.remainingPercent != nil {
             return "\(resetDetail) · \(paceLabel.lowercased()) pace"
         }
-        return "No live session window"
+        return self.unavailableDetailLabel
     }
 
     private var cardBackgroundOpacity: Double {
@@ -223,15 +229,41 @@ struct ProviderMenuCard: View {
             return 0.13
         }
     }
+
+    private var unavailableValueLabel: String {
+        let sourceLabel = self.projection.sourceLabel.lowercased()
+        if sourceLabel.contains("oauth") {
+            return "OAuth quota unavailable"
+        }
+        if sourceLabel.contains("web") {
+            return "Web quota unavailable"
+        }
+        if sourceLabel.contains("cli") {
+            return "CLI quota unavailable"
+        }
+        return "Live quota unavailable"
+    }
+
+    private var unavailableDetailLabel: String {
+        let sourceLabel = self.projection.sourceLabel.lowercased()
+        if self.projection.provider == .claude,
+           sourceLabel.contains("oauth"),
+           self.model.isClaudeOAuthCredentialsMissing() {
+            return "Missing Claude OAuth credentials file"
+        }
+        return "Live \(self.projection.title) session not available"
+    }
+
 }
 
 struct OverviewMenuCard: View {
+    @Bindable var model: AppModel
     let projection: OverviewMenuProjection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(self.sortedItems) { item in
-                OverviewProviderCard(item: item)
+                OverviewProviderCard(model: self.model, item: item)
             }
             if !self.projection.historyFractions.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -241,22 +273,27 @@ struct OverviewMenuCard: View {
                     HistoryBarStrip(fractions: self.projection.historyFractions)
                 }
             }
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Overview")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Text(self.projection.combinedCostLabel)
-                    .font(.headline)
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
                 Text(self.projection.activitySummaryLabel)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !self.projection.warningLabels.isEmpty {
-                    Text("Some provider data is limited by source availability.")
-                        .font(.caption2)
+                    Label("Source limits affect some provider data", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2.weight(.medium))
                         .foregroundStyle(.orange)
                 }
             }
+            .padding(10)
+            .menuCardBackground(opacity: 0.02, cornerRadius: 12)
         }
         .padding(10)
-        .menuCardBackground(opacity: 0.05)
+        .menuCardBackground(opacity: 0.03, cornerRadius: 14)
     }
 
     private var sortedItems: [ProviderMenuProjection] {
@@ -292,21 +329,27 @@ private struct MenuChromeHeader: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(self.title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                 Spacer()
                 if self.isRefreshing {
                     ProgressView()
                         .controlSize(.small)
                 } else {
                     Text(self.status)
-                        .font(.caption.weight(.medium))
+                        .font(.caption2.monospacedDigit().weight(.medium))
                         .foregroundStyle(.secondary)
                 }
             }
             if let attentionLabel {
-                Text(attentionLabel)
-                    .font(.caption2.weight(.medium))
+                Label(attentionLabel, systemImage: "exclamationmark.circle.fill")
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(self.attentionColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(self.attentionColor.opacity(0.12))
+                    )
             }
         }
     }
@@ -325,14 +368,16 @@ private struct TopMetricRow: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(self.title)
-                    .font(.headline)
+                    .font(.caption.weight(.semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.secondary)
                 Text(self.detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
             Text(self.value)
-                .font(.title3.monospacedDigit().weight(.semibold))
+                .font(.system(size: 18, weight: .bold, design: .rounded).monospacedDigit())
                 .foregroundStyle(.primary)
         }
     }
@@ -345,7 +390,7 @@ private struct StateBadge: View {
     var body: some View {
         Text(self.label.uppercased())
             .font(.caption2.monospaced())
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .foregroundStyle(self.foregroundColor)
             .background(self.backgroundColor)
@@ -389,11 +434,11 @@ private struct LaneStatusCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(self.detail.title)
-                    .font(.caption)
+                    .font(.caption.weight(.semibold))
                 Spacer()
                 if let remainingPercent = self.detail.remainingPercent {
                     Text("\(remainingPercent)%")
-                        .font(.caption.monospacedDigit())
+                        .font(.caption.monospacedDigit().weight(.semibold))
                 }
             }
             if let paceLabel = self.detail.paceLabel {
@@ -420,13 +465,13 @@ struct HistoryBarStrip: View {
             ForEach(Array(self.fractions.enumerated()), id: \.offset) { entry in
                 let fraction = entry.element
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.primary.opacity(0.08))
+                    .fill(Color.primary.opacity(0.06))
                     .overlay(alignment: .bottom) {
                         RoundedRectangle(cornerRadius: 1)
                             .fill(Color.primary)
-                            .frame(height: max(2, 18 * fraction))
+                            .frame(height: max(2, 16 * fraction))
                     }
-                    .frame(width: 7, height: 18)
+                    .frame(width: 6, height: 16)
             }
         }
     }
@@ -466,19 +511,21 @@ private struct MenuActionRow: View {
                 .disabled(self.model.isRefreshing)
             }
 
-            Button(action: {
-                if let url = URL(string: "http://127.0.0.1:\(self.model.config.helperPort)") {
-                    NSWorkspace.shared.open(url)
+            VStack(spacing: 6) {
+                Button(action: {
+                    if let url = URL(string: "http://127.0.0.1:\(self.model.config.helperPort)") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    SecondaryActionLabel(title: "Open Dashboard", systemImage: "safari")
                 }
-            }) {
-                SecondaryActionLabel(title: "Open Dashboard", systemImage: "safari")
-            }
-            .buttonStyle(SecondaryDashboardButtonStyle())
+                .buttonStyle(SecondaryDashboardButtonStyle())
 
-            SettingsLink {
-                SecondaryActionLabel(title: "Open Settings", systemImage: "gearshape")
+                SettingsLink {
+                    SecondaryActionLabel(title: "Open Settings", systemImage: "gearshape")
+                }
+                .buttonStyle(SecondaryDashboardButtonStyle())
             }
-            .buttonStyle(SecondaryDashboardButtonStyle())
 
             Divider()
                 .padding(.top, 2)
@@ -624,6 +671,7 @@ private struct MergeTabSwitcher: View {
 }
 
 private struct OverviewProviderCard: View {
+    @Bindable var model: AppModel
     let item: ProviderMenuProjection
 
     var body: some View {
@@ -645,6 +693,11 @@ private struct OverviewProviderCard: View {
             Text(self.item.costLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if let authHeadline = self.item.authHeadline {
+                Text(authHeadline)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(10)
         .menuCardBackground(opacity: 0.045)
@@ -662,7 +715,7 @@ private struct OverviewProviderCard: View {
         if let remaining = self.item.laneDetails.first?.remainingPercent {
             return "\(remaining)%"
         }
-        return "Unavailable"
+        return self.unavailableValueLabel
     }
 
     private var metricDetail: String {
@@ -672,7 +725,7 @@ private struct OverviewProviderCard: View {
         if let reset = lane.resetDetail, lane.remainingPercent != nil {
             return reset
         }
-        return "Session unavailable"
+        return self.unavailableDetailLabel
     }
 
     private var highlightColor: Color {
@@ -692,6 +745,83 @@ private struct OverviewProviderCard: View {
             return 1.5
         default:
             return 0
+        }
+    }
+
+    private var unavailableValueLabel: String {
+        let sourceLabel = self.item.sourceLabel.lowercased()
+        if sourceLabel.contains("oauth") {
+            return "OAuth quota unavailable"
+        }
+        if sourceLabel.contains("web") {
+            return "Web quota unavailable"
+        }
+        if sourceLabel.contains("cli") {
+            return "CLI quota unavailable"
+        }
+        return "Live quota unavailable"
+    }
+
+    private var unavailableDetailLabel: String {
+        let sourceLabel = self.item.sourceLabel.lowercased()
+        if self.item.provider == .claude,
+           sourceLabel.contains("oauth"),
+           self.model.isClaudeOAuthCredentialsMissing() {
+            return "Missing Claude OAuth credentials file"
+        }
+        return "Live \(self.item.title) session not available"
+    }
+
+}
+
+private struct AuthStatusSection: View {
+    @Bindable var model: AppModel
+    let provider: ProviderID
+    let projection: ProviderMenuProjection
+
+    var body: some View {
+        if self.projection.authHeadline != nil
+            || self.projection.authDetail != nil
+            || !self.projection.authRecoveryActions.isEmpty
+        {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Auth")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let summary = self.projection.authSummaryLabel {
+                        Text(summary)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let headline = self.projection.authHeadline {
+                    Text(headline)
+                        .font(.caption.weight(.semibold))
+                }
+                if let detail = self.projection.authDetail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if let diagnostic = self.projection.authDiagnosticCode {
+                    Text("Diagnostic: \(diagnostic)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(self.projection.authRecoveryActions.prefix(2)) { action in
+                    Button {
+                        Task { await self.model.runAuthRecoveryAction(action, for: self.provider) }
+                    } label: {
+                        Label(action.label, systemImage: "key.fill")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(SecondaryDashboardButtonStyle())
+                }
+            }
+            .padding(8)
+            .menuCardBackground(opacity: 0.04, cornerRadius: 8)
         }
     }
 }
@@ -743,8 +873,13 @@ private struct SessionDisclosureRow: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(self.title)
-                    .font(.body)
-                Text(self.subtitle)
+                    .font(.body.weight(.medium))
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(self.statusColor)
+                        .frame(width: 6, height: 6)
+                    Text(self.subtitle)
+                }
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -754,28 +889,39 @@ private struct SessionDisclosureRow: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.primary.opacity(0.04))
+                .fill(.regularMaterial)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
     }
+
+    private var statusColor: Color {
+        switch self.subtitle.lowercased() {
+        case "connected":
+            return .green
+        case "login required", "expired":
+            return .orange
+        default:
+            return .secondary.opacity(0.7)
+        }
+    }
 }
 
 private struct PrimaryDashboardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
+            .font(.body.weight(.semibold))
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 9)
             .foregroundStyle(Color.white)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.accentColor.opacity(configuration.isPressed ? 0.8 : 0.92))
+                    .fill(Color.accentColor.opacity(configuration.isPressed ? 0.72 : 0.84))
             )
     }
 }
@@ -785,14 +931,14 @@ private struct SecondaryDashboardButtonStyle: ButtonStyle {
         configuration.label
             .font(.body)
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(Color.primary.opacity(configuration.isPressed ? 0.08 : 0.045))
+                    .fill(.regularMaterial.opacity(configuration.isPressed ? 0.92 : 1))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    .stroke(Color.primary.opacity(configuration.isPressed ? 0.12 : 0.07), lineWidth: 1)
             )
     }
 }

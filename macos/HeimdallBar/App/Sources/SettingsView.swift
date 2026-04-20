@@ -20,6 +20,7 @@ struct SettingsView: View {
                 }
                 Toggle("Enable Claude Web Extras", isOn: self.$model.config.claude.dashboardExtrasEnabled)
             }
+            ProviderAuthSection(model: self.model, provider: .claude)
             ProviderWebSessionSection(model: self.model, provider: .claude)
 
             Section("Codex") {
@@ -36,6 +37,7 @@ struct SettingsView: View {
                 }
                 Toggle("Enable Codex OpenAI Web Extras", isOn: self.$model.config.codex.dashboardExtrasEnabled)
             }
+            ProviderAuthSection(model: self.model, provider: .codex)
             ProviderWebSessionSection(model: self.model, provider: .codex)
 
             Section("Web Extras Policy") {
@@ -72,6 +74,54 @@ struct SettingsView: View {
         .padding()
         .task {
             await self.model.refreshBrowserImports()
+        }
+    }
+}
+
+private struct ProviderAuthSection: View {
+    @Bindable var model: AppModel
+    let provider: ProviderID
+
+    var body: some View {
+        let projection = self.model.projection(for: self.provider)
+        let auth = self.model.authHealth(for: self.provider)
+
+        Section("\(self.provider.title) Auth") {
+            if let headline = projection.authHeadline {
+                Text(headline)
+                    .font(.headline)
+            } else {
+                Text("No auth diagnosis available yet.")
+                    .foregroundStyle(.secondary)
+            }
+
+            if let detail = projection.authDetail {
+                Text(detail)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let loginMethod = auth?.loginMethod {
+                LabeledContent("Login Method", value: loginMethod)
+            }
+            if let backend = auth?.credentialBackend {
+                LabeledContent("Credential Store", value: backend)
+            }
+            if let authMode = auth?.authMode {
+                LabeledContent("Auth Mode", value: authMode)
+            }
+            if let diagnostic = auth?.diagnosticCode {
+                LabeledContent("Diagnostic", value: diagnostic)
+            }
+
+            LabeledContent("Authenticated", value: auth?.isAuthenticated == true ? "Yes" : "No")
+            LabeledContent("Source Compatible", value: auth?.isSourceCompatible == true ? "Yes" : "No")
+            LabeledContent("Requires Re-login", value: auth?.requiresRelogin == true ? "Yes" : "No")
+
+            ForEach(self.model.authRecoveryActions(for: self.provider)) { action in
+                Button(action.label) {
+                    Task { await self.model.runAuthRecoveryAction(action, for: self.provider) }
+                }
+            }
         }
     }
 }

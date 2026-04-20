@@ -241,6 +241,52 @@ public struct ProviderSourceAttempt: Codable, Sendable, Identifiable {
     public var id: String { "\(self.source):\(self.outcome):\(self.message ?? "")" }
 }
 
+public struct AuthRecoveryAction: Codable, Sendable, Identifiable {
+    public var label: String
+    public var actionID: String
+    public var command: String?
+    public var detail: String?
+
+    public var id: String { self.actionID }
+
+    enum CodingKeys: String, CodingKey {
+        case label
+        case actionID = "action_id"
+        case command
+        case detail
+    }
+}
+
+public struct ProviderAuthHealth: Codable, Sendable {
+    public var loginMethod: String?
+    public var credentialBackend: String?
+    public var authMode: String?
+    public var isAuthenticated: Bool
+    public var isRefreshable: Bool
+    public var isSourceCompatible: Bool
+    public var requiresRelogin: Bool
+    public var managedRestriction: String?
+    public var diagnosticCode: String?
+    public var failureReason: String?
+    public var lastValidatedAt: String?
+    public var recoveryActions: [AuthRecoveryAction]
+
+    enum CodingKeys: String, CodingKey {
+        case loginMethod = "login_method"
+        case credentialBackend = "credential_backend"
+        case authMode = "auth_mode"
+        case isAuthenticated = "is_authenticated"
+        case isRefreshable = "is_refreshable"
+        case isSourceCompatible = "is_source_compatible"
+        case requiresRelogin = "requires_relogin"
+        case managedRestriction = "managed_restriction"
+        case diagnosticCode = "diagnostic_code"
+        case failureReason = "failure_reason"
+        case lastValidatedAt = "last_validated_at"
+        case recoveryActions = "recovery_actions"
+    }
+}
+
 public struct ProviderSnapshot: Codable, Sendable, Identifiable {
     public var provider: String
     public var available: Bool
@@ -255,6 +301,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
     public var tertiary: ProviderRateWindow?
     public var credits: Double?
     public var status: ProviderStatusSummary?
+    public var auth: ProviderAuthHealth
     public var costSummary: ProviderCostSummary
     public var claudeUsage: ClaudeUsageSnapshotPayload?
     public var lastRefresh: String
@@ -278,6 +325,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         case tertiary
         case credits
         case status
+        case auth
         case costSummary = "cost_summary"
         case claudeUsage = "claude_usage"
         case lastRefresh = "last_refresh"
@@ -401,6 +449,10 @@ public struct ProviderPresentationState: Sendable {
     public var adjunct: DashboardAdjunctSnapshot?
     public var resolution: ProviderSourceResolution
 
+    public var auth: ProviderAuthHealth? {
+        self.snapshot?.auth
+    }
+
     public var webExtras: DashboardWebExtras? {
         self.adjunct?.webExtras
     }
@@ -445,6 +497,16 @@ public struct ProviderPresentationState: Sendable {
         return [self.webExtras?.signedInEmail, self.webExtras?.accountPlan]
             .compactMap { $0 }
             .joined(separator: " · ")
+    }
+
+    public var authSummaryLabel: String? {
+        guard let auth else { return nil }
+        let parts = [
+            auth.loginMethod?.replacingOccurrences(of: "-", with: " ").capitalized,
+            auth.credentialBackend?.capitalized,
+        ]
+        .compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
@@ -547,6 +609,11 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
     public var title: String
     public var sourceLabel: String
     public var sourceExplanationLabel: String?
+    public var authHeadline: String?
+    public var authDetail: String?
+    public var authDiagnosticCode: String?
+    public var authSummaryLabel: String?
+    public var authRecoveryActions: [AuthRecoveryAction]
     public var warningLabels: [String]
     public var visualState: ProviderVisualState
     public var stateLabel: String

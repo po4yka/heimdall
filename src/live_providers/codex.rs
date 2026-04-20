@@ -9,8 +9,11 @@ use anyhow::{Context, Result, anyhow, bail};
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use toml::Value as TomlValue;
 
-use crate::models::{LiveProviderIdentity, LiveRateWindow};
+use crate::models::{
+    LiveProviderAuth, LiveProviderIdentity, LiveProviderRecoveryAction, LiveRateWindow,
+};
 
 const DEFAULT_USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 
@@ -20,6 +23,7 @@ pub struct CodexAuth {
     pub refresh_token: Option<String>,
     pub id_token: Option<String>,
     pub account_id: Option<String>,
+    pub auth_mode: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,6 +113,13 @@ pub struct CliStatusSnapshot {
     pub secondary: Option<LiveRateWindow>,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct CodexConfigFacts {
+    pub credential_store: Option<String>,
+    pub forced_login_method: Option<String>,
+    pub forced_chatgpt_workspace_id: Option<String>,
+}
+
 pub fn load_auth(env: &[(String, String)]) -> Result<CodexAuth> {
     let path = auth_file_path(env);
     let data = std::fs::read(&path)
@@ -129,6 +140,7 @@ pub fn parse_auth(data: &[u8]) -> Result<CodexAuth> {
             refresh_token: None,
             id_token: None,
             account_id: None,
+            auth_mode: Some("api-key".into()),
         });
     }
 
@@ -145,6 +157,10 @@ pub fn parse_auth(data: &[u8]) -> Result<CodexAuth> {
         refresh_token: string_value(tokens, "refresh_token", "refreshToken"),
         id_token: string_value(tokens, "id_token", "idToken"),
         account_id: string_value(tokens, "account_id", "accountId"),
+        auth_mode: json
+            .get("auth_mode")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
     })
 }
 
@@ -201,7 +217,10 @@ pub fn decode_identity(auth: &CodexAuth) -> Option<LiveProviderIdentity> {
         provider: "codex".into(),
         account_email: email,
         account_organization: None,
-        login_method: Some("chatgpt".into()),
+        login_method: auth
+            .auth_mode
+            .clone()
+            .or_else(|| Some("chatgpt".into())),
         plan,
     })
 }
@@ -457,6 +476,236 @@ fn auth_file_path(env: &[(String, String)]) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("~"))
         .join(".codex")
         .join("auth.json")
+}
+
+fn config_file_path(env: &[(String, String)]) -> PathBuf {
+    let env_map = env
+        .iter()
+        .cloned()
+        .collect::<std::collections::HashMap<_, _>>();
+    if let Some(codex_home) = env_map.get("CODEX_HOME").filter(|value| !value.is_empty()) {
+        return PathBuf::from(codex_home).join("config.toml");
+    }
+
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".codex")
+        .join("config.toml")
+}
+
+pub fn load_config_facts(env: &[(String, String)]) -> CodexConfigFacts {
+    let path = config_file_path(env);
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return CodexConfigFacts::default();
+    };
+    let Ok(value) = contents.parse::<TomlValue>() else {
+        return CodexConfigFacts::default();
+    };
+    CodexConfigFacts {
+        credential_store: value
+            .get("cli_auth_credentials_store")
+            .and_then(TomlValue::as_str)
+            .map(ToOwned::to_owned),
+        forced_login_method: value
+            .get("forced_login_method")
+            .and_then(TomlValue::as_str)
+            .map(ToOwned::to_owned),
+        forced_chatgpt_workspace_id: value
+            .get("forced_chatgpt_workspace_id")
+            .and_then(TomlValue::as_str)
+            .map(ToOwned::to_owned),
+    }
+}
+
+pub fn build_auth_health(
+    env: &[(String, String)],
+    config: &CodexConfigFacts,
+    auth: Option<&CodexAuth>,
+    identity: Option<&LiveProviderIdentity>,
+    available: bool,
+    source_used: &str,
+    error: Option<&str>,
+) -> LiveProviderAuth {
+    let validated_at = Some(chrono::Utc::now().to_rfc3339());
+    let headless = env_has(env, "SSH_CONNECTION")
+        || env_has(env, "CI")
+        || env_has(env, "GITHUB_ACTIONS")
+        || env_has(env, "CODESPACES");
+    let preferred_login_command = if headless {
+        "codex login --device-auth"
+    } else {
+        "codex login"
+    };
+    let mut recovery_actions = vec![
+        recovery_action(
+            if headless {
+                "Run codex login --device-auth"
+            } else {
+                "Run codex login"
+            },
+            if headless {
+                "codex-login-device"
+            } else {
+                "codex-login"
+            },
+            Some(preferred_login_command),
+            None,
+        ),
+        recovery_action(
+            "Run codex login --device-auth",
+            "codex-login-device",
+            Some("codex login --device-auth"),
+            Some("Preferred on remote or headless machines.".into()),
+        ),
+        recovery_action(
+            "Open login diagnostics",
+            "codex-login-diagnostics",
+            Some("codex login --help"),
+            None,
+        ),
+    ];
+
+    if let Some(store) = config.credential_store.as_deref() {
+        recovery_actions.push(recovery_action(
+            "Explain storage mode",
+            "codex-explain-storage",
+            None,
+            Some(format!("Codex CLI credential storage is configured as `{store}`.")),
+        ));
+    }
+    if config.forced_login_method.is_some() || config.forced_chatgpt_workspace_id.is_some() {
+        recovery_actions.push(recovery_action(
+            "Explain managed restriction mismatch",
+            "codex-explain-managed-policy",
+            None,
+            Some(format!(
+                "Managed policy: login_method={:?}, workspace_id={:?}",
+                config.forced_login_method, config.forced_chatgpt_workspace_id
+            )),
+        ));
+    }
+
+    if env_has(env, "OPENAI_API_KEY") {
+        return LiveProviderAuth {
+            login_method: Some("api-key".into()),
+            credential_backend: Some("env".into()),
+            auth_mode: Some("api-key".into()),
+            is_authenticated: true,
+            is_refreshable: false,
+            is_source_compatible: false,
+            requires_relogin: false,
+            managed_restriction: None,
+            diagnostic_code: Some("env-override".into()),
+            failure_reason: Some(
+                "OPENAI_API_KEY is active, so Codex is authenticated in API-key mode rather than ChatGPT subscription mode."
+                    .into(),
+            ),
+            last_validated_at: validated_at,
+            recovery_actions,
+        };
+    }
+
+    let backend = if auth.is_some() {
+        "file"
+    } else if matches!(config.credential_store.as_deref(), Some("keyring"))
+        || (config.credential_store.as_deref() == Some("auto") && available && source_used.starts_with("cli"))
+    {
+        "keyring"
+    } else if config.credential_store.as_deref() == Some("auto") {
+        "auto"
+    } else {
+        "file"
+    };
+
+    let login_method = auth
+        .and_then(|auth| auth.auth_mode.clone())
+        .or_else(|| identity.and_then(|identity| identity.login_method.clone()))
+        .unwrap_or_else(|| "chatgpt".into());
+    let managed_restriction = if let Some(forced_login_method) = &config.forced_login_method {
+        if *forced_login_method != login_method {
+            Some(format!("forced_login_method={forced_login_method}"))
+        } else {
+            None
+        }
+    } else if let Some(workspace_id) = &config.forced_chatgpt_workspace_id {
+        Some(format!("forced_chatgpt_workspace_id={workspace_id}"))
+    } else {
+        None
+    };
+
+    let is_refreshable = auth
+        .and_then(|auth| auth.refresh_token.as_deref())
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let is_authenticated = auth.is_some() || available;
+    let source_compatible = login_method == "chatgpt" && managed_restriction.is_none();
+    let requires_relogin = !is_authenticated || error
+        .map(|message| message.to_lowercase().contains("expired"))
+        .unwrap_or(false);
+    let diagnostic_code = if managed_restriction.is_some() {
+        Some("managed-policy".into())
+    } else if !is_authenticated {
+        Some("missing-credentials".into())
+    } else if !source_compatible {
+        Some("authenticated-incompatible-source".into())
+    } else if requires_relogin && is_refreshable {
+        Some("expired-refreshable".into())
+    } else if requires_relogin {
+        Some("requires-relogin".into())
+    } else {
+        Some("authenticated-compatible".into())
+    };
+    let failure_reason = if let Some(managed_restriction) = &managed_restriction {
+        Some(format!(
+            "Codex auth does not satisfy managed policy `{managed_restriction}`."
+        ))
+    } else if !is_authenticated {
+        Some("Codex credentials are missing from both file storage and the active CLI session.".into())
+    } else if !source_compatible {
+        Some("Codex is authenticated with API key semantics, so ChatGPT credits and subscription quota features are unavailable.".into())
+    } else if requires_relogin && is_refreshable {
+        Some("Codex access token expired, but refresh should be possible.".into())
+    } else if requires_relogin {
+        Some("Codex requires a fresh login.".into())
+    } else {
+        error.map(ToOwned::to_owned)
+    };
+
+    LiveProviderAuth {
+        login_method: Some(login_method.clone()),
+        credential_backend: Some(backend.into()),
+        auth_mode: Some(login_method),
+        is_authenticated,
+        is_refreshable,
+        is_source_compatible: source_compatible,
+        requires_relogin,
+        managed_restriction,
+        diagnostic_code,
+        failure_reason,
+        last_validated_at: validated_at,
+        recovery_actions,
+    }
+}
+
+fn recovery_action(
+    label: &str,
+    action_id: &str,
+    command: Option<&str>,
+    detail: Option<String>,
+) -> LiveProviderRecoveryAction {
+    LiveProviderRecoveryAction {
+        label: label.into(),
+        action_id: action_id.into(),
+        command: command.map(ToOwned::to_owned),
+        detail,
+    }
+}
+
+fn env_has(env: &[(String, String)], key: &str) -> bool {
+    env.iter()
+        .find(|(candidate, _)| candidate == key)
+        .map(|(_, value)| !value.trim().is_empty())
+        .unwrap_or(false)
 }
 
 fn string_value(
@@ -720,5 +969,51 @@ mod tests {
         .expect("wrapped rpc limits parse");
         assert!(result.rate_limits.primary.is_some());
         assert!(result.rate_limits.secondary.is_some());
+    }
+
+    #[test]
+    fn build_auth_health_marks_env_override_as_incompatible() {
+        let env = vec![("OPENAI_API_KEY".to_string(), "sk-live".to_string())];
+        let health = build_auth_health(
+            &env,
+            &CodexConfigFacts::default(),
+            None,
+            None,
+            false,
+            "oauth",
+            None,
+        );
+
+        assert_eq!(health.diagnostic_code.as_deref(), Some("env-override"));
+        assert_eq!(health.login_method.as_deref(), Some("api-key"));
+        assert_eq!(health.credential_backend.as_deref(), Some("env"));
+        assert!(health.is_authenticated);
+        assert!(!health.is_source_compatible);
+    }
+
+    #[test]
+    fn build_auth_health_prefers_device_auth_recovery_when_headless() {
+        let env = vec![("SSH_CONNECTION".to_string(), "1".to_string())];
+        let health = build_auth_health(
+            &env,
+            &CodexConfigFacts {
+                credential_store: Some("auto".into()),
+                ..CodexConfigFacts::default()
+            },
+            None,
+            None,
+            false,
+            "oauth",
+            Some("expired token"),
+        );
+
+        assert_eq!(
+            health.diagnostic_code.as_deref(),
+            Some("missing-credentials")
+        );
+        assert_eq!(
+            health.recovery_actions.first().and_then(|action| action.command.as_deref()),
+            Some("codex login --device-auth")
+        );
     }
 }

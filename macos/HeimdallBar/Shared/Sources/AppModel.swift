@@ -158,6 +158,67 @@ public final class AppModel {
         }
     }
 
+    public func oauthQuickFixButtonTitle(for provider: ProviderID) -> String {
+        self.primaryAuthAction(for: provider)?.label ?? "Fix Auth"
+    }
+
+    public func oauthQuickFixHint(for provider: ProviderID) -> String? {
+        self.authDetail(for: provider)
+    }
+
+    public func isClaudeOAuthCredentialsMissing() -> Bool {
+        !FileManager.default.fileExists(atPath: Self.claudeCredentialsURL.path())
+    }
+
+    public func runOAuthQuickFix(for provider: ProviderID) async {
+        guard let action = self.primaryAuthAction(for: provider) else {
+            self.lastError = "No auth recovery action is available for \(provider.title)."
+            return
+        }
+        await self.runAuthRecoveryAction(action, for: provider)
+    }
+
+    public func authHealth(for provider: ProviderID) -> ProviderAuthHealth? {
+        self.snapshot(for: provider)?.auth
+    }
+
+    public func authHeadline(for provider: ProviderID) -> String? {
+        self.projection(for: provider).authHeadline
+    }
+
+    public func authDetail(for provider: ProviderID) -> String? {
+        self.projection(for: provider).authDetail
+    }
+
+    public func authRecoveryActions(for provider: ProviderID) -> [AuthRecoveryAction] {
+        let actions = self.projection(for: provider).authRecoveryActions
+        if !actions.isEmpty {
+            return actions
+        }
+        return self.defaultAuthRecoveryActions(for: provider)
+    }
+
+    public func primaryAuthAction(for provider: ProviderID) -> AuthRecoveryAction? {
+        self.authRecoveryActions(for: provider).first
+    }
+
+    public func runAuthRecoveryAction(_ action: AuthRecoveryAction, for provider: ProviderID) async {
+        do {
+            if let detail = action.detail, action.command == nil {
+                self.lastError = detail
+                return
+            }
+            try Self.launchAuthCommand(
+                provider: provider,
+                title: action.label,
+                command: action.command ?? Self.defaultCommand(for: action, provider: provider)
+            )
+            self.lastError = nil
+        } catch {
+            self.lastError = "Failed to start \(provider.title) auth recovery. Run `\(action.command ?? Self.defaultCommand(for: action, provider: provider))` manually."
+        }
+    }
+
     public func snapshot(for provider: ProviderID) -> ProviderSnapshot? {
         self.snapshots.first(where: { $0.providerID == provider })
     }
@@ -275,5 +336,113 @@ public final class AppModel {
         if !self.visibleTabs.contains(self.selectedMergeTab) {
             self.selectedMergeTab = self.visibleTabs.first ?? .overview
         }
+    }
+
+    private static var claudeCredentialsURL: URL {
+        URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".claude", isDirectory: true)
+            .appendingPathComponent(".credentials.json", isDirectory: false)
+    }
+
+    private func defaultAuthRecoveryActions(for provider: ProviderID) -> [AuthRecoveryAction] {
+        switch provider {
+        case .claude:
+            return [
+                AuthRecoveryAction(
+                    label: "Run Claude Login",
+                    actionID: "claude-login",
+                    command: "claude login",
+                    detail: "Run Claude login to restore desktop subscription OAuth."
+                ),
+                AuthRecoveryAction(
+                    label: "Run Claude Doctor",
+                    actionID: "claude-doctor",
+                    command: "claude doctor",
+                    detail: "Use Claude doctor to diagnose credential, keychain, and environment problems."
+                ),
+            ]
+        case .codex:
+            return [
+                AuthRecoveryAction(
+                    label: "Run Codex Login",
+                    actionID: "codex-login",
+                    command: "codex login",
+                    detail: "Run Codex login to restore ChatGPT-backed auth."
+                ),
+                AuthRecoveryAction(
+                    label: "Run Device Login",
+                    actionID: "codex-login-device",
+                    command: "codex login --device-auth",
+                    detail: "Use device auth when localhost callback login is blocked or headless."
+                ),
+            ]
+        }
+    }
+
+    private static func defaultCommand(for action: AuthRecoveryAction, provider: ProviderID) -> String {
+        if let command = action.command, !command.isEmpty {
+            return command
+        }
+        switch (provider, action.actionID) {
+        case (.claude, "claude-doctor"):
+            return "claude doctor"
+        case (.claude, _):
+            return "claude login"
+        case (.codex, "codex-login-device"):
+            return "codex login --device-auth"
+        case (.codex, _):
+            return "codex login"
+        }
+    }
+
+    private static func launchAuthCommand(
+        provider: ProviderID,
+        title: String,
+        command: String
+    ) throws {
+        let scriptURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("heimdallbar-\(provider.rawValue)-auth.command", isDirectory: false)
+        let script = """
+        #!/bin/zsh
+        export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+        clear
+        echo "HeimdallBar \(provider.title) Auth Recovery"
+        echo
+        if ! command -v \(provider == .claude ? "claude" : "codex") >/dev/null 2>&1; then
+          echo "\(provider.title) CLI was not found in PATH."
+          echo "Run '\(command)' manually in a shell where the \(provider == .claude ? "claude" : "codex") command exists."
+          echo
+          read -k '?Press any key to close...'
+          exit 1
+        fi
+        echo "\(title)"
+        echo
+        echo "Running: \(command)"
+        echo
+        \(command)
+        echo
+        if [ "\(provider.rawValue)" = "claude" ]; then
+          if [ -f "$HOME/.claude/.credentials.json" ]; then
+            echo "Claude OAuth credentials were saved to ~/.claude/.credentials.json."
+          else
+            echo "Claude OAuth credentials file is still missing."
+          fi
+        else
+          if [ -f "${CODEX_HOME:-$HOME/.codex}/auth.json" ]; then
+            echo "Codex auth file is present at ${CODEX_HOME:-$HOME/.codex}/auth.json."
+          else
+            echo "Codex auth file is still missing."
+          fi
+        fi
+        echo "Return to HeimdallBar and refresh \(provider.title)."
+        echo
+        read -k '?Press any key to close...'
+        """
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path())
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", scriptURL.path()]
+        try process.run()
     }
 }

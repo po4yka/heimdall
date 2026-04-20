@@ -119,6 +119,20 @@ struct CLIParityTests {
                     description: "OpenAI degraded",
                     pageURL: "https://status.openai.com"
                 ),
+                auth: ProviderAuthHealth(
+                    loginMethod: "chatgpt",
+                    credentialBackend: "file",
+                    authMode: "chatgpt",
+                    isAuthenticated: true,
+                    isRefreshable: true,
+                    isSourceCompatible: false,
+                    requiresRelogin: false,
+                    managedRestriction: nil,
+                    diagnosticCode: "authenticated-incompatible-source",
+                    failureReason: "Codex is authenticated with API key, so ChatGPT credits and web quota features are unavailable.",
+                    lastValidatedAt: "2026-04-20T10:18:00Z",
+                    recoveryActions: []
+                ),
                 costSummary: ProviderCostSummary(
                     todayTokens: 1234,
                     todayCostUSD: 4.8,
@@ -156,6 +170,11 @@ struct CLIParityTests {
             title: "Codex",
             sourceLabel: "Source: WEB",
             sourceExplanationLabel: "Using imported dashboard session.",
+            authHeadline: "Authenticated, but incompatible with selected source",
+            authDetail: "Codex is authenticated with API key, so ChatGPT credits and web quota features are unavailable.",
+            authDiagnosticCode: "authenticated-incompatible-source",
+            authSummaryLabel: "Chatgpt · File",
+            authRecoveryActions: [],
             warningLabels: ["Login required to refresh web extras."],
             visualState: .degraded,
             stateLabel: "Degraded",

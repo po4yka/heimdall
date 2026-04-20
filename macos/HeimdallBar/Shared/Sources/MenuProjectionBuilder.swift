@@ -34,6 +34,7 @@ public enum MenuProjectionBuilder {
         let lanePrimary = presentation.primary
         let laneSecondary = presentation.secondary
         let laneTertiary = presentation.tertiary
+        let auth = presentation.auth
         let lastRefreshLabel = if let lastRefresh = snapshot?.lastRefresh {
             "Updated \(relativeLabel(lastRefresh))"
         } else if let lastUpdated = adjunct?.lastUpdated {
@@ -62,17 +63,38 @@ public enum MenuProjectionBuilder {
             lastRefreshLabel: lastRefreshLabel,
             error: snapshot?.error ?? lastGlobalError
         )
+        let authHeadline = auth.flatMap { self.authHeadline(for: $0) }
+        let authDetail = auth.flatMap {
+            self.authDetail(
+                for: $0,
+                requestedSource: resolution.requestedSource,
+                provider: provider
+            )
+        }
         let laneDetails = [
             laneDetail(title: "Session", window: lanePrimary, config: config),
             laneDetail(title: "Weekly", window: laneSecondary, config: config),
         ] + (laneTertiary.map { [laneDetail(title: "Extra", window: $0, config: config)] } ?? [])
+        var warningLabels = resolution.warnings + fallbackChainWarnings(resolution.fallbackChain)
+        if let auth, !auth.isSourceCompatible {
+            warningLabels.append("\(provider.title) auth cannot satisfy the selected \(resolution.requestedSource.rawValue) source.")
+        }
+        if let auth, auth.requiresRelogin {
+            warningLabels.append("\(provider.title) requires re-login before live quota can refresh.")
+        }
+        warningLabels = warningLabels.uniqued()
 
         return ProviderMenuProjection(
             provider: provider,
             title: provider.title,
             sourceLabel: resolution.sourceLabel,
             sourceExplanationLabel: resolution.explanation,
-            warningLabels: resolution.warnings + fallbackChainWarnings(resolution.fallbackChain),
+            authHeadline: authHeadline,
+            authDetail: authDetail,
+            authDiagnosticCode: auth?.diagnosticCode,
+            authSummaryLabel: presentation.authSummaryLabel,
+            authRecoveryActions: auth?.recoveryActions ?? [],
+            warningLabels: warningLabels,
             visualState: visualState,
             stateLabel: stateLabel(for: visualState),
             statusLabel: statusLabel,
@@ -334,6 +356,68 @@ public enum MenuProjectionBuilder {
         }
     }
 
+    private static func authHeadline(for auth: ProviderAuthHealth) -> String? {
+        if let code = auth.diagnosticCode {
+            switch code {
+            case "authenticated-compatible":
+                return "Authenticated and compatible"
+            case "authenticated-incompatible-source":
+                return "Authenticated, but incompatible with selected source"
+            case "expired-refreshable":
+                return "Expired, but refreshable"
+            case "requires-relogin":
+                return "Expired and requires re-login"
+            case "env-override":
+                return "Environment override blocks subscription auth"
+            case "keychain-unavailable":
+                return "Credential store access is blocked"
+            case "managed-policy":
+                return "Managed policy blocks this auth mode"
+            case "missing-credentials":
+                return "No saved login was found"
+            case "headless-oauth-env":
+                return "Headless OAuth token is active"
+            default:
+                break
+            }
+        }
+        if auth.isAuthenticated && auth.isSourceCompatible {
+            return "Authenticated and compatible"
+        }
+        if auth.isAuthenticated && !auth.isSourceCompatible {
+            return "Authenticated, but incompatible with selected source"
+        }
+        if auth.requiresRelogin {
+            return "Re-login required"
+        }
+        return auth.failureReason == nil ? nil : "Authentication needs attention"
+    }
+
+    private static func authDetail(
+        for auth: ProviderAuthHealth,
+        requestedSource: UsageSourcePreference,
+        provider: ProviderID
+    ) -> String? {
+        if let failureReason = auth.failureReason, !failureReason.isEmpty {
+            return failureReason
+        }
+
+        var fragments = [String]()
+        if let loginMethod = auth.loginMethod?.replacingOccurrences(of: "-", with: " ") {
+            fragments.append("Login: \(loginMethod.capitalized)")
+        }
+        if let backend = auth.credentialBackend {
+            fragments.append("Store: \(backend.capitalized)")
+        }
+        if !auth.isSourceCompatible {
+            fragments.append("Does not satisfy \(provider.title) \(requestedSource.rawValue) source")
+        }
+        if auth.requiresRelogin {
+            fragments.append("Run login again to restore live quota")
+        }
+
+        return fragments.isEmpty ? nil : fragments.joined(separator: " · ")
+    }
     private static func paceLabel(forRemainingPercent remainingPercent: Int) -> String {
         switch remainingPercent {
         case ..<15:

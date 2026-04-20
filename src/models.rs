@@ -330,6 +330,39 @@ pub struct LiveProviderSourceAttempt {
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
+pub struct LiveProviderRecoveryAction {
+    pub label: String,
+    pub action_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LiveProviderAuth {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_backend: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_mode: Option<String>,
+    pub is_authenticated: bool,
+    pub is_refreshable: bool,
+    pub is_source_compatible: bool,
+    pub requires_relogin: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub managed_restriction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagnostic_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_validated_at: Option<String>,
+    pub recovery_actions: Vec<LiveProviderRecoveryAction>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct LiveProviderSnapshot {
     pub provider: String,
     pub available: bool,
@@ -351,6 +384,7 @@ pub struct LiveProviderSnapshot {
     pub credits: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<LiveProviderStatus>,
+    pub auth: LiveProviderAuth,
     pub cost_summary: ProviderCostSummary,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_usage: Option<ClaudeUsageSnapshot>,

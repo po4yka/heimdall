@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 public actor HeimdallHelperController {
@@ -24,7 +25,14 @@ public actor HeimdallHelperController {
             self.ownedHelper = nil
         }
 
-        if await self.hasHealthyServer(on: port) {
+        let serverIsHealthy = await self.hasHealthyServer(on: port)
+        let serverIsCompatible = serverIsHealthy ? await Self.hasCompatibleLiveProvidersPayload(port: port) : false
+
+        if serverIsHealthy, !serverIsCompatible {
+            await Self.stopProcessListening(on: port)
+        }
+
+        if serverIsHealthy, serverIsCompatible {
             if let ownedHelper = self.ownedHelper {
                 let resolved = Self.resolveExecutable()
                 let fingerprint = resolved.flatMap(Self.fingerprint(for:))
@@ -187,5 +195,79 @@ public actor HeimdallHelperController {
         } catch {
             return false
         }
+    }
+
+    private static func hasCompatibleLiveProvidersPayload(port: Int) async -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:\(port)/api/live-providers") else {
+            return false
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 1
+        configuration.timeoutIntervalForResource = 1
+        let session = URLSession(configuration: configuration)
+        do {
+            let (data, response) = try await session.data(from: url)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return false
+            }
+            return Self.liveProvidersPayloadIncludesAuth(data)
+        } catch {
+            return false
+        }
+    }
+
+    static func liveProvidersPayloadIncludesAuth(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let providers = object["providers"] as? [[String: Any]] else {
+            return false
+        }
+        return providers.allSatisfy { $0["auth"] is [String: Any] }
+    }
+
+    private static func stopProcessListening(on port: Int) async {
+        for pid in Self.listeningPIDs(on: port) {
+            _ = Darwin.kill(pid_t(pid), SIGTERM)
+        }
+
+        for _ in 0..<10 {
+            if Self.listeningPIDs(on: port).isEmpty {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        for pid in Self.listeningPIDs(on: port) {
+            _ = Darwin.kill(pid_t(pid), SIGKILL)
+        }
+    }
+
+    private static func listeningPIDs(on port: Int) -> [Int32] {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        process.arguments = ["-t", "-iTCP:\(port)", "-sTCP:LISTEN", "-n", "-P"]
+        process.standardOutput = output
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+        } catch {
+            return []
+        }
+
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 || process.terminationStatus == 1 else {
+            return []
+        }
+
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        guard let string = String(data: data, encoding: .utf8) else {
+            return []
+        }
+
+        return string
+            .split(whereSeparator: \.isNewline)
+            .compactMap { Int32($0) }
     }
 }

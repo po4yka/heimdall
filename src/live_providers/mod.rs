@@ -10,6 +10,7 @@ use crate::models::{
     LiveProviderHistoryResponse, LiveProviderIdentity, LiveProviderSnapshot,
     LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse, ProviderCostSummary,
 };
+use crate::oauth::credentials;
 use crate::oauth::models::{BudgetInfo, Identity, Plan, UsageWindowsResponse, WindowInfo};
 use crate::scanner::db;
 use crate::server::api::{AppState, refresh_agent_status, refresh_usage_windows};
@@ -47,6 +48,7 @@ struct CodexLiveResolution {
     secondary: Option<crate::models::LiveRateWindow>,
     credits: Option<f64>,
     error: Option<String>,
+    auth: Option<codex::CodexAuth>,
 }
 
 pub async fn load_snapshots(
@@ -328,6 +330,10 @@ async fn build_claude_snapshot(
     let db_path = state.db_path.clone();
     let usage_clone = usage.clone();
     let status = status.cloned();
+    let env = std::env::vars().collect::<Vec<_>>();
+    let resolved_auth = credentials::resolve_auth(&env);
+    let auth = resolved_auth.health.clone();
+    let resolved_identity = resolved_auth.identity.clone();
     tokio::task::spawn_blocking(move || {
         let conn = db::open_db(&db_path)?;
         db::init_db(&conn)?;
@@ -378,7 +384,11 @@ async fn build_claude_snapshot(
             resolved_via_fallback,
             refresh_duration_ms: started_at.elapsed().as_millis() as u64,
             source_attempts,
-            identity: usage_clone.identity.as_ref().map(identity_to_live),
+            identity: usage_clone
+                .identity
+                .as_ref()
+                .map(identity_to_live)
+                .or_else(|| resolved_identity.as_ref().map(identity_to_live)),
             primary: usage_clone.session.as_ref().map(window_to_live),
             secondary: usage_clone.weekly.as_ref().map(window_to_live),
             tertiary: usage_clone
@@ -388,6 +398,7 @@ async fn build_claude_snapshot(
                 .map(window_to_live),
             credits: usage_clone.budget.as_ref().map(budget_to_credits),
             status: status.as_ref().map(status_to_live),
+            auth,
             cost_summary,
             claude_usage,
             last_refresh: chrono::Utc::now().to_rfc3339(),
@@ -409,6 +420,7 @@ async fn build_codex_snapshot(
 ) -> Result<LiveProviderSnapshot> {
     let cost_summary = load_provider_cost_summary(state, "codex").await?;
     let env = std::env::vars().collect::<Vec<_>>();
+    let config_facts = codex::load_config_facts(&env);
     let resolution = resolve_codex_live_data_with(
         &env,
         codex::load_auth,
@@ -417,6 +429,15 @@ async fn build_codex_snapshot(
         codex::fetch_cli_status,
     )
     .await;
+    let auth = codex::build_auth_health(
+        &env,
+        &config_facts,
+        resolution.auth.as_ref(),
+        resolution.identity.as_ref(),
+        resolution.available,
+        &resolution.source_used,
+        resolution.error.as_deref(),
+    );
 
     Ok(LiveProviderSnapshot {
         provider: "codex".into(),
@@ -432,6 +453,7 @@ async fn build_codex_snapshot(
         tertiary: None,
         credits: resolution.credits,
         status: status.map(status_to_live),
+        auth,
         cost_summary,
         claude_usage: None,
         last_refresh: chrono::Utc::now().to_rfc3339(),
@@ -468,16 +490,19 @@ where
     let mut primary = None;
     let mut secondary = None;
     let mut credits = None;
+    let mut resolved_auth = None;
     let mut source_used = "unavailable".to_string();
     let mut error = None;
     let mut available = false;
     let mut last_attempted_source = None;
 
     match load_auth(env) {
-        Ok(auth) => {
-            identity = codex::decode_identity(&auth);
+        Ok(codex_auth) => {
+            let auth_clone = codex_auth.clone();
+            identity = codex::decode_identity(&codex_auth);
+            resolved_auth = Some(auth_clone);
             last_attempted_source = Some("oauth".to_string());
-            match fetch_oauth(&auth).await {
+            match fetch_oauth(&codex_auth).await {
                 Ok(response) => {
                     attempts.push(LiveProviderSourceAttempt {
                         source: "oauth".into(),
@@ -630,6 +655,7 @@ where
         secondary,
         credits,
         error,
+        auth: resolved_auth,
     }
 }
 
@@ -706,6 +732,7 @@ fn provider_cost_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::LiveProviderAuth;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -729,6 +756,7 @@ mod tests {
                 tertiary: None,
                 credits: None,
                 status: None,
+                auth: LiveProviderAuth::default(),
                 cost_summary: ProviderCostSummary::default(),
                 claude_usage: None,
                 last_refresh: "2026-01-01T00:00:00Z".into(),
@@ -858,6 +886,7 @@ mod tests {
             refresh_token: None,
             id_token: None,
             account_id: None,
+            auth_mode: Some("chatgpt".into()),
         };
 
         let resolution = resolve_codex_live_data_with(

@@ -112,6 +112,20 @@ struct SourceResolverTests {
             tertiary: nil,
             credits: 11.9,
             status: nil,
+            auth: ProviderAuthHealth(
+                loginMethod: "chatgpt",
+                credentialBackend: "file",
+                authMode: "chatgpt",
+                isAuthenticated: true,
+                isRefreshable: true,
+                isSourceCompatible: sourceUsed != "cli-rpc",
+                requiresRelogin: false,
+                managedRestriction: nil,
+                diagnosticCode: sourceUsed == "cli-rpc" ? "authenticated-incompatible-source" : "authenticated-compatible",
+                failureReason: sourceUsed == "cli-rpc" ? "Current auth does not satisfy the requested oauth source." : nil,
+                lastValidatedAt: nil,
+                recoveryActions: []
+            ),
             costSummary: ProviderCostSummary(
                 todayTokens: 1200,
                 todayCostUSD: 3.8,

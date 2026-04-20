@@ -64,6 +64,15 @@ struct HeimdallHelperControllerTests {
         #expect(fingerprint?.modificationTimeInterval != nil)
     }
 
+    @Test
+    func liveProvidersPayloadCompatibilityRequiresAuthForEveryProvider() {
+        let compatible = Data(#"{"providers":[{"provider":"claude","auth":{"diagnostic_code":"ok"}},{"provider":"codex","auth":{"diagnostic_code":"ok"}}]}"#.utf8)
+        let incompatible = Data(#"{"providers":[{"provider":"claude"},{"provider":"codex","auth":{"diagnostic_code":"ok"}}]}"#.utf8)
+
+        #expect(HeimdallHelperController.liveProvidersPayloadIncludesAuth(compatible))
+        #expect(!HeimdallHelperController.liveProvidersPayloadIncludesAuth(incompatible))
+    }
+
     private static func makeTempDirectory() throws -> URL {
         let base = FileManager.default.temporaryDirectory
         let url = base.appendingPathComponent(UUID().uuidString, isDirectory: true)

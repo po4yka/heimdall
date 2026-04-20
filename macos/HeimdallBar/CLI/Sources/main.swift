@@ -97,6 +97,38 @@ struct CLIJSONUsageResponse: Encodable {
     var providers: [CLIJSONUsageProvider]
 }
 
+struct CLIJSONAuthRecoveryAction: Encodable {
+    var label: String
+    var actionID: String
+    var command: String?
+    var detail: String?
+}
+
+struct CLIJSONAuthProvider: Encodable {
+    var provider: String
+    var headline: String?
+    var detail: String?
+    var summary: String?
+    var loginMethod: String?
+    var credentialBackend: String?
+    var authMode: String?
+    var isAuthenticated: Bool
+    var isRefreshable: Bool
+    var isSourceCompatible: Bool
+    var requiresRelogin: Bool
+    var managedRestriction: String?
+    var diagnosticCode: String?
+    var failureReason: String?
+    var lastValidatedAt: String?
+    var recoveryActions: [CLIJSONAuthRecoveryAction]
+}
+
+struct CLIJSONAuthResponse: Encodable {
+    var command: String
+    var refresh: CLIJSONRefresh?
+    var providers: [CLIJSONAuthProvider]
+}
+
 typealias CLIJSONCostProvider = CLIJSONUsageProvider
 
 struct CLIJSONCostResponse: Encodable {
@@ -128,6 +160,12 @@ struct HeimdallBarCLI {
             try self.runConfigValidate(options: invocation.options)
         case .configDump:
             try self.runConfigDump(options: invocation.options)
+        case .authStatus:
+            try await self.runAuthStatus(options: invocation.options)
+        case .authDoctor:
+            try await self.runAuthDoctor(options: invocation.options)
+        case .authLogin:
+            try await self.runAuthLogin(options: invocation.options)
         }
     }
 
@@ -198,6 +236,73 @@ struct HeimdallBarCLI {
         try self.writeJSON(config, pretty: options.pretty)
     }
 
+    private static func runAuthStatus(options: CLIOptions) async throws {
+        let config = ConfigStore.shared.load()
+        let state = try await self.loadLiveState(options: options, config: config)
+        let refreshMetadata = self.refreshMetadata(from: state.envelope, requestedRefresh: options.refresh)
+
+        if options.format == .json {
+            let response = CLIJSONAuthResponse(
+                command: "auth-status",
+                refresh: refreshMetadata,
+                providers: state.sections.map(self.authJSONProvider(from:))
+            )
+            try self.writeJSON(response, pretty: options.pretty)
+            return
+        }
+
+        print(CLITextFormatter.authStatusText(
+            sections: state.sections,
+            refresh: self.refreshMetadataValue(from: refreshMetadata)
+        ))
+    }
+
+    private static func runAuthDoctor(options: CLIOptions) async throws {
+        let config = ConfigStore.shared.load()
+        let state = try await self.loadLiveState(options: options, config: config)
+        let refreshMetadata = self.refreshMetadata(from: state.envelope, requestedRefresh: options.refresh)
+
+        if options.format == .json {
+            let response = CLIJSONAuthResponse(
+                command: "auth-doctor",
+                refresh: refreshMetadata,
+                providers: state.sections.map(self.authJSONProvider(from:))
+            )
+            try self.writeJSON(response, pretty: options.pretty)
+            return
+        }
+
+        print(CLITextFormatter.authDoctorText(
+            sections: state.sections,
+            refresh: self.refreshMetadataValue(from: refreshMetadata)
+        ))
+    }
+
+    private static func runAuthLogin(options: CLIOptions) async throws {
+        guard let provider = options.providers.first else {
+            throw CLIError.invalidArguments("auth login requires --provider claude|codex")
+        }
+        let command: String
+        switch provider {
+        case .claude:
+            command = "claude login"
+        case .codex:
+            command = options.deviceAuth ? "codex login --device-auth" : "codex login"
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", command]
+        process.standardInput = FileHandle.standardInput
+        process.standardOutput = FileHandle.standardOutput
+        process.standardError = FileHandle.standardError
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw CLIError.invalidArguments("login command failed: \(command)")
+        }
+    }
+
     private static func loadLiveState(
         options: CLIOptions,
         config: HeimdallBarConfig
@@ -253,7 +358,8 @@ struct HeimdallBarCLI {
                         last30DaysTokens: 0,
                         last30DaysCostUSD: 0,
                         daily: []
-                    )
+                    ),
+                    auth: snapshot?.auth
                 )
             )
         }
@@ -322,6 +428,35 @@ struct HeimdallBarCLI {
             requiresLogin: presentation.resolution.requiresLogin,
             isUnsupported: presentation.resolution.isUnsupported,
             usesFallback: presentation.resolution.usesFallback
+        )
+    }
+
+    private static func authJSONProvider(from section: CLIProviderSection) -> CLIJSONAuthProvider {
+        let auth = section.auth
+        return CLIJSONAuthProvider(
+            provider: section.provider.rawValue,
+            headline: section.projection.authHeadline,
+            detail: section.projection.authDetail,
+            summary: section.projection.authSummaryLabel,
+            loginMethod: auth?.loginMethod,
+            credentialBackend: auth?.credentialBackend,
+            authMode: auth?.authMode,
+            isAuthenticated: auth?.isAuthenticated ?? false,
+            isRefreshable: auth?.isRefreshable ?? false,
+            isSourceCompatible: auth?.isSourceCompatible ?? false,
+            requiresRelogin: auth?.requiresRelogin ?? false,
+            managedRestriction: auth?.managedRestriction,
+            diagnosticCode: auth?.diagnosticCode,
+            failureReason: auth?.failureReason,
+            lastValidatedAt: auth?.lastValidatedAt,
+            recoveryActions: section.projection.authRecoveryActions.map { action in
+                CLIJSONAuthRecoveryAction(
+                    label: action.label,
+                    actionID: action.actionID,
+                    command: action.command,
+                    detail: action.detail
+                )
+            }
         )
     }
 

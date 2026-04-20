@@ -11,6 +11,7 @@ public enum SourceResolver {
         let liveSource = normalizedSource(from: snapshot?.sourceUsed)
         let liveSourceDetail = snapshot?.sourceUsed
         let fallbackChain = fallbackChain(snapshot: snapshot, adjunct: adjunct)
+        let auth = snapshot?.auth
         let webConfigured = config.dashboardExtrasEnabled
         let webSessionReady = adjunct != nil && adjunct?.isLoginRequired == false
         let webLoginRequired = adjunct?.isLoginRequired == true
@@ -31,11 +32,11 @@ public enum SourceResolver {
                     effectiveSourceDetail: liveSourceDetail,
                     sourceLabel: "Source: auto -> \(liveSourceDetail ?? "unavailable")",
                     explanation: snapshotExplanation(snapshot, requested: requestedSource, matched: true),
-                    warnings: warnings,
+                    warnings: warnings + authWarnings(for: auth, requestedSource: requestedSource),
                     fallbackChain: fallbackChain,
                     usageAvailable: snapshot.available && snapshot.primary != nil,
                     isUnsupported: false,
-                    requiresLogin: false,
+                    requiresLogin: authRequiresLogin(auth),
                     usesFallback: snapshot.resolvedViaFallback
                 )
             }
@@ -173,11 +174,11 @@ public enum SourceResolver {
                     effectiveSourceDetail: liveSourceDetail,
                     sourceLabel: "Source: \(liveSourceDetail ?? requestedSource.rawValue)",
                     explanation: snapshotExplanation(snapshot, requested: requestedSource, matched: true),
-                    warnings: [],
+                    warnings: authWarnings(for: auth, requestedSource: requestedSource),
                     fallbackChain: fallbackChain,
                     usageAvailable: snapshot.primary != nil,
                     isUnsupported: false,
-                    requiresLogin: false,
+                    requiresLogin: authRequiresLogin(auth),
                     usesFallback: snapshot.resolvedViaFallback
                 )
             }
@@ -188,15 +189,17 @@ public enum SourceResolver {
             if snapshot.resolvedViaFallback {
                 warnings.append("The helper fell back during refresh, so the requested source is withheld instead of silently mixing sources.")
             }
+            warnings.append(contentsOf: authWarnings(for: auth, requestedSource: requestedSource))
             return unavailableResolution(
                 provider: provider,
                 requestedSource: requestedSource,
                 effectiveSource: liveSource,
                 effectiveSourceDetail: liveSourceDetail,
-                explanation: "The requested \(requestedSource.rawValue) source is not the active live snapshot.",
+                explanation: auth?.failureReason
+                    ?? "The requested \(requestedSource.rawValue) source is not the active live snapshot.",
                 warnings: warnings,
                 fallbackChain: fallbackChain,
-                requiresLogin: false,
+                requiresLogin: authRequiresLogin(auth),
                 isUnsupported: false
             )
         }
@@ -291,5 +294,25 @@ public enum SourceResolver {
             return "\(sourceLabel) after attempting \(attempted)\(refreshLabel)."
         }
         return "\(sourceLabel)\(refreshLabel)."
+    }
+
+    private static func authRequiresLogin(_ auth: ProviderAuthHealth?) -> Bool {
+        guard let auth else { return false }
+        return !auth.isAuthenticated || auth.requiresRelogin
+    }
+
+    private static func authWarnings(
+        for auth: ProviderAuthHealth?,
+        requestedSource: UsageSourcePreference
+    ) -> [String] {
+        guard let auth else { return [] }
+        var warnings = [String]()
+        if !auth.isSourceCompatible {
+            warnings.append("Current auth does not satisfy the requested \(requestedSource.rawValue) source.")
+        }
+        if auth.requiresRelogin {
+            warnings.append("Saved login is expired and needs re-authentication.")
+        }
+        return warnings
     }
 }

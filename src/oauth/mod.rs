@@ -8,11 +8,18 @@ use tracing::debug;
 /// Poll OAuth usage: load credentials, fetch from API, attach identity.
 /// Returns `UsageWindowsResponse` with `available: false` if credentials missing or expired.
 pub async fn poll_usage() -> UsageWindowsResponse {
-    let creds = match credentials::load_credentials() {
+    let env = std::env::vars().collect::<Vec<_>>();
+    let resolved = credentials::resolve_auth(&env);
+    let creds = match resolved.credentials {
         Some(c) => c,
         None => {
-            debug!("No OAuth credentials found");
-            return UsageWindowsResponse::unavailable();
+            debug!("No compatible Claude OAuth credentials found");
+            return resolved
+                .health
+                .failure_reason
+                .clone()
+                .map(UsageWindowsResponse::with_error)
+                .unwrap_or_else(UsageWindowsResponse::unavailable);
         }
     };
 
@@ -40,7 +47,9 @@ pub async fn poll_usage() -> UsageWindowsResponse {
         }
     };
 
-    let identity = credentials::get_identity(&creds);
+    let identity = resolved
+        .identity
+        .unwrap_or_else(|| credentials::get_identity(&creds));
     let resp = api::fetch_usage(&token).await;
     api::with_identity(resp, identity)
 }
