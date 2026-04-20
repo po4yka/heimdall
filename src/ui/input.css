@@ -619,10 +619,14 @@
   }
   .model-chart-center-total {
     font-family: var(--font-mono);
-    font-size: clamp(26px, 3vw, 34px);
+    font-size: clamp(24px, 2.6vw, 32px);
     line-height: 1;
     color: var(--text-display);
     font-feature-settings: "tnum";
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
   }
   .model-share-list {
     display: flex;
