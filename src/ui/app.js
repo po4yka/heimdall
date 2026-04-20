@@ -1743,18 +1743,6 @@
       withAlpha("--text-display", 0.15)
     ];
   }
-  function modelSeriesColors(n3) {
-    const baseVars = ["--text-display", "--success", "--warning", "--interactive"];
-    const out = [];
-    for (let i4 = 0; i4 < n3; i4++) {
-      const slot = i4 % baseVars.length;
-      const cycle = Math.floor(i4 / baseVars.length);
-      const alpha = Math.max(0.25, 1 - cycle * 0.25);
-      const v4 = baseVars[slot];
-      out.push(cycle === 0 ? cssVar(v4) : withAlpha(v4, alpha));
-    }
-    return out;
-  }
   function industrialChartOptions(type) {
     const axisLabelStyle = {
       colors: cssVar("--text-secondary"),
@@ -5863,9 +5851,9 @@
       tokens: totalTokens(row)
     })).filter((entry) => entry.value > 0).sort((a4, b4) => b4.value - a4.value);
     if (!sorted.length) return null;
-    const TOP_N = 5;
-    const top = sorted.slice(0, TOP_N);
-    const rest = sorted.slice(TOP_N);
+    const TOP_N2 = 5;
+    const top = sorted.slice(0, TOP_N2);
+    const rest = sorted.slice(TOP_N2);
     const total = sorted.reduce((sum2, entry) => sum2 + entry.value, 0);
     const rows = top.map((entry, index) => ({
       label: entry.row.model,
@@ -7472,6 +7460,8 @@ ${row.project}` : row.project;
     calls: "Calls",
     tokens: "Tokens"
   };
+  var SLICE_OPACITY_LADDER2 = [1, 0.64, 0.46, 0.34, 0.24, 0.16];
+  var TOP_N = 5;
   function metricValue2(row, metric) {
     switch (metric) {
       case "cost":
@@ -7482,13 +7472,21 @@ ${row.project}` : row.project;
         return row.tokens;
     }
   }
-  function formatMetricTotal(total, metric) {
-    if (metric === "cost") return fmtCost(total);
-    return fmt(total);
+  function formatMetricValue2(value, metric, large = false) {
+    switch (metric) {
+      case "cost":
+        return large ? fmtCostCompact(value) : fmtCost(value);
+      case "calls":
+      case "tokens":
+        return fmt(value);
+    }
   }
-  function formatMetricSlice(val, metric) {
-    if (metric === "cost") return fmtCost(val);
-    return fmt(val);
+  function formatShare2(share) {
+    if (share >= 99.5) return "100%";
+    if (share >= 10) return `${share.toFixed(0)}%`;
+    if (share >= 0.1) return `${share.toFixed(1)}%`;
+    if (share > 0) return "<0.1%";
+    return "0%";
   }
   function VersionDonut({ rows, metric, onMetricChange }) {
     if (!rows.length) return null;
@@ -7496,71 +7494,93 @@ ${row.project}` : row.project;
       ...r4,
       version: r4.version === "" || r4.version === "unknown" ? "(unknown)" : r4.version
     }));
-    const series = normalized.map((r4) => metricValue2(r4, metric));
-    const labels = normalized.map((r4) => r4.version);
-    const total = series.reduce((s4, v4) => s4 + v4, 0);
+    const sorted = normalized.map((r4) => ({ row: r4, value: metricValue2(r4, metric) })).filter((entry) => entry.value > 0).sort((a4, b4) => b4.value - a4.value);
+    if (!sorted.length) return null;
+    const top = sorted.slice(0, TOP_N);
+    const rest = sorted.slice(TOP_N);
+    const total = sorted.reduce((s4, e4) => s4 + e4.value, 0);
+    const donutRows = top.map((entry, index) => ({
+      label: entry.row.version,
+      value: entry.value,
+      share: total > 0 ? entry.value / total * 100 : 0,
+      cost: entry.row.cost,
+      calls: entry.row.turns,
+      tokens: entry.row.tokens,
+      color: withAlpha("--text-display", SLICE_OPACITY_LADDER2[Math.min(index, SLICE_OPACITY_LADDER2.length - 1)] ?? 0.16),
+      isOther: false
+    }));
+    const otherValue = rest.reduce((s4, e4) => s4 + e4.value, 0);
+    const hasOther = otherValue > 0;
+    if (hasOther) {
+      donutRows.push({
+        label: `Other (${rest.length})`,
+        value: otherValue,
+        share: total > 0 ? otherValue / total * 100 : 0,
+        cost: rest.reduce((s4, e4) => s4 + e4.row.cost, 0),
+        calls: rest.reduce((s4, e4) => s4 + e4.row.turns, 0),
+        tokens: rest.reduce((s4, e4) => s4 + e4.row.tokens, 0),
+        color: withAlpha("--text-display", SLICE_OPACITY_LADDER2[Math.min(donutRows.length, SLICE_OPACITY_LADDER2.length - 1)] ?? 0.16),
+        isOther: true
+      });
+    }
     const base = industrialChartOptions("donut");
     const options = {
       ...base,
       chart: { ...base.chart, type: "donut" },
-      series,
-      labels,
-      colors: modelSeriesColors(normalized.length),
+      series: donutRows.map((r4) => r4.value),
+      labels: donutRows.map((r4) => r4.label),
+      colors: donutRows.map((r4) => r4.color),
       stroke: { width: 2, colors: [cssVar("--surface")] },
-      plotOptions: {
-        pie: {
-          donut: {
-            size: "64%",
-            labels: {
-              show: true,
-              total: {
-                show: true,
-                label: "TOTAL",
-                fontFamily: 'var(--font-mono), "Space Mono", monospace',
-                fontSize: "11px",
-                color: cssVar("--text-secondary"),
-                formatter: () => formatMetricTotal(total, metric)
-              },
-              value: {
-                fontFamily: 'var(--font-mono), "Space Mono", monospace',
-                fontSize: "18px",
-                color: cssVar("--text-display"),
-                formatter: (val) => formatMetricSlice(Number(val), metric)
-              },
-              name: {
-                fontFamily: 'var(--font-mono), "Space Mono", monospace',
-                fontSize: "11px",
-                color: cssVar("--text-secondary")
-              }
-            }
-          }
-        }
+      legend: { ...base.legend, show: false },
+      states: {
+        hover: { filter: { type: "none", value: 0 } },
+        active: { filter: { type: "none", value: 0 } }
       },
       tooltip: {
         ...base.tooltip,
         custom: ({ seriesIndex }) => {
-          const r4 = normalized[seriesIndex];
+          const r4 = donutRows[seriesIndex];
           if (!r4) return "";
-          const label = esc(r4.version);
-          const cost = fmtCost(r4.cost);
-          const calls = fmt(r4.turns);
-          const tokens = fmt(r4.tokens);
-          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${label}</strong><br/>${cost} &nbsp;&bull;&nbsp; ${calls} calls &nbsp;&bull;&nbsp; ${tokens} tokens</div>`;
+          return `<div style="padding:8px 12px;font-family:var(--font-mono,'Space Mono',monospace);font-size:11px;line-height:1.6"><strong>${esc(r4.label)}</strong><br/>${esc(METRIC_LABELS2[metric])}: ${esc(formatMetricValue2(r4.value, metric))} (${esc(formatShare2(r4.share))} share)<br/>Cost: ${esc(fmtCost(r4.cost))} &nbsp;&bull;&nbsp; Calls: ${esc(fmt(r4.calls))} &nbsp;&bull;&nbsp; Tokens: ${esc(fmt(r4.tokens))}</div>`;
+        }
+      },
+      plotOptions: {
+        pie: {
+          expandOnClick: false,
+          donut: {
+            size: "72%",
+            labels: { show: false }
+          }
         }
       }
     };
-    return /* @__PURE__ */ u4("div", { style: { display: "flex", flexDirection: "column", gap: "8px", height: "100%" }, children: [
-      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "4px", alignItems: "center" }, children: Object.keys(METRIC_LABELS2).map((m4) => /* @__PURE__ */ u4(
+    return /* @__PURE__ */ u4("div", { class: "model-chart-panel", children: [
+      /* @__PURE__ */ u4("div", { class: "range-group", "aria-label": "Version metric", children: Object.keys(METRIC_LABELS2).map((m4) => /* @__PURE__ */ u4(
         "button",
         {
           type: "button",
           class: `range-btn${metric === m4 ? " active" : ""}`,
+          "aria-pressed": metric === m4,
           onClick: () => onMetricChange(m4),
           children: METRIC_LABELS2[m4]
         },
         m4
       )) }),
-      /* @__PURE__ */ u4("div", { style: { flex: 1, minHeight: 0 }, children: /* @__PURE__ */ u4(ApexChart, { options, id: "chart-version-donut" }) })
+      /* @__PURE__ */ u4("div", { class: "model-chart-ring", children: [
+        /* @__PURE__ */ u4(ApexChart, { options, id: "chart-version-donut" }),
+        /* @__PURE__ */ u4("div", { class: "model-chart-center", "aria-hidden": "true", children: /* @__PURE__ */ u4("div", { class: "model-chart-center-inner", children: [
+          /* @__PURE__ */ u4("div", { class: "model-chart-center-kicker", children: [
+            "Total ",
+            METRIC_LABELS2[metric]
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "model-chart-center-total", children: formatMetricValue2(total, metric, true) }),
+          hasOther ? /* @__PURE__ */ u4("div", { class: "model-chart-center-meta", children: [
+            "Top ",
+            TOP_N,
+            " + Other"
+          ] }) : null
+        ] }) })
+      ] })
     ] });
   }
 
@@ -8059,7 +8079,7 @@ ${row.project}` : row.project;
               padding: "20px"
             },
             children: [
-              /* @__PURE__ */ u4("div", { style: { flex: "1 1 260px", minWidth: "220px", height: "300px" }, children: /* @__PURE__ */ u4(
+              /* @__PURE__ */ u4("div", { style: { flex: "1 1 260px", minWidth: "220px" }, children: /* @__PURE__ */ u4(
                 VersionDonut,
                 {
                   rows: data,

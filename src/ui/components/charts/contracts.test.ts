@@ -150,17 +150,16 @@ describe('chart contracts', () => {
     }) as { props: { children: unknown } };
 
     const children = Array.isArray(vnode.props.children) ? vnode.props.children : [vnode.props.children];
-    const chartShell = children[1] as { props: { children: { props: Record<string, unknown> } } };
-    const chartVNode = chartShell.props.children;
-    const options = chartVNode.props['options'] as {
+    const ring = children[1] as { props: { children: Array<{ props: Record<string, unknown> }> } };
+    const ringChildren = Array.isArray(ring.props.children) ? ring.props.children : [ring.props.children];
+    const chartVNode = ringChildren[0] as { props: { id?: string; options: Record<string, unknown> } };
+    const options = chartVNode.props.options as {
       labels: string[];
-      plotOptions: { pie: { donut: { labels: { total: { formatter: () => string } } } } };
       tooltip: { custom: ({ seriesIndex }: { seriesIndex: number }) => string };
     };
 
     expect(chartVNode.props['id']).toBe('chart-version-donut');
     expect(options.labels).toEqual(['(unknown)', '1.2.3']);
-    expect(options.plotOptions.pie.donut.labels.total.formatter()).toBe('$2.0000');
     expect(options.tooltip.custom({ seriesIndex: 0 })).toContain('(unknown)');
   });
 

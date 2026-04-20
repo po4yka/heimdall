@@ -298,7 +298,7 @@ function renderVersionSummary(data: DashboardData['version_summary']): void {
             padding: '20px',
           }}
         >
-          <div style={{ flex: '1 1 260px', minWidth: '220px', height: '300px' }}>
+          <div style={{ flex: '1 1 260px', minWidth: '220px' }}>
             <VersionDonut
               rows={data}
               metric={versionDonutMetric.value}
