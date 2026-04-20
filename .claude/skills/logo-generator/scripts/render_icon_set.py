@@ -16,6 +16,12 @@ ink-on-transparent silhouette, matching NSImage's template-image convention.
 
 Rasterization: resvg CLI (Rust, tiny-skia-backed). Install: `cargo install resvg`.
 Packaging: Pillow for .ico writing; macOS `iconutil` for .icns compilation.
+
+Optional: pass --use-tauri to delegate the .icns and .ico packaging to the
+`tauri icon` subcommand (requires `cargo install tauri-cli`). The rest of the
+pipeline (AppIcon.appiconset layout, menu-bar template, Linux hicolor tree,
+favicon) still runs on resvg+Pillow since tauri icon's output layout does
+not cover those surfaces.
 """
 
 import argparse
@@ -43,6 +49,43 @@ def _find_resvg() -> str:
         print("Install with: cargo install resvg", file=sys.stderr)
         sys.exit(1)
     return path
+
+
+def _find_tauri_cli() -> list[str] | None:
+    """Locate tauri-cli. Returns the invocation prefix (e.g. ['cargo-tauri']) or None.
+
+    `cargo install tauri-cli` installs `cargo-tauri` under ~/.cargo/bin; cargo
+    auto-detects it as the `cargo tauri` subcommand. Some users also have the
+    standalone `tauri` binary from npm. Try each in order of preference.
+    """
+    if shutil.which("cargo-tauri"):
+        return ["cargo-tauri"]
+    if shutil.which("tauri"):
+        return ["tauri"]
+    return None
+
+
+def run_tauri_icon(source_svg: Path, out_dir: Path) -> bool:
+    """Invoke `tauri icon` to produce icon.icns + icon.ico in out_dir.
+
+    Returns True on success. Tauri also writes a lot of Android/iOS/Windows-Store
+    variants we do not need; those are ignored by the caller.
+    """
+    cli = _find_tauri_cli()
+    if cli is None:
+        print("Error: tauri-cli not found on PATH.", file=sys.stderr)
+        print("Install with: cargo install tauri-cli", file=sys.stderr)
+        return False
+    out_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(
+            [*cli, "icon", str(source_svg), "-o", str(out_dir)],
+            check=True, capture_output=True, text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"tauri icon failed: {e.stderr or e}", file=sys.stderr)
+        return False
+    return True
 
 
 RESVG = _find_resvg()
@@ -145,12 +188,22 @@ def write_contents_json(appiconset_dir: Path) -> None:
     )
 
 
-def emit_macos(out_root: Path, master_svg: str, template_svg: str) -> bool:
+def emit_macos(
+    out_root: Path,
+    master_svg: str,
+    template_svg: str,
+    tauri_out: Path | None = None,
+) -> bool:
     # iconutil consumes .iconset (strict format). Xcode consumes .appiconset
     # (richer Asset Catalog format with Contents.json). The PNG set is identical;
     # only the directory extension and the Contents.json presence differ.
     # Strategy: render PNGs once into .iconset, compile .icns, then rename the
     # directory to .appiconset and add Contents.json for Xcode.
+    #
+    # tauri_out: if provided (i.e. --use-tauri was set and the tauri pre-render
+    # succeeded), copy tauri's `icon.icns` instead of compiling via iconutil.
+    # The .appiconset/ and menu-bar template PNGs are still generated via resvg
+    # because tauri icon does not produce them in the layout Xcode expects.
     mac_dir = out_root / "macos"
     mac_dir.mkdir(parents=True, exist_ok=True)
     iconset = mac_dir / "AppIcon.iconset"
@@ -173,22 +226,31 @@ def emit_macos(out_root: Path, master_svg: str, template_svg: str) -> bool:
         render_png(template_svg, menu_bar / fname, px)
         print(f"  [mac] menu-bar/{fname} {px}x{px}")
 
-    # .icns compilation — macOS only. Must run against the .iconset, not .appiconset.
-    iconutil = shutil.which("iconutil")
     icns_path = mac_dir / "heimdall.icns"
     compile_ok = False
-    if iconutil:
-        try:
-            subprocess.run(
-                [iconutil, "-c", "icns", str(iconset), "-o", str(icns_path)],
-                check=True,
-            )
-            print(f"  [mac] heimdall.icns compiled")
+
+    if tauri_out is not None:
+        tauri_icns = tauri_out / "icon.icns"
+        if tauri_icns.exists():
+            shutil.copyfile(tauri_icns, icns_path)
+            print(f"  [mac] heimdall.icns copied from tauri output")
             compile_ok = True
-        except subprocess.CalledProcessError as e:
-            print(f"  [mac] WARNING: iconutil failed: {e}")
+        else:
+            print(f"  [mac] WARNING: tauri output missing icon.icns at {tauri_icns}")
     else:
-        print("  [mac] iconutil not found (non-macOS host); .icns compile skipped.")
+        iconutil = shutil.which("iconutil")
+        if iconutil:
+            try:
+                subprocess.run(
+                    [iconutil, "-c", "icns", str(iconset), "-o", str(icns_path)],
+                    check=True,
+                )
+                print(f"  [mac] heimdall.icns compiled via iconutil")
+                compile_ok = True
+            except subprocess.CalledProcessError as e:
+                print(f"  [mac] WARNING: iconutil failed: {e}")
+        else:
+            print("  [mac] iconutil not found (non-macOS host); .icns compile skipped.")
 
     # Promote .iconset -> .appiconset for Xcode consumption; add Contents.json.
     iconset.rename(appiconset)
@@ -205,11 +267,31 @@ def emit_linux(out_root: Path, master_svg: str) -> None:
         print(f"  [lin] hicolor/{px}x{px}/apps/heimdall.png")
 
 
-def emit_windows(out_root: Path, master_svg: str) -> None:
-    """Write a multi-size .ico by rasterizing each size separately then stacking."""
+def emit_windows(
+    out_root: Path,
+    master_svg: str,
+    tauri_out: Path | None = None,
+) -> None:
+    """Write a multi-size .ico.
+
+    With `--use-tauri`, copy tauri's `icon.ico` directly. Without it, rasterize
+    each required size via resvg and assemble a multi-layer .ico with Pillow.
+    """
+    win_dir = out_root / "windows"
+    win_dir.mkdir(parents=True, exist_ok=True)
+    ico_path = win_dir / "heimdall.ico"
+
+    if tauri_out is not None:
+        tauri_ico = tauri_out / "icon.ico"
+        if tauri_ico.exists():
+            shutil.copyfile(tauri_ico, ico_path)
+            print(f"  [win] heimdall.ico copied from tauri output")
+            return
+        print(f"  [win] WARNING: tauri output missing icon.ico at {tauri_ico}; falling back to Pillow")
+
     layers: list[Image.Image] = []
     tmp_pngs: list[Path] = []
-    tmp_dir = out_root / "windows" / ".tmp_ico"
+    tmp_dir = win_dir / ".tmp_ico"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     try:
         for px in WINDOWS_ICO_SIZES:
@@ -218,7 +300,6 @@ def emit_windows(out_root: Path, master_svg: str) -> None:
             tmp_pngs.append(p)
             layers.append(Image.open(p).convert("RGBA"))
 
-        ico_path = out_root / "windows" / "heimdall.ico"
         # Pillow: pass `sizes` on the largest-canvas image; it embeds all layers.
         largest = layers[-1]
         largest.save(
@@ -289,6 +370,15 @@ def main() -> int:
         default="all",
         help="Emit only one platform (default: all)",
     )
+    parser.add_argument(
+        "--use-tauri",
+        action="store_true",
+        help=(
+            "Delegate .icns and .ico packaging to `tauri icon` (requires "
+            "`cargo install tauri-cli`). Other outputs (AppIcon.appiconset, "
+            "menu-bar templates, Linux hicolor tree, favicon) still use resvg."
+        ),
+    )
     args = parser.parse_args()
 
     master_path = Path(args.master_svg).resolve()
@@ -310,24 +400,43 @@ def main() -> int:
     print(f"Rendering icon set")
     print(f"  master : {master_path}")
     print(f"  output : {out_root}")
+    if args.use_tauri:
+        print("  mode   : --use-tauri (.icns + .ico via tauri icon)")
     print()
 
-    if args.only in ("macos", "all"):
-        print("macOS:")
-        emit_macos(out_root, master_svg, template_svg)
+    # Pre-render via tauri if requested. Produces icon.icns + icon.ico in a
+    # tempdir; we copy only those two files (tauri also writes Android/iOS/
+    # Windows-Store variants we do not ship).
+    tauri_out: Path | None = None
+    if args.use_tauri and args.only in ("macos", "windows", "all"):
+        tauri_tmp = Path(tempfile.mkdtemp(prefix="heimdall-tauri-icon-"))
+        print(f"Running `tauri icon` (output -> {tauri_tmp}) ...")
+        if run_tauri_icon(master_path, tauri_tmp):
+            tauri_out = tauri_tmp
+        else:
+            print("  [tauri] pre-render failed; falling back to default pipeline")
         print()
-    if args.only in ("linux", "all"):
-        print("Linux:")
-        emit_linux(out_root, master_svg)
-        print()
-    if args.only in ("windows", "all"):
-        print("Windows:")
-        emit_windows(out_root, master_svg)
-        print()
-    if args.only in ("web", "all"):
-        print("Web:")
-        emit_web(out_root, master_svg, master_path)
-        print()
+
+    try:
+        if args.only in ("macos", "all"):
+            print("macOS:")
+            emit_macos(out_root, master_svg, template_svg, tauri_out=tauri_out)
+            print()
+        if args.only in ("linux", "all"):
+            print("Linux:")
+            emit_linux(out_root, master_svg)
+            print()
+        if args.only in ("windows", "all"):
+            print("Windows:")
+            emit_windows(out_root, master_svg, tauri_out=tauri_out)
+            print()
+        if args.only in ("web", "all"):
+            print("Web:")
+            emit_web(out_root, master_svg, master_path)
+            print()
+    finally:
+        if tauri_out is not None and tauri_out.exists():
+            shutil.rmtree(tauri_out, ignore_errors=True)
 
     print("[OK] Icon set rendering complete.")
     return 0

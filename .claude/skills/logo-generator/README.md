@@ -32,11 +32,14 @@ cargo install resvg
 cd .claude/skills/logo-generator
 pip install -r requirements.txt   # Pillow, python-dotenv, google-genai
 
+# Optional — opt-in tauri icon pipeline for .icns + .ico (~3 min to compile)
+cargo install tauri-cli           # enables --use-tauri flag on render_icon_set.py
+
 # Optional — only needed for Phase 5 Gemini showcase renders
 cp .env.example .env              # add GEMINI_API_KEY
 ```
 
-No native library prerequisites. resvg is a self-contained Rust binary (tiny-skia-backed, zero runtime deps). Pillow handles `.ico` writing. Phase 5 (Gemini showcase) is optional.
+No native library prerequisites. resvg is a self-contained Rust binary (tiny-skia-backed, zero runtime deps). Pillow handles `.ico` writing by default; passing `--use-tauri` delegates `.icns` and `.ico` packaging to `tauri icon` (uses the same Rust crates tauri uses internally). Phase 5 (Gemini showcase) is optional.
 
 ## Files
 
@@ -44,12 +47,12 @@ No native library prerequisites. resvg is a self-contained Rust binary (tiny-ski
 logo-generator/
 ├── SKILL.md                                 # workflow (Phase 0–6, Opus 4.7-tuned)
 ├── README.md                                # this file
-├── requirements.txt                         # cairosvg, google-genai, python-dotenv, pillow
+├── requirements.txt                         # Pillow, python-dotenv, google-genai
 ├── .env.example                             # env template (gitignored locally)
 ├── .gitignore                               # excludes .env and output/
 ├── scripts/
-│   ├── svg_to_png.py                        # cairosvg wrapper (single size)
-│   ├── render_icon_set.py                   # master SVG → full platform icon set
+│   ├── svg_to_png.py                        # resvg wrapper (single size)
+│   ├── render_icon_set.py                   # master SVG → full platform icon set (--use-tauri opt-in)
 │   ├── generate_showcase.py                 # Nano Banana showcase renderer (6 on-brand styles)
 │   └── validate_svg.py                      # grammar-contract validator (stdlib-only)
 ├── references/
@@ -61,10 +64,17 @@ logo-generator/
 │   ├── logo-usage-rules.md                  # clear space, minimum sizes, file organization
 │   ├── design_patterns.md                   # SVG pattern library (port from blog)
 │   └── background_styles.md                 # 6 on-brand backgrounds, heimdall-tuned
-└── assets/
-    ├── showcase_template.html               # interactive HTML gallery (heimdall-skinned)
-    └── appiconset-contents.json.tmpl        # Contents.json template for macOS xcassets
+├── assets/
+│   ├── showcase_template.html               # interactive HTML gallery (heimdall-skinned)
+│   └── appiconset-contents.json.tmpl        # Contents.json template for macOS xcassets
+└── ci/
+    ├── package.json                         # svglint + odiff-bin devDeps
+    ├── package-lock.json                    # pinned install
+    ├── .svglintrc.js                        # declarative grammar rules (mirror of svg-contract.md)
+    └── visual_regression.sh                 # 3-gate runner: validator + svglint + odiff
 ```
+
+The GitHub Actions workflow at `.github/workflows/logo-assets.yml` runs the same three gates on any PR touching `assets/icons/` or `.claude/skills/logo-generator/`.
 
 ## Validator (mechanical grammar gate)
 

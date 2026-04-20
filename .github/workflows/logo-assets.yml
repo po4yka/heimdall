@@ -1,0 +1,60 @@
+name: Logo Assets CI
+
+on:
+  pull_request:
+    paths:
+      - 'assets/icons/**'
+      - '.claude/skills/logo-generator/**'
+      - '.github/workflows/logo-assets.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/icons/**'
+      - '.claude/skills/logo-generator/**'
+      - '.github/workflows/logo-assets.yml'
+
+jobs:
+  logo-ci:
+    name: Grammar + lint + visual regression
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: '.claude/skills/logo-generator/ci/package-lock.json'
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # master
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Keyed on the logo-gen workflow so it does not clash with the main
+          # Rust CI cache from ci.yml.
+          shared-key: logo-assets
+          cache-directories: |
+            ~/.cargo/bin
+
+      - name: Install resvg (rasterizer)
+        run: |
+          if ! command -v resvg >/dev/null; then
+            cargo install resvg --locked
+          else
+            resvg --version
+          fi
+
+      - name: Install npm deps (svglint + odiff)
+        working-directory: .claude/skills/logo-generator/ci
+        run: npm ci
+
+      - name: Run logo CI gates
+        run: bash .claude/skills/logo-generator/ci/visual_regression.sh

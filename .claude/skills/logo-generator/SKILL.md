@@ -293,13 +293,41 @@ For more pattern families see `references/design_patterns.md`.
 
 ## Pipeline
 
-**Current (2026):** `resvg` (Rust) for rasterization → Pillow for `.ico` writing → macOS `iconutil` for `.icns` compilation. Zero native-library dependencies for the rasterizer; Pillow is pip-installable; `iconutil` is macOS-built-in (skipped on other platforms, `.icns` compiles later on a Mac).
+**Default (2026):** `resvg` (Rust) for rasterization → Pillow for `.ico` writing → macOS `iconutil` for `.icns` compilation. Zero native-library dependencies for the rasterizer; Pillow is pip-installable; `iconutil` is macOS-built-in (skipped on other platforms, `.icns` compiles later on a Mac).
 
-**Deferred migrations** (not do-now, schedule as dedicated maintenance):
+**Opt-in alternative — `--use-tauri`:** pass `--use-tauri` to `render_icon_set.py` to delegate the `.icns` and `.ico` packaging to the `tauri icon` subcommand (requires `cargo install tauri-cli`). The rest of the pipeline (`AppIcon.appiconset`, menu-bar template, Linux hicolor tree, favicon) still runs on resvg+Pillow — those surfaces are not covered by `tauri icon`'s output layout. Reasons to opt in:
 
-1. **Replace `iconutil` + Pillow with `tauri icon`.** A single command produces `.icns` + `.ico` + hicolor PNGs + `@2x` variants. Cross-platform (uses resvg internally). Drops the macOS-only `iconutil` dependency entirely. Cost: add a `cargo install tauri-cli` or `npm i -g @tauri-apps/cli` prerequisite.
-2. **Add `svglint` with heimdall custom rules** as a pre-commit gate. The Python validator in `scripts/validate_svg.py` covers the essentials; `svglint` would add rule configurability at the cost of a Node.js dep.
-3. **Add `odiff` visual regression** in CI. Compare icon-set N vs. N-1 at pixel level, fail on delta > 0.5%.
+- You want `.icns` compilation to work cross-platform (not limited to macOS `iconutil`).
+- You prefer the `icns` / `ico` Rust crates (same ones tauri uses internally) over Pillow for the ICO container.
+
+Reasons to stay on the default:
+
+- No extra Rust prereq (`cargo install tauri-cli` is ~3 min compile).
+- `iconutil`-compiled `.icns` uses the `ic12` type (Apple's higher-resolution 16×16@2x entry); tauri's `icns` crate uses `ic13`. Both are valid; `ic12` is the slightly more traditional macOS layout.
+
+## CI gates
+
+Three layered gates run locally and in GitHub Actions (`.github/workflows/logo-assets.yml`). The workflow triggers on any change under `assets/icons/**` or `.claude/skills/logo-generator/**`.
+
+1. **Grammar contract** — `scripts/validate_svg.py --strict` (Python stdlib only). Authoritative. Catches forbidden elements, chromatic drift, unclosed filled paths, decimal arc flags, coordinate drift, transform discipline, accent-pip singleton.
+2. **svglint** — `ci/.svglintrc.js` mirrors the subset of the grammar contract that maps to svglint's declarative rule syntax. Runs from `ci/` via `npm ci && npx svglint --ci`. Overlaps deliberately with gate 1 — a JS-first reviewer gets the same enforcement via a tool they know.
+3. **Visual regression** — `ci/visual_regression.sh` runs the Python validator, svglint, then rasterizes every `v*.svg` at 128px and 16px via resvg and uses `odiff` to compare against the committed PNGs. Any pixel delta above the per-size threshold (16px ≤ 4 diff, 128px ≤ 80 diff) is a fail. Thresholds are overridable via `MAX_DIFF_PIXELS_SMALL` / `MAX_DIFF_PIXELS_LARGE` env vars.
+
+Running locally:
+
+```bash
+# One-time setup
+cd .claude/skills/logo-generator/ci && npm install
+
+# Run all three gates
+bash .claude/skills/logo-generator/ci/visual_regression.sh
+```
+
+If an SVG change is intentional, regenerate the PNG previews and commit them alongside the SVG — the gate then passes.
+
+## Deferred
+
+Nothing remaining — the upgrade path from the original research (`resvg`, `tauri icon`, `svglint`, `odiff`) is fully integrated.
 
 ## Opus 4.7 optimization notes
 
