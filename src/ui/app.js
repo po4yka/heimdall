@@ -1185,25 +1185,23 @@
 
   // src/ui/components/DashboardTabs.tsx
   var TABS = [
-    { key: "overview", label: "Overview", summary: "status, spend, sync" },
-    { key: "activity", label: "Activity", summary: "charts & timing" },
-    { key: "breakdowns", label: "Breakdowns", summary: "tools, branches, versions" },
-    { key: "tables", label: "Tables", summary: "sessions, models, projects" }
+    { key: "overview", label: "Overview" },
+    { key: "activity", label: "Activity" },
+    { key: "breakdowns", label: "Breakdowns" },
+    { key: "tables", label: "Tables" }
   ];
   function DashboardTabs({ onTabChange }) {
-    return /* @__PURE__ */ u4("nav", { id: "dashboard-tabs", "aria-label": "Dashboard sections", children: TABS.map((tab) => {
+    return /* @__PURE__ */ u4("nav", { id: "dashboard-tabs", role: "tablist", "aria-label": "Dashboard sections", children: TABS.map((tab) => {
       const active = activeDashboardTab.value === tab.key;
       return /* @__PURE__ */ u4(
         "button",
         {
           type: "button",
+          role: "tab",
           class: `dashboard-tab${active ? " active" : ""}`,
-          "aria-pressed": active,
+          "aria-selected": active,
           onClick: () => onTabChange(tab.key),
-          children: [
-            /* @__PURE__ */ u4("span", { class: "dashboard-tab-label", children: tab.label }),
-            /* @__PURE__ */ u4("span", { class: "dashboard-tab-summary", children: tab.summary })
-          ]
+          children: tab.label
         },
         tab.key
       );
@@ -1632,9 +1630,9 @@
     ] });
     return /* @__PURE__ */ u4("header", { ref: headerRef, children: [
       /* @__PURE__ */ u4("h1", { children: [
-        /* @__PURE__ */ u4("span", { class: "accent", children: "Code" }),
+        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontWeight: 400 }, children: "Code" }),
         " ",
-        "Usage",
+        /* @__PURE__ */ u4("span", { style: { color: "var(--text-display)", fontWeight: 500 }, children: "Usage" }),
         planBadge.value && /* @__PURE__ */ u4(
           "span",
           {
@@ -5678,25 +5676,33 @@
   }
 
   // src/ui/components/EstimationMeta.tsx
+  function humanizeKey(key) {
+    return key.split(/[_\s-]+/).filter(Boolean).map((w5) => w5.charAt(0).toUpperCase() + w5.slice(1).toLowerCase()).join(" ");
+  }
+  function formatPricingVersion(v4) {
+    const m4 = v4.match(/^\d{4}-\d{2}-\d{2}/);
+    return m4 ? m4[0] : v4;
+  }
   function EstimationMeta({
     confidenceBreakdown,
     billingModeBreakdown,
     pricingVersions
   }) {
+    const formatBreakdown = (rows) => rows.map(([key, value]) => `${humanizeKey(key)}: ${value.sessions.toLocaleString()}`).join(" \xB7 ");
     return /* @__PURE__ */ u4(S, { children: [
       /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cost Confidence" }),
-        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: confidenceBreakdown.length ? confidenceBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: confidenceBreakdown.length ? formatBreakdown(confidenceBreakdown) : "n/a" }),
         /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Session mix in current filter" })
       ] }) }),
       /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Billing Mode" }),
-        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: billingModeBreakdown.length ? billingModeBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(" / ") : "n/a" }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: billingModeBreakdown.length ? formatBreakdown(billingModeBreakdown) : "n/a" }),
         /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Local estimate vs subscriber-included sessions" })
       ] }) }),
       /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Pricing Snapshot" }),
-        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: pricingVersions.length === 0 ? "n/a" : pricingVersions.length === 1 ? pricingVersions[0] : `mixed (${pricingVersions.length})` }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: pricingVersions.length === 0 ? "n/a" : pricingVersions.length === 1 ? formatPricingVersion(pricingVersions[0]) : `mixed (${pricingVersions.length})` }),
         /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Stored per-session pricing metadata" })
       ] }) })
     ] });
@@ -6801,13 +6807,15 @@ ${row.project}` : row.project;
           enableSorting: false,
           cell: (info) => {
             const row = info.row.original;
-            return /* @__PURE__ */ u4("div", { class: "muted", style: { fontSize: "10px", lineHeight: "1.35" }, children: [
-              /* @__PURE__ */ u4("div", { children: [
+            const pricing = row.pricing_version || "n/a";
+            const shortPricing = pricing.includes("@") ? pricing.split("@")[0] : pricing;
+            return /* @__PURE__ */ u4("div", { class: "muted", style: { fontSize: "10px", lineHeight: "1.4" }, children: [
+              /* @__PURE__ */ u4("div", { style: { whiteSpace: "nowrap" }, children: [
                 row.cost_confidence || "low",
                 " / ",
                 row.billing_mode || "estimated_local"
               ] }),
-              /* @__PURE__ */ u4("div", { children: row.pricing_version || "n/a" })
+              /* @__PURE__ */ u4("div", { title: pricing, style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "140px" }, children: shortPricing })
             ] });
           }
         },
@@ -7250,19 +7258,18 @@ ${row.project}` : row.project;
     billingBlocks,
     contextWindow
   }) {
-    const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
     const avgPerActiveDay = (() => {
       if (activeDays === void 0 || activeDays === null) return "--";
       if (activeDays === 0) return "--";
       const totalUsd = (activeDayTotalCostNanos ?? 0) / 1e9;
-      return fmtCost(totalUsd / activeDays);
+      return fmtCostBig(totalUsd / activeDays);
     })();
     const activeDayTooltip = activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `Averaged over ${activeDays} day${activeDays === 1 ? "" : "s"} with non-zero spend` : "No spend in selected period";
     const stats = [
-      { label: "Sessions", value: totals.sessions.toLocaleString(), sub: rangeLabel },
-      { label: "Turns", value: fmt(totals.turns), sub: rangeLabel },
-      { label: "Input Tokens", value: fmt(totals.input), sub: rangeLabel },
-      { label: "Output Tokens", value: fmt(totals.output), sub: rangeLabel },
+      { label: "Sessions", value: totals.sessions.toLocaleString(), sub: "" },
+      { label: "Turns", value: fmt(totals.turns), sub: "" },
+      { label: "Input Tokens", value: fmt(totals.input), sub: "" },
+      { label: "Output Tokens", value: fmt(totals.output), sub: "" },
       { label: "Cached Input", value: fmt(totals.cache_read), sub: "prompt cache" },
       { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "cache writes" },
       { label: "Reasoning", value: fmt(totals.reasoning_output), sub: "subset of output" },
@@ -7272,7 +7279,7 @@ ${row.project}` : row.project;
       stats.map((s4) => /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
         /* @__PURE__ */ u4("div", { class: "stat-content", children: [
           /* @__PURE__ */ u4("div", { class: "stat-label", children: s4.label }),
-          /* @__PURE__ */ u4("div", { class: `stat-value${s4.isCost ? " cost-value doto-hero" : ""}`, children: s4.value }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", children: s4.value }),
           s4.sub ? /* @__PURE__ */ u4("div", { class: "stat-sub", children: s4.sub }) : null
         ] }),
         s4.isCost && daily && daily.length >= 2 ? /* @__PURE__ */ u4("div", { class: "stat-sparkline", children: /* @__PURE__ */ u4(Sparkline, { daily }) }) : null

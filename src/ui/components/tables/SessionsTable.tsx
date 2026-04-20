@@ -194,10 +194,16 @@ function useSessionColumns(
         enableSorting: false,
         cell: (info: CellContext<SessionRow, unknown>) => {
           const row = info.row.original as SessionRow;
+          const pricing = row.pricing_version || 'n/a';
+          const shortPricing = pricing.includes('@') ? pricing.split('@')[0] : pricing;
           return (
-            <div class="muted" style={{ fontSize: '10px', lineHeight: '1.35' }}>
-              <div>{row.cost_confidence || 'low'} / {row.billing_mode || 'estimated_local'}</div>
-              <div>{row.pricing_version || 'n/a'}</div>
+            <div class="muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
+              <div style={{ whiteSpace: 'nowrap' }}>
+                {row.cost_confidence || 'low'} / {row.billing_mode || 'estimated_local'}
+              </div>
+              <div title={pricing} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
+                {shortPricing}
+              </div>
             </div>
           );
         },

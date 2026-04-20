@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { ApexChart } from './ApexChart';
 import { industrialChartOptions, cssVar, withAlpha } from '../../lib/charts';
-import { esc, fmt, fmtCost, fmtCostBig, truncateMid } from '../../lib/format';
+import { esc, fmt, fmtCost, fmtCostCompact } from '../../lib/format';
 import type { ModelAgg } from '../../state/types';
 
 type ModelMetric = 'cost' | 'tokens' | 'calls';
@@ -43,7 +43,7 @@ function metricValue(row: ModelAgg, metric: ModelMetric): number {
 function formatMetricValue(value: number, metric: ModelMetric, large = false): string {
   switch (metric) {
     case 'cost':
-      return large ? (value < 1 ? fmtCost(value) : fmtCostBig(value)) : fmtCost(value);
+      return large ? fmtCostCompact(value) : fmtCost(value);
     case 'tokens':
     case 'calls':
       return fmt(value);
@@ -53,7 +53,9 @@ function formatMetricValue(value: number, metric: ModelMetric, large = false): s
 function formatShare(share: number): string {
   if (share >= 99.5) return '100%';
   if (share >= 10) return `${share.toFixed(0)}%`;
-  return `${share.toFixed(1)}%`;
+  if (share >= 0.1) return `${share.toFixed(1)}%`;
+  if (share > 0) return '<0.1%';
+  return '0%';
 }
 
 export function ModelChart({
@@ -215,7 +217,7 @@ export function ModelChart({
             <div class="model-share-row-head">
               <div class="model-share-label">
                 <span class="model-share-swatch" style={{ background: row.color }} aria-hidden="true" />
-                <span title={row.label}>{truncateMid(row.label, row.isOther ? 18 : 24, 8)}</span>
+                <span title={row.label}>{row.label}</span>
               </div>
               <div class="model-share-value">{formatMetricValue(row.value, metric)}</div>
             </div>

@@ -4,20 +4,34 @@ interface EstimationMetaProps {
   pricingVersions: string[];
 }
 
+function humanizeKey(key: string): string {
+  return key
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function formatPricingVersion(v: string): string {
+  const m = v.match(/^\d{4}-\d{2}-\d{2}/);
+  return m ? m[0] : v;
+}
+
 export function EstimationMeta({
   confidenceBreakdown,
   billingModeBreakdown,
   pricingVersions,
 }: EstimationMetaProps) {
+  const formatBreakdown = (rows: Array<[string, { sessions: number; cost: number }]>) =>
+    rows.map(([key, value]) => `${humanizeKey(key)}: ${value.sessions.toLocaleString()}`).join(' · ');
+
   return (
     <>
       <div class="card stat-card">
         <div class="stat-content">
           <div class="stat-label">Cost Confidence</div>
           <div class="stat-value" style={{ fontSize: '18px' }}>
-            {confidenceBreakdown.length
-              ? confidenceBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(' / ')
-              : 'n/a'}
+            {confidenceBreakdown.length ? formatBreakdown(confidenceBreakdown) : 'n/a'}
           </div>
           <div class="stat-sub">Session mix in current filter</div>
         </div>
@@ -26,9 +40,7 @@ export function EstimationMeta({
         <div class="stat-content">
           <div class="stat-label">Billing Mode</div>
           <div class="stat-value" style={{ fontSize: '18px' }}>
-            {billingModeBreakdown.length
-              ? billingModeBreakdown.map(([key, value]) => `${key} ${value.sessions}`).join(' / ')
-              : 'n/a'}
+            {billingModeBreakdown.length ? formatBreakdown(billingModeBreakdown) : 'n/a'}
           </div>
           <div class="stat-sub">Local estimate vs subscriber-included sessions</div>
         </div>
@@ -40,7 +52,7 @@ export function EstimationMeta({
             {pricingVersions.length === 0
               ? 'n/a'
               : pricingVersions.length === 1
-                ? pricingVersions[0]
+                ? formatPricingVersion(pricingVersions[0])
                 : `mixed (${pricingVersions.length})`}
           </div>
           <div class="stat-sub">Stored per-session pricing metadata</div>

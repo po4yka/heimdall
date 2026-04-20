@@ -7,6 +7,34 @@ interface ReconciliationBlockProps {
 export function ReconciliationBlock({ reconciliation }: ReconciliationBlockProps) {
   const deltaMatch = Math.abs(reconciliation.delta_cost) < 0.01;
 
+  if (!reconciliation.available) {
+    return (
+      <div class="card card-flat bento-full" style={{ padding: '12px 20px' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '12px',
+          letterSpacing: '0.04em',
+          color: 'var(--text-secondary)',
+        }}>
+          <span style={{
+            fontSize: '10px',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'var(--text-disabled)',
+          }}>
+            OpenAI Reconciliation
+          </span>
+          <span style={{ color: 'var(--text-disabled)' }}>·</span>
+          <span>{reconciliation.error ?? 'Unavailable'}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div class="card card-flat bento-full">
       <h2>OpenAI Org Usage Reconciliation</h2>

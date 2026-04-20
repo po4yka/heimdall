@@ -17,6 +17,15 @@ export function fmtCostBig(c: number): string {
   return '$' + c.toFixed(2);
 }
 
+export function fmtCostCompact(c: number): string {
+  const abs = Math.abs(c);
+  if (abs >= 1e9) return '$' + (c / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return '$' + (c / 1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return '$' + (c / 1e3).toFixed(1) + 'K';
+  if (abs >= 1) return '$' + c.toFixed(2);
+  return '$' + c.toFixed(4);
+}
+
 export function fmtResetTime(minutes: number | null | undefined): string {
   if (minutes == null || minutes <= 0) return 'now';
   if (minutes >= 1440) return Math.floor(minutes / 1440) + 'd ' + Math.floor((minutes % 1440) / 60) + 'h';

@@ -1,6 +1,4 @@
-import { fmt, fmtCost, fmtCostBig } from '../lib/format';
-import { RANGE_LABELS } from '../lib/charts';
-import { selectedRange } from '../state/store';
+import { fmt, fmtCostBig } from '../lib/format';
 import { Sparkline } from './charts/Sparkline';
 import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { BillingBlocksCard } from './BillingBlocksCard';
@@ -31,15 +29,13 @@ export function StatsCards({
   billingBlocks,
   contextWindow,
 }: StatsCardsProps) {
-  const rangeLabel = RANGE_LABELS[selectedRange.value].toLowerCase();
-
   // Active-period average: divide total by active days.
   // Displays "--" when no active days (empty range).
   const avgPerActiveDay: string = (() => {
     if (activeDays === undefined || activeDays === null) return '--';
     if (activeDays === 0) return '--';
     const totalUsd = (activeDayTotalCostNanos ?? 0) / 1_000_000_000;
-    return fmtCost(totalUsd / activeDays);
+    return fmtCostBig(totalUsd / activeDays);
   })();
 
   const activeDayTooltip = activeDays !== undefined && activeDays !== null && activeDays > 0
@@ -47,10 +43,10 @@ export function StatsCards({
     : 'No spend in selected period';
 
   const stats: StatCard[] = [
-    { label: 'Sessions',       value: totals.sessions.toLocaleString(), sub: rangeLabel },
-    { label: 'Turns',          value: fmt(totals.turns),                sub: rangeLabel },
-    { label: 'Input Tokens',   value: fmt(totals.input),                sub: rangeLabel },
-    { label: 'Output Tokens',  value: fmt(totals.output),               sub: rangeLabel },
+    { label: 'Sessions',       value: totals.sessions.toLocaleString(), sub: '' },
+    { label: 'Turns',          value: fmt(totals.turns),                sub: '' },
+    { label: 'Input Tokens',   value: fmt(totals.input),                sub: '' },
+    { label: 'Output Tokens',  value: fmt(totals.output),               sub: '' },
     { label: 'Cached Input',   value: fmt(totals.cache_read),           sub: 'prompt cache' },
     { label: 'Cache Creation', value: fmt(totals.cache_creation),       sub: 'cache writes' },
     { label: 'Reasoning',      value: fmt(totals.reasoning_output),     sub: 'subset of output' },
@@ -63,7 +59,7 @@ export function StatsCards({
         <div class="card stat-card" key={s.label}>
           <div class="stat-content">
             <div class="stat-label">{s.label}</div>
-            <div class={`stat-value${s.isCost ? ' cost-value doto-hero' : ''}`}>{s.value}</div>
+            <div class="stat-value">{s.value}</div>
             {s.sub ? <div class="stat-sub">{s.sub}</div> : null}
           </div>
           {s.isCost && daily && daily.length >= 2 ? (

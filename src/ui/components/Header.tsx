@@ -77,7 +77,9 @@ export function Header({ onDataReload, onThemeToggle }: HeaderProps) {
   return (
     <header ref={headerRef}>
       <h1>
-        <span class="accent">Code</span>{' '}Usage
+        <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>Code</span>
+        {' '}
+        <span style={{ color: 'var(--text-display)', fontWeight: 500 }}>Usage</span>
         {planBadge.value && (
           <span
             aria-live="polite"
