@@ -2,6 +2,12 @@ import Darwin
 import Foundation
 
 public actor HeimdallHelperController {
+    enum LiveProvidersProbeResult: Equatable {
+        case compatible
+        case incompatible
+        case unavailable
+    }
+
     struct HelperBinaryFingerprint: Equatable {
         var path: String
         var modificationTimeInterval: TimeInterval?
@@ -20,35 +26,39 @@ public actor HeimdallHelperController {
 
     public init() {}
 
-    public func ensureServerRunning(port: Int) async {
+    public func ensureServerRunning(port: Int) async -> Bool {
         if let ownedHelper = self.ownedHelper, !ownedHelper.process.isRunning {
             self.ownedHelper = nil
         }
 
         let serverIsHealthy = await self.hasHealthyServer(on: port)
-        let serverIsCompatible = serverIsHealthy ? await Self.hasCompatibleLiveProvidersPayload(port: port) : false
+        let compatibility = serverIsHealthy ? await Self.liveProvidersProbeResult(port: port) : .unavailable
 
-        if serverIsHealthy, !serverIsCompatible {
+        if serverIsHealthy, compatibility == .incompatible {
             await Self.stopProcessListening(on: port)
         }
 
-        if serverIsHealthy, serverIsCompatible {
+        if serverIsHealthy, compatibility == .compatible {
             if let ownedHelper = self.ownedHelper {
                 let resolved = Self.resolveExecutable()
                 let fingerprint = resolved.flatMap(Self.fingerprint(for:))
                 if ownedHelper.port == port,
                    resolved?.path == ownedHelper.executable.path,
                    fingerprint == ownedHelper.fingerprint {
-                    return
+                    return true
                 }
 
                 await self.stopOwnedHelper()
                 if await self.hasHealthyServer(on: port) {
-                    return
+                    return true
                 }
             } else {
-                return
+                return true
             }
+        }
+
+        if serverIsHealthy, compatibility == .unavailable {
+            return await self.waitForReadyServer(on: port, attempts: 30, intervalNanoseconds: 200_000_000)
         }
 
         if let ownedHelper = self.ownedHelper,
@@ -58,7 +68,7 @@ public actor HeimdallHelperController {
 
         guard let executable = Self.resolveExecutable(),
               let fingerprint = Self.fingerprint(for: executable) else {
-            return
+            return false
         }
 
         let process = Process()
@@ -88,9 +98,9 @@ public actor HeimdallHelperController {
                 port: port,
                 launchID: launchID
             )
-            _ = await self.waitForHealthyServer(on: port, attempts: 15, intervalNanoseconds: 200_000_000)
+            return await self.waitForReadyServer(on: port, attempts: 50, intervalNanoseconds: 200_000_000)
         } catch {
-            return
+            return false
         }
     }
 
@@ -127,6 +137,20 @@ public actor HeimdallHelperController {
     ) async -> Bool {
         for _ in 0..<attempts {
             if await Self.pingHealth(port: port) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: intervalNanoseconds)
+        }
+        return false
+    }
+
+    private func waitForReadyServer(
+        on port: Int,
+        attempts: Int,
+        intervalNanoseconds: UInt64
+    ) async -> Bool {
+        for _ in 0..<attempts {
+            if await Self.liveProvidersProbeResult(port: port) == .compatible {
                 return true
             }
             try? await Task.sleep(nanoseconds: intervalNanoseconds)
@@ -197,23 +221,23 @@ public actor HeimdallHelperController {
         }
     }
 
-    private static func hasCompatibleLiveProvidersPayload(port: Int) async -> Bool {
+    private static func liveProvidersProbeResult(port: Int) async -> LiveProvidersProbeResult {
         guard let url = URL(string: "http://127.0.0.1:\(port)/api/live-providers") else {
-            return false
+            return .unavailable
         }
 
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 1
-        configuration.timeoutIntervalForResource = 1
+        configuration.timeoutIntervalForRequest = 5
+        configuration.timeoutIntervalForResource = 5
         let session = URLSession(configuration: configuration)
         do {
             let (data, response) = try await session.data(from: url)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                return false
+                return .unavailable
             }
-            return Self.liveProvidersPayloadIncludesAuth(data)
+            return Self.liveProvidersPayloadIncludesAuth(data) ? .compatible : .incompatible
         } catch {
-            return false
+            return .unavailable
         }
     }
 

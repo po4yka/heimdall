@@ -35,6 +35,9 @@ public enum MenuProjectionBuilder {
         let laneSecondary = presentation.secondary
         let laneTertiary = presentation.tertiary
         let auth = presentation.auth
+        let hasCachedSnapshot = snapshot != nil
+        let connectivityFailure = hasCachedSnapshot ? lastGlobalError : nil
+        let effectiveError = snapshot?.error ?? (hasCachedSnapshot ? nil : lastGlobalError)
         let lastRefreshLabel = if let lastRefresh = snapshot?.lastRefresh {
             "Updated \(relativeLabel(lastRefresh))"
         } else if let lastUpdated = adjunct?.lastUpdated {
@@ -54,14 +57,19 @@ public enum MenuProjectionBuilder {
         let visualState = self.visualState(
             statusIndicator: snapshot?.status?.indicator,
             stale: snapshot?.stale ?? false,
-            error: snapshot?.error ?? lastGlobalError,
+            error: effectiveError,
             isRefreshing: isRefreshing
         )
+        let displayState = self.displayState(
+            from: visualState,
+            showingCachedData: connectivityFailure?.isEmpty == false
+        )
         let refreshStatusLabel = self.refreshStatusLabel(
-            visualState: visualState,
+            visualState: displayState,
             isRefreshing: isRefreshing,
             lastRefreshLabel: lastRefreshLabel,
-            error: snapshot?.error ?? lastGlobalError
+            error: effectiveError,
+            showingCachedData: connectivityFailure?.isEmpty == false
         )
         let authHeadline = auth.flatMap { self.authHeadline(for: $0) }
         let authDetail = auth.flatMap {
@@ -82,6 +90,9 @@ public enum MenuProjectionBuilder {
         if let auth, auth.requiresRelogin {
             warningLabels.append("\(provider.title) requires re-login before live quota can refresh.")
         }
+        if connectivityFailure?.isEmpty == false {
+            warningLabels.append("Live refresh failed. Showing last known data.")
+        }
         warningLabels = warningLabels.uniqued()
 
         return ProviderMenuProjection(
@@ -95,8 +106,8 @@ public enum MenuProjectionBuilder {
             authSummaryLabel: presentation.authSummaryLabel,
             authRecoveryActions: auth?.recoveryActions ?? [],
             warningLabels: warningLabels,
-            visualState: visualState,
-            stateLabel: stateLabel(for: visualState),
+            visualState: displayState,
+            stateLabel: stateLabel(for: displayState),
             statusLabel: statusLabel,
             identityLabel: identityLabel,
             lastRefreshLabel: lastRefreshLabel,
@@ -106,8 +117,10 @@ public enum MenuProjectionBuilder {
             creditsLabel: creditsLabel,
             incidentLabel: incidentLabel,
             stale: snapshot?.stale ?? false,
+            isShowingCachedData: connectivityFailure?.isEmpty == false,
             isRefreshing: isRefreshing,
-            error: snapshot?.error,
+            error: effectiveError,
+            globalIssueLabel: connectivityFailure.map(self.presentableRefreshFailure),
             historyFractions: history,
             claudeFactors: snapshot?.claudeUsage?.factors ?? [],
             adjunct: adjunct
@@ -141,6 +154,8 @@ public enum MenuProjectionBuilder {
             "Waiting for provider activity"
         }
         let refreshStatusLabel: String
+        let isShowingCachedData = lastGlobalError?.isEmpty == false && !items.isEmpty
+        let globalIssueLabel: String?
         if isRefreshing {
             let providerNames = items.map(\.title).joined(separator: " + ")
             refreshStatusLabel = if providerNames.isEmpty {
@@ -148,10 +163,22 @@ public enum MenuProjectionBuilder {
             } else {
                 "Refreshing \(providerNames)…"
             }
-        } else if let lastGlobalError {
-            refreshStatusLabel = "Last refresh failed: \(lastGlobalError)"
+        } else if isShowingCachedData {
+            refreshStatusLabel = "Showing cached data"
+        } else if lastGlobalError?.isEmpty == false {
+            refreshStatusLabel = "Refresh failed"
         } else {
             refreshStatusLabel = refreshedLabel
+        }
+
+        if let lastGlobalError, !lastGlobalError.isEmpty {
+            if isShowingCachedData {
+                globalIssueLabel = "Live refresh failed. Showing last known data."
+            } else {
+                globalIssueLabel = self.presentableRefreshFailure(lastGlobalError)
+            }
+        } else {
+            globalIssueLabel = nil
         }
 
         return OverviewMenuProjection(
@@ -161,8 +188,10 @@ public enum MenuProjectionBuilder {
             activitySummaryLabel: activitySummaryLabel,
             historyFractions: historyFractions,
             warningLabels: warningLabels,
+            isShowingCachedData: isShowingCachedData,
             isRefreshing: isRefreshing,
-            refreshStatusLabel: refreshStatusLabel
+            refreshStatusLabel: refreshStatusLabel,
+            globalIssueLabel: globalIssueLabel
         )
     }
 
@@ -321,6 +350,19 @@ public enum MenuProjectionBuilder {
         return .healthy
     }
 
+    private static func displayState(
+        from visualState: ProviderVisualState,
+        showingCachedData: Bool
+    ) -> ProviderVisualState {
+        guard showingCachedData else { return visualState }
+        switch visualState {
+        case .healthy, .refreshing:
+            return .stale
+        default:
+            return visualState
+        }
+    }
+
     private static func stateLabel(for state: ProviderVisualState) -> String {
         switch state {
         case .healthy: return "Operational"
@@ -336,13 +378,17 @@ public enum MenuProjectionBuilder {
         visualState: ProviderVisualState,
         isRefreshing: Bool,
         lastRefreshLabel: String,
-        error: String?
+        error: String?,
+        showingCachedData: Bool
     ) -> String {
         if isRefreshing {
             return "Refreshing…"
         }
+        if showingCachedData {
+            return "Showing cached data"
+        }
         if let error, !error.isEmpty {
-            return "Last refresh failed: \(error)"
+            return "Refresh failed"
         }
         switch visualState {
         case .incident:
@@ -360,7 +406,7 @@ public enum MenuProjectionBuilder {
         if let code = auth.diagnosticCode {
             switch code {
             case "authenticated-compatible":
-                return "Authenticated and compatible"
+                return nil
             case "authenticated-incompatible-source":
                 return "Authenticated, but incompatible with selected source"
             case "expired-refreshable":
@@ -382,7 +428,7 @@ public enum MenuProjectionBuilder {
             }
         }
         if auth.isAuthenticated && auth.isSourceCompatible {
-            return "Authenticated and compatible"
+            return nil
         }
         if auth.isAuthenticated && !auth.isSourceCompatible {
             return "Authenticated, but incompatible with selected source"
@@ -402,6 +448,10 @@ public enum MenuProjectionBuilder {
             return failureReason
         }
 
+        if auth.isAuthenticated && auth.isSourceCompatible && !auth.requiresRelogin {
+            return nil
+        }
+
         var fragments = [String]()
         if let loginMethod = auth.loginMethod?.replacingOccurrences(of: "-", with: " ") {
             fragments.append("Login: \(loginMethod.capitalized)")
@@ -417,6 +467,21 @@ public enum MenuProjectionBuilder {
         }
 
         return fragments.isEmpty ? nil : fragments.joined(separator: " · ")
+    }
+
+    private static func presentableRefreshFailure(_ error: String) -> String {
+        let normalized = error.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercased = normalized.lowercased()
+        if lowercased.contains("could not connect to the server")
+            || lowercased.contains("failed to connect")
+            || lowercased.contains("connection refused")
+        {
+            return "Cannot reach the local Heimdall server."
+        }
+        if lowercased.contains("timed out") {
+            return "The local Heimdall server did not respond in time."
+        }
+        return normalized
     }
     private static func paceLabel(forRemainingPercent remainingPercent: Int) -> String {
         switch remainingPercent {

@@ -74,7 +74,13 @@ public final class AppModel {
         self.isRefreshing = true
         self.refreshingProvider = provider
         defer { self.isRefreshing = false }
-        await self.helperController.ensureServerRunning(port: self.config.helperPort)
+        let helperReady = await self.helperController.ensureServerRunning(port: self.config.helperPort)
+        guard helperReady else {
+            self.lastError = "The local Heimdall server is still starting."
+            self.lastRefreshCompletedAt = Date()
+            self.refreshingProvider = nil
+            return
+        }
         let client = HeimdallAPIClient(port: self.config.helperPort)
         do {
             let envelope: ProviderSnapshotEnvelope

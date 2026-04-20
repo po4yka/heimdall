@@ -49,6 +49,7 @@ struct MenuProjectionBuilderTests {
         #expect(projection.warningLabels.contains("Resolution chain: oauth -> cli-rpc"))
         #expect(projection.laneDetails.first?.summary.contains("64% left") == true)
         #expect(projection.refreshStatusLabel.contains("Incident active"))
+        #expect(projection.isShowingCachedData == false)
     }
 
     @Test
@@ -75,8 +76,10 @@ struct MenuProjectionBuilderTests {
             creditsLabel: nil,
             incidentLabel: nil,
             stale: false,
+            isShowingCachedData: false,
             isRefreshing: false,
             error: nil,
+            globalIssueLabel: nil,
             historyFractions: [0.2, 0.8],
             claudeFactors: [],
             adjunct: nil
@@ -103,8 +106,10 @@ struct MenuProjectionBuilderTests {
             creditsLabel: nil,
             incidentLabel: nil,
             stale: false,
+            isShowingCachedData: false,
             isRefreshing: false,
             error: nil,
+            globalIssueLabel: nil,
             historyFractions: [0.6, 0.4],
             claudeFactors: [],
             adjunct: nil
@@ -121,6 +126,49 @@ struct MenuProjectionBuilderTests {
         #expect(overview.warningLabels == ["Shared warning", "Codex login required"])
         #expect(overview.historyFractions == [0.4, 0.6000000000000001])
         #expect(overview.refreshStatusLabel == "Last refresh: 2m ago")
+        #expect(overview.isShowingCachedData == false)
+        #expect(overview.globalIssueLabel == nil)
+    }
+
+    @Test
+    func projectionShowsCachedDataInsteadOfProviderErrorWhenGlobalRefreshFails() {
+        var snapshot = Self.codexSnapshot()
+        snapshot.status = nil
+        let presentation = ProviderPresentationState(
+            provider: .codex,
+            snapshot: snapshot,
+            adjunct: nil,
+            resolution: ProviderSourceResolution(
+                provider: .codex,
+                requestedSource: .auto,
+                effectiveSource: .cli,
+                effectiveSourceDetail: "cli-rpc",
+                sourceLabel: "Source: auto",
+                explanation: "Using the latest successful live snapshot.",
+                warnings: [],
+                fallbackChain: ["auto", "cli-rpc"],
+                usageAvailable: true,
+                isUnsupported: false,
+                requiresLogin: false,
+                usesFallback: false
+            )
+        )
+
+        let projection = MenuProjectionBuilder.projection(
+            from: presentation,
+            config: HeimdallBarConfig.default,
+            isRefreshing: false,
+            lastGlobalError: "Could not connect to the server."
+        )
+
+        #expect(projection.visualState == .stale)
+        #expect(projection.stateLabel == "Stale")
+        #expect(projection.isShowingCachedData == true)
+        #expect(projection.error == nil)
+        #expect(projection.refreshStatusLabel == "Showing cached data")
+        #expect(projection.globalIssueLabel == "Cannot reach the local Heimdall server.")
+        #expect(projection.warningLabels.contains("Live refresh failed. Showing last known data."))
+        #expect(projection.authHeadline == nil)
     }
 
     @Test

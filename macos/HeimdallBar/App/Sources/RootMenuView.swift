@@ -11,10 +11,17 @@ struct RootMenuView: View {
         VStack(alignment: .leading, spacing: 10) {
             MenuChromeHeader(
                 title: "HeimdallBar",
-                status: overview.refreshStatusLabel,
+                status: overview.refreshedAtLabel,
                 isRefreshing: overview.isRefreshing,
                 attentionLabel: self.attentionLabel(for: overview)
             )
+
+            if let globalIssueLabel = overview.globalIssueLabel {
+                GlobalIssueBanner(
+                    message: globalIssueLabel,
+                    detail: overview.isShowingCachedData ? "Showing last known provider data" : nil
+                )
+            }
 
             if self.model.visibleTabs.count > 1 {
                 MergeTabSwitcher(
@@ -36,12 +43,6 @@ struct RootMenuView: View {
 
             if self.model.selectedMergeTab == .overview {
                 SessionActionGroup(model: self.model, providers: self.model.visibleProviders)
-            }
-
-            if let lastError = self.model.lastError {
-                Text(lastError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
             }
         }
         .padding(10)
@@ -76,10 +77,16 @@ struct ProviderMenuView: View {
         VStack(alignment: .leading, spacing: 10) {
             MenuChromeHeader(
                 title: self.provider.title,
-                status: self.model.projection(for: self.provider).refreshStatusLabel,
+                status: self.model.projection(for: self.provider).lastRefreshLabel,
                 isRefreshing: self.model.projection(for: self.provider).isRefreshing,
                 attentionLabel: self.providerAttentionLabel
             )
+            if let globalIssueLabel = self.model.projection(for: self.provider).globalIssueLabel {
+                GlobalIssueBanner(
+                    message: globalIssueLabel,
+                    detail: self.model.projection(for: self.provider).isShowingCachedData ? "Showing last known provider data" : nil
+                )
+            }
             ProviderMenuCard(model: self.model, projection: self.model.projection(for: self.provider))
             SessionActionGroup(model: self.model, providers: [self.provider])
 
@@ -117,12 +124,11 @@ struct ProviderMenuCard: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            Text(self.primaryMetricText)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-            Text(self.secondaryMetricText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            TopMetricRow(
+                title: self.primaryMetricTitle,
+                value: self.primaryMetricText,
+                detail: self.secondaryMetricText
+            )
             AuthStatusSection(model: self.model, provider: self.projection.provider, projection: self.projection)
             if self.projection.laneDetails.count > 1 {
                 Divider()
@@ -142,7 +148,7 @@ struct ProviderMenuCard: View {
                 Text(identityLabel)
                     .font(.caption)
             }
-            if self.projection.laneDetails.count > 1 {
+            if self.projection.laneDetails.count > 1 && !self.projection.isShowingCachedData {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                     ForEach(self.projection.laneDetails.dropFirst()) { detail in
                         LaneStatusCard(detail: detail)
@@ -193,12 +199,16 @@ struct ProviderMenuCard: View {
         .menuCardBackground(opacity: self.cardBackgroundOpacity)
     }
 
+    private var primaryMetricTitle: String {
+        self.projection.laneDetails.first?.remainingPercent == nil ? "Availability" : "Session"
+    }
+
     private var primaryMetricText: String {
         guard let primaryLane = self.projection.laneDetails.first else {
             return self.unavailableValueLabel
         }
         if let remaining = primaryLane.remainingPercent {
-            return "\(remaining)% left"
+            return "\(remaining)%"
         }
         return self.unavailableValueLabel
     }
@@ -693,8 +703,8 @@ private struct OverviewProviderCard: View {
             Text(self.item.costLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if let authHeadline = self.item.authHeadline {
-                Text(authHeadline)
+            if let summaryNote = self.summaryNote {
+                Text(summaryNote)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -708,7 +718,7 @@ private struct OverviewProviderCard: View {
     }
 
     private var metricTitle: String {
-        self.item.laneDetails.first?.remainingPercent == nil ? "Needs attention" : "Session"
+        self.item.laneDetails.first?.remainingPercent == nil ? "Availability" : "Session"
     }
 
     private var metricValue: String {
@@ -769,7 +779,17 @@ private struct OverviewProviderCard: View {
            self.model.isClaudeOAuthCredentialsMissing() {
             return "Missing Claude OAuth credentials file"
         }
+        if self.item.isShowingCachedData {
+            return "Showing last known provider data"
+        }
         return "Live \(self.item.title) session not available"
+    }
+
+    private var summaryNote: String? {
+        if self.item.isShowingCachedData {
+            return "Live refresh failed. Showing cached data."
+        }
+        return self.item.authHeadline
     }
 
 }
@@ -823,6 +843,39 @@ private struct AuthStatusSection: View {
             .padding(8)
             .menuCardBackground(opacity: 0.04, cornerRadius: 8)
         }
+    }
+}
+
+private struct GlobalIssueBanner: View {
+    let message: String
+    let detail: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(self.message)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                if let detail {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.orange.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+        )
     }
 }
 

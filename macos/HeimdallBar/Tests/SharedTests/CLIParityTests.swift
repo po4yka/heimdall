@@ -195,8 +195,10 @@ struct CLIParityTests {
             creditsLabel: "$12.40 credits",
             incidentLabel: "OpenAI degraded",
             stale: false,
+            isShowingCachedData: false,
             isRefreshing: false,
             error: nil,
+            globalIssueLabel: nil,
             historyFractions: [],
             claudeFactors: [],
             adjunct: nil

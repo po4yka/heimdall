@@ -701,8 +701,10 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
     public var creditsLabel: String?
     public var incidentLabel: String?
     public var stale: Bool
+    public var isShowingCachedData: Bool
     public var isRefreshing: Bool
     public var error: String?
+    public var globalIssueLabel: String?
     public var historyFractions: [Double]
     public var claudeFactors: [ClaudeUsageFactorSnapshot]
     public var adjunct: DashboardAdjunctSnapshot?
@@ -717,6 +719,8 @@ public struct OverviewMenuProjection: Sendable {
     public var activitySummaryLabel: String
     public var historyFractions: [Double]
     public var warningLabels: [String]
+    public var isShowingCachedData: Bool
     public var isRefreshing: Bool
     public var refreshStatusLabel: String
+    public var globalIssueLabel: String?
 }
