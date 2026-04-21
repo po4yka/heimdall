@@ -7,20 +7,20 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            ProviderSettingsSection(
+            CombinedProviderSection(
                 title: "Claude",
                 config: self.$model.config.claude,
-                extrasTitle: "Enable Claude Web Extras"
+                extrasTitle: "Enable Claude Web Extras",
+                providerModel: self.providerModel(.claude)
             )
-            ProviderAuthSection(model: self.providerModel(.claude))
             ProviderWebSessionSection(model: self.providerModel(.claude))
 
-            ProviderSettingsSection(
+            CombinedProviderSection(
                 title: "Codex",
                 config: self.$model.config.codex,
-                extrasTitle: "Enable Codex OpenAI Web Extras"
+                extrasTitle: "Enable Codex OpenAI Web Extras",
+                providerModel: self.providerModel(.codex)
             )
-            ProviderAuthSection(model: self.providerModel(.codex))
             ProviderWebSessionSection(model: self.providerModel(.codex))
 
             Section("Web Extras Policy") {
@@ -66,13 +66,15 @@ struct SettingsView: View {
     }
 }
 
-private struct ProviderSettingsSection: View {
+private struct CombinedProviderSection: View {
     let title: String
     @Binding var config: ProviderConfig
     let extrasTitle: String
+    @Bindable var providerModel: ProviderFeatureModel
 
     var body: some View {
         Section(self.title) {
+            // Config rows
             Toggle("Enable \(self.title)", isOn: self.$config.enabled)
             Picker("\(self.title) Source", selection: self.$config.source) {
                 ForEach(UsageSourcePreference.allCases, id: \.self) { source in
@@ -85,18 +87,16 @@ private struct ProviderSettingsSection: View {
                 }
             }
             Toggle(self.extrasTitle, isOn: self.$config.dashboardExtrasEnabled)
-        }
-    }
-}
 
-private struct ProviderAuthSection: View {
-    @Bindable var model: ProviderFeatureModel
+            // Auth sub-header
+            Text("Auth")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-    var body: some View {
-        let projection = self.model.projection
-        let auth = self.model.authHealth
+            // Auth rows
+            let projection = self.providerModel.projection
+            let auth = self.providerModel.authHealth
 
-        Section("\(self.model.provider.title) Auth") {
             if let headline = projection.authHeadline {
                 Text(headline)
                     .font(.headline)
@@ -116,22 +116,52 @@ private struct ProviderAuthSection: View {
             if let backend = auth?.credentialBackend {
                 LabeledContent("Credential Store", value: backend)
             }
-            if let authMode = auth?.authMode {
+            // Fix 1: show Auth Mode only when it differs from Login Method
+            if let authMode = auth?.authMode,
+               authMode.lowercased() != (auth?.loginMethod ?? "").lowercased() {
                 LabeledContent("Auth Mode", value: authMode)
             }
             if let diagnostic = auth?.diagnosticCode {
                 LabeledContent("Diagnostic", value: diagnostic)
             }
 
-            LabeledContent("Authenticated", value: auth?.isAuthenticated == true ? "Yes" : "No")
-            LabeledContent("Source Compatible", value: auth?.isSourceCompatible == true ? "Yes" : "No")
-            LabeledContent("Requires Re-login", value: auth?.requiresRelogin == true ? "Yes" : "No")
+            // Fix 3: single Status row collapsing three health flags
+            if let auth {
+                let statusValue: String = {
+                    if auth.isAuthenticated != true { return "Not authenticated" }
+                    if auth.requiresRelogin == true { return "Needs re-login" }
+                    if auth.isSourceCompatible != true { return "Source not compatible" }
+                    return "Healthy"
+                }()
+                let tooltip = "Authenticated: \(auth.isAuthenticated == true ? "Yes" : "No") · Source Compatible: \(auth.isSourceCompatible == true ? "Yes" : "No") · Requires Re-login: \(auth.requiresRelogin == true ? "Yes" : "No")"
+                LabeledContent("Status", value: statusValue)
+                    .help(tooltip)
+            }
 
-            ForEach(self.model.authRecoveryActions) { action in
-                Button(action.label) {
-                    Task { await self.model.runAuthRecoveryAction(action) }
+            // Fix 2 & 5: horizontal row of labelled recovery buttons
+            if !self.providerModel.authRecoveryActions.isEmpty {
+                HStack {
+                    ForEach(self.providerModel.authRecoveryActions) { action in
+                        Button(self.displayLabel(for: action)) {
+                            Task { await self.providerModel.runAuthRecoveryAction(action) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                    Spacer()
                 }
             }
+        }
+    }
+
+    private func displayLabel(for action: AuthRecoveryAction) -> String {
+        switch action.actionID {
+        case "claude-run": return "Open Claude Code"
+        case "claude-login": return "Open Claude Code (then /login)"
+        case "claude-doctor": return "Open Claude Code (then /doctor)"
+        case "codex-login": return "Run Codex Login"
+        case "codex-login-device": return "Run Codex Device Login"
+        default: return action.label
         }
     }
 }
