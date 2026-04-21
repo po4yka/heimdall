@@ -88,9 +88,13 @@ private struct CombinedProviderSection: View {
             Toggle(self.extrasTitle, isOn: self.$config.dashboardExtrasEnabled)
 
             // Auth sub-header
-            Text("Auth")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("Auth")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Auth rows
             let projection = self.providerModel.projection
