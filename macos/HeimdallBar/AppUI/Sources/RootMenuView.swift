@@ -787,9 +787,6 @@ struct OverviewProviderCard: View {
                     .font(.headline)
                 StateBadge(state: self.item.visualState, label: self.item.stateLabel)
                 Spacer()
-                Text(self.item.refreshStatusLabel)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
             TopMetricRow(
                 title: self.metricTitle,
@@ -882,10 +879,7 @@ struct OverviewProviderCard: View {
     }
 
     private var summaryNote: String? {
-        if self.item.isShowingCachedData {
-            return "Live refresh failed. Showing cached data."
-        }
-        return self.item.authHeadline
+        self.item.authHeadline
     }
 
 }
