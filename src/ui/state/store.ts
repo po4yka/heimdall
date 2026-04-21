@@ -17,6 +17,26 @@ const FILTERS_EXPANDED_PARAM = 'filters_expanded';
 const DASHBOARD_TAB_PARAM = 'tab';
 const COLLAPSED_SECTIONS_PARAM = 'collapsed_sections';
 
+// Allowlist of column IDs declared in SessionsTable.tsx. Used to validate
+// untrusted columnIds parsed from the URL before they are used as object keys,
+// preventing prototype pollution via crafted ?sessions_hidden=__proto__ etc.
+const SESSIONS_TABLE_COLUMN_IDS: ReadonlySet<string> = new Set([
+  'session',
+  'project',
+  'provider',
+  'last',
+  'duration_min',
+  'model',
+  'turns',
+  'input',
+  'output',
+  'cost',
+  'credits',
+  'cost_meta',
+  'cache_hit_ratio',
+  'tokens_per_min',
+]);
+
 export const selectedModels = signal<Set<string>>(new Set());
 export const selectedRange = signal<RangeKey>('30d');
 export const selectedProvider = signal<ProviderFilter>('both');
@@ -109,9 +129,11 @@ function readSessionsTableColumnVisibility(): VisibilityState {
   const hiddenColumns = readSearchParam(SESSIONS_HIDDEN_COLUMNS_PARAM);
   if (!hiddenColumns) return {};
 
-  const visibility: VisibilityState = {};
+  const visibility: VisibilityState = Object.create(null) as VisibilityState;
   for (const columnId of hiddenColumns.split(',').map(value => value.trim()).filter(Boolean)) {
-    visibility[columnId] = false;
+    if (SESSIONS_TABLE_COLUMN_IDS.has(columnId)) {
+      visibility[columnId] = false;
+    }
   }
   return visibility;
 }

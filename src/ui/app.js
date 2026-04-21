@@ -1017,6 +1017,22 @@
   var FILTERS_EXPANDED_PARAM = "filters_expanded";
   var DASHBOARD_TAB_PARAM = "tab";
   var COLLAPSED_SECTIONS_PARAM = "collapsed_sections";
+  var SESSIONS_TABLE_COLUMN_IDS = /* @__PURE__ */ new Set([
+    "session",
+    "project",
+    "provider",
+    "last",
+    "duration_min",
+    "model",
+    "turns",
+    "input",
+    "output",
+    "cost",
+    "credits",
+    "cost_meta",
+    "cache_hit_ratio",
+    "tokens_per_min"
+  ]);
   var selectedModels = y3(/* @__PURE__ */ new Set());
   var selectedRange = y3("30d");
   var selectedProvider = y3("both");
@@ -1078,9 +1094,11 @@
   function readSessionsTableColumnVisibility() {
     const hiddenColumns = readSearchParam(SESSIONS_HIDDEN_COLUMNS_PARAM);
     if (!hiddenColumns) return {};
-    const visibility = {};
+    const visibility = /* @__PURE__ */ Object.create(null);
     for (const columnId of hiddenColumns.split(",").map((value) => value.trim()).filter(Boolean)) {
-      visibility[columnId] = false;
+      if (SESSIONS_TABLE_COLUMN_IDS.has(columnId)) {
+        visibility[columnId] = false;
+      }
     }
     return visibility;
   }
