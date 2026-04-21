@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.2.2",
+    "@tailwindcss/cli": "^4.2.3",
     "esbuild": "^0.28.0",
     "typescript": "^6.0.0",
     "vitest": "^4.1.4"
