@@ -97,7 +97,11 @@ private struct WindowOverviewView: View {
             WindowHeader(
                 title: "Overview",
                 subtitle: projection.refreshedAtLabel,
-                issue: projection.globalIssueLabel
+                issue: projection.globalIssueLabel,
+                onRetry: {
+                    Task { await self.overview.refreshAll() }
+                },
+                isRetrying: projection.isRefreshing
             )
 
             OverviewMenuCard(providerModel: self.providerModel, projection: projection)
@@ -125,7 +129,11 @@ private struct WindowProviderView: View {
             WindowHeader(
                 title: self.model.provider.title,
                 subtitle: self.model.projection.refreshStatusLabel,
-                issue: self.model.issue?.message ?? self.model.projection.globalIssueLabel
+                issue: self.model.issue?.message ?? self.model.projection.globalIssueLabel,
+                onRetry: {
+                    Task { await self.model.refresh() }
+                },
+                isRetrying: self.model.isBusy
             )
 
             ProviderMenuCard(providerModel: self.model)
@@ -160,6 +168,8 @@ private struct WindowHeader: View {
     let title: String
     let subtitle: String
     let issue: String?
+    var onRetry: (() -> Void)? = nil
+    var isRetrying: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -169,15 +179,25 @@ private struct WindowHeader: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             if let issue, !issue.isEmpty {
-                Text(issue)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.primary.opacity(0.05))
-                    )
+                HStack(alignment: .top, spacing: 10) {
+                    Text(issue)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    if let onRetry {
+                        Button(self.isRetrying ? "Retrying…" : "Retry", action: onRetry)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(self.isRetrying)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                )
             }
         }
     }

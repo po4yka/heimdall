@@ -176,11 +176,11 @@ public enum MenuProjectionBuilder {
         }
 
         if let lastGlobalError, !lastGlobalError.isEmpty {
-            if isShowingCachedData {
-                globalIssueLabel = "Live refresh failed. Showing last known data."
-            } else {
-                globalIssueLabel = self.presentableRefreshFailure(lastGlobalError)
-            }
+            // Always surface the specific reason. refreshStatusLabel already
+            // communicates "Showing cached data" / "Refresh failed", so the
+            // banner can stay focused on the 'why' instead of repeating the
+            // cached-state tag.
+            globalIssueLabel = self.presentableRefreshFailure(lastGlobalError)
         } else {
             globalIssueLabel = nil
         }
