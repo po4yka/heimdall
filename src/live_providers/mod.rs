@@ -107,7 +107,7 @@ where
         }
     };
 
-    if let Some(cached) = cached_response(state).await {
+    if !force_refresh && let Some(cached) = cached_response(state).await {
         return Ok(filter_response(
             &cached,
             requested_provider.as_deref(),
