@@ -2,6 +2,13 @@ import AppKit
 import HeimdallDomain
 import SwiftUI
 
+enum WindowReopener {
+    static func reopenMainWindow(openWindow: (String) -> Void, activateApp: () -> Void) {
+        activateApp()
+        openWindow(HeimdallBarSceneID.mainWindow)
+    }
+}
+
 struct RootMenuView: View {
     @Bindable var shell: AppShellModel
     @Bindable var overview: OverviewFeatureModel
@@ -1125,8 +1132,10 @@ private struct MenuActionRow: View {
     }
 
     private func openMainWindow() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        self.openWindow(id: HeimdallBarSceneID.mainWindow)
+        WindowReopener.reopenMainWindow(
+            openWindow: { windowID in self.openWindow(id: windowID) },
+            activateApp: { NSApplication.shared.activate(ignoringOtherApps: true) }
+        )
     }
 }
 

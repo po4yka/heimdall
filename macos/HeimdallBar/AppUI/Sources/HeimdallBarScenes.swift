@@ -1,25 +1,22 @@
 import AppKit
 import Observation
 import SwiftUI
+import os.log
 
 enum HeimdallBarSceneID {
     static let mainWindow = "heimdall-main-window"
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let shutdownTimeoutNanoseconds: UInt64 = 2_000_000_000
+    private static let logger = Logger(subsystem: "dev.heimdall.HeimdallBar", category: "Lifecycle")
+
     var model: AppModel?
     private var isPreparingToTerminate = false
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        Task { @MainActor in
-            self.model?.start()
-        }
-    }
 
     @MainActor
     func attach(model: AppModel) {
         self.model = model
-        model.start()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -27,13 +24,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !self.isPreparingToTerminate else { return .terminateLater }
 
         self.isPreparingToTerminate = true
-        Task {
-            await model.prepareForExit()
+        Task { [weak self] in
+            let shutdownCompleted = await Self.awaitShutdown(timeoutNanoseconds: Self.shutdownTimeoutNanoseconds) {
+                await model.prepareForExit()
+            }
             await MainActor.run {
+                if !shutdownCompleted {
+                    Self.logger.error("Shutdown timed out; terminating before helper cleanup completed.")
+                }
+                self?.isPreparingToTerminate = false
                 sender.reply(toApplicationShouldTerminate: true)
             }
         }
         return .terminateLater
+    }
+
+    static func awaitShutdown(
+        timeoutNanoseconds: UInt64,
+        operation: @escaping @Sendable () async -> Void
+    ) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await operation()
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+                return false
+            }
+
+            let completed = await group.next() ?? true
+            group.cancelAll()
+            return completed
+        }
     }
 }
 
@@ -54,7 +77,6 @@ public struct HeimdallBarScenes: Scene {
                 providerModel: self.model.providerModel(for:)
             )
                 .frame(minWidth: 900, idealWidth: 1080, minHeight: 620, idealHeight: 720)
-                .task { self.model.start() }
                 .onAppear { self.appDelegate.attach(model: self.model) }
         }
 
@@ -66,7 +88,6 @@ public struct HeimdallBarScenes: Scene {
                 helperPort: self.model.config.helperPort,
                 onQuit: self.quit
             )
-                .task { self.model.start() }
                 .onAppear { self.appDelegate.attach(model: self.model) }
         } label: {
             let overview = self.model.overview.projection
@@ -84,7 +105,6 @@ public struct HeimdallBarScenes: Scene {
                 helperPort: self.model.config.helperPort,
                 onQuit: self.quit
             )
-                .task { self.model.start() }
                 .onAppear { self.appDelegate.attach(model: self.model) }
         } label: {
             let providerModel = self.model.providerModel(for: .claude)
@@ -102,7 +122,6 @@ public struct HeimdallBarScenes: Scene {
                 helperPort: self.model.config.helperPort,
                 onQuit: self.quit
             )
-                .task { self.model.start() }
                 .onAppear { self.appDelegate.attach(model: self.model) }
         } label: {
             let providerModel = self.model.providerModel(for: .codex)

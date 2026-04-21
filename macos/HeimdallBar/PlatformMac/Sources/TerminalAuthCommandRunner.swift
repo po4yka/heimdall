@@ -3,17 +3,58 @@ import HeimdallDomain
 import HeimdallServices
 
 public struct TerminalAuthCommandRunner: AuthCommandRunning {
-    public init() {}
+    private let temporaryDirectoryProvider: @Sendable () -> URL
+    private let terminalLauncher: @Sendable (URL) throws -> Void
+
+    public init(
+        temporaryDirectoryProvider: @escaping @Sendable () -> URL = { FileManager.default.temporaryDirectory },
+        terminalLauncher: @escaping @Sendable (URL) throws -> Void = { scriptURL in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = ["-a", "Terminal", scriptURL.path()]
+            try process.run()
+        }
+    ) {
+        self.temporaryDirectoryProvider = temporaryDirectoryProvider
+        self.terminalLauncher = terminalLauncher
+    }
 
     public func runAuthCommand(
         provider: ProviderID,
         title: String,
         command: String
     ) throws {
-        let scriptURL = FileManager.default.temporaryDirectory
+        let scriptURL = self.temporaryDirectoryProvider()
             .appendingPathComponent("heimdallbar-\(provider.rawValue)-auth.command", isDirectory: false)
-        let script = """
+        let script = Self.scriptContents(
+            provider: provider,
+            title: title,
+            command: command,
+            scriptPath: scriptURL.path()
+        )
+        do {
+            try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path())
+            try self.terminalLauncher(scriptURL)
+        } catch {
+            try? FileManager.default.removeItem(at: scriptURL)
+            throw error
+        }
+    }
+
+    static func scriptContents(
+        provider: ProviderID,
+        title: String,
+        command: String,
+        scriptPath: String
+    ) -> String {
+        """
         #!/bin/zsh
+        SCRIPT_PATH=\(Self.shellSingleQuoted(scriptPath))
+        cleanup() {
+          rm -f -- "$SCRIPT_PATH"
+        }
+        trap cleanup EXIT HUP INT TERM
         export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
         clear
         echo "HeimdallBar \(provider.title) Auth Recovery"
@@ -48,11 +89,9 @@ public struct TerminalAuthCommandRunner: AuthCommandRunning {
         echo
         read -k '?Press any key to close...'
         """
-        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path())
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", "Terminal", scriptURL.path()]
-        try process.run()
+    }
+
+    private static func shellSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
 }

@@ -10,7 +10,9 @@ struct HeimdallBarApp: App {
     init() {
         let compositionRoot = MacPlatformCompositionRoot()
         let runtime = compositionRoot.appRuntime()
-        self._model = State(initialValue: AppModel(runtime: runtime))
+        let model = AppModel(runtime: runtime)
+        model.start()
+        self._model = State(initialValue: model)
     }
 
     @MainActor
