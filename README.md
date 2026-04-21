@@ -238,6 +238,17 @@ When `HeimdallBar.app` starts, it manages its own local helper:
 
 You do not need a separate `PATH` installation of `claude-usage-tracker` for the app itself.
 
+#### App architecture
+
+`HeimdallBar` is now split into layered native modules:
+
+- `HeimdallDomain` contains pure shared models, source resolution, and widget snapshot policy.
+- `HeimdallServices` owns refresh orchestration, repositories, auth coordination, and snapshot writing interfaces.
+- `HeimdallPlatformMac` contains macOS-only adapters such as helper process management, browser import, Keychain storage, and WebKit scraping.
+- `HeimdallAppUI`, `HeimdallWidgets`, and `HeimdallCLI` build the app, widget, and bundled CLI surfaces on top of those layers.
+
+This split is intentional preparation for a future iOS companion. The Rust helper remains a macOS-only local producer; a future iOS client is expected to consume synced/provider-backed data rather than launch the helper locally.
+
 #### Bundled CLI
 
 The macOS app artifact also contains a bundled `heimdallbar` CLI plus its shared framework. Keep the artifact directory structure intact if you want to call the CLI directly:
@@ -317,7 +328,12 @@ The signed macOS app artifact contains:
 
 - `HeimdallBar.app`
 - `bin/heimdallbar`
-- `Frameworks/HeimdallBarShared.framework`
+- `Frameworks/HeimdallDomain.framework`
+- `Frameworks/HeimdallServices.framework`
+- `Frameworks/HeimdallPlatformMac.framework`
+- `Frameworks/HeimdallAppUI.framework`
+- `Frameworks/HeimdallWidgets.framework`
+- `Frameworks/HeimdallCLI.framework`
 
 Inside `HeimdallBar.app` itself you should also see:
 

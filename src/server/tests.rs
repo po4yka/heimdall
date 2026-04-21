@@ -704,6 +704,7 @@ mod tests {
             *cache = Some((
                 std::time::Instant::now(),
                 crate::models::LiveProvidersResponse {
+                    contract_version: crate::models::LIVE_PROVIDERS_CONTRACT_VERSION,
                     providers: vec![
                         crate::models::LiveProviderSnapshot {
                             provider: "claude".into(),
@@ -772,6 +773,10 @@ mod tests {
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(data["requested_provider"], "codex");
+        assert_eq!(
+            data["contract_version"],
+            crate::models::LIVE_PROVIDERS_CONTRACT_VERSION
+        );
         assert_eq!(data["response_scope"], "provider");
         assert_eq!(data["cache_hit"], true);
         assert_eq!(data["providers"].as_array().unwrap().len(), 1);

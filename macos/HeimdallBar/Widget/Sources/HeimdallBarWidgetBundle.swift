@@ -1,4 +1,4 @@
-import HeimdallBarShared
+import HeimdallWidgets
 import SwiftUI
 import WidgetKit
 

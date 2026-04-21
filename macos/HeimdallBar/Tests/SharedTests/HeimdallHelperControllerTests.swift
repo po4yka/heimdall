@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import HeimdallBarShared
+@testable import HeimdallPlatformMac
 
 struct HeimdallHelperControllerTests {
     @Test
@@ -65,12 +65,12 @@ struct HeimdallHelperControllerTests {
     }
 
     @Test
-    func liveProvidersPayloadCompatibilityRequiresAuthForEveryProvider() {
-        let compatible = Data(#"{"providers":[{"provider":"claude","auth":{"diagnostic_code":"ok"}},{"provider":"codex","auth":{"diagnostic_code":"ok"}}]}"#.utf8)
-        let incompatible = Data(#"{"providers":[{"provider":"claude"},{"provider":"codex","auth":{"diagnostic_code":"ok"}}]}"#.utf8)
+    func liveProvidersPayloadCompatibilityRequiresMatchingContractVersion() {
+        let compatible = Data(#"{"contract_version":1,"providers":[{"provider":"claude"},{"provider":"codex"}]}"#.utf8)
+        let incompatible = Data(#"{"contract_version":999,"providers":[{"provider":"claude"},{"provider":"codex"}]}"#.utf8)
 
-        #expect(HeimdallHelperController.liveProvidersPayloadIncludesAuth(compatible))
-        #expect(!HeimdallHelperController.liveProvidersPayloadIncludesAuth(incompatible))
+        #expect(HeimdallHelperController.liveProvidersPayloadIsCompatible(compatible))
+        #expect(!HeimdallHelperController.liveProvidersPayloadIsCompatible(incompatible))
     }
 
     @Test

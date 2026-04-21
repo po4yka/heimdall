@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import HeimdallBarShared
+@testable import HeimdallDomain
 
 struct MenuProjectionBuilderTests {
     @Test

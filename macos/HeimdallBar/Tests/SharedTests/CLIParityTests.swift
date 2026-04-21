@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import HeimdallBarShared
+import HeimdallDomain
+@testable import HeimdallCLI
 
 struct CLIParityTests {
     @Test

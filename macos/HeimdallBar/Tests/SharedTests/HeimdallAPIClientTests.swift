@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import HeimdallBarShared
+import HeimdallDomain
+@testable import HeimdallPlatformMac
 
 struct HeimdallAPIClientTests {
     @Test
@@ -85,6 +86,7 @@ struct HeimdallAPIClientTests {
     private static func snapshotEnvelopeJSON(provider: String) -> String {
         """
         {
+          "contract_version": 1,
           "providers": [
             {
               "provider": "\(provider)",

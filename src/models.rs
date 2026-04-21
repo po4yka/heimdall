@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub const LIVE_PROVIDERS_CONTRACT_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Default)]
 pub struct Session {
     pub session_id: String,
@@ -396,6 +398,7 @@ pub struct LiveProviderSnapshot {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct LiveProvidersResponse {
+    pub contract_version: u32,
     pub providers: Vec<LiveProviderSnapshot>,
     pub fetched_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]

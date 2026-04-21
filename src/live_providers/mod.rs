@@ -7,8 +7,9 @@ use anyhow::{Result, anyhow, bail};
 
 use crate::agent_status::models::ProviderStatus;
 use crate::models::{
-    LiveProviderHistoryResponse, LiveProviderIdentity, LiveProviderSnapshot,
-    LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse, ProviderCostSummary,
+    LIVE_PROVIDERS_CONTRACT_VERSION, LiveProviderHistoryResponse, LiveProviderIdentity,
+    LiveProviderSnapshot, LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse,
+    ProviderCostSummary,
 };
 use crate::oauth::credentials;
 use crate::oauth::models::{BudgetInfo, Identity, Plan, UsageWindowsResponse, WindowInfo};
@@ -216,6 +217,7 @@ async fn fetch_live_provider_response(
     }
 
     Ok(LiveProvidersResponse {
+        contract_version: LIVE_PROVIDERS_CONTRACT_VERSION,
         providers,
         fetched_at: chrono::Utc::now().to_rfc3339(),
         requested_provider: requested_provider.map(ToOwned::to_owned),
@@ -321,6 +323,7 @@ fn filter_response(
     };
 
     LiveProvidersResponse {
+        contract_version: response.contract_version,
         providers,
         fetched_at: response.fetched_at.clone(),
         requested_provider: requested_provider.map(ToOwned::to_owned),
@@ -768,6 +771,7 @@ mod tests {
 
     fn fixture_response(provider: &str) -> LiveProvidersResponse {
         LiveProvidersResponse {
+            contract_version: LIVE_PROVIDERS_CONTRACT_VERSION,
             providers: vec![LiveProviderSnapshot {
                 provider: provider.to_string(),
                 available: true,

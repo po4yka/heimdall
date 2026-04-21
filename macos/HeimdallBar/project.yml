@@ -2,13 +2,25 @@ name: HeimdallBar
 options:
   minimumXcodeGenVersion: 2.38.0
 schemes:
-  HeimdallBarShared:
+  HeimdallBarModules:
     build:
       targets:
-        HeimdallBarShared: all
+        HeimdallDomain: all
+        HeimdallServices: all
+        HeimdallPlatformMac: all
+        HeimdallAppUI: all
+        HeimdallWidgets: all
+        HeimdallCLI: all
     test:
       targets:
-        - HeimdallBarSharedTests
+        - HeimdallBarModuleTests
+  HeimdallBarApp:
+    build:
+      targets:
+        HeimdallBarApp: all
+    test:
+      targets:
+        - HeimdallBarModuleTests
 settings:
   base:
     SWIFT_VERSION: 6.0
@@ -16,17 +28,90 @@ settings:
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 0.1.0
 targets:
-  HeimdallBarShared:
+  HeimdallDomain:
     type: framework
     platform: macOS
-    info:
-      path: Shared/Info.plist
     sources:
-      - path: Shared/Sources
+      - path: Domain/Sources
+    preBuildScripts:
+      - name: Validate Domain Boundaries
+        basedOnDependencyAnalysis: false
+        script: |
+          "$SRCROOT/scripts/validate_module_boundaries.sh" "$SRCROOT/Domain/Sources" "HeimdallDomain"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBarShared
-        PRODUCT_NAME: HeimdallBarShared
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallDomain
+        PRODUCT_NAME: HeimdallDomain
+        GENERATE_INFOPLIST_FILE: YES
+  HeimdallServices:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Services/Sources
+    preBuildScripts:
+      - name: Validate Services Boundaries
+        basedOnDependencyAnalysis: false
+        script: |
+          "$SRCROOT/scripts/validate_module_boundaries.sh" "$SRCROOT/Services/Sources" "HeimdallServices"
+    dependencies:
+      - target: HeimdallDomain
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallServices
+        PRODUCT_NAME: HeimdallServices
+        GENERATE_INFOPLIST_FILE: YES
+  HeimdallPlatformMac:
+    type: framework
+    platform: macOS
+    sources:
+      - path: PlatformMac/Sources
+    dependencies:
+      - target: HeimdallDomain
+      - target: HeimdallServices
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallPlatformMac
+        PRODUCT_NAME: HeimdallPlatformMac
+        GENERATE_INFOPLIST_FILE: YES
+  HeimdallAppUI:
+    type: framework
+    platform: macOS
+    sources:
+      - path: AppUI/Sources
+    dependencies:
+      - target: HeimdallDomain
+      - target: HeimdallServices
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallAppUI
+        PRODUCT_NAME: HeimdallAppUI
+        GENERATE_INFOPLIST_FILE: YES
+  HeimdallWidgets:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Widgets/Sources
+    dependencies:
+      - target: HeimdallDomain
+      - target: HeimdallServices
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallWidgets
+        PRODUCT_NAME: HeimdallWidgets
+        GENERATE_INFOPLIST_FILE: YES
+  HeimdallCLI:
+    type: framework
+    platform: macOS
+    sources:
+      - path: CLIFramework/Sources
+    dependencies:
+      - target: HeimdallDomain
+      - target: HeimdallServices
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallCLI
+        PRODUCT_NAME: HeimdallCLI
+        GENERATE_INFOPLIST_FILE: YES
   HeimdallBarApp:
     type: application
     platform: macOS
@@ -42,7 +127,14 @@ targets:
         script: |
           "$SRCROOT/../../script/bundle_heimdall_helper.sh" "$TARGET_BUILD_DIR/$WRAPPER_NAME" "$CONFIGURATION"
     dependencies:
-      - target: HeimdallBarShared
+      - target: HeimdallDomain
+        embed: true
+      - target: HeimdallServices
+        embed: true
+      - target: HeimdallPlatformMac
+        embed: true
+      - target: HeimdallAppUI
+        embed: true
       - target: HeimdallBarWidget
         embed: true
     settings:
@@ -63,7 +155,12 @@ targets:
     sources:
       - path: Widget/Sources
     dependencies:
-      - target: HeimdallBarShared
+      - target: HeimdallDomain
+        embed: true
+      - target: HeimdallServices
+        embed: true
+      - target: HeimdallWidgets
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBar.widget
@@ -78,7 +175,10 @@ targets:
     sources:
       - path: CLI/Sources
     dependencies:
-      - target: HeimdallBarShared
+      - target: HeimdallDomain
+      - target: HeimdallServices
+      - target: HeimdallPlatformMac
+      - target: HeimdallCLI
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBar.cli
@@ -87,15 +187,20 @@ targets:
       configs:
         Release:
           ENABLE_HARDENED_RUNTIME: YES
-  HeimdallBarSharedTests:
+  HeimdallBarModuleTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - path: Tests/SharedTests
     dependencies:
-      - target: HeimdallBarShared
+      - target: HeimdallDomain
+      - target: HeimdallServices
+      - target: HeimdallPlatformMac
+      - target: HeimdallAppUI
+      - target: HeimdallWidgets
+      - target: HeimdallCLI
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBarSharedTests
-        PRODUCT_NAME: HeimdallBarSharedTests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBarModuleTests
+        PRODUCT_NAME: HeimdallBarModuleTests
         GENERATE_INFOPLIST_FILE: YES
