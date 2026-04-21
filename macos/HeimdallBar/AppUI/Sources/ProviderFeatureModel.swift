@@ -2,6 +2,7 @@ import Foundation
 import HeimdallDomain
 import HeimdallServices
 import Observation
+import os.log
 
 @MainActor
 @Observable
@@ -46,8 +47,15 @@ public final class ProviderFeatureModel {
         self.repository.browserImportCandidates[self.provider] ?? []
     }
 
+    private static let logger = Logger(subsystem: "dev.heimdall.HeimdallBar", category: "ProviderFeatureModel")
+
     public var issue: AppIssue? {
-        self.repository.issue(for: self.provider) ?? self.repository.issue(for: nil)
+        let candidate = self.repository.issue(for: self.provider) ?? self.repository.issue(for: nil)
+        if let candidate, candidate.kind == .widgetPersistence {
+            Self.logger.debug("Suppressing widgetPersistence issue from UI: \(candidate.message)")
+            return nil
+        }
+        return candidate
     }
 
     public var isBusy: Bool {

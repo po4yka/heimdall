@@ -23,7 +23,13 @@ public enum MenuProjectionBuilder {
         let adjunct = presentation.adjunct
         let resolution = presentation.resolution
         let history = snapshot.map { historyFractions($0.costSummary.daily) } ?? []
-        let statusLabel = snapshot?.status.map { "[\($0.indicator.uppercased())] \($0.description)" }
+        let statusLabel = snapshot?.status.map { status -> String in
+            let normalized = status.indicator.lowercased().trimmingCharacters(in: .whitespaces)
+            if normalized.isEmpty || normalized == "none" {
+                return status.description
+            }
+            return "[\(status.indicator.uppercased())] \(status.description)"
+        }
         let incidentLabel = statusLabel.flatMap { $0.contains("major") || $0.contains("critical") ? $0 : nil }
         let identityLabel = presentation.displayIdentityLabel
         let creditsLabel = presentation.displayCredits.map { value in
@@ -90,9 +96,7 @@ public enum MenuProjectionBuilder {
         if let auth, auth.requiresRelogin {
             warningLabels.append("\(provider.title) requires re-login before live quota can refresh.")
         }
-        if connectivityFailure?.isEmpty == false {
-            warningLabels.append("Live refresh failed. Showing last known data.")
-        }
+        // "Showing cached data" is already conveyed by the StateBadge; suppress the duplicate warning.
         warningLabels = warningLabels.uniqued()
 
         return ProviderMenuProjection(

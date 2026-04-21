@@ -167,7 +167,7 @@ struct MenuProjectionBuilderTests {
         #expect(projection.error == nil)
         #expect(projection.refreshStatusLabel == "Showing cached data")
         #expect(projection.globalIssueLabel == "Cannot reach the local Heimdall server.")
-        #expect(projection.warningLabels.contains("Live refresh failed. Showing last known data."))
+        #expect(!projection.warningLabels.contains("Live refresh failed. Showing last known data."))
         #expect(projection.authHeadline == nil)
     }
 

@@ -137,7 +137,6 @@ private struct WindowProviderView: View {
 
             ProviderMenuCard(providerModel: self.model)
 
-            ProviderAuthDetails(model: self.model)
             ProviderSessionDetails(model: self.model)
         }
     }
@@ -187,36 +186,6 @@ private struct WindowHeader: View {
                     )
             }
         }
-    }
-}
-
-private struct ProviderAuthDetails: View {
-    @Bindable var model: ProviderFeatureModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Auth")
-                .font(.headline)
-            if let headline = self.model.projection.authHeadline {
-                Text(headline)
-            }
-            if let detail = self.model.projection.authDetail {
-                Text(detail)
-                    .foregroundStyle(.secondary)
-            }
-            if let auth = self.model.authHealth {
-                LabeledContent("Login Method", value: auth.loginMethod ?? "Unknown")
-                LabeledContent("Credential Store", value: auth.credentialBackend ?? "Unknown")
-                LabeledContent("Diagnostic", value: auth.diagnosticCode ?? "Unknown")
-            }
-            ForEach(self.model.authRecoveryActions) { action in
-                Button(action.label) {
-                    Task { await self.model.runAuthRecoveryAction(action) }
-                }
-            }
-        }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.03)))
     }
 }
 

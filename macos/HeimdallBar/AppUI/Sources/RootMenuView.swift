@@ -142,10 +142,6 @@ struct ProviderMenuCard: View {
                 Text(self.projection.title)
                     .font(.system(size: 13, weight: .semibold))
                 StateBadge(state: self.projection.visualState, label: self.projection.stateLabel)
-                Spacer()
-                Text(self.projection.refreshStatusLabel)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
             }
             TopMetricRow(
                 title: self.primaryMetricTitle,
@@ -929,7 +925,7 @@ struct AuthStatusSection: View {
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                 }
-                ForEach(self.model.authRecoveryActions.prefix(2)) { action in
+                ForEach(self.model.authRecoveryActions) { action in
                     Button {
                         Task { await self.model.runAuthRecoveryAction(action) }
                     } label: {
