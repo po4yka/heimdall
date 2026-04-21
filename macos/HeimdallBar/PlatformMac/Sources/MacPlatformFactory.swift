@@ -3,7 +3,9 @@ import HeimdallServices
 public struct MacPlatformCompositionRoot: Sendable {
     private let settingsStore: any SettingsStore
     private let helperRuntime: any HelperRuntime
-    private let adjunctProvider: any AdjunctProvider
+    private let adjunctLoader: any DashboardAdjunctLoading
+    private let browserSessionManager: any BrowserSessionManaging
+    private let credentialInspector: any ProviderCredentialInspecting
     private let widgetSnapshotWriter: any WidgetSnapshotWriter
     private let widgetReloader: any WidgetReloading
     private let authCommandRunner: any AuthCommandRunning
@@ -12,7 +14,8 @@ public struct MacPlatformCompositionRoot: Sendable {
     public init(
         settingsStore: any SettingsStore = ConfigStore.shared,
         helperRuntime: any HelperRuntime = HeimdallHelperController(),
-        adjunctProvider: any AdjunctProvider = DashboardAdjunctController(),
+        browserSessionManager: any BrowserSessionManaging = BrowserSessionController(),
+        credentialInspector: any ProviderCredentialInspecting = ProviderCredentialInspector(),
         widgetSnapshotWriter: any WidgetSnapshotWriter = AppGroupWidgetSnapshotStore(),
         widgetReloader: any WidgetReloading = WidgetCenterReloader(),
         authCommandRunner: any AuthCommandRunning = TerminalAuthCommandRunner(),
@@ -22,7 +25,9 @@ public struct MacPlatformCompositionRoot: Sendable {
     ) {
         self.settingsStore = settingsStore
         self.helperRuntime = helperRuntime
-        self.adjunctProvider = adjunctProvider
+        self.browserSessionManager = browserSessionManager
+        self.adjunctLoader = DashboardAdjunctController(sessionManager: browserSessionManager)
+        self.credentialInspector = credentialInspector
         self.widgetSnapshotWriter = widgetSnapshotWriter
         self.widgetReloader = widgetReloader
         self.authCommandRunner = authCommandRunner
@@ -33,7 +38,9 @@ public struct MacPlatformCompositionRoot: Sendable {
         HeimdallAppEnvironment(
             settingsStore: self.settingsStore,
             helperRuntime: self.helperRuntime,
-            adjunctProvider: self.adjunctProvider,
+            adjunctLoader: self.adjunctLoader,
+            browserSessionManager: self.browserSessionManager,
+            credentialInspector: self.credentialInspector,
             widgetSnapshotWriter: self.widgetSnapshotWriter,
             widgetReloader: self.widgetReloader,
             authCommandRunner: self.authCommandRunner,
@@ -44,7 +51,7 @@ public struct MacPlatformCompositionRoot: Sendable {
     public func cliDependencies() -> HeimdallCLIDependencies {
         HeimdallCLIDependencies(
             settingsStore: self.settingsStore,
-            adjunctProvider: self.adjunctProvider,
+            adjunctLoader: self.adjunctLoader,
             authCommandRunner: self.authCommandRunner,
             liveProviderClientFactory: self.liveProviderClientFactory
         )

@@ -12,19 +12,22 @@ public final class ProviderFeatureModel {
     private let repository: ProviderRepository
     private let refreshCoordinator: RefreshCoordinator
     private let authCoordinator: AuthCoordinator
+    private let credentialInspector: any ProviderCredentialInspecting
 
     public init(
         provider: ProviderID,
         sessionStore: AppSessionStore,
         repository: ProviderRepository,
         refreshCoordinator: RefreshCoordinator,
-        authCoordinator: AuthCoordinator
+        authCoordinator: AuthCoordinator,
+        credentialInspector: any ProviderCredentialInspecting
     ) {
         self.provider = provider
         self.sessionStore = sessionStore
         self.repository = repository
         self.refreshCoordinator = refreshCoordinator
         self.authCoordinator = authCoordinator
+        self.credentialInspector = credentialInspector
     }
 
     public var config: ProviderConfig {
@@ -84,11 +87,16 @@ public final class ProviderFeatureModel {
         self.authCoordinator.recoveryActions(for: self.provider, projection: self.projection)
     }
 
-    public func isClaudeOAuthCredentialsMissing() -> Bool {
-        let url = URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent(".claude", isDirectory: true)
-            .appendingPathComponent(".credentials.json", isDirectory: false)
-        return !FileManager.default.fileExists(atPath: url.path)
+    public var missingCredentialDetail: String? {
+        guard self.credentialInspector.credentialPresence(for: self.provider) == .missing else {
+            return nil
+        }
+        switch self.provider {
+        case .claude:
+            return "Missing Claude OAuth credentials file"
+        case .codex:
+            return "Missing Codex auth file"
+        }
     }
 
     public func refresh() async {

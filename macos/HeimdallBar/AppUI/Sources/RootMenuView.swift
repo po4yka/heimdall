@@ -285,8 +285,8 @@ struct ProviderMenuCard: View {
         let sourceLabel = self.projection.sourceLabel.lowercased()
         if self.projection.provider == .claude,
            sourceLabel.contains("oauth"),
-           self.providerModel.isClaudeOAuthCredentialsMissing() {
-            return "Missing Claude OAuth credentials file"
+           let credentialDetail = self.providerModel.missingCredentialDetail {
+            return credentialDetail
         }
         return "Live \(self.projection.title) session not available"
     }
@@ -876,8 +876,8 @@ struct OverviewProviderCard: View {
         let sourceLabel = self.item.sourceLabel.lowercased()
         if self.item.provider == .claude,
            sourceLabel.contains("oauth"),
-           self.model.isClaudeOAuthCredentialsMissing() {
-            return "Missing Claude OAuth credentials file"
+           let credentialDetail = self.model.missingCredentialDetail {
+            return credentialDetail
         }
         if self.item.isShowingCachedData {
             return "Showing last known provider data"

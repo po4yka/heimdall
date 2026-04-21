@@ -164,7 +164,7 @@ public protocol HelperRuntime: Sendable {
     func stopOwnedHelper() async
 }
 
-public protocol AdjunctProvider: Sendable {
+public protocol DashboardAdjunctLoading: Sendable {
     func loadAdjunct(
         provider: ProviderID,
         config: ProviderConfig,
@@ -172,6 +172,9 @@ public protocol AdjunctProvider: Sendable {
         forceRefresh: Bool,
         allowLiveNavigation: Bool
     ) async -> DashboardAdjunctSnapshot?
+}
+
+public protocol BrowserSessionManaging: Sendable {
     func importedSession(provider: ProviderID) async -> ImportedBrowserSession?
     func discoverImportCandidates(provider: ProviderID) async -> [BrowserSessionImportCandidate]
     func importBrowserSession(
@@ -179,6 +182,16 @@ public protocol AdjunctProvider: Sendable {
         candidate: BrowserSessionImportCandidate
     ) async throws -> ImportedBrowserSession
     func resetImportedSession(provider: ProviderID) async throws
+}
+
+public enum ProviderCredentialPresence: Sendable, Equatable {
+    case present
+    case missing
+    case unknown
+}
+
+public protocol ProviderCredentialInspecting: Sendable {
+    func credentialPresence(for provider: ProviderID) -> ProviderCredentialPresence
 }
 
 public protocol WidgetSnapshotWriter: Sendable {
@@ -201,7 +214,9 @@ public protocol AuthCommandRunning: Sendable {
 public struct HeimdallAppEnvironment: Sendable {
     public var settingsStore: any SettingsStore
     public var helperRuntime: any HelperRuntime
-    public var adjunctProvider: any AdjunctProvider
+    public var adjunctLoader: any DashboardAdjunctLoading
+    public var browserSessionManager: any BrowserSessionManaging
+    public var credentialInspector: any ProviderCredentialInspecting
     public var widgetSnapshotWriter: any WidgetSnapshotWriter
     public var widgetReloader: any WidgetReloading
     public var authCommandRunner: any AuthCommandRunning
@@ -210,7 +225,9 @@ public struct HeimdallAppEnvironment: Sendable {
     public init(
         settingsStore: any SettingsStore,
         helperRuntime: any HelperRuntime,
-        adjunctProvider: any AdjunctProvider,
+        adjunctLoader: any DashboardAdjunctLoading,
+        browserSessionManager: any BrowserSessionManaging,
+        credentialInspector: any ProviderCredentialInspecting,
         widgetSnapshotWriter: any WidgetSnapshotWriter,
         widgetReloader: any WidgetReloading,
         authCommandRunner: any AuthCommandRunning,
@@ -218,7 +235,9 @@ public struct HeimdallAppEnvironment: Sendable {
     ) {
         self.settingsStore = settingsStore
         self.helperRuntime = helperRuntime
-        self.adjunctProvider = adjunctProvider
+        self.adjunctLoader = adjunctLoader
+        self.browserSessionManager = browserSessionManager
+        self.credentialInspector = credentialInspector
         self.widgetSnapshotWriter = widgetSnapshotWriter
         self.widgetReloader = widgetReloader
         self.authCommandRunner = authCommandRunner
@@ -228,18 +247,18 @@ public struct HeimdallAppEnvironment: Sendable {
 
 public struct HeimdallCLIDependencies: Sendable {
     public var settingsStore: any SettingsStore
-    public var adjunctProvider: any AdjunctProvider
+    public var adjunctLoader: any DashboardAdjunctLoading
     public var authCommandRunner: any AuthCommandRunning
     public var liveProviderClientFactory: @Sendable (Int) -> any LiveProviderClient
 
     public init(
         settingsStore: any SettingsStore,
-        adjunctProvider: any AdjunctProvider,
+        adjunctLoader: any DashboardAdjunctLoading,
         authCommandRunner: any AuthCommandRunning,
         liveProviderClientFactory: @escaping @Sendable (Int) -> any LiveProviderClient
     ) {
         self.settingsStore = settingsStore
-        self.adjunctProvider = adjunctProvider
+        self.adjunctLoader = adjunctLoader
         self.authCommandRunner = authCommandRunner
         self.liveProviderClientFactory = liveProviderClientFactory
     }

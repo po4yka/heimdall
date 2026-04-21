@@ -22,7 +22,8 @@ public final class AppModel {
             sessionStore: sessionStore,
             repository: providerRepository,
             helperRuntime: environment.helperRuntime,
-            adjunctProvider: environment.adjunctProvider,
+            adjunctLoader: environment.adjunctLoader,
+            browserSessionManager: environment.browserSessionManager,
             widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
                 writer: environment.widgetSnapshotWriter,
                 reloader: environment.widgetReloader
@@ -54,7 +55,8 @@ public final class AppModel {
                     sessionStore: sessionStore,
                     repository: providerRepository,
                     refreshCoordinator: refreshCoordinator,
-                    authCoordinator: authCoordinator
+                    authCoordinator: authCoordinator,
+                    credentialInspector: environment.credentialInspector
                 )
             )
         })

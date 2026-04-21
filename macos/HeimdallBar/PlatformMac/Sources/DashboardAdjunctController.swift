@@ -2,16 +2,13 @@ import Foundation
 import HeimdallDomain
 import HeimdallServices
 
-public actor DashboardAdjunctController: AdjunctProvider {
-    private let keychainStore: KeychainStore
-    private let importer: BrowserSessionImporter
+public actor DashboardAdjunctController: DashboardAdjunctLoading {
+    private let sessionManager: any BrowserSessionManaging
 
     public init(
-        keychainStore: KeychainStore = KeychainStore(),
-        importer: BrowserSessionImporter = BrowserSessionImporter()
+        sessionManager: any BrowserSessionManaging
     ) {
-        self.keychainStore = keychainStore
-        self.importer = importer
+        self.sessionManager = sessionManager
     }
 
     public func loadAdjunct(
@@ -23,7 +20,7 @@ public actor DashboardAdjunctController: AdjunctProvider {
     ) async -> DashboardAdjunctSnapshot? {
         guard config.dashboardExtrasEnabled else { return nil }
 
-        let importedSession = await self.importedSession(provider: provider)
+        let importedSession = await self.sessionManager.importedSession(provider: provider)
         let source = config.cookieSource == .auto ? .web : config.cookieSource
         let scraper = await MainActor.run { WebDashboardScraper() }
         await MainActor.run {
@@ -62,32 +59,6 @@ public actor DashboardAdjunctController: AdjunctProvider {
             lastUpdated: scrapeResult.fetchedAt
         )
     }
-
-    public func importedSession(provider: ProviderID) async -> ImportedBrowserSession? {
-        self.keychainStore.loadJSON(ImportedBrowserSession.self, account: account(for: provider))
-    }
-
-    public func discoverImportCandidates(provider _: ProviderID) async -> [BrowserSessionImportCandidate] {
-        self.importer.discoverCandidates()
-    }
-
-    public func importBrowserSession(
-        provider: ProviderID,
-        candidate: BrowserSessionImportCandidate
-    ) async throws -> ImportedBrowserSession {
-        let session = try self.importer.importSession(provider: provider, candidate: candidate)
-        try self.keychainStore.saveJSON(session, account: account(for: provider))
-        return session
-    }
-
-    public func resetImportedSession(provider: ProviderID) async throws {
-        try self.keychainStore.delete(account: account(for: provider))
-    }
-
-    private func account(for provider: ProviderID) -> String {
-        "\(provider.rawValue).web-session"
-    }
-
     private func relativeLabel(_ timestamp: String) -> String {
         let formatter = ISO8601DateFormatter()
         guard let date = formatter.date(from: timestamp) else { return timestamp }

@@ -347,7 +347,7 @@ public enum HeimdallCLIEntrypoint {
                 overrideSource: options.preferredSource
             )
             let snapshot = snapshotsByProvider[provider]
-            let adjunct = await dependencies.adjunctProvider.loadAdjunct(
+            let adjunct = await dependencies.adjunctLoader.loadAdjunct(
                 provider: provider,
                 config: providerConfig,
                 snapshot: snapshot,

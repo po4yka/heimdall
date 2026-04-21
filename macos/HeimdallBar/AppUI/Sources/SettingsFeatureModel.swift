@@ -54,11 +54,4 @@ public final class SettingsFeatureModel {
     public func refreshBrowserImports() async {
         await self.refreshCoordinator.refreshBrowserImports()
     }
-
-    public func isClaudeOAuthCredentialsMissing() -> Bool {
-        let url = URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent(".claude", isDirectory: true)
-            .appendingPathComponent(".credentials.json", isDirectory: false)
-        return !FileManager.default.fileExists(atPath: url.path)
-    }
 }

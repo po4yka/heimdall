@@ -6,7 +6,8 @@ public final class RefreshCoordinator {
     private let sessionStore: AppSessionStore
     private let repository: ProviderRepository
     private let helperRuntime: any HelperRuntime
-    private let adjunctProvider: any AdjunctProvider
+    private let adjunctLoader: any DashboardAdjunctLoading
+    private let browserSessionManager: any BrowserSessionManaging
     private let widgetSnapshotCoordinator: WidgetSnapshotCoordinator
     private let liveProviderClientFactory: @Sendable (Int) -> any LiveProviderClient
     private var pollTask: Task<Void, Never>?
@@ -16,14 +17,16 @@ public final class RefreshCoordinator {
         sessionStore: AppSessionStore,
         repository: ProviderRepository,
         helperRuntime: any HelperRuntime,
-        adjunctProvider: any AdjunctProvider,
+        adjunctLoader: any DashboardAdjunctLoading,
+        browserSessionManager: any BrowserSessionManaging,
         widgetSnapshotCoordinator: WidgetSnapshotCoordinator,
         liveProviderClientFactory: @escaping @Sendable (Int) -> any LiveProviderClient
     ) {
         self.sessionStore = sessionStore
         self.repository = repository
         self.helperRuntime = helperRuntime
-        self.adjunctProvider = adjunctProvider
+        self.adjunctLoader = adjunctLoader
+        self.browserSessionManager = browserSessionManager
         self.widgetSnapshotCoordinator = widgetSnapshotCoordinator
         self.liveProviderClientFactory = liveProviderClientFactory
     }
@@ -102,7 +105,7 @@ public final class RefreshCoordinator {
         self.repository.beginImport(provider: provider, resetting: false)
 
         do {
-            let session = try await self.adjunctProvider.importBrowserSession(provider: provider, candidate: candidate)
+            let session = try await self.browserSessionManager.importBrowserSession(provider: provider, candidate: candidate)
             self.repository.importedSessions[provider] = session
             await self.loadAdjuncts(for: [provider], forceRefresh: true)
             self.repository.finishImport(issue: nil)
@@ -117,7 +120,7 @@ public final class RefreshCoordinator {
         self.repository.beginImport(provider: provider, resetting: true)
 
         do {
-            try await self.adjunctProvider.resetImportedSession(provider: provider)
+            try await self.browserSessionManager.resetImportedSession(provider: provider)
             self.repository.importedSessions.removeValue(forKey: provider)
             await self.loadAdjuncts(for: [provider], forceRefresh: true)
             self.repository.finishImport(issue: nil)
@@ -148,7 +151,7 @@ public final class RefreshCoordinator {
     ) async {
         for provider in providers {
             let providerConfig = self.sessionStore.config.providerConfig(for: provider)
-            let adjunct = await self.adjunctProvider.loadAdjunct(
+            let adjunct = await self.adjunctLoader.loadAdjunct(
                 provider: provider,
                 config: providerConfig,
                 snapshot: self.repository.snapshot(for: provider),
@@ -161,8 +164,8 @@ public final class RefreshCoordinator {
 
     private func loadImportedSessions(for providers: [ProviderID]) async {
         for provider in providers {
-            self.repository.importedSessions[provider] = await self.adjunctProvider.importedSession(provider: provider)
-            self.repository.browserImportCandidates[provider] = await self.adjunctProvider.discoverImportCandidates(provider: provider)
+            self.repository.importedSessions[provider] = await self.browserSessionManager.importedSession(provider: provider)
+            self.repository.browserImportCandidates[provider] = await self.browserSessionManager.discoverImportCandidates(provider: provider)
         }
     }
 }
