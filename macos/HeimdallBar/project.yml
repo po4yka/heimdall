@@ -1,6 +1,4 @@
 name: HeimdallBar
-options:
-  minimumXcodeGenVersion: 2.38.0
 schemes:
   HeimdallBarModules:
     build:
@@ -21,16 +19,27 @@ schemes:
     test:
       targets:
         - HeimdallBarModuleTests
+  HeimdallMobileApp:
+    build:
+      targets:
+        HeimdallMobileApp: all
+    test:
+      targets:
+        - HeimdallMobileTests
 settings:
   base:
     SWIFT_VERSION: 6.0
-    MACOSX_DEPLOYMENT_TARGET: "14.0"
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 0.1.0
+options:
+  minimumXcodeGenVersion: 2.38.0
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
 targets:
   HeimdallDomain:
     type: framework
-    platform: macOS
+    supportedDestinations: [macOS, iOS]
     sources:
       - path: Domain/Sources
     preBuildScripts:
@@ -45,7 +54,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
   HeimdallServices:
     type: framework
-    platform: macOS
+    supportedDestinations: [macOS, iOS]
     sources:
       - path: Services/Sources
     preBuildScripts:
@@ -117,8 +126,18 @@ targets:
     platform: macOS
     info:
       path: App/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     entitlements:
       path: App/HeimdallBar.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.dev.heimdall.heimdallbar
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.dev.heimdall.heimdallbar
+        com.apple.developer.icloud-services:
+          - CloudKit
     sources:
       - path: App/Sources
     postBuildScripts:
@@ -150,8 +169,14 @@ targets:
     platform: macOS
     info:
       path: Widget/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     entitlements:
       path: Widget/HeimdallBarWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.dev.heimdall.heimdallbar
     sources:
       - path: Widget/Sources
     dependencies:
@@ -203,4 +228,41 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallBarModuleTests
         PRODUCT_NAME: HeimdallBarModuleTests
+        GENERATE_INFOPLIST_FILE: YES
+  HeimdallMobileApp:
+    type: application
+    platform: iOS
+    entitlements:
+      path: iOS/App/HeimdallMobile.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers:
+          - iCloud.dev.heimdall.heimdallbar
+        com.apple.developer.icloud-services:
+          - CloudKit
+    sources:
+      - path: iOS/App/Sources
+    dependencies:
+      - target: HeimdallDomain
+        embed: true
+      - target: HeimdallServices
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallMobile
+        PRODUCT_NAME: HeimdallMobileApp
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Heimdall
+  HeimdallMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/iOSTests
+    dependencies:
+      - target: HeimdallDomain
+      - target: HeimdallServices
+      - target: HeimdallMobileApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallMobileTests
+        PRODUCT_NAME: HeimdallMobileTests
         GENERATE_INFOPLIST_FILE: YES

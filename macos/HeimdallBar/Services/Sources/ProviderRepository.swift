@@ -164,6 +164,7 @@ public final class ProviderRepository {
                 self.issues.clear(kind: .browserImport)
                 self.issues.clear(kind: .settingsSave)
                 self.issues.clear(kind: .authRecovery)
+                self.issues.clear(kind: .snapshotSync)
                 self.issues.clear(kind: .widgetPersistence)
                 self.issues.clear(kind: .helperStartup)
                 return
@@ -178,6 +179,7 @@ public final class ProviderRepository {
             self.browserSessionState.state.lastIssue,
             self.issues.issue(for: .settingsSave),
             self.issues.issue(for: .authRecovery),
+            self.issues.issue(for: .snapshotSync),
             self.issues.issue(for: .widgetPersistence),
             self.issues.issue(for: .helperStartup),
         ]
@@ -249,7 +251,7 @@ public final class ProviderRepository {
             self.refreshState.state.lastIssue = issue
         case .browserImport:
             self.browserSessionState.state.lastIssue = issue
-        case .settingsSave, .authRecovery, .widgetPersistence:
+        case .settingsSave, .authRecovery, .snapshotSync, .widgetPersistence:
             break
         }
     }
@@ -258,6 +260,7 @@ public final class ProviderRepository {
         guard let issue else {
             self.clearIssue(kind: .settingsSave)
             self.clearIssue(kind: .authRecovery)
+            self.clearIssue(kind: .snapshotSync)
             return
         }
         self.recordIssue(issue)
@@ -289,7 +292,7 @@ public final class ProviderRepository {
             if self.browserSessionState.state.lastIssue?.kind == kind {
                 self.browserSessionState.state.lastIssue = nil
             }
-        case .settingsSave, .authRecovery, .widgetPersistence:
+        case .settingsSave, .authRecovery, .snapshotSync, .widgetPersistence:
             break
         }
     }

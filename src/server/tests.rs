@@ -22,8 +22,8 @@ mod tests {
     use crate::scanner;
     use crate::server::api::{
         AppState, api_agent_status, api_claude_usage, api_community_signal,
-        api_live_provider_history, api_live_provider_refresh, api_live_providers, api_rescan,
-        api_usage_windows,
+        api_live_provider_history, api_live_provider_refresh, api_live_providers,
+        api_mobile_snapshot, api_rescan, api_usage_windows,
     };
     use crate::server::assets;
     use crate::server::{ServeOptions, build_router, build_state, start_background_pollers_with};
@@ -154,6 +154,73 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+        }
+    }
+
+    fn cached_live_provider_response(stale_codex: bool) -> crate::models::LiveProvidersResponse {
+        crate::models::LiveProvidersResponse {
+            contract_version: crate::models::LIVE_PROVIDERS_CONTRACT_VERSION,
+            providers: vec![
+                crate::models::LiveProviderSnapshot {
+                    provider: "claude".into(),
+                    available: true,
+                    source_used: "oauth".into(),
+                    last_attempted_source: Some("oauth".into()),
+                    resolved_via_fallback: false,
+                    refresh_duration_ms: 1,
+                    source_attempts: vec![],
+                    identity: None,
+                    primary: Some(crate::models::LiveRateWindow {
+                        used_percent: 42.0,
+                        resets_at: Some("2026-04-21T18:00:00Z".into()),
+                        resets_in_minutes: Some(120),
+                        window_minutes: Some(300),
+                        reset_label: Some("2h".into()),
+                    }),
+                    secondary: None,
+                    tertiary: None,
+                    credits: None,
+                    status: None,
+                    auth: crate::models::LiveProviderAuth::default(),
+                    cost_summary: crate::models::ProviderCostSummary::default(),
+                    claude_usage: None,
+                    last_refresh: "2026-04-21T09:00:00Z".into(),
+                    stale: false,
+                    error: None,
+                },
+                crate::models::LiveProviderSnapshot {
+                    provider: "codex".into(),
+                    available: true,
+                    source_used: "cli-rpc".into(),
+                    last_attempted_source: Some("cli-rpc".into()),
+                    resolved_via_fallback: false,
+                    refresh_duration_ms: 2,
+                    source_attempts: vec![],
+                    identity: None,
+                    primary: Some(crate::models::LiveRateWindow {
+                        used_percent: 18.0,
+                        resets_at: Some("2026-04-21T17:30:00Z".into()),
+                        resets_in_minutes: Some(90),
+                        window_minutes: Some(60),
+                        reset_label: Some("90m".into()),
+                    }),
+                    secondary: None,
+                    tertiary: None,
+                    credits: Some(12.5),
+                    status: None,
+                    auth: crate::models::LiveProviderAuth::default(),
+                    cost_summary: crate::models::ProviderCostSummary::default(),
+                    claude_usage: None,
+                    last_refresh: "2026-04-21T08:30:00Z".into(),
+                    stale: stale_codex,
+                    error: None,
+                },
+            ],
+            fetched_at: "2026-04-21T09:00:00Z".into(),
+            requested_provider: None,
+            response_scope: "all".into(),
+            cache_hit: false,
+            refreshed_providers: vec!["claude".into(), "codex".into()],
         }
     }
 
@@ -609,6 +676,15 @@ mod tests {
                 .insert(axum::extract::ConnectInfo(remote));
             req
         };
+        let mobile_snapshot_req = {
+            let mut req = Request::builder()
+                .uri("/api/mobile-snapshot")
+                .body(Body::empty())
+                .unwrap();
+            req.extensions_mut()
+                .insert(axum::extract::ConnectInfo(remote));
+            req
+        };
 
         let usage = api_usage_windows(State(state.clone()), usage_req).await;
         let claude_usage = api_claude_usage(State(state.clone()), claude_req).await;
@@ -631,7 +707,7 @@ mod tests {
         )
         .await;
         let history = api_live_provider_history(
-            State(state),
+            State(state.clone()),
             axum::extract::Query(crate::server::api::LiveProviderQuery {
                 provider: Some("claude".into()),
                 scope: None,
@@ -639,12 +715,14 @@ mod tests {
             history_req,
         )
         .await;
+        let mobile_snapshot = api_mobile_snapshot(State(state), mobile_snapshot_req).await;
 
         assert_eq!(usage.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(claude_usage.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(live.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(refresh.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(history.unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(mobile_snapshot.unwrap_err(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
@@ -692,6 +770,46 @@ mod tests {
         assert!(data["summary"]["last_30_days_tokens"].is_number());
         assert!(data["summary"]["last_30_days_cost_usd"].is_number());
         assert!(data["summary"]["daily"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_api_mobile_snapshot_returns_aggregate_payload() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let state = Arc::new(base_state(db_path, projects));
+        {
+            let mut cache = state.live_provider_cache.write().await;
+            *cache = Some((
+                std::time::Instant::now(),
+                cached_live_provider_response(true),
+            ));
+        }
+        let app = build_router(state);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/mobile-snapshot")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(
+            data["contract_version"],
+            crate::models::MOBILE_SNAPSHOT_CONTRACT_VERSION
+        );
+        assert_eq!(data["providers"].as_array().unwrap().len(), 2);
+        assert_eq!(data["history_90d"].as_array().unwrap().len(), 2);
+        assert!(data["totals"]["today_tokens"].is_number());
+        assert!(data["totals"]["last_90_days_tokens"].is_number());
+        assert_eq!(data["freshness"]["has_stale_providers"], true);
+        assert_eq!(data["freshness"]["stale_providers"][0], "codex");
     }
 
     #[tokio::test]

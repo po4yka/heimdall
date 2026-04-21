@@ -38,6 +38,7 @@ public struct MacPlatformCompositionRoot: Sendable {
     public func appRuntime() -> HeimdallAppRuntime {
         let sessionStore = AppSessionStore(config: self.settingsStore.load())
         let providerRepository = ProviderRepository()
+        let liveProviderClient = HeimdallAPIClient(port: sessionStore.config.helperPort)
         let refreshCoordinator = RefreshCoordinator(
             sessionStore: sessionStore,
             repository: providerRepository,
@@ -48,7 +49,11 @@ public struct MacPlatformCompositionRoot: Sendable {
                 writer: self.widgetSnapshotWriter,
                 reloader: self.widgetReloader
             ),
-            providerDataSource: self.providerDataSource
+            providerDataSource: self.providerDataSource,
+            snapshotSyncer: SnapshotSyncCoordinator(
+                client: liveProviderClient,
+                store: CloudKitSnapshotSyncStore()
+            )
         )
         let authCoordinator = AuthCoordinator(runner: self.authCommandRunner)
 

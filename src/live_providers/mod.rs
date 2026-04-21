@@ -7,9 +7,11 @@ use anyhow::{Result, anyhow, bail};
 
 use crate::agent_status::models::ProviderStatus;
 use crate::models::{
-    LIVE_PROVIDERS_CONTRACT_VERSION, LiveProviderHistoryResponse, LiveProviderIdentity,
-    LiveProviderSnapshot, LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse,
-    ProviderCostSummary,
+    LIVE_PROVIDERS_CONTRACT_VERSION, MOBILE_SNAPSHOT_CONTRACT_VERSION,
+    LiveProviderHistoryResponse, LiveProviderIdentity, LiveProviderSnapshot,
+    LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse,
+    MobileProviderHistorySeries, MobileSnapshotEnvelope, MobileSnapshotFreshness,
+    MobileSnapshotTotals, ProviderCostSummary,
 };
 use crate::oauth::credentials;
 use crate::oauth::models::{BudgetInfo, Identity, Plan, UsageWindowsResponse, WindowInfo};
@@ -159,6 +161,112 @@ pub async fn load_provider_history(
         provider: provider.to_string(),
         summary,
     })
+}
+
+pub async fn load_mobile_snapshot(state: &Arc<AppState>) -> Result<MobileSnapshotEnvelope> {
+    let response = load_snapshots(state, None, ResponseScope::All, false).await?;
+    let providers = response.providers.clone();
+    let provider_names = providers
+        .iter()
+        .map(|provider| provider.provider.clone())
+        .collect::<Vec<_>>();
+    let db_path = state.db_path.clone();
+
+    let (history_90d, totals) = tokio::task::spawn_blocking(move || {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        build_mobile_history_and_totals(&conn, &providers, &provider_names)
+    })
+    .await
+    .map_err(anyhow::Error::from)??;
+
+    Ok(build_mobile_snapshot(response, history_90d, totals))
+}
+
+fn build_mobile_snapshot(
+    response: LiveProvidersResponse,
+    history_90d: Vec<MobileProviderHistorySeries>,
+    totals: MobileSnapshotTotals,
+) -> MobileSnapshotEnvelope {
+    let freshest_provider_refresh = response
+        .providers
+        .iter()
+        .map(|provider| provider.last_refresh.clone())
+        .max();
+    let oldest_provider_refresh = response
+        .providers
+        .iter()
+        .map(|provider| provider.last_refresh.clone())
+        .min();
+    let stale_providers = response
+        .providers
+        .iter()
+        .filter(|provider| provider.stale)
+        .map(|provider| provider.provider.clone())
+        .collect::<Vec<_>>();
+    let generated_at = chrono::Utc::now().to_rfc3339();
+
+    MobileSnapshotEnvelope {
+        contract_version: MOBILE_SNAPSHOT_CONTRACT_VERSION,
+        generated_at: generated_at.clone(),
+        source_device: source_device_name(),
+        providers: response.providers,
+        history_90d,
+        totals,
+        freshness: MobileSnapshotFreshness {
+            newest_provider_refresh: freshest_provider_refresh,
+            oldest_provider_refresh,
+            has_stale_providers: !stale_providers.is_empty(),
+            stale_providers,
+        },
+    }
+}
+
+fn build_mobile_history_and_totals(
+    conn: &rusqlite::Connection,
+    providers: &[LiveProviderSnapshot],
+    provider_names: &[String],
+) -> Result<(Vec<MobileProviderHistorySeries>, MobileSnapshotTotals)> {
+    let start_90d = (chrono::Utc::now().date_naive() - chrono::Duration::days(89)).to_string();
+
+    let mut history_90d = Vec::with_capacity(provider_names.len());
+    let mut totals = MobileSnapshotTotals::default();
+
+    for provider in providers {
+        totals.today_tokens += provider.cost_summary.today_tokens;
+        totals.today_cost_usd += provider.cost_summary.today_cost_usd;
+        totals
+            .today_breakdown
+            .accumulate(&provider.cost_summary.today_breakdown);
+    }
+
+    for provider in provider_names {
+        let (cost_90d_nanos, tokens_90d, breakdown_90d) =
+            db::get_provider_cost_summary_since(conn, provider, &start_90d)?;
+        let daily = db::get_provider_daily_cost_history_since(conn, provider, &start_90d)?;
+
+        totals.last_90_days_tokens += tokens_90d;
+        totals.last_90_days_cost_usd += cost_90d_nanos as f64 / 1_000_000_000.0;
+        totals.last_90_days_breakdown.accumulate(&breakdown_90d);
+
+        history_90d.push(MobileProviderHistorySeries {
+            provider: provider.clone(),
+            daily,
+            total_tokens: tokens_90d,
+            total_cost_usd: cost_90d_nanos as f64 / 1_000_000_000.0,
+        });
+    }
+
+    Ok((history_90d, totals))
+}
+
+fn source_device_name() -> String {
+    std::env::var("HEIMDALL_SOURCE_DEVICE")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| std::env::var("HOSTNAME").ok())
+        .or_else(|| std::env::var("COMPUTERNAME").ok())
+        .unwrap_or_else(|| "unknown-device".to_string())
 }
 
 async fn fetch_live_provider_response(

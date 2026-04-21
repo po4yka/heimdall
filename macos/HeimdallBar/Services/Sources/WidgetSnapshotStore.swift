@@ -105,10 +105,15 @@ public enum WidgetSnapshotStore {
             base = container
         } else {
             #if DEBUG
+            #if os(iOS)
+            base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? fm.temporaryDirectory
+            #else
             base = fm.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library", isDirectory: true)
                 .appendingPathComponent("Application Support", isDirectory: true)
                 .appendingPathComponent("HeimdallBar", isDirectory: true)
+            #endif
             #else
             throw WidgetSnapshotStoreError.appGroupUnavailable
             #endif

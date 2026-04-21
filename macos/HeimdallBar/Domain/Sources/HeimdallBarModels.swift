@@ -4,6 +4,10 @@ public enum LiveProviderContract {
     public static let version = 1
 }
 
+public enum MobileSnapshotContract {
+    public static let version = 1
+}
+
 public enum ProviderID: String, Codable, CaseIterable, Sendable, Identifiable {
     case claude
     case codex
@@ -608,6 +612,145 @@ public struct CostSummaryEnvelope: Codable, Sendable {
     public init(provider: String, summary: ProviderCostSummary) {
         self.provider = provider
         self.summary = summary
+    }
+}
+
+public struct MobileProviderHistorySeries: Codable, Sendable, Identifiable {
+    public var provider: String
+    public var daily: [CostHistoryPoint]
+    public var totalTokens: Int
+    public var totalCostUSD: Double
+
+    public var id: String { self.provider }
+    public var providerID: ProviderID? { ProviderID(rawValue: self.provider) }
+
+    public init(
+        provider: String,
+        daily: [CostHistoryPoint],
+        totalTokens: Int,
+        totalCostUSD: Double
+    ) {
+        self.provider = provider
+        self.daily = daily
+        self.totalTokens = totalTokens
+        self.totalCostUSD = totalCostUSD
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case daily
+        case totalTokens = "total_tokens"
+        case totalCostUSD = "total_cost_usd"
+    }
+}
+
+public struct MobileSnapshotTotals: Codable, Sendable {
+    public var todayTokens: Int
+    public var todayCostUSD: Double
+    public var last90DaysTokens: Int
+    public var last90DaysCostUSD: Double
+    public var todayBreakdown: TokenBreakdown?
+    public var last90DaysBreakdown: TokenBreakdown?
+
+    public init(
+        todayTokens: Int,
+        todayCostUSD: Double,
+        last90DaysTokens: Int,
+        last90DaysCostUSD: Double,
+        todayBreakdown: TokenBreakdown? = nil,
+        last90DaysBreakdown: TokenBreakdown? = nil
+    ) {
+        self.todayTokens = todayTokens
+        self.todayCostUSD = todayCostUSD
+        self.last90DaysTokens = last90DaysTokens
+        self.last90DaysCostUSD = last90DaysCostUSD
+        self.todayBreakdown = todayBreakdown
+        self.last90DaysBreakdown = last90DaysBreakdown
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case todayTokens = "today_tokens"
+        case todayCostUSD = "today_cost_usd"
+        case last90DaysTokens = "last_90_days_tokens"
+        case last90DaysCostUSD = "last_90_days_cost_usd"
+        case todayBreakdown = "today_breakdown"
+        case last90DaysBreakdown = "last_90_days_breakdown"
+    }
+}
+
+public struct MobileSnapshotFreshness: Codable, Sendable {
+    public var newestProviderRefresh: String?
+    public var oldestProviderRefresh: String?
+    public var staleProviders: [String]
+    public var hasStaleProviders: Bool
+
+    public init(
+        newestProviderRefresh: String?,
+        oldestProviderRefresh: String?,
+        staleProviders: [String],
+        hasStaleProviders: Bool
+    ) {
+        self.newestProviderRefresh = newestProviderRefresh
+        self.oldestProviderRefresh = oldestProviderRefresh
+        self.staleProviders = staleProviders
+        self.hasStaleProviders = hasStaleProviders
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case newestProviderRefresh = "newest_provider_refresh"
+        case oldestProviderRefresh = "oldest_provider_refresh"
+        case staleProviders = "stale_providers"
+        case hasStaleProviders = "has_stale_providers"
+    }
+}
+
+public struct MobileSnapshotEnvelope: Codable, Sendable {
+    public var contractVersion: Int
+    public var generatedAt: String
+    public var sourceDevice: String
+    public var providers: [ProviderSnapshot]
+    public var history90d: [MobileProviderHistorySeries]
+    public var totals: MobileSnapshotTotals
+    public var freshness: MobileSnapshotFreshness
+
+    public init(
+        contractVersion: Int = MobileSnapshotContract.version,
+        generatedAt: String,
+        sourceDevice: String,
+        providers: [ProviderSnapshot],
+        history90d: [MobileProviderHistorySeries],
+        totals: MobileSnapshotTotals,
+        freshness: MobileSnapshotFreshness
+    ) {
+        self.contractVersion = contractVersion
+        self.generatedAt = generatedAt
+        self.sourceDevice = sourceDevice
+        self.providers = providers
+        self.history90d = history90d
+        self.totals = totals
+        self.freshness = freshness
+    }
+
+    public var providerEnvelope: ProviderSnapshotEnvelope {
+        ProviderSnapshotEnvelope(
+            contractVersion: LiveProviderContract.version,
+            providers: self.providers,
+            fetchedAt: self.generatedAt,
+            requestedProvider: nil,
+            responseScope: "all",
+            cacheHit: false,
+            refreshedProviders: self.providers.map(\.provider)
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case contractVersion = "contract_version"
+        case generatedAt = "generated_at"
+        case sourceDevice = "source_device"
+        case providers
+        case history90d = "history_90d"
+        case totals
+        case freshness
     }
 }
 

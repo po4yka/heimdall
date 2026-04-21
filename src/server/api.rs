@@ -21,6 +21,7 @@ use crate::live_providers;
 use crate::models::ClaudeUsageResponse;
 use crate::models::LiveProviderHistoryResponse;
 use crate::models::LiveProvidersResponse;
+use crate::models::MobileSnapshotEnvelope;
 use crate::models::OpenAiReconciliation;
 use crate::oauth;
 use crate::oauth::models::UsageWindowsResponse;
@@ -408,6 +409,17 @@ pub async fn api_live_provider_history(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(summary))
+}
+
+pub async fn api_mobile_snapshot(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<MobileSnapshotEnvelope>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let snapshot = live_providers::load_mobile_snapshot(&state)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(snapshot))
 }
 
 fn parse_live_provider_scope(

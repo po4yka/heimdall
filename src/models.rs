@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const LIVE_PROVIDERS_CONTRACT_VERSION: u32 = 1;
+pub const MOBILE_SNAPSHOT_CONTRACT_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Default)]
 pub struct Session {
@@ -341,6 +342,14 @@ impl TokenBreakdown {
         }
         Some(self.cache_read as f64 / denom as f64)
     }
+
+    pub fn accumulate(&mut self, other: &Self) {
+        self.input += other.input;
+        self.output += other.output;
+        self.cache_read += other.cache_read;
+        self.cache_creation += other.cache_creation;
+        self.reasoning_output += other.reasoning_output;
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -467,6 +476,47 @@ pub struct LiveProvidersResponse {
 pub struct LiveProviderHistoryResponse {
     pub provider: String,
     pub summary: ProviderCostSummary,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct MobileProviderHistorySeries {
+    pub provider: String,
+    pub daily: Vec<ProviderCostHistoryPoint>,
+    pub total_tokens: i64,
+    pub total_cost_usd: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct MobileSnapshotTotals {
+    pub today_tokens: i64,
+    pub today_cost_usd: f64,
+    pub last_90_days_tokens: i64,
+    pub last_90_days_cost_usd: f64,
+    #[serde(default)]
+    pub today_breakdown: TokenBreakdown,
+    #[serde(default)]
+    pub last_90_days_breakdown: TokenBreakdown,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct MobileSnapshotFreshness {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub newest_provider_refresh: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oldest_provider_refresh: Option<String>,
+    pub stale_providers: Vec<String>,
+    pub has_stale_providers: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct MobileSnapshotEnvelope {
+    pub contract_version: u32,
+    pub generated_at: String,
+    pub source_device: String,
+    pub providers: Vec<LiveProviderSnapshot>,
+    pub history_90d: Vec<MobileProviderHistorySeries>,
+    pub totals: MobileSnapshotTotals,
+    pub freshness: MobileSnapshotFreshness,
 }
 
 #[derive(Debug, Clone, Serialize)]

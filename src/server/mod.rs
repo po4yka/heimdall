@@ -129,6 +129,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             "/api/live-providers/history",
             get(api::api_live_provider_history),
         )
+        .route("/api/mobile-snapshot", get(api::api_mobile_snapshot))
         .route(
             "/api/cost-reconciliation",
             get(api::api_cost_reconciliation),

@@ -2,7 +2,7 @@ import Foundation
 import HeimdallDomain
 import HeimdallServices
 
-public struct HeimdallAPIClient: LiveProviderClient, Sendable {
+public struct HeimdallAPIClient: LiveProviderClient, MobileSnapshotClient, Sendable {
     public var baseURL: URL
     private let session: URLSession
     private let retryPolicy: RetryPolicy
@@ -53,6 +53,10 @@ public struct HeimdallAPIClient: LiveProviderClient, Sendable {
         var components = URLComponents(url: self.baseURL.appendingPathComponent("/api/live-providers/history"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "provider", value: provider.rawValue)]
         return try await self.fetch(url: components.url!, as: CostSummaryEnvelope.self)
+    }
+
+    public func fetchMobileSnapshot() async throws -> MobileSnapshotEnvelope {
+        try await self.fetch(path: "/api/mobile-snapshot", as: MobileSnapshotEnvelope.self)
     }
 
     private func fetch<T: Decodable>(path: String, as type: T.Type) async throws -> T {

@@ -56,6 +56,7 @@ public enum AppIssueKind: String, Sendable, Equatable {
     case settingsSave
     case browserImport
     case authRecovery
+    case snapshotSync
     case widgetPersistence
 }
 
@@ -157,6 +158,19 @@ public protocol LiveProviderClient: Sendable {
 
 public protocol SyncProviderClient: Sendable {
     func fetchSyncedSnapshots() async throws -> ProviderSnapshotEnvelope
+}
+
+public protocol MobileSnapshotClient: Sendable {
+    func fetchMobileSnapshot() async throws -> MobileSnapshotEnvelope
+}
+
+public protocol SnapshotSyncStore: Sendable {
+    func loadLatestSnapshot() async throws -> MobileSnapshotEnvelope?
+    func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws
+}
+
+public protocol SnapshotSyncing: Sendable {
+    func syncLatestSnapshot() async throws -> MobileSnapshotEnvelope
 }
 
 public protocol ProviderDataSource: Sendable {

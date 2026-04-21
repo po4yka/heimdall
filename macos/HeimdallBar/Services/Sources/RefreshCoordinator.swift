@@ -1,5 +1,6 @@
 import Foundation
 import HeimdallDomain
+import os.log
 
 @MainActor
 public final class RefreshCoordinator {
@@ -10,8 +11,10 @@ public final class RefreshCoordinator {
     private let browserSessionManager: any BrowserSessionManaging
     private let widgetSnapshotCoordinator: WidgetSnapshotCoordinator
     private let providerDataSource: any ProviderDataSource
+    private let snapshotSyncer: (any SnapshotSyncing)?
     private var pollTask: Task<Void, Never>?
     private var started = false
+    private static let logger = Logger(subsystem: "dev.heimdall.HeimdallBar", category: "RefreshCoordinator")
 
     public init(
         sessionStore: AppSessionStore,
@@ -20,7 +23,8 @@ public final class RefreshCoordinator {
         adjunctLoader: any DashboardAdjunctLoading,
         browserSessionManager: any BrowserSessionManaging,
         widgetSnapshotCoordinator: WidgetSnapshotCoordinator,
-        providerDataSource: any ProviderDataSource
+        providerDataSource: any ProviderDataSource,
+        snapshotSyncer: (any SnapshotSyncing)? = nil
     ) {
         self.sessionStore = sessionStore
         self.repository = repository
@@ -29,6 +33,7 @@ public final class RefreshCoordinator {
         self.browserSessionManager = browserSessionManager
         self.widgetSnapshotCoordinator = widgetSnapshotCoordinator
         self.providerDataSource = providerDataSource
+        self.snapshotSyncer = snapshotSyncer
     }
 
     public func start() {
@@ -84,6 +89,18 @@ public final class RefreshCoordinator {
                 self.repository.recordIssue(
                     AppIssue(kind: .widgetPersistence, message: error.localizedDescription)
                 )
+            }
+
+            if provider == nil, let snapshotSyncer = self.snapshotSyncer {
+                do {
+                    _ = try await snapshotSyncer.syncLatestSnapshot()
+                    self.repository.clearIssue(kind: .snapshotSync)
+                } catch {
+                    Self.logger.error("Snapshot sync failed: \(error.localizedDescription)")
+                    self.repository.recordIssue(
+                        AppIssue(kind: .snapshotSync, message: error.localizedDescription)
+                    )
+                }
             }
         } catch {
             self.repository.finishRefresh(
