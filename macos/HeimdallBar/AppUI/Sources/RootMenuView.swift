@@ -138,10 +138,23 @@ struct ProviderMenuCard: View {
     var body: some View {
         let projection = self.projection
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(self.projection.title)
                     .font(.system(size: 13, weight: .semibold))
                 StateBadge(state: self.projection.visualState, label: self.projection.stateLabel)
+                if let plan = self.planBadgeLabel {
+                    Text(plan.uppercased())
+                        .font(.caption2.weight(.bold))
+                        .tracking(0.5)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.18))
+                        )
+                        .foregroundStyle(.primary)
+                }
+                Spacer(minLength: 0)
             }
             TopMetricRow(
                 title: self.primaryMetricTitle,
@@ -163,7 +176,12 @@ struct ProviderMenuCard: View {
                     .font(.caption2)
                     .foregroundStyle(.orange)
             }
-            if let identityLabel = projection.identityLabel {
+            // Only render identityLabel when it carries more than just the
+            // plan tier (which is already shown as a header badge). An
+            // identityLabel of 'email · plan' still renders so the user sees
+            // which account is active.
+            if let identityLabel = projection.identityLabel,
+               identityLabel.contains("·") || identityLabel.contains("@") {
                 Text(identityLabel)
                     .font(.caption)
             }
@@ -220,6 +238,20 @@ struct ProviderMenuCard: View {
 
     private var projection: ProviderMenuProjection {
         self.providerModel.projection
+    }
+
+    /// Extract the plan tier out of the projection's identityLabel for the
+    /// header badge — identityLabel is either 'email · plan' or just 'plan'.
+    private var planBadgeLabel: String? {
+        guard let raw = self.projection.identityLabel,
+              !raw.trimmingCharacters(in: .whitespaces).isEmpty
+        else { return nil }
+        let parts = raw.split(separator: "·").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+        // 'email · plan' -> take the last part
+        // 'plan' -> take the only part
+        return parts.last
     }
 
     private var primaryMetricTitle: String {
@@ -527,8 +559,9 @@ private struct LaneStatusCard: View {
                     .font(.caption.weight(.semibold))
                 Spacer()
                 if let remainingPercent = self.detail.remainingPercent {
-                    Text("\(remainingPercent)%")
+                    Text("\(remainingPercent)% left")
                         .font(.caption.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(Self.paceTint(remainingPercent: remainingPercent))
                 }
             }
             if let remainingPercent = self.detail.remainingPercent {
@@ -549,19 +582,24 @@ private struct LaneStatusCard: View {
                 }
                 .frame(height: 4)
             }
-            if let paceLabel = self.detail.paceLabel {
-                Text("Pace \(paceLabel.lowercased())")
-                    .font(.caption2)
-            }
-            if let resetDetail = self.detail.resetDetail {
-                Text(resetDetail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+            // Fold pace + reset into one compact secondary line — they're
+            // both descriptors of the same lane, no need to burn two rows.
+            Text(self.footerLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .menuCardBackground(opacity: 0.045, cornerRadius: 8)
+    }
+
+    /// One-line footer that merges pace + reset, using the dot separator
+    /// consistent with the rest of the dashboard. Either half can be absent.
+    private var footerLabel: String {
+        let pace = self.detail.paceLabel.map { "Pace \($0.lowercased())" }
+        return [pace, self.detail.resetDetail]
+            .compactMap { $0 }
+            .joined(separator: " · ")
     }
 
     /// Tint the progress bar by pace: comfortable green, heavy orange,
@@ -580,18 +618,53 @@ struct HistoryBarStrip: View {
     let fractions: [Double]
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            ForEach(Array(self.fractions.enumerated()), id: \.offset) { entry in
-                let fraction = entry.element
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.primary.opacity(0.06))
-                    .overlay(alignment: .bottom) {
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.primary)
-                            .frame(height: max(2, 16 * fraction))
-                    }
-                    .frame(width: 6, height: 16)
+        let labels = Self.dayLabels(count: self.fractions.count)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Last \(self.fractions.count) days")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+                Spacer()
             }
+            HStack(alignment: .bottom, spacing: 6) {
+                ForEach(Array(zip(self.fractions, labels).enumerated()), id: \.offset) { entry in
+                    let (fraction, label) = entry.element
+                    // Today is the last slot — highlight it with the accent tint.
+                    let isToday = entry.offset == self.fractions.count - 1
+                    VStack(spacing: 3) {
+                        ZStack(alignment: .bottom) {
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                                .frame(height: 28)
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(isToday ? Color.accentColor : Color.primary.opacity(0.7))
+                                .frame(height: max(2, 28 * fraction))
+                        }
+                        .frame(maxWidth: .infinity)
+                        Text(label)
+                            .font(.system(size: 9).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .menuCardBackground(opacity: 0.03, cornerRadius: 8)
+    }
+
+    /// Produce day-of-week labels for the last N days ending today, so the
+    /// rightmost label is today's weekday.
+    private static func dayLabels(count: Int) -> [String] {
+        guard count > 0 else { return [] }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        let calendar = Calendar.current
+        let today = Date()
+        return (0..<count).map { offset in
+            let date = calendar.date(byAdding: .day, value: -(count - 1 - offset), to: today) ?? today
+            return formatter.string(from: date)
         }
     }
 }
