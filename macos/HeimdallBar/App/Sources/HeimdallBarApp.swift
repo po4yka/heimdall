@@ -7,7 +7,8 @@ struct HeimdallBarApp: App {
     @State private var model: AppModel
 
     init() {
-        let environment = MacPlatformFactory.appEnvironment()
+        let compositionRoot = MacPlatformCompositionRoot()
+        let environment = compositionRoot.appEnvironment()
         self._model = State(initialValue: AppModel(environment: environment))
     }
 

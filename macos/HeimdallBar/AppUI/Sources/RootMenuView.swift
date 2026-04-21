@@ -3,10 +3,14 @@ import HeimdallDomain
 import SwiftUI
 
 struct RootMenuView: View {
-    @Bindable var model: AppModel
+    @Bindable var shell: AppShellModel
+    @Bindable var overview: OverviewFeatureModel
+    let providerModel: (ProviderID) -> ProviderFeatureModel
+    let helperPort: Int
+    let onQuit: () -> Void
 
     var body: some View {
-        let overview = self.model.overviewProjection()
+        let overview = self.overview.projection
 
         VStack(alignment: .leading, spacing: 10) {
             MenuChromeHeader(
@@ -23,26 +27,37 @@ struct RootMenuView: View {
                 )
             }
 
-            if self.model.visibleTabs.count > 1 {
+            if self.shell.visibleTabs.count > 1 {
                 MergeTabSwitcher(
-                    tabs: self.model.visibleTabs,
-                    selection: self.$model.selectedMergeTab
+                    tabs: self.shell.visibleTabs,
+                    selection: Binding(
+                        get: { self.shell.selectedMenuTab },
+                        set: { self.shell.selectMenuTab($0) }
+                    )
                 )
             }
 
-            if self.model.selectedMergeTab == .overview {
-                OverviewMenuCard(model: self.model, projection: overview)
-            } else if let provider = self.model.selectedMergeTab.providerID {
-                ProviderMenuCard(model: self.model, projection: self.model.projection(for: provider))
-                SessionActionGroup(model: self.model, providers: [provider])
+            if self.shell.selectedMenuTab == .overview {
+                OverviewMenuCard(providerModel: self.providerModel, projection: overview)
+            } else if let provider = self.shell.selectedMenuTab.providerID {
+                let providerModel = self.providerModel(provider)
+                ProviderMenuCard(providerModel: providerModel)
+                SessionActionGroup(models: [providerModel])
             }
 
             Divider()
 
-            MenuActionRow(model: self.model, tab: self.model.selectedMergeTab)
+            MenuActionRow(
+                shell: self.shell,
+                overview: self.overview,
+                providerModel: self.providerModel,
+                helperPort: self.helperPort,
+                tab: self.shell.selectedMenuTab,
+                onQuit: self.onQuit
+            )
 
-            if self.model.selectedMergeTab == .overview {
-                SessionActionGroup(model: self.model, providers: self.model.visibleProviders)
+            if self.shell.selectedMenuTab == .overview {
+                SessionActionGroup(models: self.shell.visibleProviders.map(self.providerModel))
             }
         }
         .padding(10)
@@ -70,36 +85,44 @@ struct RootMenuView: View {
 }
 
 struct ProviderMenuView: View {
-    @Bindable var model: AppModel
-    let provider: ProviderID
+    @Bindable var model: ProviderFeatureModel
+    let helperPort: Int
+    let onQuit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             MenuChromeHeader(
-                title: self.provider.title,
-                status: self.model.projection(for: self.provider).lastRefreshLabel,
-                isRefreshing: self.model.projection(for: self.provider).isRefreshing,
+                title: self.model.provider.title,
+                status: self.model.projection.lastRefreshLabel,
+                isRefreshing: self.model.projection.isRefreshing,
                 attentionLabel: self.providerAttentionLabel
             )
-            if let globalIssueLabel = self.model.projection(for: self.provider).globalIssueLabel {
+            if let globalIssueLabel = self.model.projection.globalIssueLabel {
                 GlobalIssueBanner(
                     message: globalIssueLabel,
-                    detail: self.model.projection(for: self.provider).isShowingCachedData ? "Showing last known provider data" : nil
+                    detail: self.model.projection.isShowingCachedData ? "Showing last known provider data" : nil
                 )
             }
-            ProviderMenuCard(model: self.model, projection: self.model.projection(for: self.provider))
-            SessionActionGroup(model: self.model, providers: [self.provider])
+            ProviderMenuCard(providerModel: self.model)
+            SessionActionGroup(models: [self.model])
 
             Divider()
 
-            MenuActionRow(model: self.model, tab: self.provider == .claude ? .claude : .codex)
+            MenuActionRow(
+                shell: nil,
+                overview: nil,
+                providerModel: { _ in self.model },
+                helperPort: self.helperPort,
+                tab: self.model.provider == .claude ? .claude : .codex,
+                onQuit: self.onQuit
+            )
         }
         .padding(12)
         .frame(width: 336)
     }
 
     private var providerAttentionLabel: String? {
-        let projection = self.model.projection(for: self.provider)
+        let projection = self.model.projection
         switch projection.visualState {
         case .healthy, .refreshing:
             return nil
@@ -110,10 +133,10 @@ struct ProviderMenuView: View {
 }
 
 struct ProviderMenuCard: View {
-    @Bindable var model: AppModel
-    let projection: ProviderMenuProjection
+    @Bindable var providerModel: ProviderFeatureModel
 
     var body: some View {
+        let projection = self.projection
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(self.projection.title)
@@ -129,67 +152,67 @@ struct ProviderMenuCard: View {
                 value: self.primaryMetricText,
                 detail: self.secondaryMetricText
             )
-            AuthStatusSection(model: self.model, provider: self.projection.provider, projection: self.projection)
-            if self.projection.laneDetails.count > 1 {
+            AuthStatusSection(model: self.providerModel, projection: projection)
+            if projection.laneDetails.count > 1 {
                 Divider()
                     .padding(.vertical, 1)
             }
-            if let sourceExplanationLabel = self.projection.sourceExplanationLabel {
+            if let sourceExplanationLabel = projection.sourceExplanationLabel {
                 Text(sourceExplanationLabel)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            ForEach(self.projection.warningLabels.prefix(2), id: \.self) { warning in
+            ForEach(projection.warningLabels.prefix(2), id: \.self) { warning in
                 Text(warning)
                     .font(.caption2)
                     .foregroundStyle(.orange)
             }
-            if let identityLabel = self.projection.identityLabel {
+            if let identityLabel = projection.identityLabel {
                 Text(identityLabel)
                     .font(.caption)
             }
-            if self.projection.laneDetails.count > 1 && !self.projection.isShowingCachedData {
+            if projection.laneDetails.count > 1 && !projection.isShowingCachedData {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                    ForEach(self.projection.laneDetails.dropFirst()) { detail in
+                    ForEach(projection.laneDetails.dropFirst()) { detail in
                         LaneStatusCard(detail: detail)
                     }
                 }
             }
-            if !self.projection.historyFractions.isEmpty {
-                HistoryBarStrip(fractions: self.projection.historyFractions)
+            if !projection.historyFractions.isEmpty {
+                HistoryBarStrip(fractions: projection.historyFractions)
             }
-            Text(self.projection.costLabel)
+            Text(projection.costLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if let creditsLabel = self.projection.creditsLabel {
+            if let creditsLabel = projection.creditsLabel {
                 Text(creditsLabel)
                     .font(.caption)
             }
-            if let statusLabel = self.projection.statusLabel {
+            if let statusLabel = projection.statusLabel {
                 Text(statusLabel)
                     .font(.caption)
                     .foregroundStyle(.primary)
             }
-            if let incidentLabel = self.projection.incidentLabel {
+            if let incidentLabel = projection.incidentLabel {
                 Text(incidentLabel)
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            if !self.projection.claudeFactors.isEmpty {
+            if !projection.claudeFactors.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Usage Factors")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    ForEach(self.projection.claudeFactors) { factor in
+                    ForEach(projection.claudeFactors) { factor in
                         Text("\(factor.displayLabel): \(Int(factor.percent.rounded()))%")
                             .font(.caption2)
                     }
                 }
             }
-            if let adjunct = self.projection.adjunct {
+            if let adjunct = projection.adjunct {
                 AdjunctSummaryCard(adjunct: adjunct)
             }
-            if let error = self.projection.error {
+            if let error = projection.error {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -197,6 +220,10 @@ struct ProviderMenuCard: View {
         }
         .padding(10)
         .menuCardBackground(opacity: self.cardBackgroundOpacity)
+    }
+
+    private var projection: ProviderMenuProjection {
+        self.providerModel.projection
     }
 
     private var primaryMetricTitle: String {
@@ -258,7 +285,7 @@ struct ProviderMenuCard: View {
         let sourceLabel = self.projection.sourceLabel.lowercased()
         if self.projection.provider == .claude,
            sourceLabel.contains("oauth"),
-           self.model.isClaudeOAuthCredentialsMissing() {
+           self.providerModel.isClaudeOAuthCredentialsMissing() {
             return "Missing Claude OAuth credentials file"
         }
         return "Live \(self.projection.title) session not available"
@@ -267,13 +294,13 @@ struct ProviderMenuCard: View {
 }
 
 struct OverviewMenuCard: View {
-    @Bindable var model: AppModel
+    let providerModel: (ProviderID) -> ProviderFeatureModel
     let projection: OverviewMenuProjection
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(self.sortedItems) { item in
-                OverviewProviderCard(model: self.model, item: item)
+                OverviewProviderCard(model: self.providerModel(item.provider), item: item)
             }
             OverviewSummaryCard(projection: self.projection)
         }
@@ -545,13 +572,23 @@ struct HistoryBarStrip: View {
 }
 
 private struct MenuActionRow: View {
-    @Bindable var model: AppModel
+    let shell: AppShellModel?
+    let overview: OverviewFeatureModel?
+    let providerModel: (ProviderID) -> ProviderFeatureModel
+    let helperPort: Int
     let tab: MergeMenuTab
+    let onQuit: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(action: {
-                Task { await self.model.refresh(force: true, provider: self.primaryRefreshProvider) }
+                Task {
+                    if let provider = self.primaryRefreshProvider {
+                        await self.providerModel(provider).refresh()
+                    } else if let overview {
+                        await overview.refreshAll()
+                    }
+                }
             }) {
                 HStack {
                     Image(systemName: "arrow.clockwise")
@@ -566,21 +603,21 @@ private struct MenuActionRow: View {
             }
             .buttonStyle(PrimaryDashboardButtonStyle())
             .keyboardShortcut("r", modifiers: .command)
-            .disabled(self.model.isRefreshing)
+            .disabled(self.isRefreshing)
 
             if self.tab.providerID != nil {
                 Button(action: {
-                    Task { await self.model.refresh(force: true, provider: nil) }
+                    Task { await self.overview?.refreshAll() }
                 }) {
                     SecondaryActionLabel(title: "Refresh All", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(SecondaryDashboardButtonStyle())
-                .disabled(self.model.isRefreshing)
+                .disabled(self.isRefreshing)
             }
 
             VStack(spacing: 6) {
                 Button(action: {
-                    if let url = URL(string: "http://127.0.0.1:\(self.model.config.helperPort)") {
+                    if let url = URL(string: "http://127.0.0.1:\(self.helperPort)") {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
@@ -597,12 +634,7 @@ private struct MenuActionRow: View {
             Divider()
                 .padding(.top, 2)
 
-            Button(action: {
-                Task {
-                    await self.model.prepareForExit()
-                    NSApplication.shared.terminate(nil)
-                }
-            }) {
+            Button(action: self.onQuit) {
                 Text("Quit")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -611,62 +643,73 @@ private struct MenuActionRow: View {
     }
 
     private var primaryRefreshTitle: String {
-        if self.model.isRefreshing {
+        if self.isRefreshing {
             if let provider = self.primaryRefreshProvider {
                 return "Refreshing \(provider.title)…"
             }
-            let names = self.model.visibleProviders.map(\.title).joined(separator: " + ")
+            let names = self.visibleProviders.map(\.title).joined(separator: " + ")
             return names.isEmpty ? "Refreshing…" : "Refreshing \(names)…"
         }
-        return self.model.refreshActionLabel(for: self.tab)
+        if let provider = self.tab.providerID {
+            return "Refresh \(provider.title)"
+        }
+        return "Refresh All"
     }
 
     private var primaryRefreshProvider: ProviderID? {
         self.tab.providerID
     }
+
+    private var visibleProviders: [ProviderID] {
+        self.shell?.visibleProviders ?? self.primaryRefreshProvider.map { [$0] } ?? []
+    }
+    private var isRefreshing: Bool {
+        if let provider = self.primaryRefreshProvider {
+            return self.providerModel(provider).isRefreshing
+        }
+        return self.overview?.projection.isRefreshing ?? false
+    }
 }
 
-private struct SessionActionGroup: View {
-    @Bindable var model: AppModel
-    let providers: [ProviderID]
+struct SessionActionGroup: View {
+    let models: [ProviderFeatureModel]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Web Sessions")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            ForEach(self.providers, id: \.self) { provider in
+            ForEach(self.models, id: \.provider) { providerModel in
                 Menu {
-                    let candidates = self.model.importCandidates(for: provider)
-                    if candidates.isEmpty {
+                    if providerModel.importCandidates.isEmpty {
                         Text("No browser stores found")
                     } else {
-                        ForEach(candidates) { candidate in
+                        ForEach(providerModel.importCandidates) { candidate in
                             Button("Import \(candidate.title)") {
-                                Task { await self.model.importBrowserSession(provider: provider, candidate: candidate) }
+                                Task { await providerModel.importBrowserSession(candidate: candidate) }
                             }
                         }
                     }
-                    if self.model.importedSession(for: provider) != nil {
+                    if providerModel.importedSession != nil {
                         Divider()
                         Button("Reset Stored Session") {
-                            Task { await self.model.resetBrowserSession(provider: provider) }
+                            Task { await providerModel.resetBrowserSession() }
                         }
                     }
                 } label: {
                     SessionDisclosureRow(
-                        title: "\(provider.title) Web Session",
-                        subtitle: self.sessionHealthLabel(for: provider)
+                        title: "\(providerModel.provider.title) Web Session",
+                        subtitle: self.sessionHealthLabel(for: providerModel)
                     )
                 }
                 .menuStyle(.borderlessButton)
             }
         }
-        .disabled(self.model.isImportingSession)
+        .disabled(self.models.contains { $0.isImportingSession })
     }
 
-    private func sessionHealthLabel(for provider: ProviderID) -> String {
-        guard let session = self.model.importedSession(for: provider) else {
+    private func sessionHealthLabel(for providerModel: ProviderFeatureModel) -> String {
+        guard let session = providerModel.importedSession else {
             return "Missing"
         }
         if session.expired {
@@ -737,8 +780,8 @@ private struct MergeTabSwitcher: View {
     }
 }
 
-private struct OverviewProviderCard: View {
-    @Bindable var model: AppModel
+struct OverviewProviderCard: View {
+    @Bindable var model: ProviderFeatureModel
     let item: ProviderMenuProjection
 
     var body: some View {
@@ -851,9 +894,8 @@ private struct OverviewProviderCard: View {
 
 }
 
-private struct AuthStatusSection: View {
-    @Bindable var model: AppModel
-    let provider: ProviderID
+struct AuthStatusSection: View {
+    @Bindable var model: ProviderFeatureModel
     let projection: ProviderMenuProjection
 
     var body: some View {
@@ -887,9 +929,9 @@ private struct AuthStatusSection: View {
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                 }
-                ForEach(self.projection.authRecoveryActions.prefix(2)) { action in
+                ForEach(self.model.authRecoveryActions.prefix(2)) { action in
                     Button {
-                        Task { await self.model.runAuthRecoveryAction(action, for: self.provider) }
+                        Task { await self.model.runAuthRecoveryAction(action) }
                     } label: {
                         Label(action.label, systemImage: "key.fill")
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -936,7 +978,7 @@ private struct GlobalIssueBanner: View {
     }
 }
 
-private struct MenuCardBackgroundModifier: ViewModifier {
+struct MenuCardBackgroundModifier: ViewModifier {
     let opacity: Double
     let cornerRadius: CGFloat
 
@@ -953,7 +995,7 @@ private struct MenuCardBackgroundModifier: ViewModifier {
     }
 }
 
-private extension View {
+extension View {
     func menuCardBackground(opacity: Double, cornerRadius: CGFloat = 10) -> some View {
         self.modifier(MenuCardBackgroundModifier(opacity: opacity, cornerRadius: cornerRadius))
     }
@@ -1022,7 +1064,7 @@ private struct SessionDisclosureRow: View {
     }
 }
 
-private struct PrimaryDashboardButtonStyle: ButtonStyle {
+struct PrimaryDashboardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
@@ -1036,7 +1078,7 @@ private struct PrimaryDashboardButtonStyle: ButtonStyle {
     }
 }
 
-private struct SecondaryDashboardButtonStyle: ButtonStyle {
+struct SecondaryDashboardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body)

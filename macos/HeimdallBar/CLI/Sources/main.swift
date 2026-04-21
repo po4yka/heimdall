@@ -4,9 +4,10 @@ import HeimdallCLI
 import HeimdallPlatformMac
 
 do {
+    let compositionRoot = MacPlatformCompositionRoot()
     try await HeimdallCLIEntrypoint.run(
         arguments: CommandLine.arguments,
-        dependencies: MacPlatformFactory.cliDependencies()
+        dependencies: compositionRoot.cliDependencies()
     )
 } catch {
     fputs("\(error.localizedDescription)\n", stderr)

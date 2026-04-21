@@ -38,19 +38,29 @@ public struct HeimdallBarScenes: Scene {
 
     public var body: some Scene {
         WindowGroup("HeimdallBar") {
-            RootMenuView(model: self.model)
-                .frame(minWidth: 360, idealWidth: 420)
-                .padding(8)
+            AppShellView(
+                shell: self.model.shell,
+                overview: self.model.overview,
+                settings: self.model.settings,
+                providerModel: self.model.providerModel(for:)
+            )
+                .frame(minWidth: 900, idealWidth: 1080, minHeight: 620, idealHeight: 720)
                 .task { self.model.start() }
                 .onAppear { self.appDelegate.attach(model: self.model) }
         }
 
         MenuBarExtra(isInserted: .constant(self.model.config.mergeIcons)) {
-            RootMenuView(model: self.model)
+            RootMenuView(
+                shell: self.model.shell,
+                overview: self.model.overview,
+                providerModel: self.model.providerModel(for:),
+                helperPort: self.model.config.helperPort,
+                onQuit: self.quit
+            )
                 .task { self.model.start() }
                 .onAppear { self.appDelegate.attach(model: self.model) }
         } label: {
-            let overview = self.model.overviewProjection()
+            let overview = self.model.overview.projection
             MenuBarLabel(
                 title: "Heimdall",
                 image: MenuBarMeterRenderer.mergedImage(from: overview.items, isRefreshing: overview.isRefreshing)
@@ -60,37 +70,57 @@ public struct HeimdallBarScenes: Scene {
         .menuBarExtraStyle(.window)
 
         MenuBarExtra(isInserted: .constant(!self.model.config.mergeIcons && self.model.config.claude.enabled)) {
-            ProviderMenuView(model: self.model, provider: .claude)
+            ProviderMenuView(
+                model: self.model.providerModel(for: .claude),
+                helperPort: self.model.config.helperPort,
+                onQuit: self.quit
+            )
                 .task { self.model.start() }
                 .onAppear { self.appDelegate.attach(model: self.model) }
         } label: {
-            let projection = self.model.projection(for: .claude)
+            let providerModel = self.model.providerModel(for: .claude)
             MenuBarLabel(
-                title: self.model.menuTitle(for: .claude),
-                image: MenuBarMeterRenderer.image(for: projection)
+                title: providerModel.menuTitle,
+                image: MenuBarMeterRenderer.image(for: providerModel.projection)
             )
             .onAppear { self.appDelegate.attach(model: self.model) }
         }
         .menuBarExtraStyle(.window)
 
         MenuBarExtra(isInserted: .constant(!self.model.config.mergeIcons && self.model.config.codex.enabled)) {
-            ProviderMenuView(model: self.model, provider: .codex)
+            ProviderMenuView(
+                model: self.model.providerModel(for: .codex),
+                helperPort: self.model.config.helperPort,
+                onQuit: self.quit
+            )
                 .task { self.model.start() }
                 .onAppear { self.appDelegate.attach(model: self.model) }
         } label: {
-            let projection = self.model.projection(for: .codex)
+            let providerModel = self.model.providerModel(for: .codex)
             MenuBarLabel(
-                title: self.model.menuTitle(for: .codex),
-                image: MenuBarMeterRenderer.image(for: projection)
+                title: providerModel.menuTitle,
+                image: MenuBarMeterRenderer.image(for: providerModel.projection)
             )
             .onAppear { self.appDelegate.attach(model: self.model) }
         }
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(model: self.model)
+            SettingsView(
+                model: self.model.settings,
+                providerModel: self.model.providerModel(for:)
+            )
                 .frame(width: 480, height: 360)
                 .onAppear { self.appDelegate.attach(model: self.model) }
+        }
+    }
+
+    private var quit: () -> Void {
+        {
+            Task {
+                await self.model.prepareForExit()
+                NSApplication.shared.terminate(nil)
+            }
         }
     }
 }

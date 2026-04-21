@@ -2,43 +2,26 @@ import HeimdallDomain
 import SwiftUI
 
 struct SettingsView: View {
-    @Bindable var model: AppModel
+    @Bindable var model: SettingsFeatureModel
+    let providerModel: (ProviderID) -> ProviderFeatureModel
 
     var body: some View {
         Form {
-            Section("Claude") {
-                Toggle("Enable Claude", isOn: self.$model.config.claude.enabled)
-                Picker("Claude Source", selection: self.$model.config.claude.source) {
-                    ForEach(UsageSourcePreference.allCases, id: \.self) { source in
-                        Text(source.rawValue.capitalized).tag(source)
-                    }
-                }
-                Picker("Claude Cookie Source", selection: self.$model.config.claude.cookieSource) {
-                    ForEach(UsageSourcePreference.allCases, id: \.self) { source in
-                        Text(source.rawValue.capitalized).tag(source)
-                    }
-                }
-                Toggle("Enable Claude Web Extras", isOn: self.$model.config.claude.dashboardExtrasEnabled)
-            }
-            ProviderAuthSection(model: self.model, provider: .claude)
-            ProviderWebSessionSection(model: self.model, provider: .claude)
+            ProviderSettingsSection(
+                title: "Claude",
+                config: self.$model.config.claude,
+                extrasTitle: "Enable Claude Web Extras"
+            )
+            ProviderAuthSection(model: self.providerModel(.claude))
+            ProviderWebSessionSection(model: self.providerModel(.claude))
 
-            Section("Codex") {
-                Toggle("Enable Codex", isOn: self.$model.config.codex.enabled)
-                Picker("Codex Source", selection: self.$model.config.codex.source) {
-                    ForEach(UsageSourcePreference.allCases, id: \.self) { source in
-                        Text(source.rawValue.capitalized).tag(source)
-                    }
-                }
-                Picker("Codex Cookie Source", selection: self.$model.config.codex.cookieSource) {
-                    ForEach(UsageSourcePreference.allCases, id: \.self) { source in
-                        Text(source.rawValue.capitalized).tag(source)
-                    }
-                }
-                Toggle("Enable Codex OpenAI Web Extras", isOn: self.$model.config.codex.dashboardExtrasEnabled)
-            }
-            ProviderAuthSection(model: self.model, provider: .codex)
-            ProviderWebSessionSection(model: self.model, provider: .codex)
+            ProviderSettingsSection(
+                title: "Codex",
+                config: self.$model.config.codex,
+                extrasTitle: "Enable Codex OpenAI Web Extras"
+            )
+            ProviderAuthSection(model: self.providerModel(.codex))
+            ProviderWebSessionSection(model: self.providerModel(.codex))
 
             Section("Web Extras Policy") {
                 Text("OpenAI web extras use a hidden local WKWebView with imported browser cookies. Refreshes are cached and rate-limited, but they still cost battery and expose your local browser session to this app only on this machine.")
@@ -55,15 +38,20 @@ struct SettingsView: View {
                         Text(mode.rawValue.capitalized).tag(mode)
                     }
                 }
-                Stepper("Refresh Interval: \(self.model.config.refreshIntervalSeconds)s", value: self.$model.config.refreshIntervalSeconds, in: 60...1800, step: 60)
+                Stepper(
+                    "Refresh Interval: \(self.model.config.refreshIntervalSeconds)s",
+                    value: self.$model.config.refreshIntervalSeconds,
+                    in: 60...1800,
+                    step: 60
+                )
             }
 
             Section {
                 Button("Save Settings") {
-                    self.model.saveConfig()
+                    self.model.save()
                 }
                 Button("Refresh Data") {
-                    Task { await self.model.refresh(force: true, provider: nil) }
+                    Task { await self.model.refreshAll() }
                 }
                 Button("Refresh Browser Discovery") {
                     Task { await self.model.refreshBrowserImports() }
@@ -78,15 +66,37 @@ struct SettingsView: View {
     }
 }
 
-private struct ProviderAuthSection: View {
-    @Bindable var model: AppModel
-    let provider: ProviderID
+private struct ProviderSettingsSection: View {
+    let title: String
+    @Binding var config: ProviderConfig
+    let extrasTitle: String
 
     var body: some View {
-        let projection = self.model.projection(for: self.provider)
-        let auth = self.model.authHealth(for: self.provider)
+        Section(self.title) {
+            Toggle("Enable \(self.title)", isOn: self.$config.enabled)
+            Picker("\(self.title) Source", selection: self.$config.source) {
+                ForEach(UsageSourcePreference.allCases, id: \.self) { source in
+                    Text(source.rawValue.capitalized).tag(source)
+                }
+            }
+            Picker("\(self.title) Cookie Source", selection: self.$config.cookieSource) {
+                ForEach(UsageSourcePreference.allCases, id: \.self) { source in
+                    Text(source.rawValue.capitalized).tag(source)
+                }
+            }
+            Toggle(self.extrasTitle, isOn: self.$config.dashboardExtrasEnabled)
+        }
+    }
+}
 
-        Section("\(self.provider.title) Auth") {
+private struct ProviderAuthSection: View {
+    @Bindable var model: ProviderFeatureModel
+
+    var body: some View {
+        let projection = self.model.projection
+        let auth = self.model.authHealth
+
+        Section("\(self.model.provider.title) Auth") {
             if let headline = projection.authHeadline {
                 Text(headline)
                     .font(.headline)
@@ -117,22 +127,21 @@ private struct ProviderAuthSection: View {
             LabeledContent("Source Compatible", value: auth?.isSourceCompatible == true ? "Yes" : "No")
             LabeledContent("Requires Re-login", value: auth?.requiresRelogin == true ? "Yes" : "No")
 
-            ForEach(self.model.authRecoveryActions(for: self.provider)) { action in
+            ForEach(self.model.authRecoveryActions) { action in
                 Button(action.label) {
-                    Task { await self.model.runAuthRecoveryAction(action, for: self.provider) }
+                    Task { await self.model.runAuthRecoveryAction(action) }
                 }
             }
         }
     }
 }
 
-private struct ProviderWebSessionSection: View {
-    let model: AppModel
-    let provider: ProviderID
+struct ProviderWebSessionSection: View {
+    @Bindable var model: ProviderFeatureModel
 
     var body: some View {
-        Section("\(self.provider.title) Web Session") {
-            if let session = self.model.importedSession(for: self.provider) {
+        Section("\(self.model.provider.title) Web Session") {
+            if let session = self.model.importedSession {
                 Text(statusLine(for: session))
                 Text("Source: \(session.browserSource.title) · \(session.profileName)")
                     .foregroundStyle(.secondary)
@@ -143,8 +152,8 @@ private struct ProviderWebSessionSection: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Button("Reset \(self.provider.title) Session") {
-                    Task { await self.model.resetBrowserSession(provider: self.provider) }
+                Button("Reset \(self.model.provider.title) Session") {
+                    Task { await self.model.resetBrowserSession() }
                 }
                 .disabled(self.model.isImportingSession)
             } else {
@@ -152,14 +161,14 @@ private struct ProviderWebSessionSection: View {
                     .foregroundStyle(.secondary)
             }
 
-            if self.model.importCandidates(for: self.provider).isEmpty {
+            if self.model.importCandidates.isEmpty {
                 Text("No Safari, Chrome, Arc, or Brave cookie stores were discovered.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(self.model.importCandidates(for: self.provider)) { candidate in
+                ForEach(self.model.importCandidates) { candidate in
                     Button("Import from \(candidate.title)") {
-                        Task { await self.model.importBrowserSession(provider: self.provider, candidate: candidate) }
+                        Task { await self.model.importBrowserSession(candidate: candidate) }
                     }
                     .disabled(self.model.isImportingSession)
                 }
