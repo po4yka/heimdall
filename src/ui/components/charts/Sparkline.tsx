@@ -7,7 +7,7 @@ export function Sparkline({ daily }: { daily: DailyAgg[] }) {
   if (last7.length < 2) return null;
 
   const options = {
-    chart: { type: 'line', height: 30, width: 120, sparkline: { enabled: true },
+    chart: { type: 'line', height: 32, width: '100%', sparkline: { enabled: true },
              background: 'transparent', fontFamily: 'inherit' },
     series: [{ data: last7.map(d => d.input + d.output) }],
     stroke: { width: 1.5, curve: 'smooth' },

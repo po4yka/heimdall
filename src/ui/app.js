@@ -6963,8 +6963,8 @@ ${row.project}` : row.project;
     const options = {
       chart: {
         type: "line",
-        height: 30,
-        width: 120,
+        height: 32,
+        width: "100%",
         sparkline: { enabled: true },
         background: "transparent",
         fontFamily: "inherit"
