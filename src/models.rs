@@ -364,6 +364,11 @@ pub struct ProviderCostSummary {
     /// Cache-read fraction for today only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_hit_rate_today: Option<f64>,
+    /// Estimated dollar savings from cache reads over the 30-day window,
+    /// computed as Σ cache_read_tokens × (input_price − cache_read_price) per
+    /// model. None when no cache reads happened.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_savings_30d_usd: Option<f64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

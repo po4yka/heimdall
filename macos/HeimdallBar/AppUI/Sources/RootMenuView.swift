@@ -204,7 +204,8 @@ struct ProviderMenuCard: View {
             if let hitRate = projection.cacheHitRateToday {
                 CacheEfficiencyCard(
                     hitRateToday: hitRate,
-                    hitRate30d: projection.cacheHitRate30d
+                    hitRate30d: projection.cacheHitRate30d,
+                    savings30dUSD: projection.cacheSavings30dUSD
                 )
             }
             Text(projection.costLabel)
@@ -884,6 +885,10 @@ struct TokenBreakdownRow: View {
 struct CacheEfficiencyCard: View {
     let hitRateToday: Double
     let hitRate30d: Double?
+    /// Estimated $ saved over the trailing 30 days by cache reads being
+    /// billed at the cache-read rate instead of the full input rate. Nil
+    /// when no cache usage or when the helper hasn't computed it.
+    var savings30dUSD: Double? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -913,14 +918,33 @@ struct CacheEfficiencyCard: View {
                 }
             }
             .frame(height: 4)
-            if let thirty = self.hitRate30d {
-                Text("30-day avg: \(Self.percentLabel(thirty))")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                if let thirty = self.hitRate30d {
+                    Text("30-day avg: \(Self.percentLabel(thirty))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if let savings = self.savings30dUSD, savings > 0 {
+                    Spacer(minLength: 4)
+                    Text("≈ \(Self.currencyLabel(savings)) saved")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.green)
+                        .help("Estimated dollar savings over the last 30 days from cache reads being billed at the cache-read rate instead of the input rate.")
+                }
             }
         }
         .padding(8)
         .menuCardBackground(opacity: 0.03, cornerRadius: 8)
+    }
+
+    private static func currencyLabel(_ usd: Double) -> String {
+        if usd >= 100 {
+            return String(format: "$%.0f", usd)
+        }
+        if usd >= 10 {
+            return String(format: "$%.1f", usd)
+        }
+        return String(format: "$%.2f", usd)
     }
 
     private static func percentLabel(_ value: Double) -> String {

@@ -140,7 +140,8 @@ public enum MenuProjectionBuilder {
             todayBreakdown: snapshot?.costSummary.todayBreakdown,
             last30DaysBreakdown: snapshot?.costSummary.last30DaysBreakdown,
             cacheHitRateToday: snapshot?.costSummary.cacheHitRateToday,
-            cacheHitRate30d: snapshot?.costSummary.cacheHitRate30d
+            cacheHitRate30d: snapshot?.costSummary.cacheHitRate30d,
+            cacheSavings30dUSD: snapshot?.costSummary.cacheSavings30dUSD
         )
     }
 

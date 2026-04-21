@@ -2699,6 +2699,37 @@ pub fn get_provider_cost_summary_since(
     ))
 }
 
+/// Estimate total cache-read savings since `start_date` for the given
+/// provider. Uses per-model cache-read sums joined with the pricing table so
+/// Sonnet vs Opus vs Haiku rate differences are honored.
+pub fn get_provider_cache_savings_nanos_since(
+    conn: &Connection,
+    provider: &str,
+    start_date: &str,
+) -> Result<i64> {
+    let mut stmt = conn.prepare(
+        "SELECT model, COALESCE(SUM(cache_read_tokens), 0) AS cache_reads
+         FROM turns
+         WHERE provider = ?1 AND substr(timestamp, 1, 10) >= ?2
+         GROUP BY model",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![provider, start_date], |row| {
+        let model: String = row.get(0)?;
+        let cache_reads: i64 = row.get(1)?;
+        Ok((model, cache_reads))
+    })?;
+
+    let mut total: i64 = 0;
+    for row in rows {
+        let (model, cache_reads) = row?;
+        total = total.saturating_add(crate::pricing::calc_cache_savings_nanos(
+            &model,
+            cache_reads,
+        ));
+    }
+    Ok(total)
+}
+
 pub fn get_provider_daily_cost_history_since(
     conn: &Connection,
     provider: &str,

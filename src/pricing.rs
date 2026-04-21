@@ -720,6 +720,27 @@ pub fn calc_cost(
     calc_cost_nanos(model, input, output, cache_read, cache_creation) as f64 / 1_000_000_000.0
 }
 
+/// Estimate the dollar savings (in nanos) from cache reads for a given model.
+/// savings = cache_read_tokens × (input_price - cache_read_price)
+/// Returns 0 for unknown models or when cache-read pricing is missing/worse
+/// than input pricing (which would be a negative saving — clamp to zero).
+pub fn calc_cache_savings_nanos(model: &str, cache_read_tokens: i64) -> i64 {
+    if cache_read_tokens <= 0 {
+        return 0;
+    }
+    let Some(lookup) = lookup_pricing(model) else {
+        return 0;
+    };
+    let PricingLookup::Borrowed { pricing: p, .. } = lookup;
+    let delta = p.input - p.cache_read;
+    if delta <= 0.0 {
+        return 0;
+    }
+    // Same units as calc_cost_nanos: tokens × (price-per-million) × 1000
+    // -> nanodollars (per-million × 1000 gives nanodollars per token).
+    (cache_read_tokens as f64 * delta * 1000.0) as i64
+}
+
 /// Format a token count for display (e.g., 1.5M, 2.3K, 999).
 pub fn fmt_tokens(n: i64) -> String {
     if n >= 1_000_000 {

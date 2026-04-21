@@ -303,6 +303,7 @@ public struct ProviderCostSummary: Codable, Sendable {
     public var last30DaysBreakdown: TokenBreakdown?
     public var cacheHitRateToday: Double?
     public var cacheHitRate30d: Double?
+    public var cacheSavings30dUSD: Double?
 
     public init(
         todayTokens: Int,
@@ -313,7 +314,8 @@ public struct ProviderCostSummary: Codable, Sendable {
         todayBreakdown: TokenBreakdown? = nil,
         last30DaysBreakdown: TokenBreakdown? = nil,
         cacheHitRateToday: Double? = nil,
-        cacheHitRate30d: Double? = nil
+        cacheHitRate30d: Double? = nil,
+        cacheSavings30dUSD: Double? = nil
     ) {
         self.todayTokens = todayTokens
         self.todayCostUSD = todayCostUSD
@@ -324,6 +326,7 @@ public struct ProviderCostSummary: Codable, Sendable {
         self.last30DaysBreakdown = last30DaysBreakdown
         self.cacheHitRateToday = cacheHitRateToday
         self.cacheHitRate30d = cacheHitRate30d
+        self.cacheSavings30dUSD = cacheSavings30dUSD
     }
 
     enum CodingKeys: String, CodingKey {
@@ -336,6 +339,7 @@ public struct ProviderCostSummary: Codable, Sendable {
         case last30DaysBreakdown = "last_30_days_breakdown"
         case cacheHitRateToday = "cache_hit_rate_today"
         case cacheHitRate30d = "cache_hit_rate_30d"
+        case cacheSavings30dUSD = "cache_savings_30d_usd"
     }
 }
 
@@ -1219,6 +1223,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
     public var last30DaysBreakdown: TokenBreakdown?
     public var cacheHitRateToday: Double?
     public var cacheHitRate30d: Double?
+    public var cacheSavings30dUSD: Double?
     public var claudeFactors: [ClaudeUsageFactorSnapshot]
     public var adjunct: DashboardAdjunctSnapshot?
 
@@ -1257,7 +1262,8 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         todayBreakdown: TokenBreakdown? = nil,
         last30DaysBreakdown: TokenBreakdown? = nil,
         cacheHitRateToday: Double? = nil,
-        cacheHitRate30d: Double? = nil
+        cacheHitRate30d: Double? = nil,
+        cacheSavings30dUSD: Double? = nil
     ) {
         self.provider = provider
         self.title = title
@@ -1290,6 +1296,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         self.last30DaysBreakdown = last30DaysBreakdown
         self.cacheHitRateToday = cacheHitRateToday
         self.cacheHitRate30d = cacheHitRate30d
+        self.cacheSavings30dUSD = cacheSavings30dUSD
         self.claudeFactors = claudeFactors
         self.adjunct = adjunct
     }

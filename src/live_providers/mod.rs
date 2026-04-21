@@ -791,6 +791,13 @@ fn provider_cost_summary(
     let daily = db::get_provider_daily_cost_history_since(conn, provider, &start_date)?;
     let cache_hit_rate_today = today_breakdown.cache_hit_rate();
     let cache_hit_rate_30d = last_30_days_breakdown.cache_hit_rate();
+    let cache_savings_30d_nanos =
+        db::get_provider_cache_savings_nanos_since(conn, provider, &start_date)?;
+    let cache_savings_30d_usd = if cache_savings_30d_nanos > 0 {
+        Some(cache_savings_30d_nanos as f64 / 1_000_000_000.0)
+    } else {
+        None
+    };
 
     Ok(ProviderCostSummary {
         today_tokens,
@@ -802,6 +809,7 @@ fn provider_cost_summary(
         last_30_days_breakdown,
         cache_hit_rate_today,
         cache_hit_rate_30d,
+        cache_savings_30d_usd,
     })
 }
 
