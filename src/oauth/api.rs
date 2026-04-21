@@ -45,6 +45,15 @@ async fn fetch_usage_inner(
             "OAuth token expired. Run `claude login` to refresh.".into(),
         ));
     }
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        // Transient — Anthropic throttles companion apps that poll the usage
+        // endpoint too frequently. Don't dump the raw JSON body into the UI;
+        // just say 'retrying' so the user knows cached data will clear soon.
+        let _body = resp.text().await.unwrap_or_default();
+        return Ok(UsageWindowsResponse::with_error(
+            "Anthropic API rate-limited us — retrying on next poll.".into(),
+        ));
+    }
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         return Ok(UsageWindowsResponse::with_error(format!(

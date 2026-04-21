@@ -296,6 +296,13 @@ public enum MenuProjectionBuilder {
 
     private static func fallbackChainWarnings(_ chain: [String]) -> [String] {
         guard chain.count > 1 else { return [] }
+        // Suppress the chain when the final step is 'unavailable' — the ERROR
+        // badge and top message already tell the user the whole pipeline
+        // failed. A chain like 'oauth -> cli-rpc' where we DID recover is
+        // still worth showing.
+        if chain.last == "unavailable" {
+            return []
+        }
         return ["Resolution chain: \(chain.joined(separator: " -> "))"]
     }
 

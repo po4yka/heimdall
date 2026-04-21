@@ -185,7 +185,14 @@ public enum SourceResolver {
 
             var warnings = [String]()
             let resolvedDetail = liveSourceDetail ?? "unavailable"
-            warnings.append("Requested \(requestedSource.rawValue), but Heimdall resolved \(resolvedDetail).")
+            // Only surface the 'resolved X' note when there's a real fallback
+            // to report. When resolvedDetail == 'unavailable' the ERROR state
+            // and top-level message already carry the info — the note just
+            // becomes dev noise ('Requested oauth, but Heimdall resolved
+            // unavailable.' below a big red ERROR badge).
+            if resolvedDetail != "unavailable" {
+                warnings.append("Requested \(requestedSource.rawValue), but Heimdall resolved \(resolvedDetail).")
+            }
             if snapshot.resolvedViaFallback {
                 warnings.append("The helper fell back during refresh, so the requested source is withheld instead of silently mixing sources.")
             }
@@ -290,7 +297,12 @@ public enum SourceResolver {
     ) -> String {
         let refreshLabel = snapshot.refreshDurationMs > 0 ? " in \(snapshot.refreshDurationMs)ms" : ""
         let sourceLabel = matched ? "Using \(requested.rawValue)" : "Resolved \(snapshot.sourceUsed)"
-        if let attempted = snapshot.lastAttemptedSource {
+        // Only surface the 'after attempting X' fallback tail when we ACTUALLY
+        // fell through from a different source. If the attempted source and
+        // the winning source are the same (e.g. oauth -> oauth), the tail is
+        // redundant noise — "Using oauth after attempting oauth in 576ms."
+        if let attempted = snapshot.lastAttemptedSource,
+           attempted != snapshot.sourceUsed {
             return "\(sourceLabel) after attempting \(attempted)\(refreshLabel)."
         }
         return "\(sourceLabel)\(refreshLabel)."
