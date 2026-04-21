@@ -34,17 +34,31 @@ public struct MacPlatformCompositionRoot: Sendable {
         self.providerDataSource = LocalProviderDataSource(clientFactory: liveProviderClientFactory)
     }
 
-    public func appEnvironment() -> HeimdallAppEnvironment {
-        HeimdallAppEnvironment(
-            settingsStore: self.settingsStore,
+    @MainActor
+    public func appRuntime() -> HeimdallAppRuntime {
+        let sessionStore = AppSessionStore(config: self.settingsStore.load())
+        let providerRepository = ProviderRepository()
+        let refreshCoordinator = RefreshCoordinator(
+            sessionStore: sessionStore,
+            repository: providerRepository,
             helperRuntime: self.helperRuntime,
             adjunctLoader: self.adjunctLoader,
             browserSessionManager: self.browserSessionManager,
-            credentialInspector: self.credentialInspector,
-            widgetSnapshotWriter: self.widgetSnapshotWriter,
-            widgetReloader: self.widgetReloader,
-            authCommandRunner: self.authCommandRunner,
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                writer: self.widgetSnapshotWriter,
+                reloader: self.widgetReloader
+            ),
             providerDataSource: self.providerDataSource
+        )
+        let authCoordinator = AuthCoordinator(runner: self.authCommandRunner)
+
+        return HeimdallAppRuntime(
+            sessionStore: sessionStore,
+            providerRepository: providerRepository,
+            refreshCoordinator: refreshCoordinator,
+            authCoordinator: authCoordinator,
+            settingsStore: self.settingsStore,
+            credentialInspector: self.credentialInspector
         )
     }
 

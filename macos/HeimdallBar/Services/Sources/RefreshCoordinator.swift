@@ -93,7 +93,9 @@ public final class RefreshCoordinator {
     }
 
     public func refreshBrowserImports() async {
-        await self.loadImportedSessions(for: ProviderID.allCases)
+        let providers = ProviderID.allCases
+        await self.loadImportedSessions(for: providers)
+        await self.loadImportCandidates(for: providers)
         await self.loadAdjuncts(for: self.sessionStore.visibleProviders, forceRefresh: false)
     }
 
@@ -106,6 +108,7 @@ public final class RefreshCoordinator {
         do {
             let session = try await self.browserSessionManager.importBrowserSession(provider: provider, candidate: candidate)
             self.repository.importedSessions[provider] = session
+            await self.loadImportCandidates(for: [provider])
             await self.loadAdjuncts(for: [provider], forceRefresh: true)
             self.repository.finishImport(issue: nil)
         } catch {
@@ -121,6 +124,7 @@ public final class RefreshCoordinator {
         do {
             try await self.browserSessionManager.resetImportedSession(provider: provider)
             self.repository.importedSessions.removeValue(forKey: provider)
+            await self.loadImportCandidates(for: [provider])
             await self.loadAdjuncts(for: [provider], forceRefresh: true)
             self.repository.finishImport(issue: nil)
         } catch {
@@ -164,6 +168,11 @@ public final class RefreshCoordinator {
     private func loadImportedSessions(for providers: [ProviderID]) async {
         for provider in providers {
             self.repository.importedSessions[provider] = await self.browserSessionManager.importedSession(provider: provider)
+        }
+    }
+
+    private func loadImportCandidates(for providers: [ProviderID]) async {
+        for provider in providers {
             self.repository.browserImportCandidates[provider] = await self.browserSessionManager.discoverImportCandidates(provider: provider)
         }
     }

@@ -5,7 +5,7 @@ import SwiftUI
 struct AppShellView: View {
     @Bindable var shell: AppShellModel
     @Bindable var overview: OverviewFeatureModel
-    @Bindable var settings: SettingsFeatureModel
+    let helperPort: Int
     let providerModel: (ProviderID) -> ProviderFeatureModel
 
     var body: some View {
@@ -33,11 +33,6 @@ struct AppShellView: View {
                         )
                     case .provider(let provider):
                         WindowProviderView(model: self.providerModel(provider))
-                    case .settings:
-                        WindowSettingsView(
-                            settings: self.settings,
-                            providerModel: self.providerModel
-                        )
                     }
                 }
                 .padding(24)
@@ -50,7 +45,7 @@ struct AppShellView: View {
                 Button {
                     Task {
                         switch self.shell.navigationSelection {
-                        case .overview, .settings:
+                        case .overview:
                             await self.overview.refreshAll()
                         case .provider(let provider):
                             await self.providerModel(provider).refresh()
@@ -61,8 +56,12 @@ struct AppShellView: View {
                 }
                 .disabled(self.isBusy)
 
+                SettingsLink {
+                    Label("Settings", systemImage: "gearshape")
+                }
+
                 Button {
-                    if let url = URL(string: "http://127.0.0.1:\(self.settings.config.helperPort)") {
+                    if let url = URL(string: "http://127.0.0.1:\(self.helperPort)") {
                         NSWorkspace.shared.open(url)
                     }
                 } label: {
@@ -70,14 +69,11 @@ struct AppShellView: View {
                 }
             }
         }
-        .task {
-            await self.settings.refreshBrowserImports()
-        }
     }
 
     private var isBusy: Bool {
         switch self.shell.navigationSelection {
-        case .overview, .settings:
+        case .overview:
             return self.overview.projection.isRefreshing
         case .provider(let provider):
             return self.providerModel(provider).isBusy
@@ -157,27 +153,6 @@ private struct WindowProviderView: View {
             ProviderMenuCard(providerModel: self.model)
 
             ProviderSessionDetails(model: self.model)
-        }
-    }
-}
-
-private struct WindowSettingsView: View {
-    @Bindable var settings: SettingsFeatureModel
-    let providerModel: (ProviderID) -> ProviderFeatureModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            WindowHeader(
-                title: "Settings",
-                subtitle: "Provider configuration, auth diagnostics, and web session imports",
-                issue: self.settings.issue?.message
-            )
-            .padding(.horizontal, 20)
-            SettingsView(
-                model: self.settings,
-                providerModel: self.providerModel
-            )
-            .frame(maxWidth: 760, alignment: .leading)
         }
     }
 }

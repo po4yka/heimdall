@@ -1019,6 +1019,8 @@ struct CacheEfficiencyCard: View {
 }
 
 private struct MenuActionRow: View {
+    @Environment(\.openWindow) private var openWindow
+
     let shell: AppShellModel?
     let overview: OverviewFeatureModel?
     let providerModel: (ProviderID) -> ProviderFeatureModel
@@ -1063,6 +1065,11 @@ private struct MenuActionRow: View {
             }
 
             VStack(spacing: 6) {
+                Button(action: self.openMainWindow) {
+                    SecondaryActionLabel(title: "Open Main Window", systemImage: "macwindow")
+                }
+                .buttonStyle(SecondaryDashboardButtonStyle())
+
                 Button(action: {
                     if let url = URL(string: "http://127.0.0.1:\(self.helperPort)") {
                         NSWorkspace.shared.open(url)
@@ -1115,6 +1122,11 @@ private struct MenuActionRow: View {
             return self.providerModel(provider).isRefreshing
         }
         return self.overview?.projection.isRefreshing ?? false
+    }
+
+    private func openMainWindow() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        self.openWindow(id: HeimdallBarSceneID.mainWindow)
     }
 }
 

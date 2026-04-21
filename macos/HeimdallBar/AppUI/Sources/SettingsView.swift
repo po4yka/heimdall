@@ -9,7 +9,7 @@ struct SettingsView: View {
         Form {
             CombinedProviderSection(
                 title: "Claude",
-                config: self.$model.config.claude,
+                config: self.$model.draftConfig.claude,
                 extrasTitle: "Enable Claude Web Extras",
                 providerModel: self.providerModel(.claude)
             )
@@ -17,7 +17,7 @@ struct SettingsView: View {
 
             CombinedProviderSection(
                 title: "Codex",
-                config: self.$model.config.codex,
+                config: self.$model.draftConfig.codex,
                 extrasTitle: "Enable Codex OpenAI Web Extras",
                 providerModel: self.providerModel(.codex)
             )
@@ -30,17 +30,17 @@ struct SettingsView: View {
             }
 
             Section("Display") {
-                Toggle("Merge Icons", isOn: self.$model.config.mergeIcons)
-                Toggle("Show Used Values", isOn: self.$model.config.showUsedValues)
-                Toggle("Check Provider Status", isOn: self.$model.config.checkProviderStatus)
-                Picker("Reset Display", selection: self.$model.config.resetDisplayMode) {
+                Toggle("Merge Icons", isOn: self.$model.draftConfig.mergeIcons)
+                Toggle("Show Used Values", isOn: self.$model.draftConfig.showUsedValues)
+                Toggle("Check Provider Status", isOn: self.$model.draftConfig.checkProviderStatus)
+                Picker("Reset Display", selection: self.$model.draftConfig.resetDisplayMode) {
                     ForEach(ResetDisplayMode.allCases, id: \.self) { mode in
                         Text(mode.rawValue.capitalized).tag(mode)
                     }
                 }
                 Stepper(
-                    "Refresh Interval: \(self.model.config.refreshIntervalSeconds)s",
-                    value: self.$model.config.refreshIntervalSeconds,
+                    "Refresh Interval: \(self.model.draftConfig.refreshIntervalSeconds)s",
+                    value: self.$model.draftConfig.refreshIntervalSeconds,
                     in: 60...1800,
                     step: 60
                 )
@@ -59,6 +59,9 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            self.model.resetDraftFromLiveConfig()
+        }
         .task {
             await self.model.refreshBrowserImports()
         }

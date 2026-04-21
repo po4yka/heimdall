@@ -9,6 +9,7 @@ import os.log
 public final class SettingsFeatureModel {
     public let sessionStore: AppSessionStore
     public var onSettingsSaved: (() -> Void)?
+    public var draftConfig: HeimdallBarConfig
 
     private let repository: ProviderRepository
     private let settingsStore: any SettingsStore
@@ -27,11 +28,11 @@ public final class SettingsFeatureModel {
         self.settingsStore = settingsStore
         self.refreshCoordinator = refreshCoordinator
         self.onSettingsSaved = nil
+        self.draftConfig = sessionStore.config
     }
 
     public var config: HeimdallBarConfig {
-        get { self.sessionStore.config }
-        set { self.sessionStore.config = newValue }
+        self.sessionStore.config
     }
 
     public var issue: AppIssue? {
@@ -44,8 +45,11 @@ public final class SettingsFeatureModel {
     }
 
     public func save() {
+        let draftConfig = self.draftConfig
         do {
-            try self.settingsStore.save(self.sessionStore.config)
+            try self.settingsStore.save(draftConfig)
+            self.sessionStore.config = draftConfig
+            self.draftConfig = draftConfig
             self.repository.setIssue(nil)
             self.onSettingsSaved?()
         } catch {
@@ -53,6 +57,10 @@ public final class SettingsFeatureModel {
                 AppIssue(kind: .settingsSave, message: error.localizedDescription)
             )
         }
+    }
+
+    public func resetDraftFromLiveConfig() {
+        self.draftConfig = self.sessionStore.config
     }
 
     public func refreshAll() async {

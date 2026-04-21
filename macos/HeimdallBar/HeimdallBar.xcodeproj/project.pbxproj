@@ -19,6 +19,7 @@
 		150EE1BDF37D48595797855A /* HeimdallDomain.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B361431C8E1A60029FB1575 /* HeimdallDomain.framework */; };
 		1530AFC8B784BC449CF3550B /* WebDashboardScraper.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7BCD211AF778A9587087EAD /* WebDashboardScraper.swift */; };
 		163315B2A5D39D41125E20A2 /* ProviderRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB837251A9F1D27248168A2A /* ProviderRepository.swift */; };
+		1A2B3C4D5E6F708192A3B4C5 /* AppRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708192A3B4C6 /* AppRuntime.swift */; };
 		1D803B00BDFD793339BF6B48 /* HeimdallServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA7C2377DFAE3941FC632BCB /* HeimdallServices.framework */; };
 		1DE7FA806EDB8480024B918C /* MenuProjectionBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A91BE8793106327B68F1437 /* MenuProjectionBuilder.swift */; };
 		267A063CEC14E7622D36FBAC /* ProviderCredentialInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59C497E2262263D7B75075D6 /* ProviderCredentialInspector.swift */; };
@@ -360,6 +361,7 @@
 		080E76F40A2F0062FBDFC99B /* HeimdallAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeimdallAPIClient.swift; sourceTree = "<group>"; };
 		1531C689E1BC09BAA2C378AF /* HeimdallWidgets.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = HeimdallWidgets.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		1D5F16E9E5E7E0990A544FD3 /* RootMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootMenuView.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F708192A3B4C6 /* AppRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRuntime.swift; sourceTree = "<group>"; };
 		2120AF6A2ED97BE28AF034CF /* AppSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionStore.swift; sourceTree = "<group>"; };
 		271BF478681AF1588ADE812F /* AuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthCoordinator.swift; sourceTree = "<group>"; };
 		32195DE8DB04DAE9A92267B7 /* HistoryWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryWidgetView.swift; sourceTree = "<group>"; };
@@ -616,6 +618,7 @@
 		794B8D493B4A2D49BC4A2A99 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				1A2B3C4D5E6F708192A3B4C6 /* AppRuntime.swift */,
 				2120AF6A2ED97BE28AF034CF /* AppSessionStore.swift */,
 				271BF478681AF1588ADE812F /* AuthCoordinator.swift */,
 				5CD49122C12EE482D41E2AC8 /* ProviderDataSource.swift */,
@@ -1044,6 +1047,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1A2B3C4D5E6F708192A3B4C5 /* AppRuntime.swift in Sources */,
 				D97A3CBF56DEFD68A82F4586 /* AppSessionStore.swift in Sources */,
 				6EEFB3121F3B1467D23048DF /* AuthCoordinator.swift in Sources */,
 				60F9ADFD062D3421D90F2C21 /* ProviderDataSource.swift in Sources */,

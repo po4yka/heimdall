@@ -2,8 +2,13 @@ import AppKit
 import Observation
 import SwiftUI
 
+enum HeimdallBarSceneID {
+    static let mainWindow = "heimdall-main-window"
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var model: AppModel?
+    private var isPreparingToTerminate = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
@@ -17,14 +22,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.start()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        guard let model else { return }
-        let semaphore = DispatchSemaphore(value: 0)
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model else { return .terminateNow }
+        guard !self.isPreparingToTerminate else { return .terminateLater }
+
+        self.isPreparingToTerminate = true
         Task {
             await model.prepareForExit()
-            semaphore.signal()
+            await MainActor.run {
+                sender.reply(toApplicationShouldTerminate: true)
+            }
         }
-        _ = semaphore.wait(timeout: .now() + 2)
+        return .terminateLater
     }
 }
 
@@ -37,11 +46,11 @@ public struct HeimdallBarScenes: Scene {
     }
 
     public var body: some Scene {
-        WindowGroup("HeimdallBar") {
+        WindowGroup("HeimdallBar", id: HeimdallBarSceneID.mainWindow) {
             AppShellView(
                 shell: self.model.shell,
                 overview: self.model.overview,
-                settings: self.model.settings,
+                helperPort: self.model.config.helperPort,
                 providerModel: self.model.providerModel(for:)
             )
                 .frame(minWidth: 900, idealWidth: 1080, minHeight: 620, idealHeight: 720)
@@ -117,10 +126,7 @@ public struct HeimdallBarScenes: Scene {
 
     private var quit: () -> Void {
         {
-            Task {
-                await self.model.prepareForExit()
-                NSApplication.shared.terminate(nil)
-            }
+            NSApplication.shared.terminate(nil)
         }
     }
 }

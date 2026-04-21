@@ -6,10 +6,11 @@ import SwiftUI
 struct HeimdallBarApp: App {
     @State private var model: AppModel
 
+    @MainActor
     init() {
         let compositionRoot = MacPlatformCompositionRoot()
-        let environment = compositionRoot.appEnvironment()
-        self._model = State(initialValue: AppModel(environment: environment))
+        let runtime = compositionRoot.appRuntime()
+        self._model = State(initialValue: AppModel(runtime: runtime))
     }
 
     @MainActor

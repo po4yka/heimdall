@@ -15,22 +15,13 @@ public final class AppModel {
     private let providerFeatures: [ProviderID: ProviderFeatureModel]
     private var hasStarted: Bool
 
-    public init(environment: HeimdallAppEnvironment) {
-        let sessionStore = AppSessionStore(config: environment.settingsStore.load())
-        let providerRepository = ProviderRepository()
-        let refreshCoordinator = RefreshCoordinator(
-            sessionStore: sessionStore,
-            repository: providerRepository,
-            helperRuntime: environment.helperRuntime,
-            adjunctLoader: environment.adjunctLoader,
-            browserSessionManager: environment.browserSessionManager,
-            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
-                writer: environment.widgetSnapshotWriter,
-                reloader: environment.widgetReloader
-            ),
-            providerDataSource: environment.providerDataSource
-        )
-        let authCoordinator = AuthCoordinator(runner: environment.authCommandRunner)
+    public init(runtime: HeimdallAppRuntime) {
+        let sessionStore = runtime.sessionStore
+        let providerRepository = runtime.providerRepository
+        let refreshCoordinator = runtime.refreshCoordinator
+        let authCoordinator = runtime.authCoordinator
+        let settingsStore = runtime.settingsStore
+        let credentialInspector = runtime.credentialInspector
 
         self.sessionStore = sessionStore
         self.shell = AppShellModel(sessionStore: sessionStore)
@@ -42,7 +33,7 @@ public final class AppModel {
         self.settings = SettingsFeatureModel(
             sessionStore: sessionStore,
             repository: providerRepository,
-            settingsStore: environment.settingsStore,
+            settingsStore: settingsStore,
             refreshCoordinator: refreshCoordinator
         )
         self.refreshCoordinator = refreshCoordinator
@@ -56,7 +47,7 @@ public final class AppModel {
                     repository: providerRepository,
                     refreshCoordinator: refreshCoordinator,
                     authCoordinator: authCoordinator,
-                    credentialInspector: environment.credentialInspector
+                    credentialInspector: credentialInspector
                 )
             )
         })
