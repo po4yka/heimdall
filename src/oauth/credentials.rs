@@ -677,14 +677,108 @@ fn persist_refreshed_credentials(
         Some(ClaudeCredentialStore::File(path)) => {
             write_refreshed_credentials(path, access_token, refresh_token, expires_at)
         }
+        #[cfg(target_os = "macos")]
+        Some(ClaudeCredentialStore::Keychain) => {
+            write_refreshed_credentials_to_keychain(access_token, refresh_token, expires_at)
+        }
+        #[cfg(not(target_os = "macos"))]
         Some(ClaudeCredentialStore::Keychain) => {
             debug!(
-                "Skipping persisted refresh write for keychain-backed Claude credentials to avoid plaintext downgrade"
+                "Keychain-backed Claude credential refresh persistence not supported on this platform"
             );
             Ok(())
         }
         None => Ok(()),
     }
+}
+
+/// Locate the existing Claude Keychain entry and rewrite it with refreshed
+/// credentials. We respect the user's original backend — when creds were read
+/// from Keychain we write them back to Keychain, not to `~/.claude/.credentials.json`.
+#[cfg(target_os = "macos")]
+fn write_refreshed_credentials_to_keychain(
+    access_token: &str,
+    refresh_token: Option<&str>,
+    expires_at: i64,
+) -> std::io::Result<()> {
+    for service in KEYCHAIN_SERVICE_CANDIDATES {
+        let Some((existing_secret, account)) = read_keychain_entry_meta(service) else {
+            continue;
+        };
+        let new_contents = build_refreshed_credentials_json(
+            Some(&existing_secret),
+            access_token,
+            refresh_token,
+            expires_at,
+        )?;
+        let mut cmd = std::process::Command::new("/usr/bin/security");
+        cmd.args(["add-generic-password", "-U", "-s", service]);
+        if let Some(account) = account.as_deref() {
+            cmd.args(["-a", account]);
+        }
+        cmd.args(["-w", &new_contents]);
+        let output = cmd
+            .output()
+            .map_err(|e| std::io::Error::other(format!("spawn security: {e}")))?;
+        if output.status.success() {
+            debug!("Persisted refreshed Claude credentials to Keychain service '{service}'");
+            return Ok(());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(std::io::Error::other(format!(
+            "security add-generic-password -U (service '{service}') failed: {stderr}"
+        )));
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "No matching Claude Keychain entry found to update",
+    ))
+}
+
+/// Pull the raw secret and the `acct` attribute from a generic-password
+/// Keychain entry. Returns None when the entry doesn't exist or can't be read.
+#[cfg(target_os = "macos")]
+fn read_keychain_entry_meta(service: &str) -> Option<(String, Option<String>)> {
+    let attrs = std::process::Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-s", service])
+        .output()
+        .ok()?;
+    if !attrs.status.success() {
+        return None;
+    }
+    let account = parse_account_from_security_output(&String::from_utf8_lossy(&attrs.stdout));
+
+    let pw = std::process::Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-s", service, "-w"])
+        .output()
+        .ok()?;
+    if !pw.status.success() {
+        return None;
+    }
+    let secret = String::from_utf8_lossy(&pw.stdout).trim().to_string();
+    Some((secret, account))
+}
+
+/// Parse the `acct` attribute from `security find-generic-password` output,
+/// which prints lines like `"acct"<blob>="<value>"`.
+#[cfg(target_os = "macos")]
+fn parse_account_from_security_output(output: &str) -> Option<String> {
+    for line in output.lines() {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed.strip_prefix("\"acct\"<blob>=") else {
+            continue;
+        };
+        // Value is either `"..."` or `0x...` (hex) or `<NULL>`.
+        if rest == "<NULL>" {
+            return None;
+        }
+        if let Some(quoted) = rest.strip_prefix('"') {
+            if let Some(end) = quoted.find('"') {
+                return Some(quoted[..end].to_string());
+            }
+        }
+    }
+    None
 }
 
 fn build_refreshed_credentials_json(
@@ -940,17 +1034,42 @@ mod tests {
     }
 
     #[test]
-    fn test_persist_refreshed_credentials_skips_plaintext_for_keychain_backing() {
-        let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("should-not-exist.json");
-        persist_refreshed_credentials(
-            Some(&ClaudeCredentialStore::Keychain),
-            "new_tok",
-            Some("new_ref"),
-            200,
-        )
-        .unwrap();
-        assert!(!path.exists());
+    fn test_persist_refreshed_credentials_noop_when_no_store() {
+        // None store: should succeed without touching the filesystem.
+        persist_refreshed_credentials(None, "new_tok", Some("new_ref"), 200).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_account_from_security_output_extracts_quoted_account() {
+        let sample = "\
+            keychain: \"/Users/test/Library/Keychains/login.keychain-db\"\n\
+            version: 512\n\
+            class: \"genp\"\n\
+            attributes:\n\
+                0x00000007 <blob>=\"Claude Code-credentials\"\n\
+                0x00000008 <blob>=<NULL>\n\
+                \"acct\"<blob>=\"npochaev\"\n\
+                \"cdat\"<timedate>=0x20260421\n\
+        ";
+        assert_eq!(
+            parse_account_from_security_output(sample),
+            Some("npochaev".to_string())
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_account_from_security_output_handles_null() {
+        let sample = "    \"acct\"<blob>=<NULL>\n";
+        assert_eq!(parse_account_from_security_output(sample), None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn parse_account_from_security_output_handles_missing() {
+        let sample = "class: \"genp\"\n";
+        assert_eq!(parse_account_from_security_output(sample), None);
     }
 
     #[test]

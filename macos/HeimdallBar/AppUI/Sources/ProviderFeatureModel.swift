@@ -115,7 +115,7 @@ public final class ProviderFeatureModel {
                     : "Sign in to Codex"
             case "missing-credentials":
                 return self.provider == .claude ? "Sign in to Claude" : "Sign in to Codex"
-            case "keychain-locked":
+            case "keychain-locked", "keychain-unavailable":
                 return "Keychain access denied — reopen HeimdallBar to retry"
             case "managed-restricted":
                 return self.authHealth?.managedRestriction
