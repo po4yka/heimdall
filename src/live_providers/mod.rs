@@ -454,10 +454,47 @@ async fn build_codex_snapshot(
     let cost_summary = load_provider_cost_summary(state, "codex").await?;
     let env = std::env::vars().collect::<Vec<_>>();
     let config_facts = codex::load_config_facts(&env);
+    // Wrap fetch_oauth_usage with a single-shot refresh retry: if the initial
+    // call fails with an auth-looking error and we have a refresh_token, ask
+    // Codex's OAuth provider for a new access token, persist it back to
+    // ~/.codex/auth.json, and retry the fetch once with the new creds.
+    let env_for_refresh = env.clone();
     let resolution = resolve_codex_live_data_with(
         &env,
         codex::load_auth,
-        |auth| Box::pin(codex::fetch_oauth_usage(auth)),
+        move |auth| {
+            let env_for_refresh = env_for_refresh.clone();
+            Box::pin(async move {
+                match codex::fetch_oauth_usage(auth).await {
+                    Ok(response) => Ok(response),
+                    Err(err) => {
+                        let Some(refresh) = auth.refresh_token.as_deref() else {
+                            return Err(err);
+                        };
+                        if !codex::looks_like_oauth_auth_error(&err) {
+                            return Err(err);
+                        }
+                        match codex::refresh_oauth_token(refresh).await {
+                            Ok(tokens) => {
+                                if let Err(persist_err) =
+                                    codex::persist_refreshed_tokens_to_disk(&env_for_refresh, &tokens)
+                                {
+                                    tracing::warn!(
+                                        "Codex refresh persist failed: {persist_err:#}"
+                                    );
+                                }
+                                let refreshed = codex::apply_refreshed_tokens(auth, &tokens);
+                                codex::fetch_oauth_usage(&refreshed).await
+                            }
+                            Err(refresh_err) => {
+                                tracing::warn!("Codex token refresh failed: {refresh_err:#}");
+                                Err(err)
+                            }
+                        }
+                    }
+                }
+            })
+        },
         codex::fetch_rpc_snapshot,
         codex::fetch_cli_status,
     )

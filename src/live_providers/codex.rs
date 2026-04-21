@@ -17,6 +17,16 @@ use crate::models::{
 
 const DEFAULT_USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 
+// Codex CLI OAuth refresh — wire format taken from openai/codex
+// `codex-rs/login/src/auth/manager.rs`:
+//   - endpoint: https://auth.openai.com/oauth/token, JSON body
+//   - client_id: app_EMoamEEZ73f0CkXaXp7hrann
+//   - body: { client_id, grant_type: "refresh_token", refresh_token }
+//   - response: { access_token, refresh_token, id_token }
+const CODEX_REFRESH_ENDPOINT: &str = "https://auth.openai.com/oauth/token";
+const CODEX_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+const CODEX_REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
+
 #[derive(Debug, Clone)]
 pub struct CodexAuth {
     pub access_token: String,
@@ -162,6 +172,142 @@ pub fn parse_auth(data: &[u8]) -> Result<CodexAuth> {
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
     })
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CodexRefreshedTokens {
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub id_token: Option<String>,
+}
+
+/// POST a refresh_token grant to Codex's OAuth provider and return the new
+/// tokens. On any failure (transport, non-2xx, malformed JSON) returns an
+/// error; the caller is responsible for falling back to the pre-refresh auth.
+pub async fn refresh_oauth_token(refresh_token: &str) -> Result<CodexRefreshedTokens> {
+    let client = reqwest::Client::builder()
+        .user_agent("claude-usage-tracker/0.1")
+        .timeout(CODEX_REFRESH_TIMEOUT)
+        .build()
+        .context("failed to build Codex refresh client")?;
+
+    let body = json!({
+        "client_id": CODEX_CLIENT_ID,
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+    });
+
+    let response = client
+        .post(CODEX_REFRESH_ENDPOINT)
+        .json(&body)
+        .send()
+        .await
+        .context("failed to POST Codex token refresh")?;
+
+    let status = response.status();
+    let body_text = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        bail!(
+            "Codex token refresh failed ({}): {}",
+            status.as_u16(),
+            body_text.chars().take(200).collect::<String>()
+        );
+    }
+    parse_refresh_response(&body_text)
+}
+
+pub fn parse_refresh_response(body: &str) -> Result<CodexRefreshedTokens> {
+    let parsed: Value =
+        serde_json::from_str(body).context("invalid Codex refresh response JSON")?;
+    Ok(CodexRefreshedTokens {
+        access_token: parsed
+            .get("access_token")
+            .and_then(Value::as_str)
+            .map(String::from),
+        refresh_token: parsed
+            .get("refresh_token")
+            .and_then(Value::as_str)
+            .map(String::from),
+        id_token: parsed
+            .get("id_token")
+            .and_then(Value::as_str)
+            .map(String::from),
+    })
+}
+
+/// Return a new CodexAuth with refreshed access/refresh/id tokens merged in.
+/// Missing response fields fall back to the prior auth values.
+pub fn apply_refreshed_tokens(auth: &CodexAuth, tokens: &CodexRefreshedTokens) -> CodexAuth {
+    CodexAuth {
+        access_token: tokens
+            .access_token
+            .clone()
+            .unwrap_or_else(|| auth.access_token.clone()),
+        refresh_token: tokens
+            .refresh_token
+            .clone()
+            .or_else(|| auth.refresh_token.clone()),
+        id_token: tokens
+            .id_token
+            .clone()
+            .or_else(|| auth.id_token.clone()),
+        account_id: auth.account_id.clone(),
+        auth_mode: auth.auth_mode.clone(),
+    }
+}
+
+/// Update `~/.codex/auth.json` (or `$CODEX_HOME/auth.json`) with the refreshed
+/// tokens, preserving other top-level keys (OPENAI_API_KEY, auth_mode, etc.)
+/// and bumping `last_refresh` to the current time.
+pub fn persist_refreshed_tokens_to_disk(
+    env: &[(String, String)],
+    tokens: &CodexRefreshedTokens,
+) -> Result<()> {
+    let path = auth_file_path(env);
+    let existing = std::fs::read(&path)
+        .with_context(|| format!("read Codex auth file at {}", path.display()))?;
+    let mut json: Value =
+        serde_json::from_slice(&existing).context("invalid Codex auth.json")?;
+
+    let root = json
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("Codex auth.json root must be an object"))?;
+    let tokens_entry = root
+        .entry("tokens".to_string())
+        .or_insert_with(|| Value::Object(Default::default()));
+    let tokens_obj = tokens_entry
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("Codex auth.json tokens must be an object"))?;
+    if let Some(at) = tokens.access_token.as_deref() {
+        tokens_obj.insert("access_token".into(), Value::String(at.to_string()));
+    }
+    if let Some(rt) = tokens.refresh_token.as_deref() {
+        tokens_obj.insert("refresh_token".into(), Value::String(rt.to_string()));
+    }
+    if let Some(it) = tokens.id_token.as_deref() {
+        tokens_obj.insert("id_token".into(), Value::String(it.to_string()));
+    }
+    root.insert(
+        "last_refresh".into(),
+        Value::String(chrono::Utc::now().to_rfc3339()),
+    );
+
+    let rendered = serde_json::to_string_pretty(&json).context("serialize Codex auth.json")?;
+    std::fs::write(&path, rendered)
+        .with_context(|| format!("write Codex auth file at {}", path.display()))?;
+    Ok(())
+}
+
+/// Heuristic: does this fetch error look like an auth failure worth retrying
+/// after refresh? We don't get typed errors out of fetch_oauth_usage (it goes
+/// through reqwest::Response::error_for_status), so we sniff the message.
+pub fn looks_like_oauth_auth_error(err: &anyhow::Error) -> bool {
+    let s = format!("{err:#}");
+    s.contains("401")
+        || s.contains("403")
+        || s.to_lowercase().contains("unauthorized")
+        || s.to_lowercase().contains("invalid_token")
+        || s.to_lowercase().contains("token expired")
 }
 
 pub async fn fetch_oauth_usage(auth: &CodexAuth) -> Result<CodexUsageResponse> {
@@ -831,6 +977,127 @@ mod tests {
         assert_eq!(auth.access_token, "access");
         assert_eq!(auth.refresh_token.as_deref(), Some("refresh"));
         assert_eq!(auth.account_id.as_deref(), Some("acct_123"));
+    }
+
+    #[test]
+    fn parse_refresh_response_extracts_all_fields() {
+        let body = r#"{
+            "access_token": "at_new",
+            "refresh_token": "rt_new",
+            "id_token": "it_new"
+        }"#;
+        let tokens = parse_refresh_response(body).expect("parse refresh");
+        assert_eq!(tokens.access_token.as_deref(), Some("at_new"));
+        assert_eq!(tokens.refresh_token.as_deref(), Some("rt_new"));
+        assert_eq!(tokens.id_token.as_deref(), Some("it_new"));
+    }
+
+    #[test]
+    fn parse_refresh_response_handles_partial_payload() {
+        let body = r#"{ "access_token": "at_new" }"#;
+        let tokens = parse_refresh_response(body).expect("parse partial");
+        assert_eq!(tokens.access_token.as_deref(), Some("at_new"));
+        assert!(tokens.refresh_token.is_none());
+        assert!(tokens.id_token.is_none());
+    }
+
+    #[test]
+    fn apply_refreshed_tokens_merges_with_existing_auth() {
+        let auth = CodexAuth {
+            access_token: "old_at".into(),
+            refresh_token: Some("old_rt".into()),
+            id_token: Some("old_it".into()),
+            account_id: Some("acct_1".into()),
+            auth_mode: Some("chatgpt".into()),
+        };
+        // Only access_token is rotated — refresh/id fall back to prior values.
+        let tokens = CodexRefreshedTokens {
+            access_token: Some("new_at".into()),
+            refresh_token: None,
+            id_token: None,
+        };
+        let merged = apply_refreshed_tokens(&auth, &tokens);
+        assert_eq!(merged.access_token, "new_at");
+        assert_eq!(merged.refresh_token.as_deref(), Some("old_rt"));
+        assert_eq!(merged.id_token.as_deref(), Some("old_it"));
+        assert_eq!(merged.account_id.as_deref(), Some("acct_1"));
+    }
+
+    #[test]
+    fn persist_refreshed_tokens_updates_auth_json() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let codex_home = tmp.path().to_path_buf();
+        let auth_path = codex_home.join("auth.json");
+        std::fs::write(
+            &auth_path,
+            r#"{
+                "OPENAI_API_KEY": "sk-keep-me",
+                "auth_mode": "chatgpt",
+                "tokens": {
+                    "access_token": "old_at",
+                    "refresh_token": "old_rt",
+                    "id_token": "old_it",
+                    "account_id": "acct_preserve"
+                }
+            }"#,
+        )
+        .expect("seed auth.json");
+
+        let env = vec![(
+            "CODEX_HOME".to_string(),
+            codex_home.to_string_lossy().into_owned(),
+        )];
+        let tokens = CodexRefreshedTokens {
+            access_token: Some("fresh_at".into()),
+            refresh_token: Some("fresh_rt".into()),
+            id_token: None,
+        };
+        persist_refreshed_tokens_to_disk(&env, &tokens).expect("persist");
+
+        let written = std::fs::read_to_string(&auth_path).expect("read back");
+        let parsed: Value = serde_json::from_str(&written).expect("valid json");
+        let tokens_obj = parsed
+            .get("tokens")
+            .and_then(Value::as_object)
+            .expect("tokens object");
+        assert_eq!(
+            tokens_obj.get("access_token").and_then(Value::as_str),
+            Some("fresh_at")
+        );
+        assert_eq!(
+            tokens_obj.get("refresh_token").and_then(Value::as_str),
+            Some("fresh_rt")
+        );
+        // id_token was not in the refresh response — the old value stays.
+        assert_eq!(
+            tokens_obj.get("id_token").and_then(Value::as_str),
+            Some("old_it")
+        );
+        // account_id is preserved verbatim.
+        assert_eq!(
+            tokens_obj.get("account_id").and_then(Value::as_str),
+            Some("acct_preserve")
+        );
+        // Sibling top-level keys are preserved.
+        assert_eq!(
+            parsed.get("OPENAI_API_KEY").and_then(Value::as_str),
+            Some("sk-keep-me")
+        );
+        assert_eq!(
+            parsed.get("auth_mode").and_then(Value::as_str),
+            Some("chatgpt")
+        );
+        // last_refresh is stamped.
+        assert!(parsed.get("last_refresh").and_then(Value::as_str).is_some());
+    }
+
+    #[test]
+    fn looks_like_oauth_auth_error_recognizes_401() {
+        let err = anyhow!("request failed: 401 Unauthorized");
+        assert!(looks_like_oauth_auth_error(&err));
+
+        let err = anyhow!("timeout waiting for response");
+        assert!(!looks_like_oauth_auth_error(&err));
     }
 
     #[test]
