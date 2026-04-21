@@ -759,14 +759,14 @@ private struct StackedDayBar: View {
     var body: some View {
         let total = max(self.breakdown.total, 1)
         let visibleHeight = max(2, self.height * CGFloat(self.fraction))
-        VStack(spacing: 1) {
+        VStack(spacing: 0) {
             Spacer(minLength: 0)
             ForEach(Array(TokenCategory.orderedForStack.enumerated()), id: \.offset) { entry in
                 let category = entry.element
                 let tokens = category.value(for: self.breakdown)
                 if tokens > 0 {
                     Rectangle()
-                        .fill(category.tint.opacity(self.highlight ? 1.0 : 0.85))
+                        .fill(category.tint)
                         .frame(
                             height: max(1, visibleHeight * CGFloat(tokens) / CGFloat(total))
                         )
@@ -775,6 +775,7 @@ private struct StackedDayBar: View {
         }
         .frame(height: self.height, alignment: .bottom)
         .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+        .opacity(self.highlight ? 1.0 : 0.75)
     }
 }
 
@@ -814,11 +815,11 @@ enum TokenCategory: CaseIterable {
 
     var tint: Color {
         switch self {
-        case .input: return Color.accentColor.opacity(0.85)
-        case .output: return Color.primary.opacity(0.85)
+        case .input: return Color.accentColor
+        case .output: return Color.primary.opacity(0.88)
         case .cacheRead: return Color.primary.opacity(0.55)
-        case .cacheCreation: return Color.primary.opacity(0.35)
-        case .reasoning: return Color.accentColor.opacity(0.55)
+        case .cacheCreation: return Color.primary.opacity(0.28)
+        case .reasoning: return Color.primary.opacity(0.14)
         }
     }
 
@@ -872,7 +873,7 @@ struct TokenBreakdownRow: View {
                     .font(.caption.monospacedDigit().weight(.semibold))
             }
             GeometryReader { geo in
-                HStack(spacing: 1) {
+                HStack(spacing: 0) {
                     ForEach(Array(TokenCategory.orderedForStack.enumerated()), id: \.offset) { entry in
                         let category = entry.element
                         let tokens = category.value(for: self.breakdown)
@@ -1004,14 +1005,15 @@ struct CacheEfficiencyCard: View {
         return String(format: "%.1f%%", clamped * 100)
     }
 
-    /// Green >= 60%, orange 30–60%, red < 30%. Matches the
-    /// LaneStatusCard pace-tint semantics (greater = better) but flipped —
-    /// here a HIGH value is good (more cache hits).
+    /// Red < 30%, orange 30–60%, monochrome primary otherwise. The design
+    /// system reserves green for semantic success like the savings line
+    /// below; the healthy-rate path stays monochrome so the bar length —
+    /// not its color — carries the signal.
     private static func tint(for rate: Double) -> Color {
         switch rate {
         case ..<0.3: return .red
         case ..<0.6: return .orange
-        default: return .green
+        default: return Color.primary.opacity(0.82)
         }
     }
 }
