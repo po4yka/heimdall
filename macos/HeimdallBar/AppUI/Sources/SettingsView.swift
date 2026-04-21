@@ -100,7 +100,7 @@ private struct ProviderAuthSection: View {
             if let headline = projection.authHeadline {
                 Text(headline)
                     .font(.headline)
-            } else {
+            } else if auth == nil {
                 Text("No auth diagnosis available yet.")
                     .foregroundStyle(.secondary)
             }

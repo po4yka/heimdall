@@ -2,6 +2,7 @@ import Foundation
 import HeimdallDomain
 import HeimdallServices
 import Observation
+import os.log
 
 @MainActor
 @Observable
@@ -12,6 +13,8 @@ public final class SettingsFeatureModel {
     private let repository: ProviderRepository
     private let settingsStore: any SettingsStore
     private let refreshCoordinator: RefreshCoordinator
+
+    private static let logger = Logger(subsystem: "dev.heimdall.HeimdallBar", category: "SettingsFeatureModel")
 
     public init(
         sessionStore: AppSessionStore,
@@ -32,7 +35,12 @@ public final class SettingsFeatureModel {
     }
 
     public var issue: AppIssue? {
-        self.repository.issue(for: nil)
+        let candidate = self.repository.issue(for: nil)
+        if let candidate, candidate.kind == .widgetPersistence {
+            Self.logger.debug("Suppressing widgetPersistence issue from Settings UI: \(candidate.message)")
+            return nil
+        }
+        return candidate
     }
 
     public func save() {
