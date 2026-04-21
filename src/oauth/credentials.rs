@@ -287,9 +287,12 @@ pub fn resolve_auth(env: &[(String, String)]) -> ResolvedClaudeAuth {
     }
 
     let (diagnostic_code, failure_reason) = match keychain_status {
+        // User-denied or locked login.keychain-db. Distinct code so the UI
+        // can tell them to retry (re-running the helper re-triggers the
+        // prompt) instead of lumping with system-level Keychain faults.
         KeychainStatus::Locked => (
-            Some("keychain-unavailable".into()),
-            Some("Claude macOS Keychain is unavailable or locked, and no file fallback credentials were found.".into()),
+            Some("keychain-locked".into()),
+            Some("Access to the Claude macOS Keychain item was denied. Retry and approve the prompt, or unlock your login keychain.".into()),
         ),
         KeychainStatus::Error => (
             Some("keychain-unavailable".into()),
