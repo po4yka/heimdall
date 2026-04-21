@@ -1167,6 +1167,15 @@ public enum ProviderVisualState: String, Codable, Sendable {
     case error
 }
 
+/// Spend-direction classification over the last 7 days. Computed from the
+/// costSummary.daily points: compare the last 3 days' average vs the prior 4,
+/// classify the ratio against ±10% thresholds so small jitter doesn't flap.
+public enum TrendDirection: String, Sendable {
+    case up
+    case flat
+    case down
+}
+
 public struct LaneDetailProjection: Sendable, Identifiable {
     public var title: String
     public var summary: String
@@ -1224,6 +1233,13 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
     public var cacheHitRateToday: Double?
     public var cacheHitRate30d: Double?
     public var cacheSavings30dUSD: Double?
+    /// Projected spend for the current weekly window, linearly extrapolated
+    /// from elapsed-time fraction. Nil when the weekly window data (time in
+    /// window, minutes remaining) is unavailable or the fraction is too
+    /// small to be meaningful (< 10%).
+    public var weeklyProjectedCostUSD: Double?
+    /// 7-day spend trend classification (up / flat / down).
+    public var spendTrendDirection: TrendDirection?
     public var claudeFactors: [ClaudeUsageFactorSnapshot]
     public var adjunct: DashboardAdjunctSnapshot?
 
@@ -1263,7 +1279,9 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         last30DaysBreakdown: TokenBreakdown? = nil,
         cacheHitRateToday: Double? = nil,
         cacheHitRate30d: Double? = nil,
-        cacheSavings30dUSD: Double? = nil
+        cacheSavings30dUSD: Double? = nil,
+        weeklyProjectedCostUSD: Double? = nil,
+        spendTrendDirection: TrendDirection? = nil
     ) {
         self.provider = provider
         self.title = title
@@ -1297,6 +1315,8 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         self.cacheHitRateToday = cacheHitRateToday
         self.cacheHitRate30d = cacheHitRate30d
         self.cacheSavings30dUSD = cacheSavings30dUSD
+        self.weeklyProjectedCostUSD = weeklyProjectedCostUSD
+        self.spendTrendDirection = spendTrendDirection
         self.claudeFactors = claudeFactors
         self.adjunct = adjunct
     }

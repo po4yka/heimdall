@@ -208,9 +208,24 @@ struct ProviderMenuCard: View {
                     savings30dUSD: projection.cacheSavings30dUSD
                 )
             }
-            Text(projection.costLabel)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(projection.costLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let trend = projection.spendTrendDirection {
+                    Image(systemName: Self.trendIcon(trend))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Self.trendTint(trend))
+                        .help(Self.trendTooltip(trend))
+                }
+                Spacer(minLength: 0)
+            }
+            if let projected = projection.weeklyProjectedCostUSD, projected > 0 {
+                Text("Projected weekly: \(Self.formatProjectedCost(projected))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .help("Linear extrapolation of the current weekly window's spend at the current pace.")
+            }
             if let creditsLabel = projection.creditsLabel {
                 Text(creditsLabel)
                     .font(.caption)
@@ -330,6 +345,36 @@ struct ProviderMenuCard: View {
             return credentialDetail
         }
         return "Live \(self.projection.title) session not available"
+    }
+
+    private static func trendIcon(_ trend: TrendDirection) -> String {
+        switch trend {
+        case .up: return "arrow.up.right"
+        case .flat: return "arrow.right"
+        case .down: return "arrow.down.right"
+        }
+    }
+
+    private static func trendTint(_ trend: TrendDirection) -> Color {
+        switch trend {
+        case .up: return .orange
+        case .flat: return .secondary
+        case .down: return .green
+        }
+    }
+
+    private static func trendTooltip(_ trend: TrendDirection) -> String {
+        switch trend {
+        case .up:   return "Spend trend: last 3 days above prior 4 days by more than 10%."
+        case .flat: return "Spend trend: last 3 days within ±10% of the prior 4-day average."
+        case .down: return "Spend trend: last 3 days below prior 4 days by more than 10%."
+        }
+    }
+
+    private static func formatProjectedCost(_ usd: Double) -> String {
+        if usd >= 1000 { return String(format: "$%.0f", usd) }
+        if usd >= 10 { return String(format: "$%.1f", usd) }
+        return String(format: "$%.2f", usd)
     }
 
 }

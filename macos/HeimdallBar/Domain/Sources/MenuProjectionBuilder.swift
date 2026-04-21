@@ -107,6 +107,14 @@ public enum MenuProjectionBuilder {
             return recent.map { $0.breakdown ?? TokenBreakdown() }
         } ?? []
 
+        // Phase 3: weekly projection + spend-trend direction.
+        let weeklyProjectedCost: Double? = snapshot.flatMap {
+            self.projectedWeeklyCost(snapshot: $0, secondary: presentation.secondary)
+        }
+        let spendTrendDirection: TrendDirection? = snapshot.flatMap {
+            self.trendDirection(daily: $0.costSummary.daily)
+        }
+
         return ProviderMenuProjection(
             provider: provider,
             title: provider.title,
@@ -141,7 +149,9 @@ public enum MenuProjectionBuilder {
             last30DaysBreakdown: snapshot?.costSummary.last30DaysBreakdown,
             cacheHitRateToday: snapshot?.costSummary.cacheHitRateToday,
             cacheHitRate30d: snapshot?.costSummary.cacheHitRate30d,
-            cacheSavings30dUSD: snapshot?.costSummary.cacheSavings30dUSD
+            cacheSavings30dUSD: snapshot?.costSummary.cacheSavings30dUSD,
+            weeklyProjectedCostUSD: weeklyProjectedCost,
+            spendTrendDirection: spendTrendDirection
         )
     }
 
@@ -508,6 +518,62 @@ public enum MenuProjectionBuilder {
         }
         return normalized
     }
+    /// Linearly extrapolate the current weekly window's cost to the reset
+    /// point: projected = cost_so_far / elapsed_fraction. Uses the Weekly /
+    /// secondary lane's windowMinutes + resetsInMinutes to derive elapsed
+    /// time and sums the matching suffix of costSummary.daily as
+    /// cost-so-far. Returns nil when the window info is missing, when
+    /// elapsed time is < 10% of the window (projection would be noisy), or
+    /// when we have no daily history to sum.
+    static func projectedWeeklyCost(
+        snapshot: ProviderSnapshot,
+        secondary: ProviderRateWindow?
+    ) -> Double? {
+        guard let secondary,
+              let windowMinutes = secondary.windowMinutes,
+              let resetsInMinutes = secondary.resetsInMinutes,
+              windowMinutes > 0,
+              resetsInMinutes >= 0,
+              resetsInMinutes < windowMinutes
+        else { return nil }
+
+        let elapsed = Double(windowMinutes - resetsInMinutes)
+        let elapsedFraction = elapsed / Double(windowMinutes)
+        guard elapsedFraction >= 0.1 else { return nil }
+
+        // Pull the suffix of daily rows that approximately covers the
+        // elapsed window — ceil so we include today. Daily rows align to
+        // UTC day boundaries so this is off by at most ±1 day vs the
+        // actual window start, which is fine for a rough projection.
+        let elapsedDays = max(1, Int(ceil(elapsed / 1440.0)))
+        let relevant = Array(snapshot.costSummary.daily.suffix(elapsedDays))
+        guard !relevant.isEmpty else { return nil }
+        let costSoFar = relevant.reduce(0.0) { $0 + $1.costUSD }
+        return costSoFar / elapsedFraction
+    }
+
+    /// Classify recent spend direction from daily costs. Compares the mean of
+    /// the last 3 days to the mean of the prior 4 days and buckets the ratio
+    /// into up (> 1.1), flat (0.9–1.1), or down (< 0.9). Requires at least
+    /// 5 data points so the windows aren't trivially comparable.
+    static func trendDirection(daily: [CostHistoryPoint]) -> TrendDirection? {
+        guard daily.count >= 5 else { return nil }
+        let recent = Array(daily.suffix(7))
+        let splitIndex = recent.count - 3
+        let earlier = Array(recent.prefix(splitIndex))
+        let later = Array(recent.suffix(3))
+        guard !earlier.isEmpty, !later.isEmpty else { return nil }
+        let earlierAvg = earlier.reduce(0.0) { $0 + $1.costUSD } / Double(earlier.count)
+        let laterAvg = later.reduce(0.0) { $0 + $1.costUSD } / Double(later.count)
+        guard earlierAvg > 0.0 else {
+            return laterAvg > 0.0 ? .up : .flat
+        }
+        let ratio = laterAvg / earlierAvg
+        if ratio > 1.10 { return .up }
+        if ratio < 0.90 { return .down }
+        return .flat
+    }
+
     /// Convert a minute count into a compact human-readable window:
     /// 45 -> "45m", 225 -> "3h 45m", 1440 -> "1d", 3945 -> "2d 17h".
     /// Keeps at most two magnitudes so the label stays short.

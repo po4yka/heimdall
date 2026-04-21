@@ -124,11 +124,29 @@ private struct WindowOverviewView: View {
 private struct WindowProviderView: View {
     @Bindable var model: ProviderFeatureModel
 
+    /// If we have a weekly projection, append it to the refresh-status line
+    /// so the user sees the pace at a glance on every provider page.
+    static func headerSubtitle(_ projection: ProviderMenuProjection) -> String {
+        let status = projection.refreshStatusLabel
+        guard let projected = projection.weeklyProjectedCostUSD, projected > 0 else {
+            return status
+        }
+        let formatted: String
+        if projected >= 1000 {
+            formatted = String(format: "$%.0f", projected)
+        } else if projected >= 10 {
+            formatted = String(format: "$%.1f", projected)
+        } else {
+            formatted = String(format: "$%.2f", projected)
+        }
+        return "\(status) · Weekly projected \(formatted)"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             WindowHeader(
                 title: self.model.provider.title,
-                subtitle: self.model.projection.refreshStatusLabel,
+                subtitle: Self.headerSubtitle(self.model.projection),
                 issue: self.model.issue?.message ?? self.model.projection.globalIssueLabel,
                 onRetry: {
                     Task { await self.model.refresh() }
