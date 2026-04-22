@@ -35,6 +35,10 @@ public final class ProviderFeatureModel {
         self.sessionStore.config.providerConfig(for: self.provider)
     }
 
+    public var showUsedValues: Bool {
+        self.sessionStore.config.showUsedValues
+    }
+
     public var snapshot: ProviderSnapshot? {
         self.repository.snapshot(for: self.provider)
     }

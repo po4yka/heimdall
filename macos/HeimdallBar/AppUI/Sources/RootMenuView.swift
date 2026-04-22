@@ -570,7 +570,7 @@ private struct TopMetricRow: View {
     }
 }
 
-private struct StateBadge: View {
+struct StateBadge: View {
     let state: ProviderVisualState
     let label: String
 
@@ -600,7 +600,7 @@ private struct StateBadge: View {
         case .healthy:
             return Color.primary.opacity(0.08)
         case .refreshing:
-            return Color.blue.opacity(0.14)
+            return Color.primary.opacity(0.12)
         case .stale:
             return Color.orange.opacity(0.12)
         case .degraded:
@@ -718,8 +718,15 @@ struct HistoryBarStrip: View {
                                 )
                             } else {
                                 RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                    .fill(isToday ? Color.accentColor : Color.primary.opacity(0.7))
+                                    .fill(Color.primary.opacity(isToday ? 0.9 : 0.7))
                                     .frame(height: max(2, 32 * fraction))
+                            }
+                        }
+                        .overlay(alignment: .bottom) {
+                            if isToday {
+                                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                                    .fill(Color.primary.opacity(0.55))
+                                    .frame(height: 2)
                             }
                         }
                         .frame(maxWidth: .infinity)
