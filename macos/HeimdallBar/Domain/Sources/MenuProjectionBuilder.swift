@@ -364,7 +364,10 @@ public enum MenuProjectionBuilder {
         error: String?,
         isRefreshing: Bool
     ) -> ProviderVisualState {
-        if error?.isEmpty == false {
+        if let error, !error.isEmpty {
+            if self.isTransientThrottleError(error) {
+                return .degraded
+            }
             return .error
         }
         if stale {
@@ -400,6 +403,17 @@ public enum MenuProjectionBuilder {
         }
     }
 
+    /// Upstream rate-limits (HTTP 429 from Anthropic's OAuth usage endpoint)
+    /// surface as errors in the helper's refresh envelope, but the next poll
+    /// will recover on its own. Treat them as `.degraded` instead of `.error`
+    /// so the menu doesn't shout "Error" at the user every time the API
+    /// briefly throttles our poll. The marker string comes from the helper
+    /// itself (`src/oauth/api.rs`), so it's stable.
+    static func isTransientThrottleError(_ error: String) -> Bool {
+        let lower = error.lowercased()
+        return lower.contains("rate-limit") || lower.contains("rate limited")
+    }
+
     private static func stateLabel(for state: ProviderVisualState) -> String {
         switch state {
         case .healthy: return "Operational"
@@ -425,6 +439,9 @@ public enum MenuProjectionBuilder {
             return "Showing cached data"
         }
         if let error, !error.isEmpty {
+            if self.isTransientThrottleError(error) {
+                return "Throttled · retrying on next poll"
+            }
             return "Refresh failed"
         }
         switch visualState {

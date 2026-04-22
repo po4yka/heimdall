@@ -213,6 +213,14 @@ struct MenuProjectionBuilderTests {
         #expect(MenuProjectionBuilder.menuTitle(for: presentation, provider: .codex, config: usedConfig) == "Codex 36% used")
     }
 
+    @Test
+    func transientThrottleErrorsAreClassifiedAsDegradedNotError() {
+        #expect(MenuProjectionBuilder.isTransientThrottleError("Anthropic API rate-limited us — retrying on next poll.") == true)
+        #expect(MenuProjectionBuilder.isTransientThrottleError("API returned HTTP 429: {...}") == false)
+        #expect(MenuProjectionBuilder.isTransientThrottleError("OAuth token expired. Run `claude login` to refresh.") == false)
+        #expect(MenuProjectionBuilder.isTransientThrottleError("") == false)
+    }
+
     private static func codexSnapshot() -> ProviderSnapshot {
         ProviderSnapshot(
             provider: "codex",
