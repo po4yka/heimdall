@@ -10,8 +10,8 @@ enum ChartStyle {
     static let headerTitleOpacity: Double = 0.72
     static let headerCaptionOpacity: Double = 0.68
 
-    static let barFill: Color = Color.primary.opacity(0.78)
-    static let barTodayFill: Color = Color.primary.opacity(0.95)
+    static let barFill: Color = Color.primary.opacity(0.55)
+    static let barTodayFill: Color = Color.accentColor
     static let barTrackFill: Color = Color.primary.opacity(0.10)
     static let barCornerRadius: CGFloat = 1.5
 

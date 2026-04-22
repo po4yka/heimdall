@@ -268,16 +268,17 @@ private struct WindowOverviewHistoryCard: View {
     let projection: OverviewMenuProjection
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Last 7 days")
                 .font(.headline)
-            Text("Relative activity across the visible week. Today appears at the right.")
+            Text("Daily activity across providers.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
             HistoryBarChart(
                 fractions: self.projection.historyFractions,
-                showsHeader: false
+                showsHeader: false,
+                inset: true
             )
         }
         .padding(18)

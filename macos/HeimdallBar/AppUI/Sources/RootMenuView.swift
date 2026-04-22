@@ -472,7 +472,8 @@ private struct OverviewSummaryCard: View {
                                 .foregroundStyle(.secondary)
                             HistoryBarChart(
                                 fractions: self.projection.historyFractions,
-                                showsHeader: false
+                                showsHeader: false,
+                                inset: true
                             )
                         }
                     }

@@ -8,6 +8,10 @@ import SwiftUI
 struct HistoryBarChart: View {
     let fractions: [Double]
     var showsHeader: Bool = true
+    /// When true, the chart renders without its own card background or
+    /// padding. Use from a parent view that already provides a card —
+    /// otherwise you end up with a card-in-a-card.
+    var inset: Bool = false
 
     struct Entry: Identifiable, Hashable {
         let index: Int
@@ -15,12 +19,16 @@ struct HistoryBarChart: View {
         let fraction: Double
 
         var id: Int { self.index }
-        var isToday: Bool { false }
     }
+
+    /// Minimum on-screen bar height so zero-spend days still render a
+    /// visible stub and the axis doesn't look broken. The real fraction
+    /// is still reported to VoiceOver via `accessibilityValue`.
+    private static let minimumVisibleFraction: Double = 0.04
 
     var body: some View {
         let entries = Self.entries(from: self.fractions)
-        VStack(alignment: .leading, spacing: 6) {
+        let content = VStack(alignment: .leading, spacing: 6) {
             if self.showsHeader {
                 ChartHeader(
                     title: "Usage history",
@@ -30,20 +38,26 @@ struct HistoryBarChart: View {
             self.chart(entries: entries)
                 .frame(height: 48)
         }
-        .padding(8)
-        .menuCardBackground(
-            opacity: ChartStyle.cardBackgroundOpacity,
-            cornerRadius: ChartStyle.cardCornerRadius
-        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Usage history, last \(entries.count) days")
+
+        if self.inset {
+            content
+        } else {
+            content
+                .padding(8)
+                .menuCardBackground(
+                    opacity: ChartStyle.cardBackgroundOpacity,
+                    cornerRadius: ChartStyle.cardCornerRadius
+                )
+        }
     }
 
     private func chart(entries: [Entry]) -> some View {
         Chart(entries) { entry in
             BarMark(
                 x: .value("Day", entry.label),
-                y: .value("Fraction", entry.fraction)
+                y: .value("Fraction", max(Self.minimumVisibleFraction, entry.fraction))
             )
             .foregroundStyle(self.isToday(entry, in: entries) ? ChartStyle.barTodayFill : ChartStyle.barFill)
             .cornerRadius(ChartStyle.barCornerRadius)
