@@ -35,3 +35,7 @@ Audit the release binary for size and bloat.
    - Consider `miniz_oxide` vs `flate2` if compression is pulled in
    - Evaluate if `chrono` can be replaced with lighter alternatives
    - Check codegen-units = 1 for better LTO
+
+## Notes
+- This is report-first; do not change release profile settings or dependency features unless explicitly asked.
+- Prefer repo-specific observations over generic binary-size advice.

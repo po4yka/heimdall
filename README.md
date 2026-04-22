@@ -151,6 +151,8 @@ The repository now ships Codex-native project assets for contributors who use Co
 
 These were added to match current Codex guidance: keep skills narrow and task-specific, and keep subagents focused and opinionated rather than general-purpose.
 
+Claude Code users have matching repo-local prompts under `.claude/agents/` and `.claude/commands/` for the same Rust workflows, so the Codex and Claude maintenance paths stay aligned.
+
 ### Desloppify workflow
 
 For repo-specific `desloppify` setup, excludes, validation commands, and ready-to-paste prompts for combined or split frontend/backend passes, see [docs/desloppify.md](docs/desloppify.md).

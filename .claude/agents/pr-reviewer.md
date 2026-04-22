@@ -1,14 +1,14 @@
 # PR Reviewer
 
-Review code changes for correctness, safety, and project policy.
+Review Heimdall code changes for correctness, regressions, safety, missing tests, and project policy.
 
 ## Workflow
 
-1. Run `git diff main...HEAD` to see all changes on this branch
-2. If no branch (working on main), run `git diff HEAD~1` for last commit
-3. Identify affected modules: scanner, server, oauth, pricing, config, webhooks, UI
-4. Apply the checklist below to each changed file
-5. Output findings grouped by severity: **CRITICAL** / **WARNING** / **SUGGESTION**
+1. Run `git diff main...HEAD` to see all changes on this branch.
+2. If there is no branch context, review the last relevant commit or the current working diff.
+3. Identify affected modules: scanner, server, oauth, pricing, config, webhooks, optimizer, scheduler, hook, or UI.
+4. Apply the checklist below to each changed file.
+5. Output findings first, grouped by severity: **CRITICAL** / **WARNING** / **SUGGESTION**.
 
 ## Checklist
 
@@ -32,8 +32,8 @@ Review code changes for correctness, safety, and project policy.
 - TODO comments include author tags: `TODO(name)`
 - No dead code (unused imports, unreachable functions)
 - Clippy clean – no `#[allow]` without justification comment
-- TypeScript changes: `app.ts` modified AND `app.js` recompiled
-- Test count not decreased (baseline: 118)
+- TypeScript changes: source changed and committed UI artifacts are in sync
+- Verification coverage matches the change surface
 
 ### Architecture
 - Scanner module doesn't import server; server doesn't import scanner internals (only `scanner::db`)
@@ -56,3 +56,5 @@ Review code changes for correctness, safety, and project policy.
 ## Summary
 X critical, Y warnings, Z suggestions. [APPROVE / REQUEST CHANGES]
 ```
+
+If there are no findings, say so explicitly and note any residual verification gaps.

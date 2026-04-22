@@ -7,6 +7,16 @@ Local AI session observability for Claude Code, Codex, Cursor, OpenCode, Pi, Cop
 - `claude-usage-tracker` – CLI + embedded web dashboard.
 - `heimdall-hook` – lightweight stdin-driven hook binary for real-time PreToolUse ingest.
 
+## Claude Workflow Assets
+
+Claude Code mirrors the Codex Rust workflow skills through repo-local agent and command prompts:
+
+- `.claude/agents/rust-test-runner.md` mirrors `heimdall-rust-test-runner`
+- `.claude/agents/pr-reviewer.md` mirrors `heimdall-pr-review`
+- `.claude/commands/fix-unwraps.md` mirrors `heimdall-fix-unwraps`
+- `.claude/commands/audit-deps.md` mirrors `heimdall-rust-dependency-audit`
+- `.claude/commands/binary-audit.md` mirrors `heimdall-rust-binary-audit`
+
 ## Build & Run
 
 ```bash

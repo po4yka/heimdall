@@ -1,6 +1,6 @@
 # Rust Test Runner
 
-Run the appropriate test suite based on what changed, and triage any failures.
+Run the appropriate Heimdall Rust or UI verification command based on what changed, and triage any failures.
 
 ## Suite Selection
 
@@ -8,16 +8,21 @@ Determine which tests to run based on changed files:
 
 | Changed Files | Command |
 |---------------|---------|
-| `pricing.rs` | `cargo test pricing` |
-| `scanner/` | `cargo test scanner` |
-| `oauth/` | `cargo test oauth` |
-| `server/` | `cargo test server` |
-| `config.rs` | `cargo test config` |
-| `webhooks.rs` | `cargo test webhooks` |
-| `agent_status/` | `cargo test agent_status` |
-| `main.rs` or `cli_tests.rs` | `cargo test cli_tests` |
-| `app.ts` | `./node_modules/.bin/tsc --noEmit` |
-| Multiple modules or unsure | `cargo test` |
+| `pricing.rs` | `cargo test pricing -- --nocapture` |
+| `scanner/` | `cargo test scanner -- --nocapture` |
+| `oauth/` | `cargo test oauth -- --nocapture` |
+| `server/` | `cargo test server -- --nocapture` |
+| `config.rs` | `cargo test config -- --nocapture` |
+| `webhooks.rs` | `cargo test webhooks -- --nocapture` |
+| `agent_status/` | `cargo test agent_status -- --nocapture` |
+| `optimizer/` | `cargo test optimizer -- --nocapture` |
+| `scheduler/` | `cargo test scheduler -- --nocapture` |
+| `hook/` | `cargo test hook -- --nocapture` |
+| `classifier.rs` | `cargo test classifier -- --nocapture` |
+| `watcher.rs` | `cargo test watcher -- --nocapture` |
+| `main.rs` or `cli_tests.rs` | `cargo test cli_tests -- --nocapture` |
+| `src/ui/` or TS-only changes | `./node_modules/.bin/tsc --noEmit` |
+| Multiple modules or unsure | `cargo test -- --nocapture` |
 
 Always run the targeted suite first for fast feedback, then `cargo test` for full verification.
 
@@ -49,16 +54,16 @@ When tests fail:
 
 ## Coverage Baseline
 
-Current test count: **572+ tests** (across 4 suites: lib, main, heimdall-hook, doc-tests)
+Current test count is large and evolving; treat the command matrix in `AGENTS.md` as the source of truth rather than relying on a hardcoded baseline.
 
 Rules:
 - New features MUST add tests
-- Test count should not decrease
-- Run `cargo test 2>&1 | grep "test result"` to check count
+- Run the narrowest useful suite first
+- Broaden to `cargo test` for cross-cutting or handoff-ready changes
 
 ## TypeScript Checks
 
-When `app.ts` changes:
+When `src/ui/` changes:
 1. Type check: `./node_modules/.bin/tsc --noEmit`
-2. Compile: `./node_modules/.bin/esbuild src/ui/app.ts --outfile=src/ui/app.js --bundle --format=iife --target=es2020`
-3. Rebuild Rust to embed new JS: `cargo build`
+2. If source changed, rebuild committed UI artifacts with `npm run build:ui`
+3. If requested or relevant, rebuild Rust to embed updated assets with `cargo build`
