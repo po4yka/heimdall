@@ -140,6 +140,8 @@ targets:
           - CloudKit
     sources:
       - path: App/Sources
+      - path: App/Assets.xcassets
+        buildPhase: resources
     postBuildScripts:
       - name: Bundle Heimdall helper
         basedOnDependencyAnalysis: false
@@ -232,6 +234,8 @@ targets:
   HeimdallMobileApp:
     type: application
     platform: iOS
+    info:
+      path: iOS/App/Info.plist
     entitlements:
       path: iOS/App/HeimdallMobile.entitlements
       properties:
@@ -241,6 +245,8 @@ targets:
           - CloudKit
     sources:
       - path: iOS/App/Sources
+      - path: iOS/App/Assets.xcassets
+        buildPhase: resources
     dependencies:
       - target: HeimdallDomain
         embed: true
@@ -250,8 +256,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.heimdall.HeimdallMobile
         PRODUCT_NAME: HeimdallMobileApp
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Heimdall
   HeimdallMobileTests:
     type: bundle.unit-test
     platform: iOS

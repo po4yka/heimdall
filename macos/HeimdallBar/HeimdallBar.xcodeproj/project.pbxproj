@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		0566B8C2FAA35A66F8BCD9C7 /* HeimdallDomain.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B361431C8E1A60029FB1575 /* HeimdallDomain.framework */; };
 		0675E7213B09F836AF1BF5D2 /* SwitcherWidgetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D8EE404971F41F07B514934 /* SwitcherWidgetView.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* App/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40516273849A5B6C7 /* App/Assets.xcassets */; };
+		B1C2D3E4F5061728394A5B6C /* iOS/App/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D1E2F30415263748A95B6C7D /* iOS/App/Assets.xcassets */; };
 		087EDF328C1391D858BA1F6E /* WidgetCenterReloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E85491C226346EFE6B465155 /* WidgetCenterReloader.swift */; };
 		0A110D44CA133F73522DC756 /* HeimdallServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA7C2377DFAE3941FC632BCB /* HeimdallServices.framework */; };
 		0DD4EB8863EE65C60AD1D6F2 /* HeimdallBarWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C590AB99C3D487D9C7C7157F /* HeimdallBarWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -496,6 +498,7 @@
 		B07E7E26B5F0D72205C19395 /* MacPlatformFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPlatformFactory.swift; sourceTree = "<group>"; };
 		B2BE9DAF34F63D1E8E819D43 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		B3E69C8ABD0E401A9CC79AAE /* HeimdallCLI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = HeimdallCLI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1D2E3F40516273849A5B6C7 /* App/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = App/Assets.xcassets; sourceTree = "<group>"; };
 		C1689E99DC4BD7AAC9D9BDE0 /* HeimdallHelperController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeimdallHelperController.swift; sourceTree = "<group>"; };
 		C590AB99C3D487D9C7C7157F /* HeimdallBarWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HeimdallBarWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C750E6166C261E8F57314ED3 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
@@ -508,6 +511,7 @@
 		D7E64EF761EFC29ACD504758 /* HeimdallBarScenes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeimdallBarScenes.swift; sourceTree = "<group>"; };
 		D833AAF8288995C6E6311DF4 /* HeimdallMobileApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HeimdallMobileApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D9F7266F45768D5609283D4F /* LocalProviderDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalProviderDataSource.swift; sourceTree = "<group>"; };
+		D1E2F30415263748A95B6C7D /* iOS/App/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = iOS/App/Assets.xcassets; sourceTree = "<group>"; };
 		DA58493AF9C5E107CF17CDE8 /* WidgetRendering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetRendering.swift; sourceTree = "<group>"; };
 		DD43C8237537EBE19B51313E /* MobileSnapshotSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileSnapshotSyncTests.swift; sourceTree = "<group>"; };
 		DEAEC2CF49783D7E83494A83 /* WidgetProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetProjectionTests.swift; sourceTree = "<group>"; };
@@ -785,11 +789,13 @@
 			children = (
 				D239E3B64DF06C624D882379 /* iOSTests */,
 				3D3BBF9C840AA8B604059ED0 /* SharedTests */,
+				C1D2E3F40516273849A5B6C7 /* App/Assets.xcassets */,
 				C986C8824293358171EC3FE6 /* Sources */,
 				33A72D99CBE42ACFAEF08537 /* Sources */,
 				5FDEDD5D05BED5EFBEAB66B7 /* Sources */,
 				81008ADDF4B643DD95660FC8 /* Sources */,
 				F59EACF3E74671C6CB38A5E0 /* Sources */,
+				D1E2F30415263748A95B6C7D /* iOS/App/Assets.xcassets */,
 				38B572FEA8BF559D57ADDFA6 /* Sources */,
 				794B8D493B4A2D49BC4A2A99 /* Sources */,
 				3E0E5B3162881B867BBAB556 /* Sources */,
@@ -973,6 +979,7 @@
 			buildPhases = (
 				54823DDA1C020D53AA1AE41D /* Sources */,
 				8F3677257511AF93D12FE5DE /* Frameworks */,
+				E1F2031425364758697A8B9C /* Resources */,
 				60724CEF0233646C0B2DE03E /* Embed Foundation Extensions */,
 				8FDC4D0CE57EDACDE1250D27 /* Embed Frameworks */,
 				DCF9925C45151B447E3185A0 /* Bundle Heimdall helper */,
@@ -999,6 +1006,7 @@
 			buildPhases = (
 				FE200194A30C0DD6F3404BE7 /* Sources */,
 				44D61DCEBF4D686C0E2391F3 /* Frameworks */,
+				F102132435465768798A9BAC /* Resources */,
 				DBD485686CA4F4784AD9E632 /* Embed Frameworks */,
 			);
 			buildRules = (
@@ -1098,6 +1106,25 @@
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E1F2031425364758697A8B9C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B2C3D4E5F60718293A4B5C /* App/Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F102132435465768798A9BAC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1C2D3E4F5061728394A5B6C /* iOS/App/Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXProject section */
 		9CE5AF0997814FD449540E36 /* Project object */ = {
@@ -1664,8 +1691,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/App/HeimdallMobile.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Heimdall;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iOS/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1751,8 +1778,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/App/HeimdallMobile.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Heimdall;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iOS/App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
