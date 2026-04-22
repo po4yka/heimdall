@@ -51,6 +51,8 @@ struct CodexLiveResolution {
     credits: Option<f64>,
     error: Option<String>,
     auth: Option<codex::CodexAuth>,
+    credential_store: codex::ResolvedCodexCredentialStore,
+    bootstrap_error: Option<String>,
 }
 
 pub async fn load_snapshots(
@@ -561,14 +563,15 @@ async fn build_codex_snapshot(
     let cost_summary = load_provider_cost_summary(state, "codex").await?;
     let env = std::env::vars().collect::<Vec<_>>();
     let config_facts = codex::load_config_facts(&env);
+    let bootstrap = codex::resolve_bootstrap_auth(&env, &config_facts);
     // Wrap fetch_oauth_usage with a single-shot refresh retry: if the initial
     // call fails with an auth-looking error and we have a refresh_token, ask
     // Codex's OAuth provider for a new access token, persist it back to
-    // ~/.codex/auth.json, and retry the fetch once with the new creds.
+    // auth.json only when the resolved credential backend is file-backed, and
+    // retry the fetch once with the new creds.
     let env_for_refresh = env.clone();
     let resolution = resolve_codex_live_data_with(
-        &env,
-        codex::load_auth,
+        bootstrap,
         move |auth| {
             let env_for_refresh = env_for_refresh.clone();
             Box::pin(async move {
@@ -583,13 +586,19 @@ async fn build_codex_snapshot(
                         }
                         match codex::refresh_oauth_token(refresh).await {
                             Ok(tokens) => {
-                                if let Err(persist_err) = codex::persist_refreshed_tokens_to_disk(
-                                    &env_for_refresh,
-                                    &tokens,
-                                ) {
+                                let refreshed = codex::apply_refreshed_tokens(auth, &tokens);
+                                let config_facts = codex::load_config_facts(&env_for_refresh);
+                                let bootstrap =
+                                    codex::resolve_bootstrap_auth(&env_for_refresh, &config_facts);
+                                if bootstrap.credential_store.persists_to_file()
+                                    && let Err(persist_err) =
+                                        codex::persist_refreshed_tokens_to_disk(
+                                            &env_for_refresh,
+                                            &tokens,
+                                        )
+                                {
                                     tracing::warn!("Codex refresh persist failed: {persist_err:#}");
                                 }
-                                let refreshed = codex::apply_refreshed_tokens(auth, &tokens);
                                 codex::fetch_oauth_usage(&refreshed).await
                             }
                             Err(refresh_err) => {
@@ -608,11 +617,14 @@ async fn build_codex_snapshot(
     let auth = codex::build_auth_health(
         &env,
         &config_facts,
-        resolution.auth.as_ref(),
-        resolution.identity.as_ref(),
-        resolution.available,
-        &resolution.source_used,
-        resolution.error.as_deref(),
+        codex::CodexAuthHealthInput {
+            credential_store: resolution.credential_store,
+            auth: resolution.auth.as_ref(),
+            identity: resolution.identity.as_ref(),
+            available: resolution.available,
+            bootstrap_error: resolution.bootstrap_error.as_deref(),
+            error: resolution.error.as_deref(),
+        },
     );
 
     Ok(LiveProviderSnapshot {
@@ -638,15 +650,13 @@ async fn build_codex_snapshot(
     })
 }
 
-async fn resolve_codex_live_data_with<LoadAuth, FetchOauth, FetchRpc, FetchCli>(
-    env: &[(String, String)],
-    load_auth: LoadAuth,
+async fn resolve_codex_live_data_with<FetchOauth, FetchRpc, FetchCli>(
+    bootstrap: codex::CodexBootstrapAuth,
     fetch_oauth: FetchOauth,
     fetch_rpc: FetchRpc,
     fetch_cli: FetchCli,
 ) -> CodexLiveResolution
 where
-    LoadAuth: Fn(&[(String, String)]) -> Result<codex::CodexAuth>,
     FetchOauth: for<'a> Fn(
         &'a codex::CodexAuth,
     ) -> Pin<
@@ -666,126 +676,111 @@ where
     let mut primary = None;
     let mut secondary = None;
     let mut credits = None;
-    let mut resolved_auth = None;
+    let resolved_auth = bootstrap.auth.clone();
     let mut source_used = "unavailable".to_string();
-    let mut error = None;
+    let mut error = bootstrap.load_error.clone();
     let mut available = false;
-    let mut last_attempted_source = None;
+    let mut last_attempted_source;
 
-    match load_auth(env) {
-        Ok(codex_auth) => {
-            let auth_clone = codex_auth.clone();
-            identity = codex::decode_identity(&codex_auth);
-            resolved_auth = Some(auth_clone);
-            last_attempted_source = Some("oauth".to_string());
-            match fetch_oauth(&codex_auth).await {
-                Ok(response) => {
-                    attempts.push(LiveProviderSourceAttempt {
-                        source: "oauth".into(),
-                        outcome: "success".into(),
-                        message: None,
-                    });
-                    available = true;
-                    source_used = "oauth".into();
-                    if let Some(plan_type) = response.plan_type
-                        && identity.is_none()
-                    {
-                        identity = Some(LiveProviderIdentity {
-                            provider: "codex".into(),
-                            account_email: None,
-                            account_organization: None,
-                            login_method: Some("chatgpt".into()),
-                            plan: Some(plan_type),
-                        });
-                    }
-                    if let Some(rate_limit) = response.rate_limit {
-                        primary = rate_limit
-                            .primary_window
-                            .as_ref()
-                            .map(codex::oauth_window_to_live);
-                        secondary = rate_limit
-                            .secondary_window
-                            .as_ref()
-                            .map(codex::oauth_window_to_live);
-                    }
-                    credits = response
-                        .credits
-                        .as_ref()
-                        .and_then(codex::oauth_credits_to_f64);
-                }
-                Err(fetch_error) => {
-                    attempts.push(LiveProviderSourceAttempt {
-                        source: "oauth".into(),
-                        outcome: "error".into(),
-                        message: Some(fetch_error.to_string()),
-                    });
-                    error = Some(fetch_error.to_string());
-                }
-            }
-        }
-        Err(load_error) => {
+    last_attempted_source = Some("cli-rpc".to_string());
+    match fetch_rpc(Duration::from_secs(8)) {
+        Ok((account, limits)) => {
             attempts.push(LiveProviderSourceAttempt {
-                source: "oauth-auth".into(),
-                outcome: "error".into(),
-                message: Some(load_error.to_string()),
+                source: "cli-rpc".into(),
+                outcome: "success".into(),
+                message: Some(format!(
+                    "credential backend resolved as {}",
+                    bootstrap.credential_store.backend_label()
+                )),
             });
-            error = Some(load_error.to_string());
+            available = true;
+            source_used = "cli-rpc".into();
+            identity = account.as_ref().and_then(codex::rpc_account_to_identity);
+            primary = limits
+                .rate_limits
+                .primary
+                .as_ref()
+                .map(codex::rpc_window_to_live);
+            secondary = limits
+                .rate_limits
+                .secondary
+                .as_ref()
+                .map(codex::rpc_window_to_live);
+            credits = limits
+                .rate_limits
+                .credits
+                .as_ref()
+                .and_then(codex::rpc_credits_to_f64);
+            error = None;
+        }
+        Err(rpc_error) => {
+            attempts.push(LiveProviderSourceAttempt {
+                source: "cli-rpc".into(),
+                outcome: "error".into(),
+                message: Some(rpc_error.to_string()),
+            });
+            if error.is_none() {
+                error = Some(rpc_error.to_string());
+            }
         }
     }
 
-    if !available {
-        last_attempted_source = Some("cli-rpc".to_string());
-        match fetch_rpc(Duration::from_secs(8)) {
-            Ok((account, limits)) => {
+    if !available && let Some(codex_auth) = bootstrap.auth.as_ref() {
+        last_attempted_source = Some("oauth".to_string());
+        if identity.is_none() {
+            identity = codex::decode_identity(codex_auth);
+        }
+        match fetch_oauth(codex_auth).await {
+            Ok(response) => {
                 attempts.push(LiveProviderSourceAttempt {
-                    source: "cli-rpc".into(),
+                    source: "oauth".into(),
                     outcome: "success".into(),
                     message: None,
                 });
                 available = true;
-                source_used = "cli-rpc".into();
-                if identity.is_none() {
-                    identity = account.and_then(|response| match response.account {
-                        Some(codex::RpcAccountDetails::ChatGpt { email, plan_type }) => {
-                            Some(LiveProviderIdentity {
-                                provider: "codex".into(),
-                                account_email: email,
-                                account_organization: None,
-                                login_method: Some("chatgpt".into()),
-                                plan: plan_type,
-                            })
-                        }
-                        _ => None,
+                source_used = "oauth".into();
+                if let Some(plan_type) = response.plan_type
+                    && identity.is_none()
+                {
+                    identity = Some(LiveProviderIdentity {
+                        provider: "codex".into(),
+                        account_email: None,
+                        account_organization: None,
+                        login_method: Some("chatgpt".into()),
+                        plan: Some(plan_type),
                     });
                 }
-                primary = limits
-                    .rate_limits
-                    .primary
-                    .as_ref()
-                    .map(codex::rpc_window_to_live);
-                secondary = limits
-                    .rate_limits
-                    .secondary
-                    .as_ref()
-                    .map(codex::rpc_window_to_live);
-                credits = limits
-                    .rate_limits
+                if let Some(rate_limit) = response.rate_limit {
+                    primary = rate_limit
+                        .primary_window
+                        .as_ref()
+                        .map(codex::oauth_window_to_live);
+                    secondary = rate_limit
+                        .secondary_window
+                        .as_ref()
+                        .map(codex::oauth_window_to_live);
+                }
+                credits = response
                     .credits
                     .as_ref()
-                    .and_then(codex::rpc_credits_to_f64);
+                    .and_then(codex::oauth_credits_to_f64);
                 error = None;
             }
-            Err(rpc_error) => {
+            Err(fetch_error) => {
                 attempts.push(LiveProviderSourceAttempt {
-                    source: "cli-rpc".into(),
+                    source: "oauth".into(),
                     outcome: "error".into(),
-                    message: Some(rpc_error.to_string()),
+                    message: Some(fetch_error.to_string()),
                 });
-                if error.is_none() {
-                    error = Some(rpc_error.to_string());
-                }
+                error = Some(fetch_error.to_string());
             }
         }
+    } else if !available && bootstrap.load_error.is_some() {
+        attempts.push(LiveProviderSourceAttempt {
+            source: "oauth-auth".into(),
+            outcome: "error".into(),
+            message: bootstrap.load_error.clone(),
+        });
     }
 
     if !available {
@@ -817,7 +812,7 @@ where
         }
     }
 
-    let resolved_via_fallback = available && source_used != "oauth";
+    let resolved_via_fallback = available && source_used != "cli-rpc";
 
     CodexLiveResolution {
         available,
@@ -832,6 +827,8 @@ where
         credits,
         error,
         auth: resolved_auth,
+        credential_store: bootstrap.credential_store,
+        bootstrap_error: bootstrap.load_error,
     }
 }
 
@@ -1133,7 +1130,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn codex_oauth_failure_falls_back_to_rpc() {
+    async fn codex_rpc_is_primary_when_available() {
         let auth = codex::CodexAuth {
             access_token: "token".into(),
             refresh_token: None,
@@ -1141,14 +1138,20 @@ mod tests {
             account_id: None,
             auth_mode: Some("chatgpt".into()),
         };
+        let bootstrap = codex::CodexBootstrapAuth {
+            auth: Some(auth.clone()),
+            credential_store: codex::ResolvedCodexCredentialStore::AutoKeyring,
+            auth_file_path: std::path::PathBuf::from("/tmp/codex-auth.json"),
+            load_error: None,
+        };
 
         let resolution = resolve_codex_live_data_with(
-            &[],
-            |_| Ok(auth.clone()),
+            bootstrap,
             |_| Box::pin(async { Err(anyhow!("oauth failed")) }),
             |_| {
                 Ok((
                     Some(codex::RpcAccountResponse {
+                        requires_openai_auth: Some(false),
                         account: Some(codex::RpcAccountDetails::ChatGpt {
                             email: Some("rpc@example.com".into()),
                             plan_type: Some("pro".into()),
@@ -1173,26 +1176,31 @@ mod tests {
 
         assert!(resolution.available);
         assert_eq!(resolution.source_used, "cli-rpc");
-        assert!(resolution.resolved_via_fallback);
-        assert!(
-            resolution
-                .source_attempts
-                .iter()
-                .any(|attempt| attempt.source == "oauth" && attempt.outcome == "error")
-        );
+        assert!(!resolution.resolved_via_fallback);
         assert!(
             resolution
                 .source_attempts
                 .iter()
                 .any(|attempt| attempt.source == "cli-rpc" && attempt.outcome == "success")
         );
+        assert!(
+            resolution
+                .source_attempts
+                .iter()
+                .all(|attempt| attempt.source != "oauth")
+        );
     }
 
     #[tokio::test]
     async fn codex_rpc_failure_falls_back_to_cli_status() {
+        let bootstrap = codex::CodexBootstrapAuth {
+            auth: None,
+            credential_store: codex::ResolvedCodexCredentialStore::AutoKeyring,
+            auth_file_path: std::path::PathBuf::from("/tmp/codex-auth.json"),
+            load_error: Some("auth missing".into()),
+        };
         let resolution = resolve_codex_live_data_with(
-            &[],
-            |_| Err(anyhow!("auth missing")),
+            bootstrap,
             |_| Box::pin(async { Err(anyhow!("oauth should not run")) }),
             |_| Err(anyhow!("rpc failed")),
             |_| {

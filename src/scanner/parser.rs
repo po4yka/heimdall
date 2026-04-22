@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use tracing::warn;
+use tracing::{debug, warn};
 
 use crate::models::{Session, SessionMeta, Turn};
 use crate::pricing;
@@ -72,6 +72,87 @@ pub struct ParseResult {
     #[allow(dead_code)]
     pub session_titles: HashMap<String, String>,
     pub tool_results: HashMap<String, bool>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ClaudeTokenUsage {
+    input_tokens: i64,
+    output_tokens: i64,
+    cache_read_tokens: i64,
+    cache_creation_tokens: i64,
+    has_usage_fields: bool,
+}
+
+fn extract_claude_token_usage(
+    message: &serde_json::Value,
+    session_id: &str,
+    message_id: &str,
+) -> ClaudeTokenUsage {
+    let usage = message
+        .get("usage")
+        .and_then(|value| value.as_object())
+        .or_else(|| {
+            message
+                .get("usage_metadata")
+                .and_then(|value| value.as_object())
+        });
+
+    let Some(usage) = usage else {
+        debug!(
+            "claude parser: assistant turn {} in session {} has no usage object; preserving zero-token turn",
+            message_id, session_id
+        );
+        return ClaudeTokenUsage::default();
+    };
+
+    let input_tokens = usage
+        .get("input_tokens")
+        .or_else(|| usage.get("inputTokens"))
+        .and_then(|value| value.as_i64())
+        .unwrap_or(0);
+    let output_tokens = usage
+        .get("output_tokens")
+        .or_else(|| usage.get("outputTokens"))
+        .and_then(|value| value.as_i64())
+        .unwrap_or(0);
+    let cache_read_tokens = usage
+        .get("cache_read_input_tokens")
+        .or_else(|| usage.get("cached_input_tokens"))
+        .or_else(|| usage.get("cacheReadInputTokens"))
+        .or_else(|| usage.get("cachedInputTokens"))
+        .and_then(|value| value.as_i64())
+        .unwrap_or(0);
+    let cache_creation_tokens = usage
+        .get("cache_creation_input_tokens")
+        .or_else(|| usage.get("cacheCreationInputTokens"))
+        .and_then(|value| value.as_i64())
+        .unwrap_or(0);
+
+    let has_usage_fields = usage.contains_key("input_tokens")
+        || usage.contains_key("inputTokens")
+        || usage.contains_key("output_tokens")
+        || usage.contains_key("outputTokens")
+        || usage.contains_key("cache_read_input_tokens")
+        || usage.contains_key("cached_input_tokens")
+        || usage.contains_key("cacheReadInputTokens")
+        || usage.contains_key("cachedInputTokens")
+        || usage.contains_key("cache_creation_input_tokens")
+        || usage.contains_key("cacheCreationInputTokens");
+
+    if !has_usage_fields {
+        debug!(
+            "claude parser: assistant turn {} in session {} has an unrecognized usage shape; preserving zero-token turn",
+            message_id, session_id
+        );
+    }
+
+    ClaudeTokenUsage {
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_creation_tokens,
+        has_usage_fields,
+    }
 }
 
 /// Parse a provider-specific log file.
@@ -351,10 +432,6 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 Some(m) => m,
                 None => continue,
             };
-            let usage = msg
-                .get("usage")
-                .cloned()
-                .unwrap_or(serde_json::Value::Object(Default::default()));
             let model = msg
                 .get("model")
                 .and_then(|v| v.as_str())
@@ -365,27 +442,7 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-
-            let input_tokens = usage
-                .get("input_tokens")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-            let output_tokens = usage
-                .get("output_tokens")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-            let cache_read = usage
-                .get("cache_read_input_tokens")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-            let cache_creation = usage
-                .get("cache_creation_input_tokens")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-
-            if input_tokens + output_tokens + cache_read + cache_creation == 0 {
-                continue;
-            }
+            let usage = extract_claude_token_usage(msg, &session_id, &message_id);
 
             let content_arr = msg.get("content").and_then(|c| c.as_array());
 
@@ -473,12 +530,16 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 })
                 .unwrap_or_default();
 
-            let service_tier = usage
-                .get("service_tier")
+            let service_tier = msg
+                .get("usage")
+                .or_else(|| msg.get("usage_metadata"))
+                .and_then(|usage| usage.get("service_tier"))
                 .and_then(|v| v.as_str())
                 .map(String::from);
-            let inference_geo = usage
-                .get("inference_geo")
+            let inference_geo = msg
+                .get("usage")
+                .or_else(|| msg.get("usage_metadata"))
+                .and_then(|usage| usage.get("inference_geo"))
                 .and_then(|v| v.as_str())
                 .map(String::from);
 
@@ -498,10 +559,10 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 provider: PROVIDER_CLAUDE.into(),
                 timestamp: timestamp.clone(),
                 model,
-                input_tokens,
-                output_tokens,
-                cache_read_tokens: cache_read,
-                cache_creation_tokens: cache_creation,
+                input_tokens: usage.input_tokens,
+                output_tokens: usage.output_tokens,
+                cache_read_tokens: usage.cache_read_tokens,
+                cache_creation_tokens: usage.cache_creation_tokens,
                 reasoning_output_tokens: 0,
                 tool_name,
                 cwd,
@@ -538,6 +599,12 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
             if !message_id.is_empty() {
                 seen_messages.insert(message_id, turn);
             } else {
+                if !usage.has_usage_fields {
+                    debug!(
+                        "claude parser: assistant turn without message id in session {} preserved with zero-token usage fallback",
+                        session_id
+                    );
+                }
                 turns_no_id.push(turn);
             }
         }
@@ -904,6 +971,25 @@ mod tests {
         .to_string()
     }
 
+    fn make_assistant_record_with_usage(
+        session_id: &str,
+        model: &str,
+        usage: serde_json::Value,
+    ) -> String {
+        serde_json::json!({
+            "type": "assistant",
+            "sessionId": session_id,
+            "timestamp": "2026-04-08T10:00:00Z",
+            "cwd": "/home/user/project",
+            "message": {
+                "model": model,
+                "usage": usage,
+                "content": [],
+            },
+        })
+        .to_string()
+    }
+
     fn write_jsonl(dir: &TempDir, name: &str, lines: &[String]) -> std::path::PathBuf {
         let path = dir.path().join(name);
         let mut f = std::fs::File::create(&path).unwrap();
@@ -943,7 +1029,7 @@ mod tests {
     }
 
     #[test]
-    fn test_skips_zero_tokens() {
+    fn test_preserves_zero_token_assistant_turns() {
         let dir = TempDir::new().unwrap();
         let path = write_jsonl(
             &dir,
@@ -951,7 +1037,29 @@ mod tests {
             &[make_assistant_record("s1", "claude-sonnet-4-6", 0, 0, "")],
         );
         let result = parse_jsonl_file(PROVIDER_CLAUDE, &path, 0);
-        assert_eq!(result.turns.len(), 0);
+        assert_eq!(result.turns.len(), 1);
+        assert_eq!(result.turns[0].input_tokens, 0);
+        assert_eq!(result.turns[0].output_tokens, 0);
+    }
+
+    #[test]
+    fn test_preserves_partial_usage_shapes() {
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "test.jsonl",
+            &[make_assistant_record_with_usage(
+                "s1",
+                "claude-sonnet-4-6",
+                serde_json::json!({
+                    "output_tokens": 42
+                }),
+            )],
+        );
+        let result = parse_jsonl_file(PROVIDER_CLAUDE, &path, 0);
+        assert_eq!(result.turns.len(), 1);
+        assert_eq!(result.turns[0].input_tokens, 0);
+        assert_eq!(result.turns[0].output_tokens, 42);
     }
 
     #[test]

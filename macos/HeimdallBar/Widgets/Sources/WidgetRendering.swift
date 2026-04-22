@@ -162,7 +162,7 @@ enum WidgetRenderModelBuilder {
         guard let auth else { return nil }
         let parts = [
             auth.loginMethod?.replacingOccurrences(of: "-", with: " ").capitalized,
-            auth.credentialBackend?.capitalized,
+            auth.credentialBackend?.replacingOccurrences(of: "-", with: " ").capitalized,
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }

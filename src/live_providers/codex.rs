@@ -70,12 +70,14 @@ pub struct CodexCredits {
 #[derive(Debug, Deserialize)]
 pub struct RpcAccountResponse {
     pub account: Option<RpcAccountDetails>,
+    #[serde(rename = "requiresOpenaiAuth")]
+    pub requires_openai_auth: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
 pub enum RpcAccountDetails {
-    #[serde(rename = "apikey")]
+    #[serde(rename = "apiKey", alias = "apikey")]
     ApiKey,
     #[serde(rename = "chatgpt")]
     ChatGpt {
@@ -128,6 +130,94 @@ pub struct CodexConfigFacts {
     pub credential_store: Option<String>,
     pub forced_login_method: Option<String>,
     pub forced_chatgpt_workspace_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResolvedCodexCredentialStore {
+    File,
+    Keyring,
+    AutoFile,
+    AutoKeyring,
+}
+
+impl ResolvedCodexCredentialStore {
+    pub fn backend_label(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Keyring => "keyring",
+            Self::AutoFile => "auto-file",
+            Self::AutoKeyring => "auto-keyring",
+        }
+    }
+
+    pub fn persists_to_file(self) -> bool {
+        matches!(self, Self::File | Self::AutoFile)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CodexBootstrapAuth {
+    pub auth: Option<CodexAuth>,
+    pub credential_store: ResolvedCodexCredentialStore,
+    pub auth_file_path: PathBuf,
+    pub load_error: Option<String>,
+}
+
+pub struct CodexAuthHealthInput<'a> {
+    pub credential_store: ResolvedCodexCredentialStore,
+    pub auth: Option<&'a CodexAuth>,
+    pub identity: Option<&'a LiveProviderIdentity>,
+    pub available: bool,
+    pub bootstrap_error: Option<&'a str>,
+    pub error: Option<&'a str>,
+}
+
+pub fn resolve_credential_store(
+    env: &[(String, String)],
+    config: &CodexConfigFacts,
+) -> ResolvedCodexCredentialStore {
+    let auth_path = auth_file_path(env);
+    match config.credential_store.as_deref() {
+        Some("file") => ResolvedCodexCredentialStore::File,
+        Some("keyring") => ResolvedCodexCredentialStore::Keyring,
+        Some("auto") | None => {
+            if auth_path.exists() {
+                ResolvedCodexCredentialStore::AutoFile
+            } else {
+                ResolvedCodexCredentialStore::AutoKeyring
+            }
+        }
+        Some(_) => {
+            if auth_path.exists() {
+                ResolvedCodexCredentialStore::AutoFile
+            } else {
+                ResolvedCodexCredentialStore::AutoKeyring
+            }
+        }
+    }
+}
+
+pub fn resolve_bootstrap_auth(
+    env: &[(String, String)],
+    config: &CodexConfigFacts,
+) -> CodexBootstrapAuth {
+    let credential_store = resolve_credential_store(env, config);
+    let auth_file_path = auth_file_path(env);
+    let (auth, load_error) = if credential_store.persists_to_file() {
+        match load_auth(env) {
+            Ok(auth) => (Some(auth), None),
+            Err(err) => (None, Some(err.to_string())),
+        }
+    } else {
+        (None, None)
+    };
+
+    CodexBootstrapAuth {
+        auth,
+        credential_store,
+        auth_file_path,
+        load_error,
+    }
 }
 
 pub fn load_auth(env: &[(String, String)]) -> Result<CodexAuth> {
@@ -364,6 +454,45 @@ pub fn decode_identity(auth: &CodexAuth) -> Option<LiveProviderIdentity> {
     })
 }
 
+pub fn rpc_account_to_identity(account: &RpcAccountResponse) -> Option<LiveProviderIdentity> {
+    match account.account.as_ref()? {
+        RpcAccountDetails::ApiKey => Some(LiveProviderIdentity {
+            provider: "codex".into(),
+            account_email: None,
+            account_organization: None,
+            login_method: Some("api-key".into()),
+            plan: None,
+        }),
+        RpcAccountDetails::ChatGpt { email, plan_type } => Some(LiveProviderIdentity {
+            provider: "codex".into(),
+            account_email: email.clone(),
+            account_organization: None,
+            login_method: Some("chatgpt".into()),
+            plan: plan_type.clone(),
+        }),
+    }
+}
+
+fn normalized_codex_login_method(value: Option<&str>) -> Option<&'static str> {
+    match value.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value)
+            if value.eq_ignore_ascii_case("chatgpt")
+                || value.eq_ignore_ascii_case("chatgptdevicecode") =>
+        {
+            Some("chatgpt")
+        }
+        Some(value)
+            if value.eq_ignore_ascii_case("api")
+                || value.eq_ignore_ascii_case("api-key")
+                || value.eq_ignore_ascii_case("apikey")
+                || value.eq_ignore_ascii_case("apiKey") =>
+        {
+            Some("api")
+        }
+        _ => None,
+    }
+}
+
 pub fn oauth_window_to_live(window: &CodexWindow) -> LiveRateWindow {
     let resets_at = chrono::DateTime::from_timestamp(window.reset_at, 0).map(|ts| ts.to_rfc3339());
     let resets_in_minutes = chrono::DateTime::from_timestamp(window.reset_at, 0).map(|ts| {
@@ -468,7 +597,7 @@ pub fn fetch_rpc_snapshot(
     next_id += 1;
     send_rpc_payload(
         &mut stdin,
-        &json!({"id": next_id, "method": "account/read", "params": {}}),
+        &json!({"id": next_id, "method": "account/read", "params": {"refreshToken": true}}),
     )?;
     let account_message = wait_for_rpc_id(&rx, next_id, timeout).ok();
 
@@ -659,12 +788,16 @@ pub fn load_config_facts(env: &[(String, String)]) -> CodexConfigFacts {
 pub fn build_auth_health(
     env: &[(String, String)],
     config: &CodexConfigFacts,
-    auth: Option<&CodexAuth>,
-    identity: Option<&LiveProviderIdentity>,
-    available: bool,
-    source_used: &str,
-    error: Option<&str>,
+    input: CodexAuthHealthInput<'_>,
 ) -> LiveProviderAuth {
+    let CodexAuthHealthInput {
+        credential_store,
+        auth,
+        identity,
+        available,
+        bootstrap_error,
+        error,
+    } = input;
     let validated_at = Some(chrono::Utc::now().to_rfc3339());
     let headless = env_has(env, "SSH_CONNECTION")
         || env_has(env, "CI")
@@ -746,26 +879,16 @@ pub fn build_auth_health(
         };
     }
 
-    let backend = if auth.is_some() {
-        "file"
-    } else if matches!(config.credential_store.as_deref(), Some("keyring"))
-        || (config.credential_store.as_deref() == Some("auto")
-            && available
-            && source_used.starts_with("cli"))
-    {
-        "keyring"
-    } else if config.credential_store.as_deref() == Some("auto") {
-        "auto"
-    } else {
-        "file"
-    };
-
     let login_method = auth
         .and_then(|auth| auth.auth_mode.clone())
         .or_else(|| identity.and_then(|identity| identity.login_method.clone()))
         .unwrap_or_else(|| "chatgpt".into());
+    let normalized_login_method =
+        normalized_codex_login_method(Some(&login_method)).unwrap_or("chatgpt");
     let managed_restriction = if let Some(forced_login_method) = &config.forced_login_method {
-        if *forced_login_method != login_method {
+        if normalized_codex_login_method(Some(forced_login_method.as_str()))
+            != Some(normalized_login_method)
+        {
             Some(format!("forced_login_method={forced_login_method}"))
         } else {
             None
@@ -782,7 +905,7 @@ pub fn build_auth_health(
         .map(|value| !value.trim().is_empty())
         .unwrap_or(false);
     let is_authenticated = auth.is_some() || available;
-    let source_compatible = login_method == "chatgpt" && managed_restriction.is_none();
+    let source_compatible = normalized_login_method == "chatgpt" && managed_restriction.is_none();
     let requires_relogin = !is_authenticated
         || error
             .map(|message| message.to_lowercase().contains("expired"))
@@ -805,10 +928,22 @@ pub fn build_auth_health(
             "Codex auth does not satisfy managed policy `{managed_restriction}`."
         ))
     } else if !is_authenticated {
-        Some(
-            "Codex credentials are missing from both file storage and the active CLI session."
-                .into(),
-        )
+        bootstrap_error.map(ToOwned::to_owned).or_else(|| {
+            Some(match credential_store {
+                ResolvedCodexCredentialStore::File => {
+                    "Codex file-backed credentials are unavailable, and no active CLI session was detected.".into()
+                }
+                ResolvedCodexCredentialStore::Keyring => {
+                    "Codex keyring-backed credentials are unavailable, and no active CLI session was detected.".into()
+                }
+                ResolvedCodexCredentialStore::AutoFile => {
+                    "Codex auto storage resolved to file-backed auth, but no usable auth.json or active CLI session was found.".into()
+                }
+                ResolvedCodexCredentialStore::AutoKeyring => {
+                    "Codex auto storage resolved to keyring-backed auth, but no active CLI session was detected.".into()
+                }
+            })
+        })
     } else if !source_compatible {
         Some("Codex is authenticated with API key semantics, so ChatGPT credits and subscription quota features are unavailable.".into())
     } else if requires_relogin && is_refreshable {
@@ -821,7 +956,7 @@ pub fn build_auth_health(
 
     LiveProviderAuth {
         login_method: Some(login_method.clone()),
-        credential_backend: Some(backend.into()),
+        credential_backend: Some(credential_store.backend_label().into()),
         auth_mode: Some(login_method),
         is_authenticated,
         is_refreshable,
@@ -1110,6 +1245,47 @@ mod tests {
     }
 
     #[test]
+    fn resolve_credential_store_honors_config_and_file_presence() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        let codex_home = tmp.path().to_path_buf();
+        let env = vec![(
+            "CODEX_HOME".to_string(),
+            codex_home.to_string_lossy().into_owned(),
+        )];
+
+        assert_eq!(
+            resolve_credential_store(&env, &CodexConfigFacts::default()),
+            ResolvedCodexCredentialStore::AutoKeyring
+        );
+
+        std::fs::write(codex_home.join("auth.json"), "{}").expect("seed auth file");
+        assert_eq!(
+            resolve_credential_store(&env, &CodexConfigFacts::default()),
+            ResolvedCodexCredentialStore::AutoFile
+        );
+        assert_eq!(
+            resolve_credential_store(
+                &env,
+                &CodexConfigFacts {
+                    credential_store: Some("keyring".into()),
+                    ..CodexConfigFacts::default()
+                }
+            ),
+            ResolvedCodexCredentialStore::Keyring
+        );
+        assert_eq!(
+            resolve_credential_store(
+                &env,
+                &CodexConfigFacts {
+                    credential_store: Some("file".into()),
+                    ..CodexConfigFacts::default()
+                }
+            ),
+            ResolvedCodexCredentialStore::File
+        );
+    }
+
+    #[test]
     fn parse_cli_status_extracts_limits() {
         let snapshot = parse_cli_status(
             "Credits: 123.4\n5h limit 72% left resets 14:00\nWeekly limit 41% left resets Fri 09:00\n",
@@ -1188,7 +1364,7 @@ mod tests {
         ))
         .expect("fixture rpc limits parses");
 
-        match account.account.expect("account") {
+        match account.account.as_ref().expect("account") {
             RpcAccountDetails::ChatGpt { email, plan_type } => {
                 assert_eq!(email.as_deref(), Some("rpc-fixture@example.com"));
                 assert_eq!(plan_type.as_deref(), Some("team"));
@@ -1207,6 +1383,14 @@ mod tests {
             rpc_credits_to_f64(limits.rate_limits.credits.as_ref().expect("credits")),
             Some(11.9)
         );
+
+        let identity = rpc_account_to_identity(&account).expect("rpc identity");
+        assert_eq!(
+            identity.account_email.as_deref(),
+            Some("rpc-fixture@example.com")
+        );
+        assert_eq!(identity.login_method.as_deref(), Some("chatgpt"));
+        assert_eq!(identity.plan.as_deref(), Some("team"));
     }
 
     #[test]
@@ -1247,11 +1431,14 @@ mod tests {
         let health = build_auth_health(
             &env,
             &CodexConfigFacts::default(),
-            None,
-            None,
-            false,
-            "oauth",
-            None,
+            CodexAuthHealthInput {
+                credential_store: ResolvedCodexCredentialStore::File,
+                auth: None,
+                identity: None,
+                available: false,
+                bootstrap_error: None,
+                error: None,
+            },
         );
 
         assert_eq!(health.diagnostic_code.as_deref(), Some("env-override"));
@@ -1270,11 +1457,14 @@ mod tests {
                 credential_store: Some("auto".into()),
                 ..CodexConfigFacts::default()
             },
-            None,
-            None,
-            false,
-            "oauth",
-            Some("expired token"),
+            CodexAuthHealthInput {
+                credential_store: ResolvedCodexCredentialStore::AutoKeyring,
+                auth: None,
+                identity: None,
+                available: false,
+                bootstrap_error: None,
+                error: Some("expired token"),
+            },
         );
 
         assert_eq!(
@@ -1287,6 +1477,37 @@ mod tests {
                 .first()
                 .and_then(|action| action.command.as_deref()),
             Some("codex login --device-auth")
+        );
+    }
+
+    #[test]
+    fn build_auth_health_normalizes_api_managed_policy() {
+        let health = build_auth_health(
+            &[],
+            &CodexConfigFacts {
+                forced_login_method: Some("api".into()),
+                ..CodexConfigFacts::default()
+            },
+            CodexAuthHealthInput {
+                credential_store: ResolvedCodexCredentialStore::File,
+                auth: Some(&CodexAuth {
+                    access_token: "sk-test".into(),
+                    refresh_token: None,
+                    id_token: None,
+                    account_id: None,
+                    auth_mode: Some("api-key".into()),
+                }),
+                identity: None,
+                available: true,
+                bootstrap_error: None,
+                error: None,
+            },
+        );
+
+        assert!(health.managed_restriction.is_none());
+        assert_eq!(
+            health.diagnostic_code.as_deref(),
+            Some("authenticated-incompatible-source")
         );
     }
 }

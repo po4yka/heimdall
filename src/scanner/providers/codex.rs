@@ -3,7 +3,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use tracing::warn;
+use tracing::{debug, warn};
 use walkdir::WalkDir;
 
 use crate::models::{SessionMeta, Turn};
@@ -28,6 +28,8 @@ struct TokenUsage {
     cache_read: i64,
     reasoning_output: i64,
     plan_type: Option<String>,
+    source: Option<&'static str>,
+    has_usage_fields: bool,
 }
 
 pub struct CodexProvider {
@@ -262,10 +264,11 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
                     }
                     "token_count" => {
                         let usage = parse_codex_token_usage(&payload);
-                        if usage.input + usage.output + usage.cache_read + usage.reasoning_output
-                            == 0
-                        {
-                            continue;
+                        if !usage.has_usage_fields {
+                            debug!(
+                                "codex parser: preserving token_count event without recognized usage fields from {}",
+                                usage.source.unwrap_or("unknown")
+                            );
                         }
 
                         let turn_id = current_turn_id
@@ -441,17 +444,36 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
 
 fn parse_codex_token_usage(payload: &serde_json::Map<String, serde_json::Value>) -> TokenUsage {
     let info = payload.get("info").and_then(|v| v.as_object());
-    let usage = info
-        .and_then(|info| info.get("last_token_usage"))
-        .and_then(|v| v.as_object())
-        .or_else(|| {
-            info.and_then(|info| info.get("total_token_usage"))
+    let usage_and_source = info
+        .and_then(|info| {
+            info.get("last_token_usage")
                 .and_then(|v| v.as_object())
+                .map(|usage| (usage, "last_token_usage"))
+        })
+        .or_else(|| {
+            info.and_then(|info| {
+                info.get("total_token_usage")
+                    .and_then(|v| v.as_object())
+                    .map(|usage| (usage, "total_token_usage"))
+            })
         });
 
-    let Some(usage) = usage else {
+    let Some((usage, source)) = usage_and_source else {
+        debug!("codex parser: token_count event had no recognized usage container");
         return TokenUsage::default();
     };
+
+    let has_usage_fields = usage.contains_key("input_tokens")
+        || usage.contains_key("output_tokens")
+        || usage.contains_key("cached_input_tokens")
+        || usage.contains_key("reasoning_output_tokens");
+
+    if !has_usage_fields {
+        debug!(
+            "codex parser: token_count event used {} but had no recognized token fields",
+            source
+        );
+    }
 
     TokenUsage {
         input: usage
@@ -474,6 +496,8 @@ fn parse_codex_token_usage(payload: &serde_json::Map<String, serde_json::Value>)
             .and_then(|info| info.get("plan_type"))
             .and_then(|v| v.as_str())
             .map(String::from),
+        source: Some(source),
+        has_usage_fields,
     }
 }
 
@@ -561,5 +585,55 @@ mod tests {
         assert_eq!(turns.len(), 1);
         assert_eq!(turns[0].provider, "codex");
         assert_eq!(turns[0].input_tokens, 120);
+    }
+
+    #[test]
+    fn codex_parse_preserves_token_count_with_partial_usage() {
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "partial-usage.jsonl",
+            &[
+                serde_json::json!({
+                    "timestamp": "2026-04-09T10:00:00Z",
+                    "type": "session_meta",
+                    "payload": {
+                        "id": "sess-1",
+                        "cwd": "/Users/test/work/proj",
+                        "cli_version": "0.119.0"
+                    }
+                })
+                .to_string(),
+                serde_json::json!({
+                    "timestamp": "2026-04-09T10:00:01Z",
+                    "type": "turn_context",
+                    "payload": {
+                        "turn_id": "turn-1",
+                        "cwd": "/Users/test/work/proj",
+                        "model": "gpt-5.4"
+                    }
+                })
+                .to_string(),
+                serde_json::json!({
+                    "timestamp": "2026-04-09T10:00:04Z",
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "token_count",
+                        "info": {
+                            "total_token_usage": {
+                                "output_tokens": 41
+                            }
+                        }
+                    }
+                })
+                .to_string(),
+            ],
+        );
+
+        let provider = CodexProvider::new(vec![]);
+        let turns = provider.parse(&path).unwrap();
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].input_tokens, 0);
+        assert_eq!(turns[0].output_tokens, 41);
     }
 }

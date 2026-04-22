@@ -10,7 +10,9 @@ struct ProviderCredentialInspectorTests {
         let temp = try Self.makeTempDirectory()
         let inspector = ProviderCredentialInspector(
             homeDirectoryProvider: { temp },
-            codexHomeProvider: { temp.appendingPathComponent(".codex", isDirectory: true) }
+            codexHomeProvider: { temp.appendingPathComponent(".codex", isDirectory: true) },
+            claudeKeychainCredentialProvider: { false },
+            codexCredentialStoreProvider: { nil }
         )
 
         #expect(inspector.credentialPresence(for: .claude) == .missing)
@@ -35,11 +37,47 @@ struct ProviderCredentialInspectorTests {
 
         let inspector = ProviderCredentialInspector(
             homeDirectoryProvider: { temp },
-            codexHomeProvider: { codexDirectory }
+            codexHomeProvider: { codexDirectory },
+            claudeKeychainCredentialProvider: { false },
+            codexCredentialStoreProvider: { nil }
         )
 
         #expect(inspector.credentialPresence(for: .claude) == .present)
         #expect(inspector.credentialPresence(for: .codex) == .present)
+    }
+
+    @Test
+    func reportsClaudePresentWhenKeychainEntryExistsEvenWithoutLegacyFile() throws {
+        let temp = try Self.makeTempDirectory()
+        let inspector = ProviderCredentialInspector(
+            homeDirectoryProvider: { temp },
+            codexHomeProvider: { temp.appendingPathComponent(".codex", isDirectory: true) },
+            claudeKeychainCredentialProvider: { true },
+            codexCredentialStoreProvider: { nil }
+        )
+
+        #expect(inspector.credentialPresence(for: .claude) == .present)
+    }
+
+    @Test
+    func reportsCodexPresentForKeyringAndAutoStoresWithoutAuthFile() throws {
+        let temp = try Self.makeTempDirectory()
+
+        let keyringInspector = ProviderCredentialInspector(
+            homeDirectoryProvider: { temp },
+            codexHomeProvider: { temp.appendingPathComponent(".codex", isDirectory: true) },
+            claudeKeychainCredentialProvider: { false },
+            codexCredentialStoreProvider: { "keyring" }
+        )
+        let autoInspector = ProviderCredentialInspector(
+            homeDirectoryProvider: { temp },
+            codexHomeProvider: { temp.appendingPathComponent(".codex", isDirectory: true) },
+            claudeKeychainCredentialProvider: { false },
+            codexCredentialStoreProvider: { "auto" }
+        )
+
+        #expect(keyringInspector.credentialPresence(for: .codex) == .present)
+        #expect(autoInspector.credentialPresence(for: .codex) == .present)
     }
 
     private static func makeTempDirectory() throws -> URL {

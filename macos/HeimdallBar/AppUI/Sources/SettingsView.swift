@@ -120,7 +120,7 @@ private struct CombinedProviderSection: View {
                 LabeledContent("Login Method", value: loginMethod)
             }
             if let backend = auth?.credentialBackend {
-                LabeledContent("Credential Store", value: backend)
+                LabeledContent("Credential Store", value: backend.replacingOccurrences(of: "-", with: " "))
             }
             // Fix 1: show Auth Mode only when it differs from Login Method
             if let authMode = auth?.authMode,

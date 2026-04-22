@@ -524,7 +524,7 @@ public enum MenuProjectionBuilder {
             fragments.append("Login: \(loginMethod.capitalized)")
         }
         if let backend = auth.credentialBackend {
-            fragments.append("Store: \(backend.capitalized)")
+            fragments.append("Store: \(backend.replacingOccurrences(of: "-", with: " ").capitalized)")
         }
         if !auth.isSourceCompatible {
             fragments.append("Does not satisfy \(provider.title) \(requestedSource.rawValue) source")

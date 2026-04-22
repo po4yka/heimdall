@@ -108,21 +108,23 @@ pub fn resolve_auth(env: &[(String, String)]) -> ResolvedClaudeAuth {
     let (keychain_creds, keychain_status) = load_credentials_from_keychain();
     let validated_at = chrono::Utc::now().to_rfc3339();
 
-    if env_has(env, "ANTHROPIC_API_KEY") {
+    if let Some(provider) = claude_cloud_provider(env) {
         return ResolvedClaudeAuth {
             credentials: None,
             identity: None,
             health: auth_health(
-                Some("api-key".into()),
+                Some(provider.into()),
                 Some("env".into()),
-                Some("anthropic-api-key".into()),
+                Some(provider.into()),
                 true,
                 false,
                 false,
                 false,
                 None,
                 Some("env-override".into()),
-                Some("ANTHROPIC_API_KEY overrides Claude subscription OAuth.".into()),
+                Some(format!(
+                    "Claude appears to be configured for {provider} auth, not subscription OAuth."
+                )),
                 Some(validated_at),
                 vec![
                     recovery_action("Run Claude", "claude-run", Some("claude"), None),
@@ -131,8 +133,7 @@ pub fn resolve_auth(env: &[(String, String)]) -> ResolvedClaudeAuth {
                         "claude-explain-env-override",
                         None,
                         Some(
-                            "Unset ANTHROPIC_API_KEY to restore subscription OAuth detection."
-                                .into(),
+                            "Clear Claude cloud-provider auth environment variables to restore subscription OAuth detection.".into(),
                         ),
                     ),
                 ],
@@ -174,6 +175,39 @@ pub fn resolve_auth(env: &[(String, String)]) -> ResolvedClaudeAuth {
         };
     }
 
+    if env_has(env, "ANTHROPIC_API_KEY") {
+        return ResolvedClaudeAuth {
+            credentials: None,
+            identity: None,
+            health: auth_health(
+                Some("api-key".into()),
+                Some("env".into()),
+                Some("anthropic-api-key".into()),
+                true,
+                false,
+                false,
+                false,
+                None,
+                Some("env-override".into()),
+                Some("ANTHROPIC_API_KEY overrides Claude subscription OAuth.".into()),
+                Some(validated_at),
+                vec![
+                    recovery_action("Run Claude", "claude-run", Some("claude"), None),
+                    recovery_action(
+                        "Explain env override conflict",
+                        "claude-explain-env-override",
+                        None,
+                        Some(
+                            "Unset ANTHROPIC_API_KEY to restore subscription OAuth detection."
+                                .into(),
+                        ),
+                    ),
+                ],
+            ),
+            credential_store: None,
+        };
+    }
+
     if settings.api_key_helper {
         return ResolvedClaudeAuth {
             credentials: None,
@@ -200,40 +234,6 @@ pub fn resolve_auth(env: &[(String, String)]) -> ResolvedClaudeAuth {
                             "Disable apiKeyHelper in Claude settings to use subscription OAuth."
                                 .into(),
                         ),
-                    ),
-                ],
-            ),
-            credential_store: None,
-        };
-    }
-
-    if claude_cloud_provider(env).is_some() {
-        let provider = claude_cloud_provider(env).unwrap_or("cloud");
-        return ResolvedClaudeAuth {
-            credentials: None,
-            identity: None,
-            health: auth_health(
-                Some(provider.into()),
-                Some("env".into()),
-                Some(provider.into()),
-                true,
-                false,
-                false,
-                false,
-                None,
-                Some("env-override".into()),
-                Some(format!(
-                    "Claude appears to be configured for {} auth, not subscription OAuth.",
-                    provider
-                )),
-                Some(validated_at),
-                vec![
-                    recovery_action("Run Claude", "claude-run", Some("claude"), None),
-                    recovery_action(
-                        "Explain env override conflict",
-                        "claude-explain-env-override",
-                        None,
-                        Some("Clear cloud-provider auth env vars to restore subscription OAuth detection.".into()),
                     ),
                 ],
             ),
@@ -281,7 +281,7 @@ pub fn resolve_auth(env: &[(String, String)]) -> ResolvedClaudeAuth {
         return ResolvedClaudeAuth {
             credentials: Some(creds.clone()),
             identity: Some(identity.clone()),
-            health: oauth_health(&creds, "file", None, Some(validated_at)),
+            health: oauth_health(&creds, file_backend_label(), None, Some(validated_at)),
             credential_store: Some(ClaudeCredentialStore::File(file_path)),
         };
     }
@@ -301,7 +301,7 @@ pub fn resolve_auth(env: &[(String, String)]) -> ResolvedClaudeAuth {
         _ => (
             Some("missing-credentials".into()),
             Some(format!(
-                "No Claude subscription OAuth credentials were found in {}.",
+                "No Claude subscription OAuth credentials were found in macOS Keychain or the legacy fallback file {}.",
                 file_path.display()
             )),
         ),
@@ -338,7 +338,7 @@ pub fn resolve_auth(env: &[(String, String)]) -> ResolvedClaudeAuth {
             Some("subscription-oauth".into()),
             match keychain_status {
                 KeychainStatus::Locked | KeychainStatus::Error => Some("keychain".into()),
-                _ => Some("file".into()),
+                _ => Some(file_backend_label().into()),
             },
             Some("subscription-oauth".into()),
             false,
@@ -475,19 +475,26 @@ fn env_has(env: &[(String, String)], key: &str) -> bool {
 }
 
 fn claude_cloud_provider(env: &[(String, String)]) -> Option<&'static str> {
-    let has_aws = env
-        .iter()
-        .any(|(key, value)| key.starts_with("AWS_") && !value.trim().is_empty());
-    if has_aws {
+    if env_has(env, "CLAUDE_CODE_USE_BEDROCK") {
         return Some("bedrock");
     }
-    let has_vertex = env.iter().any(|(key, value)| {
-        (key.starts_with("GOOGLE_") || key.starts_with("VERTEX_")) && !value.trim().is_empty()
-    });
-    if has_vertex {
+    if env_has(env, "CLAUDE_CODE_USE_VERTEX") {
         return Some("vertex");
     }
+    if env_has(env, "CLAUDE_CODE_USE_FOUNDRY") {
+        return Some("foundry");
+    }
     None
+}
+
+#[cfg(target_os = "macos")]
+fn file_backend_label() -> &'static str {
+    "file-legacy"
+}
+
+#[cfg(not(target_os = "macos"))]
+fn file_backend_label() -> &'static str {
+    "file"
 }
 
 #[cfg(target_os = "macos")]
@@ -1144,6 +1151,85 @@ mod tests {
             resolved.health.credential_backend.as_deref(),
             Some("config")
         );
+    }
+
+    #[test]
+    fn resolve_auth_prefers_auth_token_over_api_key_and_helper() {
+        let tmp = TempDir::new().unwrap();
+        let config_dir = tmp.path().join(".claude");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(
+            config_dir.join("settings.json"),
+            r#"{"apiKeyHelper":"op read op://example/anthropic"}"#,
+        )
+        .unwrap();
+
+        let env = vec![
+            (
+                "CLAUDE_CONFIG_DIR".to_string(),
+                config_dir.display().to_string(),
+            ),
+            ("ANTHROPIC_API_KEY".to_string(), "sk-test".to_string()),
+            ("ANTHROPIC_AUTH_TOKEN".to_string(), "auth-test".to_string()),
+        ];
+        let resolved = resolve_auth(&env);
+
+        assert_eq!(resolved.health.login_method.as_deref(), Some("auth-token"));
+        assert_eq!(resolved.health.credential_backend.as_deref(), Some("env"));
+    }
+
+    #[test]
+    fn resolve_auth_prefers_explicit_cloud_provider_over_other_env_auth() {
+        let env = vec![
+            ("CLAUDE_CODE_USE_VERTEX".to_string(), "1".to_string()),
+            ("ANTHROPIC_AUTH_TOKEN".to_string(), "auth-test".to_string()),
+            ("ANTHROPIC_API_KEY".to_string(), "sk-test".to_string()),
+        ];
+        let resolved = resolve_auth(&env);
+
+        assert_eq!(resolved.health.login_method.as_deref(), Some("vertex"));
+        assert_eq!(resolved.health.auth_mode.as_deref(), Some("vertex"));
+    }
+
+    #[test]
+    fn resolve_auth_prefers_long_lived_oauth_token_over_subscription_oauth() {
+        let tmp = TempDir::new().unwrap();
+        let config_dir = tmp.path().join(".claude");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(
+            config_dir.join(".credentials.json"),
+            format!(
+                r#"{{
+                    "claudeAiOauth": {{
+                        "accessToken": "tok_abc",
+                        "refreshToken": "ref_xyz",
+                        "expiresAt": {},
+                        "rateLimitTier": "claude_max"
+                    }}
+                }}"#,
+                chrono::Utc::now().timestamp_millis() + 3_600_000
+            ),
+        )
+        .unwrap();
+
+        let env = vec![
+            (
+                "CLAUDE_CONFIG_DIR".to_string(),
+                config_dir.display().to_string(),
+            ),
+            (
+                "CLAUDE_CODE_OAUTH_TOKEN".to_string(),
+                "oauth-env-token".to_string(),
+            ),
+        ];
+        let resolved = resolve_auth(&env);
+
+        assert!(resolved.credentials.is_none());
+        assert_eq!(
+            resolved.health.diagnostic_code.as_deref(),
+            Some("headless-oauth-env")
+        );
+        assert_eq!(resolved.health.login_method.as_deref(), Some("oauth-token"));
     }
 
     #[test]
