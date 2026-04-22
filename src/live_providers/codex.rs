@@ -247,10 +247,7 @@ pub fn apply_refreshed_tokens(auth: &CodexAuth, tokens: &CodexRefreshedTokens) -
             .refresh_token
             .clone()
             .or_else(|| auth.refresh_token.clone()),
-        id_token: tokens
-            .id_token
-            .clone()
-            .or_else(|| auth.id_token.clone()),
+        id_token: tokens.id_token.clone().or_else(|| auth.id_token.clone()),
         account_id: auth.account_id.clone(),
         auth_mode: auth.auth_mode.clone(),
     }
@@ -266,8 +263,7 @@ pub fn persist_refreshed_tokens_to_disk(
     let path = auth_file_path(env);
     let existing = std::fs::read(&path)
         .with_context(|| format!("read Codex auth file at {}", path.display()))?;
-    let mut json: Value =
-        serde_json::from_slice(&existing).context("invalid Codex auth.json")?;
+    let mut json: Value = serde_json::from_slice(&existing).context("invalid Codex auth.json")?;
 
     let root = json
         .as_object_mut()

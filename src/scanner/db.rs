@@ -2689,7 +2689,8 @@ pub fn get_provider_cost_summary_since(
             row.get(6)?,
         )),
     )?;
-    let (cost_nanos, total_tokens, input, output, cache_read, cache_creation, reasoning_output) = row;
+    let (cost_nanos, total_tokens, input, output, cache_read, cache_creation, reasoning_output) =
+        row;
     Ok((
         cost_nanos,
         total_tokens,
@@ -2983,7 +2984,8 @@ pub fn get_provider_activity_heatmap(
             turns: row.get::<_, i64>(2)? as u64,
         })
     })?;
-    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
 }
 
 pub fn get_provider_recent_sessions(
@@ -3027,7 +3029,8 @@ pub fn get_provider_recent_sessions(
             model: row.get(6)?,
         })
     })?;
-    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
 }
 
 pub fn get_provider_subagent_breakdown(
@@ -3093,7 +3096,8 @@ pub fn get_provider_version_rows(
             })
         },
     )?;
-    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
 }
 
 fn compute_duration_min(first: &str, last: &str) -> f64 {
@@ -5186,8 +5190,7 @@ mod tests {
         ];
         insert_turns(&conn, &turns).unwrap();
 
-        let rows =
-            get_provider_model_rows(&conn, "claude", "2026-04-01", 10).unwrap();
+        let rows = get_provider_model_rows(&conn, "claude", "2026-04-01", 10).unwrap();
         assert_eq!(rows.len(), 2);
         // opus costs more — must come first
         assert_eq!(rows[0].model, "claude-opus-4-5");
@@ -5209,33 +5212,33 @@ mod tests {
             ..Default::default()
         }];
         upsert_sessions(&conn, &sessions).unwrap();
-        let turns = vec![
-            Turn {
-                session_id: "pt1".into(),
-                timestamp: "2026-04-08T09:01:00Z".into(),
-                message_id: "pt-m1".into(),
-                provider: "claude".into(),
-                model: "claude-sonnet-4-6".into(),
-                tool_use_ids: vec![
-                    ("pt-t1".into(), "Read".into()),
-                    ("pt-t2".into(), "Read".into()),
-                    ("pt-t3".into(), "Bash".into()),
-                ],
-                all_tools: vec!["Read".into(), "Read".into(), "Bash".into()],
-                source_path: "/tmp/pt1.jsonl".into(),
-                ..Default::default()
-            },
-        ];
+        let turns = vec![Turn {
+            session_id: "pt1".into(),
+            timestamp: "2026-04-08T09:01:00Z".into(),
+            message_id: "pt-m1".into(),
+            provider: "claude".into(),
+            model: "claude-sonnet-4-6".into(),
+            tool_use_ids: vec![
+                ("pt-t1".into(), "Read".into()),
+                ("pt-t2".into(), "Read".into()),
+                ("pt-t3".into(), "Bash".into()),
+            ],
+            all_tools: vec!["Read".into(), "Read".into(), "Bash".into()],
+            source_path: "/tmp/pt1.jsonl".into(),
+            ..Default::default()
+        }];
         insert_turns(&conn, &turns).unwrap();
         insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
 
-        let rows =
-            get_provider_tool_rows(&conn, "claude", "2026-04-01", 15).unwrap();
+        let rows = get_provider_tool_rows(&conn, "claude", "2026-04-01", 15).unwrap();
         assert!(!rows.is_empty());
         // Read has 2 invocations, Bash has 1 — Read must come first
         assert_eq!(rows[0].tool_name, "Read");
         assert_eq!(rows[0].invocations, 2);
-        assert!(rows.iter().any(|r| r.tool_name == "Bash" && r.invocations == 1));
+        assert!(
+            rows.iter()
+                .any(|r| r.tool_name == "Bash" && r.invocations == 1)
+        );
     }
 
     #[test]

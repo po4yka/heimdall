@@ -151,7 +151,11 @@ impl WindowInfo {
         // and 86.0. If we see a value <= 1.0 treat it as a legacy fraction
         // for safety so older API responses don't regress to 0.
         let raw = w.utilization.unwrap_or(0.0);
-        let used_percent = if raw > 0.0 && raw <= 1.0 { raw * 100.0 } else { raw };
+        let used_percent = if raw > 0.0 && raw <= 1.0 {
+            raw * 100.0
+        } else {
+            raw
+        };
         let resets_in_minutes = w.resets_at.as_ref().and_then(|ts| {
             let reset = chrono::DateTime::parse_from_rfc3339(ts).ok()?;
             let now = chrono::Utc::now();
@@ -172,7 +176,11 @@ impl BudgetInfo {
             return None;
         }
         let raw = e.utilization.unwrap_or(0.0);
-        let utilization = if raw > 0.0 && raw <= 1.0 { raw * 100.0 } else { raw };
+        let utilization = if raw > 0.0 && raw <= 1.0 {
+            raw * 100.0
+        } else {
+            raw
+        };
         Some(Self {
             used: e.used_credits.unwrap_or(0.0),
             limit: e.monthly_limit.unwrap_or(0.0),

@@ -10,6 +10,18 @@ DERIVED_DATA="$PROJECT_DIR/.derived"
 APP_BUNDLE="$DERIVED_DATA/Build/Products/Debug/$APP_NAME.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
+case "$(uname -m)" in
+  arm64)
+    DESTINATION_ARGS=(-destination "platform=macOS,arch=arm64")
+    ;;
+  x86_64)
+    DESTINATION_ARGS=(-destination "platform=macOS,arch=x86_64")
+    ;;
+  *)
+    DESTINATION_ARGS=(-destination "platform=macOS")
+    ;;
+esac
+
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
 (
@@ -21,6 +33,7 @@ xcodebuild \
   -scheme HeimdallBarApp \
   -configuration Debug \
   -derivedDataPath "$DERIVED_DATA" \
+  "${DESTINATION_ARGS[@]}" \
   CODE_SIGNING_ALLOWED=NO \
   build >/dev/null
 

@@ -7,11 +7,10 @@ use anyhow::{Result, anyhow, bail};
 
 use crate::agent_status::models::ProviderStatus;
 use crate::models::{
-    LIVE_PROVIDERS_CONTRACT_VERSION, MOBILE_SNAPSHOT_CONTRACT_VERSION,
-    LiveProviderHistoryResponse, LiveProviderIdentity, LiveProviderSnapshot,
-    LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse,
-    MobileProviderHistorySeries, MobileSnapshotEnvelope, MobileSnapshotFreshness,
-    MobileSnapshotTotals, ProviderCostSummary,
+    LIVE_PROVIDERS_CONTRACT_VERSION, LiveProviderHistoryResponse, LiveProviderIdentity,
+    LiveProviderSnapshot, LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse,
+    MOBILE_SNAPSHOT_CONTRACT_VERSION, MobileProviderHistorySeries, MobileSnapshotEnvelope,
+    MobileSnapshotFreshness, MobileSnapshotTotals, ProviderCostSummary,
 };
 use crate::oauth::credentials;
 use crate::oauth::models::{BudgetInfo, Identity, Plan, UsageWindowsResponse, WindowInfo};
@@ -584,12 +583,11 @@ async fn build_codex_snapshot(
                         }
                         match codex::refresh_oauth_token(refresh).await {
                             Ok(tokens) => {
-                                if let Err(persist_err) =
-                                    codex::persist_refreshed_tokens_to_disk(&env_for_refresh, &tokens)
-                                {
-                                    tracing::warn!(
-                                        "Codex refresh persist failed: {persist_err:#}"
-                                    );
+                                if let Err(persist_err) = codex::persist_refreshed_tokens_to_disk(
+                                    &env_for_refresh,
+                                    &tokens,
+                                ) {
+                                    tracing::warn!("Codex refresh persist failed: {persist_err:#}");
                                 }
                                 let refreshed = codex::apply_refreshed_tokens(auth, &tokens);
                                 codex::fetch_oauth_usage(&refreshed).await
@@ -917,10 +915,10 @@ fn provider_cost_summary(
         db::get_provider_hourly_activity(conn, provider, &start_date).unwrap_or_default();
     let activity_heatmap =
         db::get_provider_activity_heatmap(conn, provider, &start_date).unwrap_or_default();
-    let recent_sessions =
-        db::get_provider_recent_sessions(conn, provider, 20).unwrap_or_default();
-    let subagent_breakdown =
-        db::get_provider_subagent_breakdown(conn, provider, &start_date).ok().flatten();
+    let recent_sessions = db::get_provider_recent_sessions(conn, provider, 20).unwrap_or_default();
+    let subagent_breakdown = db::get_provider_subagent_breakdown(conn, provider, &start_date)
+        .ok()
+        .flatten();
     let version_breakdown =
         db::get_provider_version_rows(conn, provider, &start_date, 10).unwrap_or_default();
 

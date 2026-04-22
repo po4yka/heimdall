@@ -775,10 +775,10 @@ fn parse_account_from_security_output(output: &str) -> Option<String> {
         if rest == "<NULL>" {
             return None;
         }
-        if let Some(quoted) = rest.strip_prefix('"') {
-            if let Some(end) = quoted.find('"') {
-                return Some(quoted[..end].to_string());
-            }
+        if let Some(quoted) = rest.strip_prefix('"')
+            && let Some(end) = quoted.find('"')
+        {
+            return Some(quoted[..end].to_string());
         }
     }
     None

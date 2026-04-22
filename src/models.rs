@@ -319,11 +319,7 @@ pub struct TokenBreakdown {
 
 impl TokenBreakdown {
     pub fn total(&self) -> i64 {
-        self.input
-            + self.output
-            + self.cache_read
-            + self.cache_creation
-            + self.reasoning_output
+        self.input + self.output + self.cache_read + self.cache_creation + self.reasoning_output
     }
 
     /// Cache hit rate = cache_read / (cache_read + cache_creation + input).
