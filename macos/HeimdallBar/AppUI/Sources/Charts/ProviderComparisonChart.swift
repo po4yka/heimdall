@@ -3,9 +3,7 @@ import HeimdallDomain
 import SwiftUI
 
 /// Stacked-area chart showing per-provider daily cost over the trailing 30
-/// days. Each provider in `items` that has parseable `dailyCosts` data becomes
-/// one area series. The first provider uses `Color.accentColor`; remaining
-/// providers step down the monochrome `Color.primary` opacity ladder.
+/// days, with a total-spend outline and compact provider share cards.
 struct ProviderComparisonChart: View {
     let items: [ProviderMenuProjection]
 
@@ -13,22 +11,62 @@ struct ProviderComparisonChart: View {
         let day: Date
         let providerTitle: String
         let costUSD: Double
+
         var id: String { "\(self.day.timeIntervalSince1970)-\(self.providerTitle)" }
     }
 
+    struct TotalEntry: Identifiable, Hashable {
+        let day: Date
+        let costUSD: Double
+
+        var id: Date { self.day }
+    }
+
+    struct ProviderSummary: Identifiable, Hashable {
+        let title: String
+        let costUSD: Double
+        let share: Double
+
+        var id: String { self.title }
+    }
+
+    private let columns = [
+        GridItem(.flexible(minimum: 120), spacing: 8),
+        GridItem(.flexible(minimum: 120), spacing: 8),
+    ]
+
     var body: some View {
+        let summaries = Self.providerSummaries(from: self.items)
         let entries = Self.entries(from: self.items)
-        let providerTitles = Self.providerTitles(from: self.items)
-        let hasData = providerTitles.count >= 2 && !entries.isEmpty
-        VStack(alignment: .leading, spacing: 6) {
+        let totals = Self.totalEntries(from: entries)
+        let providerTitles = summaries.map(\.title)
+        let totalCostUSD = summaries.reduce(0.0) { $0 + $1.costUSD }
+        let hasData = summaries.count >= 2 && !entries.isEmpty && !totals.isEmpty
+
+        VStack(alignment: .leading, spacing: 8) {
             ChartHeader(
                 title: "Provider split, 30 days",
-                caption: "Stacked daily cost by provider.",
-                trailing: hasData ? AnyView(ProviderComparisonLegend(titles: providerTitles)) : nil
+                caption: "Stacked daily cost by provider with total-spend contour."
             )
+
             if hasData {
-                self.chart(entries: entries, providerTitles: providerTitles)
-                    .frame(height: 72)
+                ProviderComparisonSummaryStrip(
+                    totalCostUSD: totalCostUSD,
+                    averageDailyCostUSD: Self.averageDailyCost(totalCostUSD: totalCostUSD, activeDays: totals.count),
+                    leadProvider: summaries.first
+                )
+
+                self.chart(entries: entries, totals: totals, providerTitles: providerTitles)
+                    .frame(height: 104)
+
+                LazyVGrid(columns: self.columns, spacing: 8) {
+                    ForEach(Array(summaries.enumerated()), id: \.element.id) { index, summary in
+                        ProviderSplitStatCard(
+                            summary: summary,
+                            tint: Self.providerScale(count: providerTitles.count)[index]
+                        )
+                    }
+                }
             } else {
                 Text("No provider activity yet.")
                     .font(.caption2)
@@ -45,15 +83,40 @@ struct ProviderComparisonChart: View {
         .accessibilityLabel("Provider cost split, last 30 days")
     }
 
-    private func chart(entries: [Entry], providerTitles: [String]) -> some View {
-        Chart(entries) { entry in
-            AreaMark(
-                x: .value("Day", entry.day),
-                y: .value("Cost", entry.costUSD),
-                stacking: .standard
-            )
-            .foregroundStyle(by: .value("Provider", entry.providerTitle))
-            .interpolationMethod(.monotone)
+    private func chart(entries: [Entry], totals: [TotalEntry], providerTitles: [String]) -> some View {
+        Chart {
+            ForEach(entries) { entry in
+                AreaMark(
+                    x: .value("Day", entry.day),
+                    y: .value("Cost", entry.costUSD),
+                    stacking: .standard
+                )
+                .foregroundStyle(by: .value("Provider", entry.providerTitle))
+                .interpolationMethod(.monotone)
+            }
+
+            ForEach(totals) { entry in
+                LineMark(
+                    x: .value("Day", entry.day),
+                    y: .value("Total cost", entry.costUSD)
+                )
+                .foregroundStyle(Color.primary.opacity(0.82))
+                .lineStyle(StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round))
+                .interpolationMethod(.monotone)
+            }
+
+            if let latest = totals.last {
+                RuleMark(x: .value("Latest", latest.day))
+                    .foregroundStyle(ChartStyle.todayRuleStroke)
+                    .lineStyle(StrokeStyle(lineWidth: ChartStyle.todayRuleWidth, dash: [2, 2]))
+
+                PointMark(
+                    x: .value("Latest", latest.day),
+                    y: .value("Total cost", latest.costUSD)
+                )
+                .foregroundStyle(Color.primary)
+                .symbolSize(26)
+            }
         }
         .chartForegroundStyleScale(
             domain: providerTitles,
@@ -62,7 +125,9 @@ struct ProviderComparisonChart: View {
         .chartLegend(.hidden)
         .chartYAxis(.hidden)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: 7)) { value in
+            AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(Color.primary.opacity(0.08))
                 AxisValueLabel {
                     if let date = value.as(Date.self) {
                         Text(Self.axisFormatter.string(from: date))
@@ -70,13 +135,20 @@ struct ProviderComparisonChart: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
-                    .foregroundStyle(Color.primary.opacity(0.15))
             }
         }
         .chartYScale(domain: .automatic(includesZero: true))
         .chartPlotStyle { plot in
-            plot.background(Color.clear)
+            plot
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.primary.opacity(0.025))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
         }
         .animation(ChartStyle.animation, value: entries)
     }
@@ -92,13 +164,54 @@ struct ProviderComparisonChart: View {
             }
             result.append(contentsOf: parsed)
         }
-        return result.sorted { $0.day < $1.day }
+        return result.sorted { lhs, rhs in
+            if lhs.day == rhs.day {
+                return lhs.providerTitle < rhs.providerTitle
+            }
+            return lhs.day < rhs.day
+        }
     }
 
-    nonisolated static func providerTitles(from items: [ProviderMenuProjection]) -> [String] {
-        items.filter { item in
-            item.dailyCosts.contains { Self.dayFormatter.date(from: $0.day) != nil }
-        }.map(\.title)
+    nonisolated static func totalEntries(from entries: [Entry]) -> [TotalEntry] {
+        let grouped = Dictionary(grouping: entries, by: \.day)
+        return grouped.keys.sorted().map { day in
+            TotalEntry(
+                day: day,
+                costUSD: grouped[day, default: []].reduce(0.0) { $0 + $1.costUSD }
+            )
+        }
+    }
+
+    nonisolated static func providerSummaries(from items: [ProviderMenuProjection]) -> [ProviderSummary] {
+        let raw: [(title: String, costUSD: Double)] = items.compactMap { item in
+            let dailyFallback = item.dailyCosts.reduce(0.0) { $0 + $1.costUSD }
+            let total = item.last30DaysCostUSD ?? dailyFallback
+            guard total > 0 else { return nil }
+            return (title: item.title, costUSD: total)
+        }
+
+        let totalCostUSD = raw.reduce(0.0) { $0 + $1.costUSD }
+        guard totalCostUSD > 0 else { return [] }
+
+        return raw
+            .map {
+                ProviderSummary(
+                    title: $0.title,
+                    costUSD: $0.costUSD,
+                    share: $0.costUSD / totalCostUSD
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.costUSD == rhs.costUSD {
+                    return lhs.title < rhs.title
+                }
+                return lhs.costUSD > rhs.costUSD
+            }
+    }
+
+    nonisolated static func averageDailyCost(totalCostUSD: Double, activeDays: Int) -> Double? {
+        guard activeDays > 0, totalCostUSD > 0 else { return nil }
+        return totalCostUSD / Double(activeDays)
     }
 
     /// Monochrome opacity ladder: first provider uses `accentColor`, rest step
@@ -117,6 +230,23 @@ struct ProviderComparisonChart: View {
         return result
     }
 
+    nonisolated static func currencyLabel(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.currencyCode = "USD"
+        formatter.currencySymbol = "$"
+        formatter.minimumFractionDigits = value >= 100 ? 0 : 2
+        formatter.maximumFractionDigits = value >= 100 ? 0 : 2
+        formatter.positiveFormat = formatter.minimumFractionDigits == 0 ? "¤#,##0" : "¤#,##0.00"
+        formatter.negativeFormat = formatter.minimumFractionDigits == 0 ? "-¤#,##0" : "-¤#,##0.00"
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "$%.2f", value)
+    }
+
+    nonisolated static func percentLabel(_ value: Double) -> String {
+        String(format: "%.0f%%", max(0, min(1, value)) * 100)
+    }
+
     nonisolated(unsafe) static let dayFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
@@ -132,45 +262,111 @@ struct ProviderComparisonChart: View {
     }()
 }
 
-// MARK: - Inline legend
-
-/// Compact inline legend: one dot + sentence-case label per provider title.
-/// Mirrors the shape of `TokenCategoryLegend` from ChartStyle.swift.
-struct ProviderComparisonLegend: View {
-    let titles: [String]
+private struct ProviderComparisonSummaryStrip: View {
+    let totalCostUSD: Double
+    let averageDailyCostUSD: Double?
+    let leadProvider: ProviderComparisonChart.ProviderSummary?
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(self.titles.enumerated()), id: \.offset) { index, title in
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(ProviderComparisonChart.providerScale(count: self.titles.count)[index])
-                        .frame(width: 6, height: 6)
-                    Text(title)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
+        HStack(spacing: 8) {
+            ProviderComparisonHeadlineCard(
+                title: "30-day total",
+                value: ProviderComparisonChart.currencyLabel(self.totalCostUSD),
+                detail: self.averageDailyCostUSD.map {
+                    "Avg/day \(ProviderComparisonChart.currencyLabel($0))"
+                } ?? "No active days"
+            )
+
+            if let leadProvider {
+                ProviderComparisonHeadlineCard(
+                    title: "Leader",
+                    value: leadProvider.title,
+                    detail: "\(ProviderComparisonChart.percentLabel(leadProvider.share)) share · \(ProviderComparisonChart.currencyLabel(leadProvider.costUSD))"
+                )
             }
         }
     }
 }
 
-// MARK: - Preview
+private struct ProviderComparisonHeadlineCard: View {
+    let title: String
+    let value: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(self.title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.4)
+            Text(self.value)
+                .font(.callout.monospacedDigit().weight(.semibold))
+            Text(self.detail)
+                .font(.caption2)
+                .foregroundStyle(Color.primary.opacity(0.66))
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .menuCardBackground(opacity: 0.03, cornerRadius: 10)
+    }
+}
+
+private struct ProviderSplitStatCard: View {
+    let summary: ProviderComparisonChart.ProviderSummary
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 6) {
+                Circle()
+                    .fill(self.tint)
+                    .frame(width: 8, height: 8)
+                Text(self.summary.title)
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+            }
+
+            Text(ProviderComparisonChart.percentLabel(self.summary.share))
+                .font(.headline.monospacedDigit().weight(.semibold))
+
+            Text(ProviderComparisonChart.currencyLabel(self.summary.costUSD))
+                .font(.caption2)
+                .foregroundStyle(Color.primary.opacity(0.66))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .menuCardBackground(opacity: 0.03, cornerRadius: 10)
+    }
+}
 
 #Preview("Provider split — 30 days") {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyy-MM-dd"
-    formatter.timeZone = TimeZone(secondsFromGMT: 0)
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    let base = Date()
-    let calendar = Calendar.current
+    let items = [
+        ProviderComparisonChart.previewProjection(title: "Claude", providerID: .claude, scale: 1.0),
+        ProviderComparisonChart.previewProjection(title: "Codex", providerID: .codex, scale: 0.38),
+    ]
+    ProviderComparisonChart(items: items)
+        .padding()
+        .frame(width: 360)
+}
 
-    func makeProjection(title: String, providerID: ProviderID, scale: Double) -> ProviderMenuProjection {
+private extension ProviderComparisonChart {
+    static func previewProjection(title: String, providerID: ProviderID, scale: Double) -> ProviderMenuProjection {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let base = Date()
+        let calendar = Calendar.current
         let points: [CostHistoryPoint] = (0..<30).reversed().map { offset in
             let date = calendar.date(byAdding: .day, value: -offset, to: base) ?? base
             let ramp = Double(30 - offset) / 30.0
             let plateau = min(ramp * 1.4, 1.0)
-            let cost = scale * (1.5 + plateau * 12.0 + Double(offset % 3) * 0.8)
+            let wave = Double((offset + Int(scale * 10)) % 5) * 0.45
+            let cost = scale * (1.1 + plateau * 10.0 + wave)
             return CostHistoryPoint(day: formatter.string(from: date), totalTokens: 0, costUSD: cost)
         }
         return ProviderMenuProjection(
@@ -191,6 +387,8 @@ struct ProviderComparisonLegend: View {
             lastRefreshLabel: "",
             refreshStatusLabel: "",
             costLabel: "",
+            todayCostUSD: nil,
+            last30DaysCostUSD: points.reduce(0.0) { $0 + $1.costUSD },
             laneDetails: [],
             creditsLabel: nil,
             incidentLabel: nil,
@@ -205,12 +403,4 @@ struct ProviderComparisonLegend: View {
             dailyCosts: points
         )
     }
-
-    let items = [
-        makeProjection(title: "Claude", providerID: .claude, scale: 1.0),
-        makeProjection(title: "Codex", providerID: .codex, scale: 0.45),
-    ]
-    return ProviderComparisonChart(items: items)
-        .padding()
-        .frame(width: 360)
 }

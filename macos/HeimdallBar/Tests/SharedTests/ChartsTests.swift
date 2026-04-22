@@ -84,4 +84,103 @@ struct ChartsTests {
         #expect(count == 1)
         #expect(cost == 2.0)
     }
+
+    @Test
+    func providerComparisonChartTotalEntriesRollUpSameDayAcrossProviders() {
+        let entries = ProviderComparisonChart.entries(from: [
+            self.makeProviderProjection(
+                title: "Claude",
+                provider: .claude,
+                last30DaysCostUSD: 12,
+                dailyCosts: [
+                    CostHistoryPoint(day: "2026-04-18", totalTokens: 0, costUSD: 4.0),
+                    CostHistoryPoint(day: "2026-04-19", totalTokens: 0, costUSD: 6.0),
+                ]
+            ),
+            self.makeProviderProjection(
+                title: "Codex",
+                provider: .codex,
+                last30DaysCostUSD: 8,
+                dailyCosts: [
+                    CostHistoryPoint(day: "2026-04-18", totalTokens: 0, costUSD: 1.5),
+                    CostHistoryPoint(day: "2026-04-19", totalTokens: 0, costUSD: 2.5),
+                ]
+            ),
+        ])
+        let totals = ProviderComparisonChart.totalEntries(from: entries)
+
+        #expect(totals.count == 2)
+        #expect(totals.map(\.costUSD) == [5.5, 8.5])
+    }
+
+    @Test
+    func providerComparisonChartSummariesSortByCostAndComputeShare() {
+        let summaries = ProviderComparisonChart.providerSummaries(from: [
+            self.makeProviderProjection(
+                title: "Codex",
+                provider: .codex,
+                last30DaysCostUSD: 80,
+                dailyCosts: [CostHistoryPoint(day: "2026-04-20", totalTokens: 0, costUSD: 5)]
+            ),
+            self.makeProviderProjection(
+                title: "Claude",
+                provider: .claude,
+                last30DaysCostUSD: 320,
+                dailyCosts: [CostHistoryPoint(day: "2026-04-20", totalTokens: 0, costUSD: 12)]
+            ),
+        ])
+
+        #expect(summaries.map(\.title) == ["Claude", "Codex"])
+        #expect(summaries.map(\.costUSD) == [320, 80])
+        #expect(abs(summaries[0].share - 0.8) < 0.0001)
+        #expect(abs(summaries[1].share - 0.2) < 0.0001)
+    }
+
+    @Test
+    func providerComparisonChartAverageDailyCostReturnsNilWithoutUsage() {
+        #expect(ProviderComparisonChart.averageDailyCost(totalCostUSD: 0, activeDays: 30) == nil)
+        #expect(ProviderComparisonChart.averageDailyCost(totalCostUSD: 10, activeDays: 0) == nil)
+        #expect(ProviderComparisonChart.averageDailyCost(totalCostUSD: 90, activeDays: 30) == 3)
+    }
+
+    private func makeProviderProjection(
+        title: String,
+        provider: ProviderID,
+        last30DaysCostUSD: Double,
+        dailyCosts: [CostHistoryPoint]
+    ) -> ProviderMenuProjection {
+        ProviderMenuProjection(
+            provider: provider,
+            title: title,
+            sourceLabel: "",
+            sourceExplanationLabel: nil,
+            authHeadline: nil,
+            authDetail: nil,
+            authDiagnosticCode: nil,
+            authSummaryLabel: nil,
+            authRecoveryActions: [],
+            warningLabels: [],
+            visualState: .healthy,
+            stateLabel: "",
+            statusLabel: nil,
+            identityLabel: nil,
+            lastRefreshLabel: "",
+            refreshStatusLabel: "",
+            costLabel: "",
+            todayCostUSD: nil,
+            last30DaysCostUSD: last30DaysCostUSD,
+            laneDetails: [],
+            creditsLabel: nil,
+            incidentLabel: nil,
+            stale: false,
+            isShowingCachedData: false,
+            isRefreshing: false,
+            error: nil,
+            globalIssueLabel: nil,
+            historyFractions: [],
+            claudeFactors: [],
+            adjunct: nil,
+            dailyCosts: dailyCosts
+        )
+    }
 }
