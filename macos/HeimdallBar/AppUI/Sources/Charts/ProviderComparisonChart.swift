@@ -6,6 +6,7 @@ import SwiftUI
 /// days, with a total-spend outline and compact provider share cards.
 struct ProviderComparisonChart: View {
     let items: [ProviderMenuProjection]
+    @State private var selectedDay: Date?
 
     struct Entry: Identifiable, Hashable {
         let day: Date
@@ -58,6 +59,7 @@ struct ProviderComparisonChart: View {
 
                 self.chart(entries: entries, totals: totals, providerTitles: providerTitles)
                     .frame(height: 104)
+                    .help(Self.tooltip(entries: entries, totals: totals))
 
                 LazyVGrid(columns: self.columns, spacing: 8) {
                     ForEach(Array(summaries.enumerated()), id: \.element.id) { index, summary in
@@ -84,7 +86,9 @@ struct ProviderComparisonChart: View {
     }
 
     private func chart(entries: [Entry], totals: [TotalEntry], providerTitles: [String]) -> some View {
-        Chart {
+        let selectedTotal = self.selectedDay.flatMap { Self.nearestTotalEntry(to: $0, in: totals) }
+        let selectedIndex = selectedTotal.flatMap { totals.firstIndex(of: $0) }
+        return Chart {
             ForEach(entries) { entry in
                 AreaMark(
                     x: .value("Day", entry.day),
@@ -116,6 +120,21 @@ struct ProviderComparisonChart: View {
                 )
                 .foregroundStyle(Color.primary)
                 .symbolSize(26)
+            }
+            if let selectedTotal, let selectedIndex {
+                RuleMark(x: .value("Selected day", selectedTotal.day))
+                    .foregroundStyle(Color.primary.opacity(0.3))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+                    .annotation(
+                        position: ChartStyle.inspectorPlacement(index: selectedIndex, totalCount: totals.count).annotationPosition,
+                        spacing: 6,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                    ) {
+                        ChartInspectorCard(
+                            title: Self.axisFormatter.string(from: selectedTotal.day),
+                            lines: Self.inspectorLines(for: selectedTotal, entries: entries)
+                        )
+                    }
             }
         }
         .chartForegroundStyleScale(
@@ -150,7 +169,39 @@ struct ProviderComparisonChart: View {
                         .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                 )
         }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        let plotFrame = geometry[proxy.plotFrame!]
+                        switch phase {
+                        case .active(let location):
+                            let x = location.x - plotFrame.origin.x
+                            guard
+                                x >= 0,
+                                x <= proxy.plotSize.width,
+                                let day = proxy.value(atX: x, as: Date.self),
+                                let nearest = Self.nearestTotalEntry(to: day, in: totals),
+                                let snappedX = proxy.position(forX: nearest.day),
+                                abs(snappedX - x) <= ChartStyle.snapThreshold(
+                                    plotWidth: proxy.plotSize.width,
+                                    itemCount: totals.count
+                                )
+                            else {
+                                ChartStyle.updateHoverSelection(&self.selectedDay, to: nil)
+                                return
+                            }
+                            ChartStyle.updateHoverSelection(&self.selectedDay, to: nearest.day)
+                        case .ended:
+                            ChartStyle.updateHoverSelection(&self.selectedDay, to: nil)
+                        }
+                    }
+            }
+        }
         .animation(ChartStyle.animation, value: entries)
+        .animation(ChartStyle.hoverAnimation, value: self.selectedDay)
     }
 
     // MARK: - Data transform
@@ -212,6 +263,33 @@ struct ProviderComparisonChart: View {
     nonisolated static func averageDailyCost(totalCostUSD: Double, activeDays: Int) -> Double? {
         guard activeDays > 0, totalCostUSD > 0 else { return nil }
         return totalCostUSD / Double(activeDays)
+    }
+
+    nonisolated static func tooltip(entries: [Entry], totals: [TotalEntry]) -> String {
+        let byDay = Dictionary(grouping: entries, by: \.day)
+        return totals.map { total in
+            let providers = byDay[total.day, default: []]
+                .sorted { $0.costUSD > $1.costUSD }
+                .map { "\($0.providerTitle) \(Self.currencyLabel($0.costUSD))" }
+                .joined(separator: " · ")
+            let prefix = "\(Self.axisFormatter.string(from: total.day)): \(Self.currencyLabel(total.costUSD))"
+            return providers.isEmpty ? prefix : "\(prefix) · \(providers)"
+        }
+        .joined(separator: "\n")
+    }
+
+    nonisolated static func inspectorLines(for total: TotalEntry, entries: [Entry]) -> [String] {
+        let contributors = entries
+            .filter { $0.day == total.day }
+            .sorted { $0.costUSD > $1.costUSD }
+            .map { "\($0.providerTitle) \(Self.currencyLabel($0.costUSD))" }
+        return [Self.currencyLabel(total.costUSD)] + contributors
+    }
+
+    nonisolated static func nearestTotalEntry(to day: Date, in totals: [TotalEntry]) -> TotalEntry? {
+        totals.min { lhs, rhs in
+            abs(lhs.day.timeIntervalSince(day)) < abs(rhs.day.timeIntervalSince(day))
+        }
     }
 
     /// Monochrome opacity ladder: first provider uses `accentColor`, rest step

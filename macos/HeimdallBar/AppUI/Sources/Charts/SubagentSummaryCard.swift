@@ -27,6 +27,7 @@ struct SubagentSummaryCard: View {
             opacity: ChartStyle.cardBackgroundOpacity,
             cornerRadius: ChartStyle.cardCornerRadius
         )
+        .help(Self.tooltip(for: self.breakdown))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             "Subagents: \(breakdown.totalTurns) turns, \(Self.formatCost(breakdown.totalCostUSD)) spend, " +
@@ -38,6 +39,16 @@ struct SubagentSummaryCard: View {
         if usd >= 1000 { return String(format: "$%.0f", usd) }
         if usd >= 10   { return String(format: "$%.1f", usd) }
         return String(format: "$%.2f", usd)
+    }
+
+    nonisolated static func tooltip(for breakdown: ProviderSubagentBreakdown) -> String {
+        [
+            "Turns: \(breakdown.totalTurns)",
+            "Spend: \(Self.formatCost(breakdown.totalCostUSD))",
+            "Sessions: \(breakdown.sessionCount)",
+            "Agents: \(breakdown.agentCount)",
+        ]
+        .joined(separator: "\n")
     }
 }
 

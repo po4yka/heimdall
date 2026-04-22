@@ -12,6 +12,7 @@ struct HistoryBarChart: View {
     /// padding. Use from a parent view that already provides a card —
     /// otherwise you end up with a card-in-a-card.
     var inset: Bool = false
+    @State private var selectedIndex: Int?
 
     struct Entry: Identifiable, Hashable {
         let index: Int
@@ -54,22 +55,44 @@ struct HistoryBarChart: View {
     }
 
     private func chart(entries: [Entry]) -> some View {
-        Chart(entries) { entry in
-            BarMark(
-                x: .value("Day", entry.label),
-                y: .value("Fraction", max(Self.minimumVisibleFraction, entry.fraction))
-            )
-            .foregroundStyle(self.isToday(entry, in: entries) ? ChartStyle.barTodayFill : ChartStyle.barFill)
-            .cornerRadius(ChartStyle.barCornerRadius)
-            .accessibilityLabel(entry.label)
-            .accessibilityValue("\(Int((entry.fraction * 100).rounded())) percent of peak")
+        let selectedEntry = self.selectedIndex.flatMap { index in
+            entries.first(where: { $0.index == index })
+        }
+        return Chart {
+            ForEach(entries) { entry in
+                BarMark(
+                    x: .value("Day", entry.index),
+                    y: .value("Fraction", max(Self.minimumVisibleFraction, entry.fraction))
+                )
+                .foregroundStyle(self.barTint(for: entry, in: entries))
+                .cornerRadius(ChartStyle.barCornerRadius)
+                .accessibilityLabel(entry.label)
+                .accessibilityValue("\(Int((entry.fraction * 100).rounded())) percent of peak")
+            }
+            if let selectedEntry {
+                RuleMark(x: .value("Day", selectedEntry.index))
+                    .foregroundStyle(Color.primary.opacity(0.3))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+                    .annotation(
+                        position: ChartStyle.inspectorPlacement(index: selectedEntry.index, totalCount: entries.count).annotationPosition,
+                        spacing: 6,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                    ) {
+                        ChartInspectorCard(
+                            title: selectedEntry.label,
+                            lines: ["\(Int((selectedEntry.fraction * 100).rounded()))% of peak"]
+                        )
+                    }
+            }
         }
         .chartYScale(domain: 0...1)
         .chartYAxis(.hidden)
         .chartXAxis {
-            AxisMarks(values: entries.map(\.label)) { value in
+            AxisMarks(values: entries.map(\.index)) { value in
                 AxisValueLabel {
-                    if let label = value.as(String.self) {
+                    if let index = value.as(Int.self),
+                       let entry = entries.first(where: { $0.index == index }) {
+                        let label = entry.label
                         let today = entries.last?.label
                         Text(label)
                             .font(.system(size: 9, weight: label == today ? .semibold : .regular).monospacedDigit())
@@ -81,11 +104,56 @@ struct HistoryBarChart: View {
         .chartPlotStyle { plot in
             plot.background(Color.clear)
         }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        let plotFrame = geometry[proxy.plotFrame!]
+                        switch phase {
+                        case .active(let location):
+                            let x = location.x - plotFrame.origin.x
+                            guard
+                                x >= 0,
+                                x <= proxy.plotSize.width,
+                                let rawIndex = proxy.value(atX: x, as: Int.self)
+                            else {
+                                ChartStyle.updateHoverSelection(&self.selectedIndex, to: nil)
+                                return
+                            }
+                            let index = min(max(rawIndex, 0), max(entries.count - 1, 0))
+                            guard
+                                let snappedX = proxy.position(forX: index),
+                                abs(snappedX - x) <= ChartStyle.snapThreshold(
+                                    plotWidth: proxy.plotSize.width,
+                                    itemCount: entries.count
+                                )
+                            else {
+                                ChartStyle.updateHoverSelection(&self.selectedIndex, to: nil)
+                                return
+                            }
+                            ChartStyle.updateHoverSelection(&self.selectedIndex, to: index)
+                        case .ended:
+                            ChartStyle.updateHoverSelection(&self.selectedIndex, to: nil)
+                        }
+                    }
+            }
+        }
+        .help(Self.tooltip(for: entries))
         .animation(ChartStyle.animation, value: entries)
+        .animation(ChartStyle.hoverAnimation, value: self.selectedIndex)
     }
 
     private func isToday(_ entry: Entry, in entries: [Entry]) -> Bool {
         entry.index == entries.count - 1
+    }
+
+    private func barTint(for entry: Entry, in entries: [Entry]) -> Color {
+        if self.selectedIndex == entry.index {
+            return Color.accentColor
+        }
+        return self.isToday(entry, in: entries) ? ChartStyle.barTodayFill : ChartStyle.barFill
     }
 
     nonisolated static func entries(from fractions: [Double]) -> [Entry] {
@@ -98,6 +166,13 @@ struct HistoryBarChart: View {
                 fraction: max(0, min(1, fraction))
             )
         }
+    }
+
+    nonisolated static func tooltip(for entries: [Entry]) -> String {
+        entries.map { entry in
+            "\(entry.label): \(Int((entry.fraction * 100).rounded()))% of peak"
+        }
+        .joined(separator: "\n")
     }
 
     nonisolated private static func dayLabels(count: Int) -> [String] {

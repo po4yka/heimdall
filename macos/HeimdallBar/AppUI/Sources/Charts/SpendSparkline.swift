@@ -54,6 +54,7 @@ struct SpendSparkline: View {
                 plot.background(Color.clear)
             }
             .frame(width: self.width, height: self.height)
+            .help(Self.tooltip(for: entries))
             .accessibilityLabel("Spend sparkline, last \(self.fractions.count) days")
         }
     }
@@ -62,6 +63,15 @@ struct SpendSparkline: View {
         fractions.enumerated().map { offset, fraction in
             Entry(index: offset, fraction: max(0, min(1, fraction)))
         }
+    }
+
+    nonisolated static func tooltip(for entries: [Entry]) -> String {
+        let labels = ChartDayLabels.lastNDays(entries.count)
+        return entries.enumerated().map { offset, entry in
+            let label = offset == entries.count - 1 ? "Today" : labels[offset]
+            return "\(label): \(Int((entry.fraction * 100).rounded()))% of peak"
+        }
+        .joined(separator: "\n")
     }
 }
 

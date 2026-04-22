@@ -50,7 +50,7 @@ public actor HeimdallHelperController: HelperRuntime {
             await Self.stopProcessListening(on: port)
         }
 
-        if serverIsHealthy, compatibility == .compatible {
+        if Self.canReuseExistingServer(isHealthy: serverIsHealthy, compatibility: compatibility) {
             if let ownedHelper = self.ownedHelper {
                 let resolved = Self.resolveExecutable()
                 let resolvedFingerprint = resolved.flatMap(Self.fingerprint(for:))
@@ -61,19 +61,16 @@ public actor HeimdallHelperController: HelperRuntime {
                 }
 
                 await self.stopOwnedHelper()
-                if await self.hasHealthyServer(on: port),
-                   Self.hasTrustedListener(
-                       on: port,
-                       expectedExecutable: executable,
-                       expectedFingerprint: fingerprint
-                   ) {
+                if Self.canReuseExistingServer(
+                    isHealthy: await self.hasHealthyServer(on: port),
+                    compatibility: await Self.liveProvidersProbeResult(port: port)
+                ) {
                     return true
                 }
-            } else if trustedExistingServer {
+            } else if trustedExistingServer || compatibility == .compatible {
                 return true
-            } else {
-                return false
             }
+            return false
         }
 
         if serverIsHealthy, compatibility == .unavailable {
@@ -267,6 +264,13 @@ public actor HeimdallHelperController: HelperRuntime {
             return false
         }
         return contractVersion == LiveProviderContract.version
+    }
+
+    static func canReuseExistingServer(
+        isHealthy: Bool,
+        compatibility: LiveProvidersProbeResult
+    ) -> Bool {
+        isHealthy && compatibility == .compatible
     }
 
     static func hasTrustedListener(

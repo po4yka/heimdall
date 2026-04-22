@@ -9,7 +9,7 @@ struct CacheMixRing: View {
     let hitRateToday: Double
     var hitRate30d: Double? = nil
     var savings30dUSD: Double? = nil
-    var diameter: CGFloat = 96
+    var diameter: CGFloat = 108
 
     struct Entry: Identifiable, Hashable {
         let slice: String
@@ -19,11 +19,11 @@ struct CacheMixRing: View {
 
     var body: some View {
         let entries = Self.entries(hitRate: self.hitRateToday)
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 14) {
             Chart(entries) { entry in
                 SectorMark(
                     angle: .value("Fraction", entry.fraction),
-                    innerRadius: .ratio(0.62),
+                    innerRadius: .ratio(0.66),
                     outerRadius: .ratio(0.98)
                 )
                 .foregroundStyle(by: .value("Slice", entry.slice))
@@ -36,7 +36,7 @@ struct CacheMixRing: View {
             .frame(width: self.diameter, height: self.diameter)
             .overlay {
                 Text(Self.rateLabel(self.hitRateToday))
-                    .font(.headline.monospacedDigit().weight(.semibold))
+                    .font(.title3.monospacedDigit().weight(.semibold))
                     .foregroundStyle(Self.tintForRate(self.hitRateToday))
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
@@ -44,29 +44,47 @@ struct CacheMixRing: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text("Cache hit rate")
-                    .font(.caption2.weight(.semibold))
+                    .font(.caption.weight(.semibold))
                     .textCase(.uppercase)
                     .tracking(0.4)
                     .foregroundStyle(.secondary)
                     .help("Fraction of input-side tokens served from cache. Ratio is cache reads / (cache reads + cache writes + fresh input).")
                 if let thirty = self.hitRate30d {
                     Text("30-day avg: \(Self.rateLabel(thirty))")
-                        .font(.caption2.monospacedDigit())
+                        .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
                 if let savings = self.savings30dUSD, savings > 0 {
                     Text("≈ \(Self.currencyLabel(savings)) saved")
-                        .font(.caption2.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.green)
                         .help("Estimated dollar savings over the last 30 days from cache reads being billed at the cache-read rate instead of the input rate.")
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 10) {
+                Self.metricBlock(
+                    label: "Today",
+                    value: Self.rateLabel(self.hitRateToday),
+                    tint: Self.tintForRate(self.hitRateToday)
+                )
+                if let thirty = self.hitRate30d {
+                    Self.metricBlock(
+                        label: "Vs 30d",
+                        value: Self.deltaLabel(today: self.hitRateToday, baseline: thirty),
+                        tint: Self.deltaTint(today: self.hitRateToday, baseline: thirty)
+                    )
+                }
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .menuCardBackground(
             opacity: ChartStyle.cardBackgroundOpacity,
             cornerRadius: ChartStyle.cardCornerRadius
         )
+        .help(Self.tooltip(hitRateToday: self.hitRateToday, hitRate30d: self.hitRate30d, savings30dUSD: self.savings30dUSD))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Cache hit rate \(Int((max(0, min(1, self.hitRateToday)) * 100).rounded())) percent")
     }
@@ -109,6 +127,49 @@ struct CacheMixRing: View {
         case ..<0.6: return .orange
         default: return Color.primary.opacity(0.82)
         }
+    }
+
+    @ViewBuilder
+    nonisolated static func metricBlock(label: String, value: String, tint: Color) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.35)
+            Text(value)
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+        }
+    }
+
+    nonisolated static func deltaLabel(today: Double, baseline: Double) -> String {
+        let delta = (today - baseline) * 100
+        if abs(delta) < 0.05 {
+            return "Flat"
+        }
+        return String(format: "%@%.1f pt", delta >= 0 ? "+" : "", delta)
+    }
+
+    nonisolated static func deltaTint(today: Double, baseline: Double) -> Color {
+        let delta = today - baseline
+        if abs(delta) < 0.0005 {
+            return .secondary
+        }
+        return delta > 0 ? .green : .orange
+    }
+
+    nonisolated static func tooltip(hitRateToday: Double, hitRate30d: Double?, savings30dUSD: Double?) -> String {
+        var lines = ["Today: \(Self.rateLabel(hitRateToday))"]
+        if let hitRate30d {
+            lines.append("30-day avg: \(Self.rateLabel(hitRate30d))")
+            lines.append("Delta: \(Self.deltaLabel(today: hitRateToday, baseline: hitRate30d))")
+        }
+        if let savings30dUSD, savings30dUSD > 0 {
+            lines.append("30-day savings: \(Self.currencyLabel(savings30dUSD))")
+        }
+        return lines.joined(separator: "\n")
     }
 }
 

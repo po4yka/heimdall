@@ -11,6 +11,13 @@ struct MacPlatformFactoryTests {
     }
 
     @Test
+    func cloudKitSnapshotSyncIsDisabledForManualDebugBuildProducts() {
+        let debugBundle = URL(fileURLWithPath: "/tmp/heimdallbar-derived/Build/Products/Debug/HeimdallBar.app")
+
+        #expect(!MacPlatformCompositionRoot.shouldEnableCloudKitSnapshotSync(bundleURL: debugBundle))
+    }
+
+    @Test
     func cloudKitSnapshotSyncRemainsEnabledOutsideDerivedBundles() {
         let signedStyleBundle = URL(fileURLWithPath: "/Applications/HeimdallBar.app")
 

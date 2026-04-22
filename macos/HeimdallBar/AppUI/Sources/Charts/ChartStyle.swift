@@ -1,3 +1,5 @@
+import Charts
+import AppKit
 import SwiftUI
 
 /// Shared chart tokens so the three chart views stay short and drift-free.
@@ -22,11 +24,83 @@ enum ChartStyle {
     static let todayRuleWidth: CGFloat = 2
 
     static let animation: Animation = .smooth(duration: 0.2)
+    static let hoverAnimation: Animation = .easeOut(duration: 0.14)
 
     /// Ordered category tints for `TokenStackChart`. Stable index order so
     /// `foregroundStyle(by:)` maps categories to the same opacity on each
     /// render. Mirrors the opacity ladder defined by `TokenCategory.tint`.
     static let categoryScale: [Color] = TokenCategory.orderedForStack.map(\.tint)
+
+    static func snapThreshold(plotWidth: CGFloat, itemCount: Int) -> CGFloat {
+        guard plotWidth > 0, itemCount > 0 else { return 0 }
+        let laneWidth = plotWidth / CGFloat(max(itemCount, 1))
+        return min(28, max(12, laneWidth * 0.5))
+    }
+
+    static func inspectorPlacement(index: Int, totalCount: Int) -> ChartInspectorPlacement {
+        guard totalCount > 2 else { return .top }
+        let normalized = Double(index) / Double(max(totalCount - 1, 1))
+        if normalized <= 0.22 {
+            return .trailing
+        }
+        if normalized >= 0.78 {
+            return .leading
+        }
+        return .top
+    }
+
+    @MainActor
+    static func updateHoverSelection<T: Equatable>(_ selection: inout T?, to newValue: T?) {
+        guard selection != newValue else { return }
+        withAnimation(Self.hoverAnimation) {
+            selection = newValue
+        }
+    }
+}
+
+enum ChartInspectorPlacement: Equatable {
+    case leading
+    case top
+    case trailing
+
+    var annotationPosition: AnnotationPosition {
+        switch self {
+        case .leading:
+            .leading
+        case .top:
+            .top
+        case .trailing:
+            .trailing
+        }
+    }
+}
+
+struct ChartInspectorCard: View {
+    let title: String
+    let lines: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(self.title)
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.primary)
+            ForEach(self.lines, id: \.self) { line in
+                Text(line)
+                    .font(.system(size: 9).monospacedDigit())
+                    .foregroundStyle(Color.primary.opacity(0.78))
+            }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+    }
 }
 
 struct ChartHeader: View {
@@ -55,28 +129,6 @@ struct ChartHeader: View {
                 Text(caption)
                     .font(.caption2)
                     .foregroundStyle(Color.primary.opacity(ChartStyle.headerCaptionOpacity))
-            }
-        }
-    }
-}
-
-/// Inline category chips used when a chart's card renders a header with a
-/// legend. The stock Swift-Charts legend doesn't respect the opacity ladder
-/// or sentence-case labels, so we render our own — same shape the previous
-/// hand-rolled strip used.
-struct TokenCategoryLegend: View {
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(TokenCategory.orderedForStack.enumerated()), id: \.offset) { entry in
-                let category = entry.element
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(category.tint)
-                        .frame(width: 6, height: 6)
-                    Text(category.shortLabel)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
             }
         }
     }

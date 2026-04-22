@@ -9,7 +9,7 @@ import SwiftUI
 struct TokenBreakdownDonut: View {
     let title: String
     let breakdown: TokenBreakdown
-    var diameter: CGFloat = 96
+    var diameter: CGFloat = 116
 
     struct Entry: Identifiable, Hashable {
         let category: TokenCategory
@@ -18,15 +18,22 @@ struct TokenBreakdownDonut: View {
     }
 
     var body: some View {
+        let entries = Self.entries(from: self.breakdown)
         VStack(alignment: .leading, spacing: 6) {
             ChartHeader(
                 title: "Token mix",
-                caption: "\(self.title) · total \(Self.compactTokenCount(self.breakdown.total))"
+                caption: self.title,
+                trailing: AnyView(self.headerSummary)
             )
-            HStack(alignment: .center, spacing: 10) {
-                self.donutView
-                TokenCategoryLegend()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 12) {
+                    self.donutView(entries: entries)
+                    self.detailsColumn(entries: entries)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    self.donutView(entries: entries)
+                    self.detailsColumn(entries: entries)
+                }
             }
         }
         .padding(8)
@@ -38,9 +45,22 @@ struct TokenBreakdownDonut: View {
         .accessibilityLabel("Token mix donut for \(self.title)")
     }
 
+    private var headerSummary: some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text(Self.compactTokenCount(self.breakdown.total))
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(Color.primary)
+            Text("total")
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.35)
+        }
+    }
+
     @ViewBuilder
-    private var donutView: some View {
-        if self.breakdown.isEmpty {
+    private func donutView(entries: [Entry]) -> some View {
+        if entries.isEmpty {
             ZStack {
                 Circle()
                     .stroke(Color.primary.opacity(0.08), lineWidth: 8)
@@ -53,12 +73,11 @@ struct TokenBreakdownDonut: View {
             }
             .frame(width: self.diameter, height: self.diameter)
         } else {
-            let entries = Self.entries(from: self.breakdown)
             ZStack {
                 Chart(entries) { entry in
                     SectorMark(
                         angle: .value("Tokens", entry.tokens),
-                        innerRadius: .ratio(0.62),
+                        innerRadius: .ratio(0.68),
                         outerRadius: .ratio(0.98)
                     )
                     .foregroundStyle(by: .value("Category", entry.category.label))
@@ -71,22 +90,42 @@ struct TokenBreakdownDonut: View {
                 )
                 .chartLegend(.hidden)
                 .frame(width: self.diameter, height: self.diameter)
+                .help(Self.tooltip(for: entries, total: self.breakdown.total))
                 .animation(ChartStyle.animation, value: entries)
 
-                VStack(spacing: 1) {
+                VStack(spacing: 2) {
                     Text(Self.compactTokenCount(self.breakdown.total))
-                        .font(.headline.monospacedDigit().weight(.semibold))
+                        .font(.title3.monospacedDigit().weight(.semibold))
                         .minimumScaleFactor(0.6)
                         .lineLimit(1)
                     Text(self.title)
-                        .font(.caption2)
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                .frame(width: self.diameter * 0.58)
+                .frame(width: self.diameter * 0.52)
             }
             .frame(width: self.diameter, height: self.diameter)
         }
+    }
+
+    private func detailsColumn(entries: [Entry]) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if entries.isEmpty {
+                Text("No category data available yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(entries) { entry in
+                    TokenBreakdownLegendRow(
+                        category: entry.category,
+                        tokens: entry.tokens,
+                        share: Self.share(for: entry.tokens, total: self.breakdown.total)
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     nonisolated static func entries(from breakdown: TokenBreakdown) -> [Entry] {
@@ -95,6 +134,31 @@ struct TokenBreakdownDonut: View {
             guard tokens > 0 else { return nil }
             return Entry(category: category, tokens: tokens)
         }
+    }
+
+    nonisolated static func share(for tokens: Int, total: Int) -> Double {
+        guard total > 0 else { return 0 }
+        return Double(tokens) / Double(total)
+    }
+
+    nonisolated static func percentLabel(for share: Double) -> String {
+        guard share > 0 else { return "0%" }
+        let percentage = share * 100
+        if percentage < 1 {
+            return "<1%"
+        }
+        if percentage >= 10 {
+            return "\(Int(percentage.rounded()))%"
+        }
+        return String(format: "%.1f%%", percentage)
+    }
+
+    nonisolated static func tooltip(for entries: [Entry], total: Int) -> String {
+        entries.map { entry in
+            let share = Self.share(for: entry.tokens, total: total)
+            return "\(entry.category.label): \(Self.percentLabel(for: share)) · \(Self.compactTokenCount(entry.tokens)) tokens"
+        }
+        .joined(separator: "\n")
     }
 
     nonisolated static func compactTokenCount(_ count: Int) -> String {
@@ -109,6 +173,38 @@ struct TokenBreakdownDonut: View {
             return String(format: "%.1fK", value / 1_000)
         }
         return "\(count)"
+    }
+}
+
+private struct TokenBreakdownLegendRow: View {
+    let category: TokenCategory
+    let tokens: Int
+    let share: Double
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(self.category.tint)
+                    .frame(width: 10, height: 10)
+                Text(self.category.label)
+                    .font(.caption)
+                    .foregroundStyle(Color.primary.opacity(0.82))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text(TokenBreakdownDonut.percentLabel(for: self.share))
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(Color.primary.opacity(0.88))
+                .frame(minWidth: 34, alignment: .trailing)
+            Text(TokenBreakdownDonut.compactTokenCount(self.tokens))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 48, alignment: .trailing)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(self.category.label), \(TokenBreakdownDonut.percentLabel(for: self.share)), \(TokenBreakdownDonut.compactTokenCount(self.tokens)) tokens")
+        .help("\(self.category.label): \(TokenBreakdownDonut.percentLabel(for: self.share)) · \(TokenBreakdownDonut.compactTokenCount(self.tokens)) tokens")
     }
 }
 

@@ -140,9 +140,6 @@ struct ProviderMenuView: View {
 }
 
 private struct MenuScrollableContainer<Content: View>: View {
-    private static let width: CGFloat = 336
-    private static let minHeight: CGFloat = 200
-
     @State private var contentHeight: CGFloat = Self.minHeight
     let content: Content
 
@@ -168,6 +165,10 @@ private struct MenuScrollableContainer<Content: View>: View {
         }
     }
 
+    private static var width: CGFloat { 336 }
+
+    private static var minHeight: CGFloat { 200 }
+
     private static var maxHeight: CGFloat {
         guard let visibleHeight = NSScreen.main?.visibleFrame.height else {
             return 720
@@ -177,7 +178,7 @@ private struct MenuScrollableContainer<Content: View>: View {
 }
 
 private struct MenuContentHeightPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
 
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())

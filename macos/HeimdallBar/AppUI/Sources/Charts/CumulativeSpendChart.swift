@@ -8,6 +8,7 @@ import SwiftUI
 /// skipped; the running sum continues across gaps.
 struct CumulativeSpendChart: View {
     let daily: [CostHistoryPoint]
+    @State private var selectedDay: Date?
 
     struct Entry: Identifiable, Hashable {
         let day: Date
@@ -42,7 +43,9 @@ struct CumulativeSpendChart: View {
     }
 
     private func chart(entries: [Entry]) -> some View {
-        Chart {
+        let selectedEntry = self.selectedDay.flatMap { Self.nearestEntry(to: $0, in: entries) }
+        let selectedIndex = selectedEntry.flatMap { entries.firstIndex(of: $0) }
+        return Chart {
             ForEach(entries) { entry in
                 AreaMark(
                     x: .value("Day", entry.day),
@@ -59,6 +62,28 @@ struct CumulativeSpendChart: View {
                 .foregroundStyle(ChartStyle.lineStroke)
                 .lineStyle(StrokeStyle(lineWidth: ChartStyle.lineWidth, lineCap: .round, lineJoin: .round))
                 .interpolationMethod(.monotone)
+            }
+            if let selectedEntry, let selectedIndex {
+                RuleMark(x: .value("Selected day", selectedEntry.day))
+                    .foregroundStyle(Color.primary.opacity(0.3))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+                    .annotation(
+                        position: ChartStyle.inspectorPlacement(index: selectedIndex, totalCount: entries.count).annotationPosition,
+                        spacing: 6,
+                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                    ) {
+                        ChartInspectorCard(
+                            title: Self.axisFormatter.string(from: selectedEntry.day),
+                            lines: [Self.currencyLabel(selectedEntry.cumulativeCostUSD)]
+                        )
+                    }
+
+                PointMark(
+                    x: .value("Selected day", selectedEntry.day),
+                    y: .value("Cumulative cost", selectedEntry.cumulativeCostUSD)
+                )
+                .foregroundStyle(Color.accentColor)
+                .symbolSize(30)
             }
         }
         .chartYScale(domain: .automatic(includesZero: true))
@@ -79,7 +104,40 @@ struct CumulativeSpendChart: View {
         .chartPlotStyle { plot in
             plot.background(Color.clear)
         }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        let plotFrame = geometry[proxy.plotFrame!]
+                        switch phase {
+                        case .active(let location):
+                            let x = location.x - plotFrame.origin.x
+                            guard
+                                x >= 0,
+                                x <= proxy.plotSize.width,
+                                let day = proxy.value(atX: x, as: Date.self),
+                                let nearest = Self.nearestEntry(to: day, in: entries),
+                                let snappedX = proxy.position(forX: nearest.day),
+                                abs(snappedX - x) <= ChartStyle.snapThreshold(
+                                    plotWidth: proxy.plotSize.width,
+                                    itemCount: entries.count
+                                )
+                            else {
+                                ChartStyle.updateHoverSelection(&self.selectedDay, to: nil)
+                                return
+                            }
+                            ChartStyle.updateHoverSelection(&self.selectedDay, to: nearest.day)
+                        case .ended:
+                            ChartStyle.updateHoverSelection(&self.selectedDay, to: nil)
+                        }
+                    }
+            }
+        }
+        .help(Self.tooltip(for: entries))
         .animation(ChartStyle.animation, value: entries)
+        .animation(ChartStyle.hoverAnimation, value: self.selectedDay)
     }
 
     nonisolated static func entries(from daily: [CostHistoryPoint]) -> [Entry] {
@@ -89,6 +147,23 @@ struct CumulativeSpendChart: View {
             running += point.costUSD
             return Entry(day: date, cumulativeCostUSD: running)
         }
+    }
+
+    nonisolated static func tooltip(for entries: [Entry]) -> String {
+        entries.map { entry in
+            "\(Self.axisFormatter.string(from: entry.day)): \(Self.currencyLabel(entry.cumulativeCostUSD))"
+        }
+        .joined(separator: "\n")
+    }
+
+    nonisolated static func nearestEntry(to day: Date, in entries: [Entry]) -> Entry? {
+        entries.min { lhs, rhs in
+            abs(lhs.day.timeIntervalSince(day)) < abs(rhs.day.timeIntervalSince(day))
+        }
+    }
+
+    nonisolated private static func currencyLabel(_ usd: Double) -> String {
+        String(format: "$%.2f", usd)
     }
 
     nonisolated(unsafe) private static let dayFormatter: DateFormatter = {

@@ -41,6 +41,7 @@ struct ModelDistributionDonut: View {
                     )
                     .chartLegend(.hidden)
                     .frame(width: 96, height: 96)
+                    .help(Self.tooltip(for: families))
                     .animation(ChartStyle.animation, value: families)
 
                     // Inline legend
@@ -54,6 +55,7 @@ struct ModelDistributionDonut: View {
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                    .help("\(family.label): \(Self.formatCost(family.costUSD))")
                                 Spacer(minLength: 2)
                                 Text(Self.formatCost(family.costUSD))
                                     .font(.caption2.monospacedDigit().weight(.semibold))
@@ -122,6 +124,13 @@ struct ModelDistributionDonut: View {
             map[label] = palette[idx % palette.count]
         }
         return map
+    }
+
+    nonisolated static func tooltip(for families: [FamilyEntry]) -> String {
+        families.map { family in
+            "\(family.label): \(Self.formatCost(family.costUSD))"
+        }
+        .joined(separator: "\n")
     }
 
     nonisolated static func formatCost(_ usd: Double) -> String {

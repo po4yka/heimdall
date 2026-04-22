@@ -51,6 +51,46 @@ struct ChartsTests {
     }
 
     @Test
+    func tokenBreakdownDonutEntriesAndPercentLabelsStayStable() {
+        let breakdown = TokenBreakdown(
+            input: 50,
+            output: 40,
+            cacheRead: 9,
+            cacheCreation: 1,
+            reasoningOutput: 0
+        )
+        let entries = TokenBreakdownDonut.entries(from: breakdown)
+
+        #expect(entries.map(\.category) == [.input, .output, .cacheRead, .cacheCreation])
+        #expect(entries.map(\.tokens) == [50, 40, 9, 1])
+
+        #expect(TokenBreakdownDonut.percentLabel(for: TokenBreakdownDonut.share(for: 50, total: 100)) == "50%")
+        #expect(TokenBreakdownDonut.percentLabel(for: TokenBreakdownDonut.share(for: 9, total: 100)) == "9.0%")
+        #expect(TokenBreakdownDonut.percentLabel(for: TokenBreakdownDonut.share(for: 1, total: 200)) == "<1%")
+    }
+
+    @Test
+    func cacheMixRingDeltaLabelsHandlePositiveNegativeAndFlat() {
+        #expect(CacheMixRing.deltaLabel(today: 0.95, baseline: 0.941) == "+0.9 pt")
+        #expect(CacheMixRing.deltaLabel(today: 0.95, baseline: 0.96) == "-1.0 pt")
+        #expect(CacheMixRing.deltaLabel(today: 0.9502, baseline: 0.95) == "Flat")
+    }
+
+    @Test
+    func chartStyleSnapThresholdScalesWithDensityButStaysBounded() {
+        #expect(ChartStyle.snapThreshold(plotWidth: 320, itemCount: 7) == 22.857142857142858)
+        #expect(ChartStyle.snapThreshold(plotWidth: 320, itemCount: 30) == 12)
+        #expect(ChartStyle.snapThreshold(plotWidth: 1_000, itemCount: 6) == 28)
+    }
+
+    @Test
+    func chartStyleInspectorPlacementBiasesAwayFromEdges() {
+        #expect(ChartStyle.inspectorPlacement(index: 0, totalCount: 7) == .trailing)
+        #expect(ChartStyle.inspectorPlacement(index: 3, totalCount: 7) == .top)
+        #expect(ChartStyle.inspectorPlacement(index: 6, totalCount: 7) == .leading)
+    }
+
+    @Test
     func dailyCostChartEntriesParseIsoDaysAndPassCostsThrough() {
         let daily = [
             CostHistoryPoint(day: "2026-04-18", totalTokens: 0, costUSD: 2.5),
@@ -141,6 +181,49 @@ struct ChartsTests {
         #expect(ProviderComparisonChart.averageDailyCost(totalCostUSD: 0, activeDays: 30) == nil)
         #expect(ProviderComparisonChart.averageDailyCost(totalCostUSD: 10, activeDays: 0) == nil)
         #expect(ProviderComparisonChart.averageDailyCost(totalCostUSD: 90, activeDays: 30) == 3)
+    }
+
+    @Test
+    func activityHeatmapSummaryCapturesPeakAndActiveCells() {
+        let summary = ActivityHeatmap.summary(from: [
+            [0, 2, 0, 0],
+            [1, 0, 7, 0],
+            [0, 0, 0, 3],
+        ])
+
+        #expect(summary != nil)
+        #expect(summary?.totalTurns == 13)
+        #expect(summary?.activeCells == 4)
+        #expect(summary?.peakTurns == 7)
+        #expect(summary?.peakDay == 1)
+        #expect(summary?.peakHour == 2)
+    }
+
+    @Test
+    func historyBarChartTooltipIncludesDayLabelsAndPercentages() {
+        let entries = HistoryBarChart.entries(from: [0.25, 1.0])
+        let tooltip = HistoryBarChart.tooltip(for: entries)
+
+        #expect(tooltip.contains("Today: 100% of peak"))
+        #expect(tooltip.contains("25% of peak"))
+    }
+
+    @Test
+    func providerComparisonChartTooltipIncludesDailyTotalsAndProviders() {
+        let day = ProviderComparisonChart.dayFormatter.date(from: "2026-04-20")!
+        let tooltip = ProviderComparisonChart.tooltip(
+            entries: [
+                .init(day: day, providerTitle: "Claude", costUSD: 12.5),
+                .init(day: day, providerTitle: "Codex", costUSD: 1.25),
+            ],
+            totals: [
+                .init(day: day, costUSD: 13.75),
+            ]
+        )
+
+        #expect(tooltip.contains("Claude"))
+        #expect(tooltip.contains("Codex"))
+        #expect(tooltip.contains("$13.75"))
     }
 
     private func makeProviderProjection(

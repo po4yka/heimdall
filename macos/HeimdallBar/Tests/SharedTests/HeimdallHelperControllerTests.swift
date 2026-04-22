@@ -74,6 +74,28 @@ struct HeimdallHelperControllerTests {
     }
 
     @Test
+    func compatibleHealthyServerCanBeReusedAcrossLocalBuildPaths() {
+        #expect(
+            HeimdallHelperController.canReuseExistingServer(
+                isHealthy: true,
+                compatibility: .compatible
+            )
+        )
+        #expect(
+            !HeimdallHelperController.canReuseExistingServer(
+                isHealthy: true,
+                compatibility: .incompatible
+            )
+        )
+        #expect(
+            !HeimdallHelperController.canReuseExistingServer(
+                isHealthy: false,
+                compatibility: .compatible
+            )
+        )
+    }
+
+    @Test
     func trustedListenerRequiresMatchingExecutablePathAndFingerprint() throws {
         let temp = try Self.makeTempDirectory()
         let executable = temp.appendingPathComponent("claude-usage-tracker")

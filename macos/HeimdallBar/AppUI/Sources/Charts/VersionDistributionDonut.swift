@@ -39,6 +39,7 @@ struct VersionDistributionDonut: View {
                     )
                     .chartLegend(.hidden)
                     .frame(width: 96, height: 96)
+                    .help(Self.tooltip(for: capped))
                     .animation(ChartStyle.animation, value: capped.map(\.version))
 
                     // Inline legend
@@ -52,6 +53,7 @@ struct VersionDistributionDonut: View {
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                    .help("\(row.version): \(Self.formatCost(row.costUSD)) · \(row.turns) turns · \(row.sessions) sessions")
                                 Spacer(minLength: 2)
                                 Text(Self.formatCost(row.costUSD))
                                     .font(.caption2.monospacedDigit().weight(.semibold))
@@ -83,6 +85,13 @@ struct VersionDistributionDonut: View {
         ]
         guard count > 0 else { return [] }
         return (0..<count).map { palette[$0 % palette.count] }
+    }
+
+    nonisolated static func tooltip(for rows: [ProviderVersionRow]) -> String {
+        rows.map { row in
+            "\(row.version): \(Self.formatCost(row.costUSD)) · \(row.turns) turns · \(row.sessions) sessions"
+        }
+        .joined(separator: "\n")
     }
 
     nonisolated static func formatCost(_ usd: Double) -> String {

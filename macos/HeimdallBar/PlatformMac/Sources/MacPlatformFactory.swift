@@ -84,7 +84,12 @@ public struct MacPlatformCompositionRoot: Sendable {
     ) -> Bool {
         let path = bundleURL.path
         #if DEBUG
-        if path.contains("/.derived/") || path.contains("/DerivedData/") {
+        // Local unsigned builds launched from Xcode or a manual derived-data
+        // directory do not carry the CloudKit setup needed by CKContainer.
+        if path.contains("/.derived/")
+            || path.contains("/DerivedData/")
+            || path.contains("/Build/Products/Debug/")
+        {
             return false
         }
         #endif
