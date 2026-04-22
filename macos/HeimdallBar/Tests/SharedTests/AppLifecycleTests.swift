@@ -22,14 +22,32 @@ struct AppLifecycleTests {
     }
 
     @Test
+    @MainActor
     func reopeningMainWindowActivatesAppAndUsesStableSceneIdentifier() {
         var events: [String] = []
 
         WindowReopener.reopenMainWindow(
+            existingMainWindow: { false },
+            focusExistingMainWindow: { events.append("focus") },
             openWindow: { windowID in events.append("open:\(windowID)") },
             activateApp: { events.append("activate") }
         )
 
         #expect(events == ["activate", "open:\(HeimdallBarSceneID.mainWindow)"])
+    }
+
+    @Test
+    @MainActor
+    func reopeningMainWindowFocusesExistingWindowInsteadOfOpeningDuplicate() {
+        var events: [String] = []
+
+        WindowReopener.reopenMainWindow(
+            existingMainWindow: { true },
+            focusExistingMainWindow: { events.append("focus") },
+            openWindow: { windowID in events.append("open:\(windowID)") },
+            activateApp: { events.append("activate") }
+        )
+
+        #expect(events == ["activate", "focus"])
     }
 }

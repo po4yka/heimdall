@@ -12,13 +12,19 @@ struct HeimdallMobileRootView: View {
                     ProgressView("Loading synced snapshot…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let snapshot = self.model.snapshot {
-                    TabView {
-                        OverviewTab(model: self.model, snapshot: snapshot)
-                            .tabItem { Label("Overview", systemImage: "rectangle.grid.2x2") }
-                        HistoryTab(model: self.model, snapshot: snapshot)
-                            .tabItem { Label("History", systemImage: "chart.line.uptrend.xyaxis") }
-                        FreshnessTab(snapshot: snapshot)
-                            .tabItem { Label("Freshness", systemImage: "clock") }
+                    VStack(spacing: 0) {
+                        if let warning = self.model.staleSnapshotWarning {
+                            SyncWarningBanner(message: warning)
+                        }
+
+                        TabView {
+                            OverviewTab(model: self.model, snapshot: snapshot)
+                                .tabItem { Label("Overview", systemImage: "rectangle.grid.2x2") }
+                            HistoryTab(model: self.model, snapshot: snapshot)
+                                .tabItem { Label("History", systemImage: "chart.line.uptrend.xyaxis") }
+                            FreshnessTab(snapshot: snapshot)
+                                .tabItem { Label("Freshness", systemImage: "clock") }
+                        }
                     }
                 } else if let lastError = self.model.lastError {
                     ContentUnavailableView(
@@ -46,6 +52,24 @@ struct HeimdallMobileRootView: View {
         .task {
             await self.model.load()
         }
+    }
+}
+
+private struct SyncWarningBanner: View {
+    let message: String
+
+    var body: some View {
+        Label {
+            Text("Showing last synced snapshot. \(self.message)")
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+        }
+        .font(.footnote)
+        .foregroundStyle(.primary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.16))
     }
 }
 

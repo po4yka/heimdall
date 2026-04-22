@@ -73,14 +73,16 @@ public struct HeimdallBarScenes: Scene {
             AppShellView(
                 shell: self.model.shell,
                 overview: self.model.overview,
+                liveMonitor: self.model.liveMonitor,
                 helperPort: self.model.config.helperPort,
                 providerModel: self.model.providerModel(for:)
             )
                 .frame(minWidth: 900, idealWidth: 1080, minHeight: 620, idealHeight: 720)
+                .background(MainWindowIdentityTagger(sceneID: HeimdallBarSceneID.mainWindow))
                 .onAppear { self.appDelegate.attach(model: self.model) }
         }
 
-        MenuBarExtra(isInserted: .constant(self.model.config.mergeIcons)) {
+        MenuBarExtra(isInserted: self.mergedMenuBarBinding) {
             RootMenuView(
                 shell: self.model.shell,
                 overview: self.model.overview,
@@ -99,7 +101,7 @@ public struct HeimdallBarScenes: Scene {
         }
         .menuBarExtraStyle(.window)
 
-        MenuBarExtra(isInserted: .constant(!self.model.config.mergeIcons && self.model.config.claude.enabled)) {
+        MenuBarExtra(isInserted: self.claudeMenuBarBinding) {
             ProviderMenuView(
                 model: self.model.providerModel(for: .claude),
                 helperPort: self.model.config.helperPort,
@@ -116,7 +118,7 @@ public struct HeimdallBarScenes: Scene {
         }
         .menuBarExtraStyle(.window)
 
-        MenuBarExtra(isInserted: .constant(!self.model.config.mergeIcons && self.model.config.codex.enabled)) {
+        MenuBarExtra(isInserted: self.codexMenuBarBinding) {
             ProviderMenuView(
                 model: self.model.providerModel(for: .codex),
                 helperPort: self.model.config.helperPort,
@@ -143,10 +145,39 @@ public struct HeimdallBarScenes: Scene {
         }
     }
 
+    private var mergedMenuBarBinding: Binding<Bool> {
+        Self.readOnlyBinding {
+            self.model.sessionStore.config.mergeIcons
+        }
+    }
+
+    private var claudeMenuBarBinding: Binding<Bool> {
+        Self.readOnlyBinding {
+            let config = self.model.sessionStore.config
+            return !config.mergeIcons && config.claude.enabled
+        }
+    }
+
+    private var codexMenuBarBinding: Binding<Bool> {
+        Self.readOnlyBinding {
+            let config = self.model.sessionStore.config
+            return !config.mergeIcons && config.codex.enabled
+        }
+    }
+
     private var quit: () -> Void {
         {
             NSApplication.shared.terminate(nil)
         }
+    }
+
+    private static func readOnlyBinding(
+        _ get: @escaping @MainActor () -> Bool
+    ) -> Binding<Bool> {
+        Binding(
+            get: { get() },
+            set: { _ in }
+        )
     }
 }
 
@@ -159,5 +190,33 @@ struct MenuBarLabel: View {
             Image(nsImage: self.image)
             Text(self.title)
         }
+    }
+}
+
+private struct MainWindowIdentityTagger: NSViewRepresentable {
+    let sceneID: String
+
+    func makeNSView(context _: Context) -> MainWindowIdentityView {
+        let view = MainWindowIdentityView()
+        view.sceneID = self.sceneID
+        return view
+    }
+
+    func updateNSView(_ nsView: MainWindowIdentityView, context _: Context) {
+        nsView.sceneID = self.sceneID
+        nsView.applyWindowIdentifierIfNeeded()
+    }
+}
+
+private final class MainWindowIdentityView: NSView {
+    var sceneID: String = HeimdallBarSceneID.mainWindow
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        self.applyWindowIdentifierIfNeeded()
+    }
+
+    func applyWindowIdentifierIfNeeded() {
+        self.window?.identifier = NSUserInterfaceItemIdentifier(self.sceneID)
     }
 }

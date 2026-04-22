@@ -35,6 +35,11 @@ final class MobileDashboardModel {
         self.snapshot != nil
     }
 
+    var staleSnapshotWarning: String? {
+        guard self.snapshot != nil else { return nil }
+        return self.lastError
+    }
+
     func load() async {
         self.isLoading = true
         defer { self.isLoading = false }

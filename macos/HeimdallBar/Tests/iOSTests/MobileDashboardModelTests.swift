@@ -43,13 +43,45 @@ struct MobileDashboardModelTests {
         #expect(model.providerSnapshots.count == 2)
         #expect(model.selectedHistorySeries?.daily.count == 2)
     }
+
+    @Test
+    func loadFailureKeepsStaleSnapshotWarningVisible() async {
+        let model = MobileDashboardModel(store: FlakySnapshotStore())
+
+        await model.load()
+        await model.load()
+
+        #expect(model.snapshot != nil)
+        #expect(model.lastError == "sync failed")
+        #expect(model.staleSnapshotWarning == "sync failed")
+    }
 }
 
 private actor StubSnapshotStore: SnapshotSyncStore {
     let snapshot: MobileSnapshotEnvelope?
 
+    init(snapshot: MobileSnapshotEnvelope?) {
+        self.snapshot = snapshot
+    }
+
     func loadLatestSnapshot() async throws -> MobileSnapshotEnvelope? {
         self.snapshot
+    }
+
+    func saveLatestSnapshot(_: MobileSnapshotEnvelope) async throws {}
+}
+
+private actor FlakySnapshotStore: SnapshotSyncStore {
+    private var loadCount = 0
+
+    func loadLatestSnapshot() async throws -> MobileSnapshotEnvelope? {
+        self.loadCount += 1
+        if self.loadCount == 1 {
+            return .fixture()
+        }
+        throw NSError(domain: "MobileDashboardModelTests", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "sync failed",
+        ])
     }
 
     func saveLatestSnapshot(_: MobileSnapshotEnvelope) async throws {}

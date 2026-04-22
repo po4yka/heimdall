@@ -3,8 +3,36 @@ import HeimdallDomain
 import SwiftUI
 
 enum WindowReopener {
-    static func reopenMainWindow(openWindow: (String) -> Void, activateApp: () -> Void) {
+    @MainActor
+    private static func hasExistingMainWindow() -> Bool {
+        NSApplication.shared.windows.contains { window in
+            window.identifier?.rawValue == HeimdallBarSceneID.mainWindow
+        }
+    }
+
+    @MainActor
+    private static func focusExistingMainWindow() {
+        guard let window = NSApplication.shared.windows.first(where: { $0.identifier?.rawValue == HeimdallBarSceneID.mainWindow }) else {
+            return
+        }
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    @MainActor
+    static func reopenMainWindow(
+        existingMainWindow: (() -> Bool)? = nil,
+        focusExistingMainWindow: (() -> Void)? = nil,
+        openWindow: (String) -> Void,
+        activateApp: () -> Void
+    ) {
+        let existingMainWindow = existingMainWindow ?? Self.hasExistingMainWindow
+        let focusExistingMainWindow = focusExistingMainWindow ?? Self.focusExistingMainWindow
+
         activateApp()
+        if existingMainWindow() {
+            focusExistingMainWindow()
+            return
+        }
         openWindow(HeimdallBarSceneID.mainWindow)
     }
 }
