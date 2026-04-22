@@ -397,6 +397,68 @@ pub struct ProviderCostSummary {
     /// MCP server invocation totals for this provider (all rows, usually small).
     #[serde(default)]
     pub by_mcp: Vec<ProviderMcpRow>,
+    /// Hourly activity buckets (0..=23) for the 30-day window.
+    #[serde(default)]
+    pub hourly_activity: Vec<ProviderHourlyBucket>,
+    /// Sparse heatmap cells (day_of_week × hour) for the 30-day window.
+    #[serde(default)]
+    pub activity_heatmap: Vec<ProviderHeatmapCell>,
+    /// Most-recent sessions for this provider, newest first.
+    #[serde(default)]
+    pub recent_sessions: Vec<ProviderSession>,
+    /// Subagent breakdown for the 30-day window; `None` when no subagent turns.
+    #[serde(default)]
+    pub subagent_breakdown: Option<ProviderSubagentBreakdown>,
+    /// Top versions by cost for the 30-day window.
+    #[serde(default)]
+    pub version_breakdown: Vec<ProviderVersionRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct ProviderHourlyBucket {
+    pub hour: u8,
+    pub turns: u64,
+    pub cost_usd: f64,
+    pub tokens: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct ProviderHeatmapCell {
+    pub day_of_week: u8,
+    pub hour: u8,
+    pub turns: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct ProviderSession {
+    pub session_id: String,
+    pub display_name: String,
+    pub started_at: String,
+    pub duration_minutes: u64,
+    pub turns: u64,
+    pub cost_usd: f64,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct ProviderSubagentBreakdown {
+    pub total_turns: u64,
+    pub total_cost_usd: f64,
+    pub session_count: u64,
+    pub agent_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct ProviderVersionRow {
+    pub version: String,
+    pub turns: u64,
+    pub sessions: u64,
+    pub cost_usd: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

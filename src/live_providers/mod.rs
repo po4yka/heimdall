@@ -913,6 +913,17 @@ fn provider_cost_summary(
     let by_tool = db::get_provider_tool_rows(conn, provider, &start_date, 15).unwrap_or_default();
     let by_mcp = db::get_provider_mcp_rows(conn, provider, &start_date).unwrap_or_default();
 
+    let hourly_activity =
+        db::get_provider_hourly_activity(conn, provider, &start_date).unwrap_or_default();
+    let activity_heatmap =
+        db::get_provider_activity_heatmap(conn, provider, &start_date).unwrap_or_default();
+    let recent_sessions =
+        db::get_provider_recent_sessions(conn, provider, 20).unwrap_or_default();
+    let subagent_breakdown =
+        db::get_provider_subagent_breakdown(conn, provider, &start_date).ok().flatten();
+    let version_breakdown =
+        db::get_provider_version_rows(conn, provider, &start_date, 10).unwrap_or_default();
+
     Ok(ProviderCostSummary {
         today_tokens,
         today_cost_usd: today_cost_nanos as f64 / 1_000_000_000.0,
@@ -928,6 +939,11 @@ fn provider_cost_summary(
         by_project,
         by_tool,
         by_mcp,
+        hourly_activity,
+        activity_heatmap,
+        recent_sessions,
+        subagent_breakdown,
+        version_breakdown,
     })
 }
 

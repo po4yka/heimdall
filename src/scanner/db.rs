@@ -2917,6 +2917,185 @@ pub fn get_provider_mcp_rows(
         .map_err(Into::into)
 }
 
+pub fn get_provider_hourly_activity(
+    conn: &Connection,
+    provider: &str,
+    start_date: &str,
+) -> Result<Vec<crate::models::ProviderHourlyBucket>> {
+    // Fetch raw aggregates grouped by local hour.
+    let mut stmt = conn.prepare(
+        "SELECT CAST(strftime('%H', datetime(timestamp, 'localtime')) AS INTEGER) as hr,
+                COUNT(*) as turns,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos,
+                COALESCE(SUM(input_tokens + output_tokens), 0) as tokens
+         FROM turns
+         WHERE provider = ?1 AND substr(timestamp, 1, 10) >= ?2
+         GROUP BY hr",
+    )?;
+    let raw: Vec<(u8, u64, i64, u64)> = stmt
+        .query_map(rusqlite::params![provider, start_date], |row| {
+            Ok((
+                row.get::<_, i64>(0)? as u8,
+                row.get::<_, i64>(1)? as u64,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)? as u64,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    // Zero-fill all 24 hours so Swift gets a contiguous 0..=23.
+    let mut buckets: Vec<crate::models::ProviderHourlyBucket> = (0u8..24)
+        .map(|h| crate::models::ProviderHourlyBucket {
+            hour: h,
+            turns: 0,
+            cost_usd: 0.0,
+            tokens: 0,
+        })
+        .collect();
+    for (hr, turns, cost_nanos, tokens) in raw {
+        if let Some(b) = buckets.get_mut(hr as usize) {
+            b.turns = turns;
+            b.cost_usd = cost_nanos as f64 / 1_000_000_000.0;
+            b.tokens = tokens;
+        }
+    }
+    Ok(buckets)
+}
+
+pub fn get_provider_activity_heatmap(
+    conn: &Connection,
+    provider: &str,
+    start_date: &str,
+) -> Result<Vec<crate::models::ProviderHeatmapCell>> {
+    let mut stmt = conn.prepare(
+        "SELECT CAST(strftime('%w', datetime(timestamp, 'localtime')) AS INTEGER) as dow,
+                CAST(strftime('%H', datetime(timestamp, 'localtime')) AS INTEGER) as hr,
+                COUNT(*) as turns
+         FROM turns
+         WHERE provider = ?1 AND substr(timestamp, 1, 10) >= ?2
+         GROUP BY dow, hr
+         HAVING turns > 0",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![provider, start_date], |row| {
+        Ok(crate::models::ProviderHeatmapCell {
+            day_of_week: row.get::<_, i64>(0)? as u8,
+            hour: row.get::<_, i64>(1)? as u8,
+            turns: row.get::<_, i64>(2)? as u64,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+}
+
+pub fn get_provider_recent_sessions(
+    conn: &Connection,
+    provider: &str,
+    limit: usize,
+) -> Result<Vec<crate::models::ProviderSession>> {
+    let mut stmt = conn.prepare(
+        "SELECT s.session_id,
+                COALESCE(NULLIF(s.project_name, ''), s.session_id) as display_name,
+                COALESCE(s.first_timestamp, '') as started_at,
+                CAST(ROUND(
+                    (julianday(COALESCE(NULLIF(s.last_timestamp, ''), s.first_timestamp))
+                     - julianday(COALESCE(s.first_timestamp, s.last_timestamp))) * 1440
+                ) AS INTEGER) as duration_minutes,
+                COUNT(t.id) as turns,
+                COALESCE(SUM(t.estimated_cost_nanos), 0) as cost_nanos,
+                (SELECT COALESCE(NULLIF(t2.model, ''), NULL)
+                 FROM turns t2
+                 WHERE t2.session_id = s.session_id
+                 GROUP BY t2.model
+                 ORDER BY COUNT(*) DESC
+                 LIMIT 1) as top_model
+         FROM sessions s
+         LEFT JOIN turns t ON t.session_id = s.session_id
+         WHERE s.provider = ?1
+         GROUP BY s.session_id
+         ORDER BY s.first_timestamp DESC
+         LIMIT ?2",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![provider, limit as i64], |row| {
+        let cost_nanos: i64 = row.get(5)?;
+        let duration_raw: i64 = row.get::<_, Option<i64>>(3)?.unwrap_or(0).max(0);
+        Ok(crate::models::ProviderSession {
+            session_id: row.get(0)?,
+            display_name: row.get(1)?,
+            started_at: row.get(2)?,
+            duration_minutes: duration_raw as u64,
+            turns: row.get::<_, i64>(4)? as u64,
+            cost_usd: cost_nanos as f64 / 1_000_000_000.0,
+            model: row.get(6)?,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+}
+
+pub fn get_provider_subagent_breakdown(
+    conn: &Connection,
+    provider: &str,
+    start_date: &str,
+) -> Result<Option<crate::models::ProviderSubagentBreakdown>> {
+    let mut stmt = conn.prepare(
+        "SELECT COUNT(*) as total_turns,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos,
+                COUNT(DISTINCT session_id) as session_count,
+                COUNT(DISTINCT agent_id) as agent_count
+         FROM turns
+         WHERE is_subagent = 1
+           AND provider = ?1
+           AND substr(timestamp, 1, 10) >= ?2",
+    )?;
+    let result = stmt.query_row(rusqlite::params![provider, start_date], |row| {
+        let total_turns: i64 = row.get(0)?;
+        let cost_nanos: i64 = row.get(1)?;
+        let session_count: i64 = row.get(2)?;
+        let agent_count: i64 = row.get(3)?;
+        Ok((total_turns, cost_nanos, session_count, agent_count))
+    })?;
+    let (total_turns, cost_nanos, session_count, agent_count) = result;
+    if total_turns == 0 {
+        return Ok(None);
+    }
+    Ok(Some(crate::models::ProviderSubagentBreakdown {
+        total_turns: total_turns as u64,
+        total_cost_usd: cost_nanos as f64 / 1_000_000_000.0,
+        session_count: session_count as u64,
+        agent_count: agent_count as u64,
+    }))
+}
+
+pub fn get_provider_version_rows(
+    conn: &Connection,
+    provider: &str,
+    start_date: &str,
+    limit: usize,
+) -> Result<Vec<crate::models::ProviderVersionRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(NULLIF(version, ''), 'unknown') as ver,
+                COUNT(*) as turns,
+                COUNT(DISTINCT session_id) as sessions,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
+         FROM turns
+         WHERE provider = ?1 AND substr(timestamp, 1, 10) >= ?2
+         GROUP BY ver
+         ORDER BY cost_nanos DESC
+         LIMIT ?3",
+    )?;
+    let rows = stmt.query_map(
+        rusqlite::params![provider, start_date, limit as i64],
+        |row| {
+            let cost_nanos: i64 = row.get(3)?;
+            Ok(crate::models::ProviderVersionRow {
+                version: row.get(0)?,
+                turns: row.get::<_, i64>(1)? as u64,
+                sessions: row.get::<_, i64>(2)? as u64,
+                cost_usd: cost_nanos as f64 / 1_000_000_000.0,
+            })
+        },
+    )?;
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+}
+
 fn compute_duration_min(first: &str, last: &str) -> f64 {
     let parse = |s: &str| -> Option<chrono::DateTime<chrono::FixedOffset>> {
         chrono::DateTime::parse_from_rfc3339(s).ok().or_else(|| {
@@ -5057,5 +5236,142 @@ mod tests {
         assert_eq!(rows[0].tool_name, "Read");
         assert_eq!(rows[0].invocations, 2);
         assert!(rows.iter().any(|r| r.tool_name == "Bash" && r.invocations == 1));
+    }
+
+    #[test]
+    fn test_get_provider_hourly_activity_contiguous_24() {
+        let conn = test_conn();
+        let sessions = vec![crate::models::Session {
+            session_id: "ha1".into(),
+            project_name: "proj".into(),
+            first_timestamp: "2026-04-08T09:00:00Z".into(),
+            last_timestamp: "2026-04-08T10:00:00Z".into(),
+            provider: "claude".into(),
+            ..Default::default()
+        }];
+        upsert_sessions(&conn, &sessions).unwrap();
+        let turns = vec![Turn {
+            session_id: "ha1".into(),
+            timestamp: "2026-04-08T09:01:00Z".into(),
+            message_id: "ha-m1".into(),
+            provider: "claude".into(),
+            model: "claude-sonnet-4-6".into(),
+            estimated_cost_nanos: 1_000_000_000,
+            ..Default::default()
+        }];
+        insert_turns(&conn, &turns).unwrap();
+
+        let rows = get_provider_hourly_activity(&conn, "claude", "2026-04-01").unwrap();
+        // Must always have exactly 24 buckets
+        assert_eq!(rows.len(), 24);
+        // Hours must be contiguous 0..=23
+        for (i, bucket) in rows.iter().enumerate() {
+            assert_eq!(bucket.hour as usize, i);
+        }
+        // At least one bucket has a non-zero turn count (the inserted turn)
+        assert!(rows.iter().any(|b| b.turns > 0));
+    }
+
+    #[test]
+    fn test_get_provider_recent_sessions_ordering_and_limit() {
+        let conn = test_conn();
+        let sessions = vec![
+            crate::models::Session {
+                session_id: "rs1".into(),
+                project_name: "proj".into(),
+                first_timestamp: "2026-04-06T08:00:00Z".into(),
+                last_timestamp: "2026-04-06T09:00:00Z".into(),
+                provider: "claude".into(),
+                ..Default::default()
+            },
+            crate::models::Session {
+                session_id: "rs2".into(),
+                project_name: "proj".into(),
+                first_timestamp: "2026-04-08T10:00:00Z".into(),
+                last_timestamp: "2026-04-08T11:00:00Z".into(),
+                provider: "claude".into(),
+                ..Default::default()
+            },
+            crate::models::Session {
+                session_id: "rs3".into(),
+                project_name: "proj".into(),
+                first_timestamp: "2026-04-07T12:00:00Z".into(),
+                last_timestamp: "2026-04-07T13:00:00Z".into(),
+                provider: "claude".into(),
+                ..Default::default()
+            },
+        ];
+        upsert_sessions(&conn, &sessions).unwrap();
+
+        // limit = 2 — must return only 2 rows, newest first
+        let rows = get_provider_recent_sessions(&conn, "claude", 2).unwrap();
+        assert_eq!(rows.len(), 2);
+        // rs2 (2026-04-08) must come before rs3 (2026-04-07)
+        assert_eq!(rows[0].session_id, "rs2");
+        assert_eq!(rows[1].session_id, "rs3");
+    }
+
+    #[test]
+    fn test_get_provider_version_rows_groups_and_orders_by_cost() {
+        let conn = test_conn();
+        let sessions = vec![crate::models::Session {
+            session_id: "vr1".into(),
+            project_name: "proj".into(),
+            first_timestamp: "2026-04-08T09:00:00Z".into(),
+            last_timestamp: "2026-04-08T10:00:00Z".into(),
+            provider: "claude".into(),
+            ..Default::default()
+        }];
+        upsert_sessions(&conn, &sessions).unwrap();
+        let turns = vec![
+            Turn {
+                session_id: "vr1".into(),
+                timestamp: "2026-04-08T09:01:00Z".into(),
+                message_id: "vr-m1".into(),
+                provider: "claude".into(),
+                model: "claude-sonnet-4-6".into(),
+                version: Some("1.2.0".into()),
+                estimated_cost_nanos: 3_000_000_000,
+                pricing_version: "test".into(),
+                cost_confidence: "exact".into(),
+                ..Default::default()
+            },
+            Turn {
+                session_id: "vr1".into(),
+                timestamp: "2026-04-08T09:02:00Z".into(),
+                message_id: "vr-m2".into(),
+                provider: "claude".into(),
+                model: "claude-haiku-3-5".into(),
+                version: Some("1.1.0".into()),
+                estimated_cost_nanos: 1_000_000_000,
+                pricing_version: "test".into(),
+                cost_confidence: "exact".into(),
+                ..Default::default()
+            },
+            Turn {
+                session_id: "vr1".into(),
+                timestamp: "2026-04-08T09:03:00Z".into(),
+                message_id: "vr-m3".into(),
+                provider: "claude".into(),
+                model: "claude-sonnet-4-6".into(),
+                version: Some("1.2.0".into()),
+                estimated_cost_nanos: 2_000_000_000,
+                pricing_version: "test".into(),
+                cost_confidence: "exact".into(),
+                ..Default::default()
+            },
+        ];
+        insert_turns(&conn, &turns).unwrap();
+
+        let rows = get_provider_version_rows(&conn, "claude", "2026-04-01", 10).unwrap();
+        // Two distinct versions
+        assert_eq!(rows.len(), 2);
+        // 1.2.0 has cost 5_000_000_000 nanos, must come first
+        assert_eq!(rows[0].version, "1.2.0");
+        assert_eq!(rows[0].turns, 2);
+        assert!((rows[0].cost_usd - 5.0).abs() < 1e-6);
+        assert_eq!(rows[1].version, "1.1.0");
+        assert_eq!(rows[1].turns, 1);
+        assert!((rows[1].cost_usd - 1.0).abs() < 1e-6);
     }
 }

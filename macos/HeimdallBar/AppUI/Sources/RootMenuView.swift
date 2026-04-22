@@ -244,6 +244,21 @@ struct ProviderMenuCard: View {
             if !projection.byMcp.isEmpty {
                 McpSummaryTable(rows: projection.byMcp)
             }
+            if !projection.hourlyActivity.isEmpty {
+                HourlyActivityChart(buckets: projection.hourlyActivity)
+            }
+            if !projection.activityHeatmap.isEmpty {
+                ActivityHeatmap(cells: projection.activityHeatmap)
+            }
+            if !projection.versionBreakdown.isEmpty {
+                VersionDistributionDonut(rows: projection.versionBreakdown)
+            }
+            if let subagents = projection.subagentBreakdown {
+                SubagentSummaryCard(breakdown: subagents)
+            }
+            if !projection.recentSessions.isEmpty {
+                SessionsTable(sessions: projection.recentSessions)
+            }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(projection.costLabel)
                     .font(.caption)

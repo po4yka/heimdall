@@ -166,7 +166,12 @@ public enum MenuProjectionBuilder {
             byModel: snapshot?.costSummary.byModel ?? [],
             byProject: snapshot?.costSummary.byProject ?? [],
             byTool: snapshot?.costSummary.byTool ?? [],
-            byMcp: snapshot?.costSummary.byMcp ?? []
+            byMcp: snapshot?.costSummary.byMcp ?? [],
+            hourlyActivity: snapshot?.costSummary.hourlyActivity ?? [],
+            activityHeatmap: snapshot?.costSummary.activityHeatmap ?? [],
+            recentSessions: snapshot?.costSummary.recentSessions ?? [],
+            subagentBreakdown: snapshot?.costSummary.subagentBreakdown,
+            versionBreakdown: snapshot?.costSummary.versionBreakdown ?? []
         )
     }
 

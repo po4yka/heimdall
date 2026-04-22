@@ -312,6 +312,11 @@ public struct ProviderCostSummary: Codable, Sendable {
     public var byProject: [ProviderProjectRow]
     public var byTool: [ProviderToolRow]
     public var byMcp: [ProviderMcpRow]
+    public var hourlyActivity: [ProviderHourlyBucket]
+    public var activityHeatmap: [ProviderHeatmapCell]
+    public var recentSessions: [ProviderSession]
+    public var subagentBreakdown: ProviderSubagentBreakdown?
+    public var versionBreakdown: [ProviderVersionRow]
 
     public init(
         todayTokens: Int,
@@ -327,7 +332,12 @@ public struct ProviderCostSummary: Codable, Sendable {
         byModel: [ProviderModelRow] = [],
         byProject: [ProviderProjectRow] = [],
         byTool: [ProviderToolRow] = [],
-        byMcp: [ProviderMcpRow] = []
+        byMcp: [ProviderMcpRow] = [],
+        hourlyActivity: [ProviderHourlyBucket] = [],
+        activityHeatmap: [ProviderHeatmapCell] = [],
+        recentSessions: [ProviderSession] = [],
+        subagentBreakdown: ProviderSubagentBreakdown? = nil,
+        versionBreakdown: [ProviderVersionRow] = []
     ) {
         self.todayTokens = todayTokens
         self.todayCostUSD = todayCostUSD
@@ -343,6 +353,11 @@ public struct ProviderCostSummary: Codable, Sendable {
         self.byProject = byProject
         self.byTool = byTool
         self.byMcp = byMcp
+        self.hourlyActivity = hourlyActivity
+        self.activityHeatmap = activityHeatmap
+        self.recentSessions = recentSessions
+        self.subagentBreakdown = subagentBreakdown
+        self.versionBreakdown = versionBreakdown
     }
 
     public init(from decoder: Decoder) throws {
@@ -361,6 +376,11 @@ public struct ProviderCostSummary: Codable, Sendable {
         self.byProject = try container.decodeIfPresent([ProviderProjectRow].self, forKey: .byProject) ?? []
         self.byTool = try container.decodeIfPresent([ProviderToolRow].self, forKey: .byTool) ?? []
         self.byMcp = try container.decodeIfPresent([ProviderMcpRow].self, forKey: .byMcp) ?? []
+        self.hourlyActivity = try container.decodeIfPresent([ProviderHourlyBucket].self, forKey: .hourlyActivity) ?? []
+        self.activityHeatmap = try container.decodeIfPresent([ProviderHeatmapCell].self, forKey: .activityHeatmap) ?? []
+        self.recentSessions = try container.decodeIfPresent([ProviderSession].self, forKey: .recentSessions) ?? []
+        self.subagentBreakdown = try container.decodeIfPresent(ProviderSubagentBreakdown.self, forKey: .subagentBreakdown)
+        self.versionBreakdown = try container.decodeIfPresent([ProviderVersionRow].self, forKey: .versionBreakdown) ?? []
     }
 
     enum CodingKeys: String, CodingKey {
@@ -378,6 +398,11 @@ public struct ProviderCostSummary: Codable, Sendable {
         case byProject = "by_project"
         case byTool = "by_tool"
         case byMcp = "by_mcp"
+        case hourlyActivity = "hourly_activity"
+        case activityHeatmap = "activity_heatmap"
+        case recentSessions = "recent_sessions"
+        case subagentBreakdown = "subagent_breakdown"
+        case versionBreakdown = "version_breakdown"
     }
 }
 
@@ -522,6 +547,104 @@ public struct ProviderMcpRow: Codable, Sendable, Hashable, Identifiable {
         case invocations
         case toolsUsed = "tools_used"
         case sessionsUsed = "sessions_used"
+    }
+}
+
+public struct ProviderHourlyBucket: Codable, Sendable, Hashable, Identifiable {
+    public let hour: Int
+    public let turns: Int
+    public let costUSD: Double
+    public let tokens: Int
+    public var id: Int { self.hour }
+
+    public init(hour: Int, turns: Int, costUSD: Double, tokens: Int) {
+        self.hour = hour; self.turns = turns; self.costUSD = costUSD; self.tokens = tokens
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case hour, turns, tokens
+        case costUSD = "cost_usd"
+    }
+}
+
+public struct ProviderHeatmapCell: Codable, Sendable, Hashable, Identifiable {
+    public let dayOfWeek: Int  // 0..6, 0 = Sunday
+    public let hour: Int       // 0..23
+    public let turns: Int
+    public var id: String { "\(self.dayOfWeek)-\(self.hour)" }
+
+    public init(dayOfWeek: Int, hour: Int, turns: Int) {
+        self.dayOfWeek = dayOfWeek; self.hour = hour; self.turns = turns
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case dayOfWeek = "day_of_week"
+        case hour, turns
+    }
+}
+
+public struct ProviderSession: Codable, Sendable, Hashable, Identifiable {
+    public let sessionID: String
+    public let displayName: String
+    public let startedAt: String
+    public let durationMinutes: Int
+    public let turns: Int
+    public let costUSD: Double
+    public let model: String?
+    public var id: String { self.sessionID }
+
+    public init(
+        sessionID: String, displayName: String, startedAt: String,
+        durationMinutes: Int, turns: Int, costUSD: Double, model: String?
+    ) {
+        self.sessionID = sessionID; self.displayName = displayName; self.startedAt = startedAt
+        self.durationMinutes = durationMinutes; self.turns = turns; self.costUSD = costUSD; self.model = model
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case displayName = "display_name"
+        case startedAt = "started_at"
+        case durationMinutes = "duration_minutes"
+        case turns
+        case costUSD = "cost_usd"
+        case model
+    }
+}
+
+public struct ProviderSubagentBreakdown: Codable, Sendable, Hashable {
+    public let totalTurns: Int
+    public let totalCostUSD: Double
+    public let sessionCount: Int
+    public let agentCount: Int
+
+    public init(totalTurns: Int, totalCostUSD: Double, sessionCount: Int, agentCount: Int) {
+        self.totalTurns = totalTurns; self.totalCostUSD = totalCostUSD
+        self.sessionCount = sessionCount; self.agentCount = agentCount
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case totalTurns = "total_turns"
+        case totalCostUSD = "total_cost_usd"
+        case sessionCount = "session_count"
+        case agentCount = "agent_count"
+    }
+}
+
+public struct ProviderVersionRow: Codable, Sendable, Hashable, Identifiable {
+    public let version: String
+    public let turns: Int
+    public let sessions: Int
+    public let costUSD: Double
+    public var id: String { self.version }
+
+    public init(version: String, turns: Int, sessions: Int, costUSD: Double) {
+        self.version = version; self.turns = turns; self.sessions = sessions; self.costUSD = costUSD
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version, turns, sessions
+        case costUSD = "cost_usd"
     }
 }
 
@@ -1573,6 +1696,11 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
     public var byProject: [ProviderProjectRow]
     public var byTool: [ProviderToolRow]
     public var byMcp: [ProviderMcpRow]
+    public var hourlyActivity: [ProviderHourlyBucket]
+    public var activityHeatmap: [ProviderHeatmapCell]
+    public var recentSessions: [ProviderSession]
+    public var subagentBreakdown: ProviderSubagentBreakdown?
+    public var versionBreakdown: [ProviderVersionRow]
 
     public var id: String { self.provider.rawValue }
 
@@ -1619,7 +1747,12 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         byModel: [ProviderModelRow] = [],
         byProject: [ProviderProjectRow] = [],
         byTool: [ProviderToolRow] = [],
-        byMcp: [ProviderMcpRow] = []
+        byMcp: [ProviderMcpRow] = [],
+        hourlyActivity: [ProviderHourlyBucket] = [],
+        activityHeatmap: [ProviderHeatmapCell] = [],
+        recentSessions: [ProviderSession] = [],
+        subagentBreakdown: ProviderSubagentBreakdown? = nil,
+        versionBreakdown: [ProviderVersionRow] = []
     ) {
         self.provider = provider
         self.title = title
@@ -1664,6 +1797,11 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         self.byProject = byProject
         self.byTool = byTool
         self.byMcp = byMcp
+        self.hourlyActivity = hourlyActivity
+        self.activityHeatmap = activityHeatmap
+        self.recentSessions = recentSessions
+        self.subagentBreakdown = subagentBreakdown
+        self.versionBreakdown = versionBreakdown
     }
 }
 
