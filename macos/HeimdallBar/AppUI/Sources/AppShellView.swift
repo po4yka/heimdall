@@ -12,7 +12,10 @@ struct AppShellView: View {
         NavigationSplitView {
             List(selection: self.$shell.navigationSelection) {
                 ForEach(self.shell.navigationItems, id: \.id) { item in
-                    Label(item.title, systemImage: item.systemImage)
+                    SidebarNavigationRow(
+                        item: item,
+                        isSelected: self.shell.navigationSelection == item
+                    )
                         .tag(item)
                 }
             }
@@ -51,22 +54,27 @@ struct AppShellView: View {
                             await self.providerModel(provider).refresh()
                         }
                     }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
                 }
+                label: { Text("Refresh") }
+                .help("Refresh the current view")
+                .accessibilityLabel("Refresh the current view")
                 .disabled(self.isBusy)
 
                 SettingsLink {
-                    Label("Settings", systemImage: "gearshape")
+                    Text("Settings")
                 }
+                .help("Open HeimdallBar settings")
+                .accessibilityLabel("Open HeimdallBar settings")
 
                 Button {
                     if let url = URL(string: "http://127.0.0.1:\(self.helperPort)") {
                         NSWorkspace.shared.open(url)
                     }
                 } label: {
-                    Label("Open Dashboard", systemImage: "safari")
+                    Text("Web Dashboard")
                 }
+                .help("Open the local Heimdall web dashboard")
+                .accessibilityLabel("Open the local Heimdall web dashboard")
             }
         }
     }
@@ -144,7 +152,7 @@ private struct WindowOverviewProvidersSection: View {
         VStack(alignment: .leading, spacing: 14) {
             WindowSectionHeader(
                 title: "Providers",
-                subtitle: "Provider state and current session quota"
+                subtitle: "Provider state, freshness, and current session quota"
             )
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16)], spacing: 16) {
@@ -176,10 +184,38 @@ private struct WindowOverviewActivitySection: View {
                 WindowOverviewTotalsCard(projection: self.projection)
 
                 if !self.projection.historyFractions.isEmpty {
-                    HistoryBarStrip(fractions: self.projection.historyFractions)
+                    WindowOverviewHistoryCard(projection: self.projection)
                 }
             }
         }
+    }
+}
+
+private struct SidebarNavigationRow: View {
+    let item: AppNavigationItem
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: self.item.systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 16)
+                .foregroundStyle(self.isSelected ? Color.primary : Color.secondary)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(self.item.title)
+                    .font(.body.weight(self.isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                Text(self.item.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 }
 
@@ -195,6 +231,28 @@ private struct WindowSectionHeader: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct WindowOverviewHistoryCard: View {
+    let projection: OverviewMenuProjection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Last 7 days")
+                .font(.headline)
+            Text("Relative daily spend across the visible week. The latest day is underlined.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            HistoryBarStrip(
+                fractions: self.projection.historyFractions,
+                showsHeader: false
+            )
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .menuCardBackground(opacity: 0.04, cornerRadius: 16)
     }
 }
 
@@ -273,6 +331,10 @@ private struct WindowOverviewProviderCard: View {
                     Text(self.item.costLabel)
                         .font(.callout)
                         .foregroundStyle(.secondary)
+
+                    Text(self.item.lastRefreshLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer(minLength: 12)
@@ -285,8 +347,7 @@ private struct WindowOverviewProviderCard: View {
             HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(self.metric.title)
-                        .font(.caption.weight(.semibold))
-                        .textCase(.uppercase)
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                     Text(self.metric.detail)
                         .font(.body.weight(.medium))
@@ -307,8 +368,7 @@ private struct WindowOverviewProviderCard: View {
                     Text(self.metric.value)
                         .font(.system(size: 32, weight: .bold, design: .rounded).monospacedDigit())
                     Text(self.metric.qualifier)
-                        .font(.caption2.weight(.semibold))
-                        .tracking(0.6)
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -393,6 +453,11 @@ private struct WindowOverviewTotalsCard: View {
             Text(self.projection.refreshedAtLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Text(self.projection.activitySummaryLabel)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let warningLine = self.warningLine {
                 Divider()

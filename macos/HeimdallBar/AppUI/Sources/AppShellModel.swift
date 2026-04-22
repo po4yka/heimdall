@@ -24,14 +24,25 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
         }
     }
 
+    public var subtitle: String {
+        switch self {
+        case .overview:
+            return "All providers"
+        case .provider(.claude):
+            return "Anthropic usage"
+        case .provider(.codex):
+            return "OpenAI usage"
+        }
+    }
+
     public var systemImage: String {
         switch self {
         case .overview:
             return "square.grid.2x2"
         case .provider(.claude):
-            return "bolt.horizontal"
+            return "quote.bubble"
         case .provider(.codex):
-            return "terminal"
+            return "curlybraces.square"
         }
     }
 

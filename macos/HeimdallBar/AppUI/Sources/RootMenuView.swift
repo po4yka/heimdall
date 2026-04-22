@@ -450,32 +450,23 @@ private struct OverviewSummaryCard: View {
                     if !self.projection.historyFractions.isEmpty {
                         VStack(alignment: .leading, spacing: 5) {
                             Text("Last 7 days")
-                                .font(.caption2.weight(.semibold))
+                                .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                             HistoryBarStrip(fractions: self.projection.historyFractions)
                         }
                     }
 
-                    HStack(spacing: 6) {
-                        OverviewMetaBadge(
-                            title: "Providers",
-                            value: "\(self.projection.items.count)"
-                        )
-                        if !self.projection.warningLabels.isEmpty {
-                            OverviewMetaBadge(
-                                title: "Flags",
-                                value: "\(self.projection.warningLabels.count)"
-                            )
-                        }
-                    }
+                    Text(self.metadataLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(minWidth: 92, alignment: .leading)
             }
 
-            if !self.projection.warningLabels.isEmpty {
+            if let warningSummary = self.warningSummary {
                 Divider()
-                Label("Source limits affect some provider data", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption2.weight(.medium))
+                Label(warningSummary, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.orange)
             }
         }
@@ -483,26 +474,21 @@ private struct OverviewSummaryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .menuCardBackground(opacity: 0.02, cornerRadius: 12)
     }
-}
 
-private struct OverviewMetaBadge: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(self.title)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            Text(self.value)
-                .font(.caption.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.primary)
+    private var metadataLine: String {
+        if self.projection.warningLabels.isEmpty {
+            return "\(self.projection.items.count) providers"
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .frame(minWidth: 40, alignment: .leading)
-        .menuCardBackground(opacity: 0.04, cornerRadius: 8)
+        return "\(self.projection.items.count) providers • \(self.projection.warningLabels.count) warnings"
+    }
+
+    private var warningSummary: String? {
+        let affectedProviders = self.projection.items
+            .filter { !$0.warningLabels.isEmpty || $0.isShowingCachedData }
+            .map(\.title)
+
+        guard !affectedProviders.isEmpty else { return nil }
+        return "\(affectedProviders.joined(separator: ", ")) have limited or fallback data."
     }
 }
 
@@ -555,8 +541,7 @@ private struct TopMetricRow: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(self.title)
-                    .font(.caption.weight(.semibold))
-                    .textCase(.uppercase)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                 Text(self.detail)
                     .font(.caption)
@@ -575,13 +560,17 @@ struct StateBadge: View {
     let label: String
 
     var body: some View {
-        Text(self.label.uppercased())
-            .font(.caption2.monospaced())
+        Text(self.label)
+            .font(.caption2.weight(.semibold))
             .padding(.horizontal, 7)
             .padding(.vertical, 3)
             .foregroundStyle(self.foregroundColor)
             .background(self.backgroundColor)
             .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(self.borderColor, lineWidth: 1)
+            )
     }
 
     private var foregroundColor: Color {
@@ -598,18 +587,28 @@ struct StateBadge: View {
     private var backgroundColor: Color {
         switch self.state {
         case .healthy:
-            return Color.primary.opacity(0.08)
-        case .refreshing:
             return Color.primary.opacity(0.12)
+        case .refreshing:
+            return Color.primary.opacity(0.16)
         case .stale:
-            return Color.orange.opacity(0.12)
+            return Color.orange.opacity(0.18)
         case .degraded:
-            return Color.orange
-                .opacity(0.18)
+            return Color.orange.opacity(0.24)
         case .incident:
             return Color.red.opacity(0.85)
         case .error:
             return Color.red
+        }
+    }
+
+    private var borderColor: Color {
+        switch self.state {
+        case .healthy, .refreshing:
+            return Color.primary.opacity(0.12)
+        case .stale, .degraded:
+            return Color.orange.opacity(0.3)
+        case .incident, .error:
+            return Color.red.opacity(0.28)
         }
     }
 }
@@ -681,6 +680,7 @@ private struct LaneStatusCard: View {
 
 struct HistoryBarStrip: View {
     let fractions: [Double]
+    var showsHeader: Bool = true
     /// Per-day token breakdown (input/output/cache-read/cache-creation). When
     /// empty or not aligned with `fractions`, the widget falls back to the
     /// flat-bar rendering used before Phase 1.
@@ -689,15 +689,15 @@ struct HistoryBarStrip: View {
     var body: some View {
         let labels = Self.dayLabels(count: self.fractions.count)
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Last \(self.fractions.count) days")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.4)
-                Spacer()
-                if self.hasBreakdowns {
-                    TokenLegend()
+            if self.showsHeader {
+                HStack {
+                    Text("Last \(self.fractions.count) days")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if self.hasBreakdowns {
+                        TokenLegend()
+                    }
                 }
             }
             HStack(alignment: .bottom, spacing: 6) {
@@ -731,8 +731,8 @@ struct HistoryBarStrip: View {
                         }
                         .frame(maxWidth: .infinity)
                         Text(label)
-                            .font(.system(size: 9).monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 9, weight: isToday ? .semibold : .regular).monospacedDigit())
+                            .foregroundStyle(isToday ? .primary : .secondary)
                     }
                 }
             }
