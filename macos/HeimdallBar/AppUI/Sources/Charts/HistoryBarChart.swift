@@ -24,11 +24,11 @@ struct HistoryBarChart: View {
             if self.showsHeader {
                 ChartHeader(
                     title: "Usage history",
-                    caption: "Relative daily spend normalized to the 7-day peak. Today is on the right."
+                    caption: "Daily spend, last 7 days."
                 )
             }
             self.chart(entries: entries)
-                .frame(height: 42)
+                .frame(height: 48)
         }
         .padding(8)
         .menuCardBackground(

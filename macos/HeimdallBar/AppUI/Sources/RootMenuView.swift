@@ -775,10 +775,10 @@ enum TokenCategory: CaseIterable {
     var tint: Color {
         switch self {
         case .input: return Color.accentColor
-        case .output: return Color.primary.opacity(0.88)
-        case .cacheRead: return Color.primary.opacity(0.55)
-        case .cacheCreation: return Color.primary.opacity(0.28)
-        case .reasoning: return Color.primary.opacity(0.14)
+        case .output: return Color.primary.opacity(0.95)
+        case .cacheRead: return Color.primary.opacity(0.62)
+        case .cacheCreation: return Color.primary.opacity(0.35)
+        case .reasoning: return Color.primary.opacity(0.18)
         }
     }
 
@@ -795,15 +795,15 @@ enum TokenCategory: CaseIterable {
 
 private struct TokenLegend: View {
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             ForEach(Array(TokenCategory.orderedForStack.enumerated()), id: \.offset) { entry in
                 let category = entry.element
-                HStack(spacing: 3) {
-                    Circle()
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(category.tint)
-                        .frame(width: 6, height: 6)
+                        .frame(width: 10, height: 4)
                     Text(category.shortLabel)
-                        .font(.system(size: 9))
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -844,14 +844,14 @@ struct TokenBreakdownRow: View {
                                         1,
                                         geo.size.width * CGFloat(tokens) / CGFloat(total)
                                     ),
-                                    height: 6
+                                    height: 10
                                 )
                         }
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
-            .frame(height: 6)
+            .frame(height: 10)
             .help(Self.tooltip(for: self.breakdown))
             TokenLegend()
         }
