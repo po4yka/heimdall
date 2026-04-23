@@ -7,6 +7,7 @@ struct HeimdallMobileCompositionRoot {
         MobileDashboardModel(
             store: CloudKitSnapshotSyncStore(),
             cache: FileBackedSyncedAggregateCache(),
+            preferencesStore: UserDefaultsMobileDashboardPreferencesStore(),
             widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
                 writer: AppGroupWidgetSnapshotStore(),
                 reloader: MobileWidgetCenterReloader()
