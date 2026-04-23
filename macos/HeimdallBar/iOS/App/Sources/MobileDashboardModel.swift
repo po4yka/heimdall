@@ -6,7 +6,7 @@ import Observation
 @MainActor
 @Observable
 final class MobileDashboardModel {
-    var snapshot: MobileSnapshotEnvelope?
+    var aggregate: SyncedAggregateEnvelope?
     var isLoading = false
     var lastError: String?
     var selectedProvider: ProviderID = .claude
@@ -18,7 +18,7 @@ final class MobileDashboardModel {
     }
 
     var providerSnapshots: [ProviderSnapshot] {
-        self.snapshot?.providers ?? []
+        self.aggregate?.aggregateProviderViews.map(\.providerSnapshot) ?? []
     }
 
     var selectedProviderSnapshot: ProviderSnapshot? {
@@ -27,16 +27,20 @@ final class MobileDashboardModel {
     }
 
     var selectedHistorySeries: MobileProviderHistorySeries? {
-        self.snapshot?.history90d.first(where: { $0.providerID == self.selectedProvider })
-            ?? self.snapshot?.history90d.first
+        self.aggregate?.aggregateHistorySeries(for: self.selectedProvider)
+            ?? self.aggregate?.aggregateHistory90d().first
+    }
+
+    var installations: [SyncedInstallationSnapshot] {
+        self.aggregate?.installations ?? []
     }
 
     var hasSnapshot: Bool {
-        self.snapshot != nil
+        self.aggregate != nil
     }
 
     var staleSnapshotWarning: String? {
-        guard self.snapshot != nil else { return nil }
+        guard self.aggregate != nil else { return nil }
         return self.lastError
     }
 
@@ -45,8 +49,21 @@ final class MobileDashboardModel {
         defer { self.isLoading = false }
 
         do {
-            let snapshot = try await self.store.loadLatestSnapshot()
-            self.snapshot = snapshot
+            self.aggregate = try await self.store.loadAggregateSnapshot()
+            self.lastError = nil
+            self.syncSelectedProvider()
+        } catch {
+            self.lastError = error.localizedDescription
+        }
+    }
+
+    func acceptShareURL(_ url: URL) async {
+        self.isLoading = true
+        defer { self.isLoading = false }
+
+        do {
+            _ = try await self.store.acceptShareURL(url)
+            self.aggregate = try await self.store.loadAggregateSnapshot()
             self.lastError = nil
             self.syncSelectedProvider()
         } catch {
@@ -55,8 +72,8 @@ final class MobileDashboardModel {
     }
 
     private func syncSelectedProvider() {
-        guard let snapshot else { return }
-        let availableProviders = snapshot.providers.compactMap(\.providerID)
+        guard let aggregate else { return }
+        let availableProviders = aggregate.aggregateProviderViews.compactMap(\.providerID)
         if availableProviders.contains(self.selectedProvider) {
             return
         }

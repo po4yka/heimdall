@@ -27,6 +27,14 @@ public final class OverviewFeatureModel {
         self.sessionStore.visibleProviders
     }
 
+    public var syncedAggregate: SyncedAggregateEnvelope? {
+        self.repository.syncedAggregate
+    }
+
+    public var cloudSyncState: CloudSyncSpaceState {
+        self.repository.cloudSyncState
+    }
+
     public var projection: OverviewMenuProjection {
         let globalIssue = self.presentableGlobalIssue()
         return MenuProjectionBuilder.overview(

@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import HeimdallDomain
 @testable import HeimdallServices
@@ -15,23 +16,24 @@ struct MobileSnapshotSyncTests {
         let synced = try await coordinator.syncLatestSnapshot()
         let persisted = try await store.loadLatestSnapshot()
 
-        #expect(synced.sourceDevice == "macbook-pro")
+        #expect(synced.installations.first?.sourceDevice == "macbook-pro")
         #expect(persisted?.sourceDevice == "macbook-pro")
         #expect(persisted?.providers.count == 2)
     }
 
     @Test
-    func cloudKitSnapshotStoreRoundTripsPayloadThroughTransport() async throws {
-        let transport = InMemorySnapshotPayloadTransport()
-        let store = CloudKitSnapshotSyncStore(transport: transport)
+    func cloudKitSnapshotStoreRoundTripsAggregateThroughBackingStore() async throws {
+        let backingStore = InMemoryCloudSnapshotBackingStore()
+        let persistence = UserDefaultsCloudSyncStateStore(defaults: UserDefaults(suiteName: "MobileSnapshotSyncTests.roundtrip")!)
+        let store = CloudKitSnapshotSyncStore(backingStore: backingStore, persistence: persistence)
         let snapshot = MobileSnapshotEnvelope.fixture(sourceDevice: "studio")
 
         try await store.saveLatestSnapshot(snapshot)
-        let loaded = try await store.loadLatestSnapshot()
+        let loaded = try await store.loadAggregateSnapshot()
 
-        #expect(loaded?.sourceDevice == "studio")
-        #expect(loaded?.history90d.count == 2)
-        #expect(loaded?.totals.last90DaysTokens == snapshot.totals.last90DaysTokens)
+        #expect(loaded?.installations.first?.sourceDevice == "studio")
+        #expect(loaded?.aggregateHistory90d().count == 2)
+        #expect(loaded?.aggregateTotals.last90DaysTokens == snapshot.totals.last90DaysTokens)
     }
 
     @Test
@@ -47,6 +49,162 @@ struct MobileSnapshotSyncTests {
         #expect(envelope.providers.first?.providerID == .codex)
         #expect(envelope.responseScope == "all")
     }
+
+    @Test
+    func aggregateEnvelopeMergesProviderBreakdownsAcrossInstallations() {
+        let firstSummary = ProviderCostSummary(
+            todayTokens: 100,
+            todayCostUSD: 10,
+            last30DaysTokens: 300,
+            last30DaysCostUSD: 30,
+            daily: [],
+            cacheHitRateToday: 25,
+            cacheHitRate30d: 40,
+            byModel: [
+                ProviderModelRow(
+                    model: "claude-sonnet",
+                    costUSD: 10,
+                    input: 100,
+                    output: 40,
+                    cacheRead: 10,
+                    cacheCreation: 5,
+                    reasoningOutput: 2,
+                    turns: 3
+                )
+            ],
+            byProject: [
+                ProviderProjectRow(project: "personal", displayName: "Personal", costUSD: 10, turns: 3, sessions: 1)
+            ],
+            byTool: [
+                ProviderToolRow(
+                    toolName: "Read",
+                    category: "fs",
+                    mcpServer: nil,
+                    invocations: 2,
+                    errors: 0,
+                    turnsUsed: 2,
+                    sessionsUsed: 1
+                )
+            ],
+            byMcp: [
+                ProviderMcpRow(server: "filesystem", invocations: 2, toolsUsed: 1, sessionsUsed: 1)
+            ],
+            hourlyActivity: [
+                ProviderHourlyBucket(hour: 9, turns: 3, costUSD: 10, tokens: 100)
+            ],
+            activityHeatmap: [
+                ProviderHeatmapCell(dayOfWeek: 1, hour: 9, turns: 3)
+            ],
+            recentSessions: [
+                ProviderSession(
+                    sessionID: "session-1",
+                    displayName: "Personal Session",
+                    startedAt: "2026-04-21T10:00:00Z",
+                    durationMinutes: 15,
+                    turns: 3,
+                    costUSD: 10,
+                    model: "claude-sonnet"
+                )
+            ],
+            subagentBreakdown: ProviderSubagentBreakdown(totalTurns: 4, totalCostUSD: 4, sessionCount: 1, agentCount: 1),
+            versionBreakdown: [
+                ProviderVersionRow(version: "1.0.0", turns: 3, sessions: 1, costUSD: 10)
+            ]
+        )
+        let secondSummary = ProviderCostSummary(
+            todayTokens: 100,
+            todayCostUSD: 6,
+            last30DaysTokens: 300,
+            last30DaysCostUSD: 18,
+            daily: [],
+            cacheHitRateToday: 75,
+            cacheHitRate30d: 60,
+            byModel: [
+                ProviderModelRow(
+                    model: "claude-sonnet",
+                    costUSD: 6,
+                    input: 60,
+                    output: 30,
+                    cacheRead: 15,
+                    cacheCreation: 0,
+                    reasoningOutput: 1,
+                    turns: 2
+                )
+            ],
+            byProject: [
+                ProviderProjectRow(project: "personal", displayName: "Personal", costUSD: 6, turns: 2, sessions: 1)
+            ],
+            byTool: [
+                ProviderToolRow(
+                    toolName: "Read",
+                    category: "fs",
+                    mcpServer: nil,
+                    invocations: 1,
+                    errors: 1,
+                    turnsUsed: 1,
+                    sessionsUsed: 1
+                )
+            ],
+            byMcp: [
+                ProviderMcpRow(server: "filesystem", invocations: 1, toolsUsed: 1, sessionsUsed: 1)
+            ],
+            hourlyActivity: [
+                ProviderHourlyBucket(hour: 9, turns: 2, costUSD: 6, tokens: 100)
+            ],
+            activityHeatmap: [
+                ProviderHeatmapCell(dayOfWeek: 1, hour: 9, turns: 2)
+            ],
+            recentSessions: [
+                ProviderSession(
+                    sessionID: "session-2",
+                    displayName: "Work Session",
+                    startedAt: "2026-04-21T11:00:00Z",
+                    durationMinutes: 20,
+                    turns: 2,
+                    costUSD: 6,
+                    model: "claude-sonnet"
+                )
+            ],
+            subagentBreakdown: ProviderSubagentBreakdown(totalTurns: 2, totalCostUSD: 2, sessionCount: 1, agentCount: 1),
+            versionBreakdown: [
+                ProviderVersionRow(version: "1.0.0", turns: 2, sessions: 1, costUSD: 6)
+            ]
+        )
+
+        let aggregate = SyncedAggregateEnvelope.aggregate(
+            installations: [
+                SyncedInstallationSnapshot.from(
+                    mobileSnapshot: .fixture(sourceDevice: "personal-mac", providers: [.fixture(provider: .claude, costSummary: firstSummary)]),
+                    installationID: "personal"
+                ),
+                SyncedInstallationSnapshot.from(
+                    mobileSnapshot: .fixture(sourceDevice: "work-mac", providers: [.fixture(provider: .claude, costSummary: secondSummary)]),
+                    installationID: "work"
+                ),
+            ],
+            generatedAt: "2026-04-21T11:00:00Z"
+        )
+
+        let provider = try! #require(aggregate.aggregateProviderViews.first)
+        #expect(provider.providerSnapshot.costSummary.byModel.count == 1)
+        #expect(provider.providerSnapshot.costSummary.byModel.first?.costUSD == 16)
+        #expect(provider.providerSnapshot.costSummary.byProject.count == 1)
+        #expect(provider.providerSnapshot.costSummary.byProject.first?.turns == 5)
+        #expect(provider.providerSnapshot.costSummary.byTool.count == 1)
+        #expect(provider.providerSnapshot.costSummary.byTool.first?.invocations == 3)
+        #expect(provider.providerSnapshot.costSummary.byMcp.count == 1)
+        #expect(provider.providerSnapshot.costSummary.byMcp.first?.invocations == 3)
+        #expect(provider.providerSnapshot.costSummary.hourlyActivity.count == 1)
+        #expect(provider.providerSnapshot.costSummary.hourlyActivity.first?.tokens == 200)
+        #expect(provider.providerSnapshot.costSummary.activityHeatmap.count == 1)
+        #expect(provider.providerSnapshot.costSummary.activityHeatmap.first?.turns == 5)
+        #expect(provider.providerSnapshot.costSummary.versionBreakdown.count == 1)
+        #expect(provider.providerSnapshot.costSummary.versionBreakdown.first?.turns == 5)
+        #expect(provider.providerSnapshot.costSummary.recentSessions.count == 2)
+        #expect(provider.providerSnapshot.costSummary.subagentBreakdown?.totalTurns == 6)
+        #expect(provider.providerSnapshot.costSummary.cacheHitRateToday == 50)
+        #expect(provider.providerSnapshot.costSummary.cacheHitRate30d == 50)
+    }
 }
 
 private actor InMemorySnapshotSyncStore: SnapshotSyncStore {
@@ -56,31 +214,66 @@ private actor InMemorySnapshotSyncStore: SnapshotSyncStore {
         self.snapshot = snapshot
     }
 
-    func loadLatestSnapshot() async throws -> MobileSnapshotEnvelope? {
+    func loadLegacySnapshot() async throws -> MobileSnapshotEnvelope? {
         self.snapshot
     }
 
-    func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws {
+    func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws -> SyncedAggregateEnvelope {
         self.snapshot = snapshot
+        return SyncedAggregateEnvelope.legacy(mobileSnapshot: snapshot, installationID: "test-installation")
+    }
+
+    func loadAggregateSnapshot() async throws -> SyncedAggregateEnvelope? {
+        self.snapshot.map { SyncedAggregateEnvelope.legacy(mobileSnapshot: $0, installationID: "test-installation") }
+    }
+
+    func loadCloudSyncSpaceState() async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .owner, status: .ownerReady)
+    }
+
+    func prepareOwnerShare() async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .owner, status: .inviteReady, shareURL: "https://example.com/share")
+    }
+
+    func acceptShareURL(_: URL) async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .participant, status: .participantJoined)
     }
 }
 
-private actor InMemorySnapshotPayloadTransport: SnapshotPayloadTransport {
-    private var payload: Data?
+private actor InMemoryCloudSnapshotBackingStore: CloudSnapshotBackingStore {
+    private var legacy: MobileSnapshotEnvelope?
+    private var installations: [SyncedInstallationSnapshot] = []
 
-    func fetchPayload(recordType _: String, recordName _: String) async throws -> Data? {
-        self.payload
+    func accountStatus() async throws -> CKAccountStatus {
+        .available
     }
 
-    func savePayload(
-        _ payload: Data,
-        contractVersion _: Int,
-        generatedAt _: String,
-        sourceDevice _: String,
-        recordType _: String,
-        recordName _: String
-    ) async throws {
-        self.payload = payload
+    func loadLegacySnapshot() async throws -> MobileSnapshotEnvelope? {
+        self.legacy
+    }
+
+    func saveLegacySnapshot(_ snapshot: MobileSnapshotEnvelope) async throws {
+        self.legacy = snapshot
+    }
+
+    func fetchInstallationSnapshots(state _: CloudSyncSpaceState) async throws -> [SyncedInstallationSnapshot] {
+        self.installations
+    }
+
+    func saveInstallationSnapshot(
+        _ snapshot: SyncedInstallationSnapshot,
+        state _: CloudSyncSpaceState
+    ) async throws -> CloudSyncSpaceState {
+        self.installations = [snapshot]
+        return CloudSyncSpaceState(role: .owner, status: .ownerReady, zoneName: "heimdall-sync-space")
+    }
+
+    func prepareOwnerShare(state _: CloudSyncSpaceState) async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .owner, status: .inviteReady, shareURL: "https://example.com/share")
+    }
+
+    func acceptShareURL(_: URL, state _: CloudSyncSpaceState) async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .participant, status: .participantJoined, zoneName: "heimdall-sync-space", zoneOwnerName: "_owner")
     }
 }
 
@@ -131,7 +324,10 @@ private extension MobileSnapshotEnvelope {
 }
 
 private extension ProviderSnapshot {
-    static func fixture(provider: ProviderID) -> ProviderSnapshot {
+    static func fixture(
+        provider: ProviderID,
+        costSummary: ProviderCostSummary? = nil
+    ) -> ProviderSnapshot {
         ProviderSnapshot(
             provider: provider.rawValue,
             available: true,
@@ -172,7 +368,7 @@ private extension ProviderSnapshot {
                 lastValidatedAt: "2026-04-21T10:00:00Z",
                 recoveryActions: []
             ),
-            costSummary: ProviderCostSummary(
+            costSummary: costSummary ?? ProviderCostSummary(
                 todayTokens: 900,
                 todayCostUSD: 9.0,
                 last30DaysTokens: 2100,

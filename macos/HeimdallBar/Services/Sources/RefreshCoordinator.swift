@@ -254,7 +254,7 @@ public final class RefreshCoordinator {
             manager: self.browserSessionManager,
             providers: importedSessionProviders
         )
-        async let snapshotSyncIssue = Self.snapshotSyncIssue(
+        async let snapshotSyncResult = Self.snapshotSyncResult(
             provider: provider,
             snapshotSyncer: self.snapshotSyncer
         )
@@ -287,7 +287,16 @@ public final class RefreshCoordinator {
             )
         }
 
-        if let snapshotSyncIssue = await snapshotSyncIssue {
+        let (syncedAggregate, syncedState, snapshotSyncIssue) = await snapshotSyncResult
+        if let syncedState {
+            self.sessionStore.cloudSyncState = syncedState
+            self.repository.setCloudSyncState(syncedState)
+        }
+        if let syncedAggregate {
+            self.repository.setSyncedAggregate(syncedAggregate)
+        }
+
+        if let snapshotSyncIssue {
             Self.logger.error("Snapshot sync failed: \(snapshotSyncIssue.message)")
             self.repository.recordIssue(snapshotSyncIssue)
         } else if provider == nil, self.snapshotSyncer != nil {
@@ -341,16 +350,19 @@ public final class RefreshCoordinator {
         }
     }
 
-    nonisolated private static func snapshotSyncIssue(
+    nonisolated private static func snapshotSyncResult(
         provider: ProviderID?,
         snapshotSyncer: (any SnapshotSyncing)?
-    ) async -> AppIssue? {
-        guard provider == nil, let snapshotSyncer else { return nil }
+    ) async -> (SyncedAggregateEnvelope?, CloudSyncSpaceState?, AppIssue?) {
+        guard provider == nil, let snapshotSyncer else { return (nil, nil, nil) }
         do {
-            _ = try await snapshotSyncer.syncLatestSnapshot()
-            return nil
+            return (
+                try await snapshotSyncer.syncLatestSnapshot(),
+                try await snapshotSyncer.loadCloudSyncSpaceState(),
+                nil
+            )
         } catch {
-            return AppIssue(kind: .snapshotSync, message: error.localizedDescription)
+            return (nil, nil, AppIssue(kind: .snapshotSync, message: error.localizedDescription))
         }
     }
 

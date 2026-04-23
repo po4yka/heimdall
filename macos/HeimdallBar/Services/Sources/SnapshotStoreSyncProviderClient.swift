@@ -14,7 +14,7 @@ public struct SnapshotStoreSyncProviderClient: SyncProviderClient {
     }
 
     public func fetchSyncedSnapshots() async throws -> ProviderSnapshotEnvelope {
-        guard let snapshot = try await self.store.loadLatestSnapshot() else {
+        guard let aggregate = try await self.store.loadAggregateSnapshot() else {
             return ProviderSnapshotEnvelope(
                 contractVersion: LiveProviderContract.version,
                 providers: [],
@@ -25,6 +25,14 @@ public struct SnapshotStoreSyncProviderClient: SyncProviderClient {
                 refreshedProviders: []
             )
         }
-        return snapshot.providerEnvelope
+        return ProviderSnapshotEnvelope(
+            contractVersion: LiveProviderContract.version,
+            providers: aggregate.aggregateProviderViews.map(\.providerSnapshot),
+            fetchedAt: aggregate.generatedAt,
+            requestedProvider: nil,
+            responseScope: "all",
+            cacheHit: false,
+            refreshedProviders: aggregate.aggregateProviderViews.map(\.provider)
+        )
     }
 }

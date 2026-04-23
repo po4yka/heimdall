@@ -8,11 +8,11 @@ import Testing
 struct MobileDashboardModelTests {
     @Test
     func loadHandlesMissingSnapshot() async {
-        let model = MobileDashboardModel(store: StubSnapshotStore(snapshot: nil))
+        let model = MobileDashboardModel(store: StubSnapshotStore(aggregate: nil))
 
         await model.load()
 
-        #expect(model.snapshot == nil)
+        #expect(model.aggregate == nil)
         #expect(model.lastError == nil)
     }
 
@@ -20,9 +20,12 @@ struct MobileDashboardModelTests {
     func loadSelectsFirstAvailableProviderWhenDefaultIsMissing() async {
         let model = MobileDashboardModel(
             store: StubSnapshotStore(
-                snapshot: MobileSnapshotEnvelope.fixture(
+                aggregate: SyncedAggregateEnvelope.legacy(
+                    mobileSnapshot: MobileSnapshotEnvelope.fixture(
                     providers: [.fixture(provider: .codex)],
                     staleProviders: ["codex"]
+                    ),
+                    installationID: "codex-installation"
                 )
             )
         )
@@ -31,12 +34,12 @@ struct MobileDashboardModelTests {
 
         #expect(model.selectedProvider == .codex)
         #expect(model.selectedProviderSnapshot?.providerID == .codex)
-        #expect(model.snapshot?.freshness.hasStaleProviders == true)
+        #expect(model.aggregate?.staleInstallations.contains("codex-installation") == true)
     }
 
     @Test
     func loadPreservesMultipleProvidersAndHistory() async {
-        let model = MobileDashboardModel(store: StubSnapshotStore(snapshot: .fixture()))
+        let model = MobileDashboardModel(store: StubSnapshotStore(aggregate: .legacy(mobileSnapshot: .fixture(), installationID: "fixture-installation")))
 
         await model.load()
 
@@ -51,30 +54,48 @@ struct MobileDashboardModelTests {
         await model.load()
         await model.load()
 
-        #expect(model.snapshot != nil)
+        #expect(model.aggregate != nil)
         #expect(model.lastError == "sync failed")
         #expect(model.staleSnapshotWarning == "sync failed")
     }
 }
 
 private actor StubSnapshotStore: SnapshotSyncStore {
-    let snapshot: MobileSnapshotEnvelope?
+    let aggregate: SyncedAggregateEnvelope?
 
-    init(snapshot: MobileSnapshotEnvelope?) {
-        self.snapshot = snapshot
+    init(aggregate: SyncedAggregateEnvelope?) {
+        self.aggregate = aggregate
     }
 
-    func loadLatestSnapshot() async throws -> MobileSnapshotEnvelope? {
-        self.snapshot
+    func loadLegacySnapshot() async throws -> MobileSnapshotEnvelope? {
+        self.aggregate?.mobileSnapshotCompatibility
     }
 
-    func saveLatestSnapshot(_: MobileSnapshotEnvelope) async throws {}
+    func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws -> SyncedAggregateEnvelope {
+        SyncedAggregateEnvelope.legacy(mobileSnapshot: snapshot, installationID: "stub-installation")
+    }
+
+    func loadAggregateSnapshot() async throws -> SyncedAggregateEnvelope? {
+        self.aggregate
+    }
+
+    func loadCloudSyncSpaceState() async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .owner, status: .ownerReady)
+    }
+
+    func prepareOwnerShare() async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .owner, status: .inviteReady, shareURL: "https://example.com/share")
+    }
+
+    func acceptShareURL(_: URL) async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .participant, status: .participantJoined)
+    }
 }
 
 private actor FlakySnapshotStore: SnapshotSyncStore {
     private var loadCount = 0
 
-    func loadLatestSnapshot() async throws -> MobileSnapshotEnvelope? {
+    func loadLegacySnapshot() async throws -> MobileSnapshotEnvelope? {
         self.loadCount += 1
         if self.loadCount == 1 {
             return .fixture()
@@ -84,7 +105,31 @@ private actor FlakySnapshotStore: SnapshotSyncStore {
         ])
     }
 
-    func saveLatestSnapshot(_: MobileSnapshotEnvelope) async throws {}
+    func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws -> SyncedAggregateEnvelope {
+        SyncedAggregateEnvelope.legacy(mobileSnapshot: snapshot, installationID: "flaky-installation")
+    }
+
+    func loadAggregateSnapshot() async throws -> SyncedAggregateEnvelope? {
+        self.loadCount += 1
+        if self.loadCount == 1 {
+            return .legacy(mobileSnapshot: .fixture(), installationID: "flaky-installation")
+        }
+        throw NSError(domain: "MobileDashboardModelTests", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "sync failed",
+        ])
+    }
+
+    func loadCloudSyncSpaceState() async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .owner, status: .ownerReady)
+    }
+
+    func prepareOwnerShare() async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .owner, status: .inviteReady)
+    }
+
+    func acceptShareURL(_: URL) async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .participant, status: .participantJoined)
+    }
 }
 
 private extension MobileSnapshotEnvelope {

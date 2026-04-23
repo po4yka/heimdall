@@ -1,4 +1,5 @@
 import AppKit
+import CloudKit
 import Observation
 import SwiftUI
 import os.log
@@ -17,6 +18,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func attach(model: AppModel) {
         self.model = model
+    }
+
+    func application(_: NSApplication, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
+        guard let url = metadata.share.url else { return }
+        Task { @MainActor [weak self] in
+            await self?.model?.handleIncomingCloudShare(url: url)
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -80,6 +88,9 @@ public struct HeimdallBarScenes: Scene {
                 .frame(minWidth: 900, idealWidth: 1080, minHeight: 620, idealHeight: 720)
                 .background(MainWindowIdentityTagger(sceneID: HeimdallBarSceneID.mainWindow))
                 .onAppear { self.appDelegate.attach(model: self.model) }
+                .onOpenURL { url in
+                    Task { await self.model.handleIncomingCloudShare(url: url) }
+                }
         }
 
         MenuBarExtra(isInserted: self.mergedMenuBarBinding) {
@@ -142,6 +153,9 @@ public struct HeimdallBarScenes: Scene {
             )
                 .frame(width: 480, height: 360)
                 .onAppear { self.appDelegate.attach(model: self.model) }
+                .onOpenURL { url in
+                    Task { await self.model.handleIncomingCloudShare(url: url) }
+                }
         }
     }
 
@@ -194,6 +208,7 @@ struct MenuBarLabel: View {
 }
 
 enum MainWindowFocusNormalizer {
+    @MainActor
     static func shouldNormalizeInitialFocus(firstResponder: NSResponder?, contentView: NSView?) -> Bool {
         guard let contentView else { return false }
         guard let firstResponder else { return true }

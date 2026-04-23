@@ -1,3 +1,4 @@
+import Foundation
 import HeimdallDomain
 import HeimdallServices
 import Observation
@@ -14,6 +15,7 @@ public final class AppModel {
     private let refreshCoordinator: RefreshCoordinator
     private let providerRepository: ProviderRepository
     private let providerFeatures: [ProviderID: ProviderFeatureModel]
+    private let cloudSyncController: (any CloudSyncControlling)?
     private var hasStarted: Bool
 
     public init(runtime: HeimdallAppRuntime) {
@@ -24,6 +26,7 @@ public final class AppModel {
         let settingsStore = runtime.settingsStore
         let credentialInspector = runtime.credentialInspector
         let localNotificationCoordinator = runtime.localNotificationCoordinator
+        let cloudSyncController = runtime.cloudSyncController
 
         self.sessionStore = sessionStore
         self.shell = AppShellModel(sessionStore: sessionStore)
@@ -41,10 +44,12 @@ public final class AppModel {
             repository: providerRepository,
             settingsStore: settingsStore,
             refreshCoordinator: refreshCoordinator,
-            localNotificationCoordinator: localNotificationCoordinator
+            localNotificationCoordinator: localNotificationCoordinator,
+            cloudSyncController: cloudSyncController
         )
         self.refreshCoordinator = refreshCoordinator
         self.providerRepository = providerRepository
+        self.cloudSyncController = cloudSyncController
         self.providerFeatures = Dictionary(uniqueKeysWithValues: ProviderID.allCases.map { provider in
             (
                 provider,
@@ -81,6 +86,9 @@ public final class AppModel {
         guard !self.hasStarted else { return }
         self.hasStarted = true
         self.refreshCoordinator.start()
+        Task { [weak self] in
+            await self?.settings.refreshCloudSyncState()
+        }
     }
 
     public func prepareForExit() async {
@@ -93,5 +101,18 @@ public final class AppModel {
 
     public var globalIssue: AppIssue? {
         self.providerRepository.issue(for: nil)
+    }
+
+    public func handleIncomingCloudShare(url: URL) async {
+        guard let cloudSyncController else { return }
+        do {
+            let state = try await cloudSyncController.acceptShareURL(url)
+            self.providerRepository.setCloudSyncState(state)
+            self.sessionStore.cloudSyncState = state
+            self.providerRepository.setSyncedAggregate(try await cloudSyncController.loadAggregateSnapshot())
+            self.providerRepository.clearIssue(kind: .snapshotSync)
+        } catch {
+            self.providerRepository.recordIssue(AppIssue(kind: .snapshotSync, message: error.localizedDescription))
+        }
     }
 }

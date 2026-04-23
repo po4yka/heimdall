@@ -220,6 +220,13 @@ public protocol AppSessionStatePersisting: Sendable {
     func saveAppSessionState(_ state: PersistedAppSessionState)
 }
 
+public protocol CloudSyncStatePersisting: Sendable {
+    func loadInstallationID() -> String?
+    func saveInstallationID(_ installationID: String)
+    func loadCloudSyncSpaceState() -> CloudSyncSpaceState?
+    func saveCloudSyncSpaceState(_ state: CloudSyncSpaceState)
+}
+
 public enum NotificationAuthorizationStatus: Sendable, Equatable {
     case notDetermined
     case denied
@@ -297,13 +304,30 @@ public protocol MobileSnapshotClient: Sendable {
     func fetchMobileSnapshot() async throws -> MobileSnapshotEnvelope
 }
 
-public protocol SnapshotSyncStore: Sendable {
-    func loadLatestSnapshot() async throws -> MobileSnapshotEnvelope?
-    func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws
+public protocol CloudSyncControlling: Sendable {
+    func loadAggregateSnapshot() async throws -> SyncedAggregateEnvelope?
+    func loadCloudSyncSpaceState() async throws -> CloudSyncSpaceState
+    func prepareOwnerShare() async throws -> CloudSyncSpaceState
+    func acceptShareURL(_ url: URL) async throws -> CloudSyncSpaceState
+}
+
+public protocol SnapshotSyncStore: CloudSyncControlling {
+    func loadLegacySnapshot() async throws -> MobileSnapshotEnvelope?
+    func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws -> SyncedAggregateEnvelope
+}
+
+public extension SnapshotSyncStore {
+    func loadLatestSnapshot() async throws -> MobileSnapshotEnvelope? {
+        if let aggregate = try await self.loadAggregateSnapshot() {
+            return aggregate.mobileSnapshotCompatibility
+        }
+        return try await self.loadLegacySnapshot()
+    }
 }
 
 public protocol SnapshotSyncing: Sendable {
-    func syncLatestSnapshot() async throws -> MobileSnapshotEnvelope
+    func syncLatestSnapshot() async throws -> SyncedAggregateEnvelope
+    func loadCloudSyncSpaceState() async throws -> CloudSyncSpaceState
 }
 
 public protocol ProviderDataSource: Sendable {

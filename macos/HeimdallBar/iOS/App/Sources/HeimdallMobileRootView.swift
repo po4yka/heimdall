@@ -11,18 +11,18 @@ struct HeimdallMobileRootView: View {
                 if self.model.isLoading && !self.model.hasSnapshot {
                     ProgressView("Loading synced snapshot…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let snapshot = self.model.snapshot {
+                } else if let aggregate = self.model.aggregate {
                     VStack(spacing: 0) {
                         if let warning = self.model.staleSnapshotWarning {
                             SyncWarningBanner(message: warning)
                         }
 
                         TabView {
-                            OverviewTab(model: self.model, snapshot: snapshot)
+                            OverviewTab(model: self.model, aggregate: aggregate)
                                 .tabItem { Label("Overview", systemImage: "rectangle.grid.2x2") }
-                            HistoryTab(model: self.model, snapshot: snapshot)
+                            HistoryTab(model: self.model, aggregate: aggregate)
                                 .tabItem { Label("History", systemImage: "chart.line.uptrend.xyaxis") }
-                            FreshnessTab(snapshot: snapshot)
+                            FreshnessTab(aggregate: aggregate)
                                 .tabItem { Label("Freshness", systemImage: "clock") }
                         }
                     }
@@ -52,6 +52,9 @@ struct HeimdallMobileRootView: View {
         .task {
             await self.model.load()
         }
+        .onOpenURL { url in
+            Task { await self.model.acceptShareURL(url) }
+        }
     }
 }
 
@@ -75,23 +78,23 @@ private struct SyncWarningBanner: View {
 
 private struct OverviewTab: View {
     @Bindable var model: MobileDashboardModel
-    let snapshot: MobileSnapshotEnvelope
+    let aggregate: SyncedAggregateEnvelope
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if self.snapshot.providers.count > 1 {
+                if self.aggregate.aggregateProviderViews.count > 1 {
                     ProviderPicker(model: self.model)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Totals")
+                    Text("All Installations")
                         .font(.headline)
-                    LabeledContent("Today tokens", value: "\(self.snapshot.totals.todayTokens)")
-                    LabeledContent("Today cost", value: usd(self.snapshot.totals.todayCostUSD))
-                    LabeledContent("Last 90 days", value: "\(self.snapshot.totals.last90DaysTokens) tokens")
-                    LabeledContent("90 day cost", value: usd(self.snapshot.totals.last90DaysCostUSD))
-                    LabeledContent("Source device", value: self.snapshot.sourceDevice)
+                    LabeledContent("Today tokens", value: "\(self.aggregate.aggregateTotals.todayTokens)")
+                    LabeledContent("Today cost", value: usd(self.aggregate.aggregateTotals.todayCostUSD))
+                    LabeledContent("Last 90 days", value: "\(self.aggregate.aggregateTotals.last90DaysTokens) tokens")
+                    LabeledContent("90 day cost", value: usd(self.aggregate.aggregateTotals.last90DaysCostUSD))
+                    LabeledContent("Installations", value: "\(self.aggregate.installations.count)")
                 }
                 .cardStyle()
 
@@ -116,6 +119,24 @@ private struct OverviewTab: View {
                     }
                     .cardStyle()
                 }
+
+                ForEach(self.aggregate.installations) { installation in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(installation.sourceDevice)
+                            .font(.headline)
+                        LabeledContent("Installation", value: installation.installationID)
+                        LabeledContent("Published", value: displayTimestamp(installation.publishedAt))
+                        LabeledContent("90 day tokens", value: "\(installation.totals.last90DaysTokens)")
+                        if !installation.accountLabels.isEmpty {
+                            LabeledContent("Accounts", value: installation.accountLabels.joined(separator: ", "))
+                        }
+                        if installation.isStale {
+                            Text("This installation has stale provider data.")
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .cardStyle()
+                }
             }
             .padding()
         }
@@ -124,11 +145,11 @@ private struct OverviewTab: View {
 
 private struct HistoryTab: View {
     @Bindable var model: MobileDashboardModel
-    let snapshot: MobileSnapshotEnvelope
+    let aggregate: SyncedAggregateEnvelope
 
     var body: some View {
         List {
-            if self.snapshot.providers.count > 1 {
+            if self.aggregate.aggregateProviderViews.count > 1 {
                 Section {
                     ProviderPicker(model: self.model)
                 }
@@ -161,29 +182,29 @@ private struct HistoryTab: View {
 }
 
 private struct FreshnessTab: View {
-    let snapshot: MobileSnapshotEnvelope
+    let aggregate: SyncedAggregateEnvelope
 
     var body: some View {
         List {
             Section("Snapshot") {
-                LabeledContent("Generated", value: displayTimestamp(self.snapshot.generatedAt))
-                LabeledContent("Source device", value: self.snapshot.sourceDevice)
+                LabeledContent("Generated", value: displayTimestamp(self.aggregate.generatedAt))
+                LabeledContent("Installations", value: "\(self.aggregate.installations.count)")
                 LabeledContent(
-                    "Stale providers",
-                    value: self.snapshot.freshness.hasStaleProviders
-                        ? self.snapshot.freshness.staleProviders.joined(separator: ", ")
+                    "Stale installations",
+                    value: !self.aggregate.staleInstallations.isEmpty
+                        ? self.aggregate.staleInstallations.joined(separator: ", ")
                         : "None"
                 )
             }
 
-            Section("Provider refreshes") {
-                ForEach(self.snapshot.providers) { provider in
+            Section("Installation refreshes") {
+                ForEach(self.aggregate.installations) { installation in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(provider.providerID?.title ?? provider.provider.capitalized)
+                        Text(installation.sourceDevice)
                             .font(.headline)
-                        Text(displayTimestamp(provider.lastRefresh))
+                        Text(displayTimestamp(installation.publishedAt))
                             .foregroundStyle(.secondary)
-                        if provider.stale {
+                        if installation.isStale {
                             Text("Marked stale")
                                 .foregroundStyle(.orange)
                         }

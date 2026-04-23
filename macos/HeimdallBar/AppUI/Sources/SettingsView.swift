@@ -29,6 +29,32 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Cloud Sync") {
+                Text(self.model.cloudSyncStatusLine)
+                    .foregroundStyle(.secondary)
+                LabeledContent("Installation ID", value: self.model.sessionStore.installationID)
+                    .font(.caption.monospaced())
+                if let shareURL = self.model.cloudSyncState.shareURL {
+                    Text(shareURL)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+                if let aggregate = self.model.cloudSyncAggregate {
+                    LabeledContent("Synced Installations", value: "\(aggregate.installations.count)")
+                    LabeledContent("Aggregate 90 Day Tokens", value: "\(aggregate.aggregateTotals.last90DaysTokens)")
+                }
+                HStack {
+                    Button("Refresh Cloud Sync") {
+                        Task { await self.model.refreshCloudSyncState() }
+                    }
+                    if self.model.cloudSyncState.role != .participant {
+                        Button("Create / Copy Share Link") {
+                            Task { await self.model.prepareCloudShare() }
+                        }
+                    }
+                }
+            }
+
             Section("Display") {
                 Toggle("Merge Icons", isOn: self.$model.draftConfig.mergeIcons)
                 Toggle("Show Used Values", isOn: self.$model.draftConfig.showUsedValues)
@@ -65,6 +91,7 @@ struct SettingsView: View {
         }
         .task {
             await self.model.refreshBrowserImports()
+            await self.model.refreshCloudSyncState()
         }
     }
 }

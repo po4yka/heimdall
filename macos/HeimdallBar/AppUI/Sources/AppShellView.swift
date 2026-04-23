@@ -152,6 +152,10 @@ private struct WindowOverviewView: View {
                 isRetrying: projection.isRefreshing
             )
 
+            if let aggregate = self.overview.syncedAggregate {
+                WindowOverviewCloudSyncSection(aggregate: aggregate, state: self.overview.cloudSyncState)
+            }
+
             WindowOverviewProvidersSection(
                 items: self.sortedItems(from: projection),
                 providerModel: self.providerModel,
@@ -184,6 +188,88 @@ private struct WindowOverviewView: View {
         case .refreshing: return 1
         case .healthy: return 0
         }
+    }
+}
+
+private struct WindowOverviewCloudSyncSection: View {
+    let aggregate: SyncedAggregateEnvelope
+    let state: CloudSyncSpaceState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            WindowSectionHeader(
+                title: "Cloud Sync",
+                subtitle: self.subtitle
+            )
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: AppShellLayout.analyticsCardMinimumWidth), spacing: 16)], spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("All Installations")
+                        .font(.headline)
+                    Text(Self.currency(self.aggregate.aggregateTotals.last90DaysCostUSD))
+                        .font(.system(size: 30, weight: .semibold).monospacedDigit())
+                    Text("\(self.aggregate.aggregateTotals.last90DaysTokens) tokens over 90 days")
+                        .foregroundStyle(.secondary)
+                    Text("\(self.aggregate.installations.count) synced installation(s)")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(18)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                )
+
+                ForEach(self.aggregate.installations) { installation in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(installation.sourceDevice)
+                            .font(.headline)
+                        Text(displayTimestamp(installation.publishedAt))
+                            .foregroundStyle(.secondary)
+                        Text("\(installation.totals.last90DaysTokens) tokens")
+                            .font(.system(.body, design: .monospaced))
+                        if !installation.accountLabels.isEmpty {
+                            Text(installation.accountLabels.joined(separator: ", "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if installation.isStale {
+                            Text("Stale provider data")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .padding(18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                    )
+                }
+            }
+        }
+    }
+
+    private var subtitle: String {
+        switch self.state.status {
+        case .inviteReady:
+            return "Owner space ready. Share link copied from Settings."
+        case .participantJoined:
+            return "Joined shared usage across Macs."
+        case .ownerReady:
+            return "Owner space ready for sharing."
+        case .sharingBlocked, .iCloudUnavailable:
+            return self.state.statusMessage ?? "Cloud Sync is unavailable on this Mac."
+        case .notConfigured:
+            return "Refresh once, then create a share link in Settings."
+        }
+    }
+
+    private static func currency(_ value: Double) -> String {
+        value.formatted(.currency(code: "USD").precision(.fractionLength(value >= 1 ? 2 : 4)))
+    }
+
+    private func displayTimestamp(_ raw: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: raw) else { return raw }
+        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 

@@ -49,7 +49,10 @@ public struct MacPlatformCompositionRoot: Sendable {
             stateStore: UserDefaultsLocalNotificationStateStore()
         )
         let liveProviderClient = HeimdallAPIClient(port: sessionStore.config.helperPort)
-        let snapshotSyncer = Self.makeSnapshotSyncer(client: liveProviderClient)
+        let cloudSyncController = Self.makeCloudSyncController()
+        let snapshotSyncer = cloudSyncController.map {
+            SnapshotSyncCoordinator(client: liveProviderClient, store: $0)
+        }
         let refreshCoordinator = RefreshCoordinator(
             sessionStore: sessionStore,
             repository: providerRepository,
@@ -74,21 +77,18 @@ public struct MacPlatformCompositionRoot: Sendable {
             settingsStore: self.settingsStore,
             credentialInspector: self.credentialInspector,
             liveMonitorClientFactory: self.liveMonitorClientFactory,
-            localNotificationCoordinator: localNotificationCoordinator
+            localNotificationCoordinator: localNotificationCoordinator,
+            cloudSyncController: cloudSyncController
         )
     }
 
-    static func makeSnapshotSyncer(
-        client: any MobileSnapshotClient,
+    static func makeCloudSyncController(
         bundleURL: URL = Bundle.main.bundleURL
-    ) -> (any SnapshotSyncing)? {
+    ) -> CloudKitSnapshotSyncStore? {
         guard Self.shouldEnableCloudKitSnapshotSync(bundleURL: bundleURL) else {
             return nil
         }
-        return SnapshotSyncCoordinator(
-            client: client,
-            store: CloudKitSnapshotSyncStore()
-        )
+        return CloudKitSnapshotSyncStore()
     }
 
     static func shouldEnableCloudKitSnapshotSync(

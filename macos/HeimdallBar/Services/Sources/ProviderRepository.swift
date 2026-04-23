@@ -7,13 +7,19 @@ import Observation
 public final class ProviderContentStore {
     public var snapshots: [ProviderSnapshot]
     public var adjunctSnapshots: [ProviderID: DashboardAdjunctSnapshot?]
+    public var syncedAggregate: SyncedAggregateEnvelope?
+    public var cloudSyncState: CloudSyncSpaceState
 
     public init(
         snapshots: [ProviderSnapshot] = [],
-        adjunctSnapshots: [ProviderID: DashboardAdjunctSnapshot?] = [:]
+        adjunctSnapshots: [ProviderID: DashboardAdjunctSnapshot?] = [:],
+        syncedAggregate: SyncedAggregateEnvelope? = nil,
+        cloudSyncState: CloudSyncSpaceState = CloudSyncSpaceState()
     ) {
         self.snapshots = snapshots
         self.adjunctSnapshots = adjunctSnapshots
+        self.syncedAggregate = syncedAggregate
+        self.cloudSyncState = cloudSyncState
     }
 
     public func snapshot(for provider: ProviderID) -> ProviderSnapshot? {
@@ -144,6 +150,16 @@ public final class ProviderRepository {
     public var adjunctSnapshots: [ProviderID: DashboardAdjunctSnapshot] {
         get { self.content.adjunctSnapshots.compactMapValues { $0 } }
         set { self.content.adjunctSnapshots = newValue.mapValues(Optional.some) }
+    }
+
+    public var syncedAggregate: SyncedAggregateEnvelope? {
+        get { self.content.syncedAggregate }
+        set { self.content.syncedAggregate = newValue }
+    }
+
+    public var cloudSyncState: CloudSyncSpaceState {
+        get { self.content.cloudSyncState }
+        set { self.content.cloudSyncState = newValue }
     }
 
     public var importedSessions: [ProviderID: ImportedBrowserSession] {
@@ -324,6 +340,14 @@ public final class ProviderRepository {
 
     public func setAdjunctSnapshot(_ snapshot: DashboardAdjunctSnapshot?, for provider: ProviderID) {
         self.content.adjunctSnapshots[provider] = snapshot
+    }
+
+    public func setSyncedAggregate(_ aggregate: SyncedAggregateEnvelope?) {
+        self.content.syncedAggregate = aggregate
+    }
+
+    public func setCloudSyncState(_ state: CloudSyncSpaceState) {
+        self.content.cloudSyncState = state
     }
 
     public func syncSelections(sessionStore: AppSessionStore) {

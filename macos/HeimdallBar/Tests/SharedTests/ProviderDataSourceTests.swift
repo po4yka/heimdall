@@ -389,26 +389,33 @@ private actor BlockingBrowserSessionManager: BrowserSessionManaging {
 private actor SnapshotSyncerSpy: SnapshotSyncing {
     private(set) var callCount = 0
 
-    func syncLatestSnapshot() async throws -> MobileSnapshotEnvelope {
+    func syncLatestSnapshot() async throws -> SyncedAggregateEnvelope {
         self.callCount += 1
-        return MobileSnapshotEnvelope(
-            generatedAt: "2026-04-21T09:00:00Z",
-            sourceDevice: "test-device",
-            providers: [],
-            history90d: [],
-            totals: MobileSnapshotTotals(
-                todayTokens: 0,
-                todayCostUSD: 0,
-                last90DaysTokens: 0,
-                last90DaysCostUSD: 0
+        return SyncedAggregateEnvelope.legacy(
+            mobileSnapshot: MobileSnapshotEnvelope(
+                generatedAt: "2026-04-21T09:00:00Z",
+                sourceDevice: "test-device",
+                providers: [],
+                history90d: [],
+                totals: MobileSnapshotTotals(
+                    todayTokens: 0,
+                    todayCostUSD: 0,
+                    last90DaysTokens: 0,
+                    last90DaysCostUSD: 0
+                ),
+                freshness: MobileSnapshotFreshness(
+                    newestProviderRefresh: nil,
+                    oldestProviderRefresh: nil,
+                    staleProviders: [],
+                    hasStaleProviders: false
+                )
             ),
-            freshness: MobileSnapshotFreshness(
-                newestProviderRefresh: nil,
-                oldestProviderRefresh: nil,
-                staleProviders: [],
-                hasStaleProviders: false
-            )
+            installationID: "test-installation"
         )
+    }
+
+    func loadCloudSyncSpaceState() async throws -> CloudSyncSpaceState {
+        CloudSyncSpaceState(role: .owner, status: .ownerReady)
     }
 }
 

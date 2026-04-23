@@ -2,6 +2,7 @@ import Foundation
 import HeimdallDomain
 import HeimdallServices
 import Observation
+import AppKit
 import os.log
 
 @MainActor
@@ -15,6 +16,7 @@ public final class SettingsFeatureModel {
     private let settingsStore: any SettingsStore
     private let refreshCoordinator: RefreshCoordinator
     private let localNotificationCoordinator: any LocalNotificationCoordinating
+    private let cloudSyncController: (any CloudSyncControlling)?
 
     private static let logger = Logger(subsystem: "dev.heimdall.HeimdallBar", category: "SettingsFeatureModel")
 
@@ -23,13 +25,15 @@ public final class SettingsFeatureModel {
         repository: ProviderRepository,
         settingsStore: any SettingsStore,
         refreshCoordinator: RefreshCoordinator,
-        localNotificationCoordinator: any LocalNotificationCoordinating
+        localNotificationCoordinator: any LocalNotificationCoordinating,
+        cloudSyncController: (any CloudSyncControlling)? = nil
     ) {
         self.sessionStore = sessionStore
         self.repository = repository
         self.settingsStore = settingsStore
         self.refreshCoordinator = refreshCoordinator
         self.localNotificationCoordinator = localNotificationCoordinator
+        self.cloudSyncController = cloudSyncController
         self.onSettingsSaved = nil
         self.draftConfig = sessionStore.config
     }
@@ -45,6 +49,31 @@ public final class SettingsFeatureModel {
             return nil
         }
         return candidate
+    }
+
+    public var cloudSyncState: CloudSyncSpaceState {
+        self.repository.cloudSyncState
+    }
+
+    public var cloudSyncAggregate: SyncedAggregateEnvelope? {
+        self.repository.syncedAggregate
+    }
+
+    public var cloudSyncStatusLine: String {
+        switch self.cloudSyncState.status {
+        case .notConfigured:
+            return "Cloud Sync is not configured on this Mac."
+        case .ownerReady:
+            return "This Mac owns the sync space."
+        case .inviteReady:
+            return "This Mac owns the sync space and has a share link ready."
+        case .participantJoined:
+            return "This Mac is joined to a shared sync space."
+        case .iCloudUnavailable:
+            return self.cloudSyncState.statusMessage ?? "Sign in to iCloud to enable Cloud Sync."
+        case .sharingBlocked:
+            return self.cloudSyncState.statusMessage ?? "CloudKit sharing is restricted on this device."
+        }
     }
 
     public func save() async {
@@ -83,5 +112,34 @@ public final class SettingsFeatureModel {
 
     public func refreshBrowserImports() async {
         await self.refreshCoordinator.refreshBrowserImports()
+    }
+
+    public func refreshCloudSyncState() async {
+        guard let cloudSyncController else { return }
+        do {
+            let state = try await cloudSyncController.loadCloudSyncSpaceState()
+            self.repository.setCloudSyncState(state)
+            self.sessionStore.cloudSyncState = state
+            self.repository.setSyncedAggregate(try await cloudSyncController.loadAggregateSnapshot())
+            self.repository.clearIssue(kind: .snapshotSync)
+        } catch {
+            self.repository.recordIssue(AppIssue(kind: .snapshotSync, message: error.localizedDescription))
+        }
+    }
+
+    public func prepareCloudShare() async {
+        guard let cloudSyncController else { return }
+        do {
+            let state = try await cloudSyncController.prepareOwnerShare()
+            self.repository.setCloudSyncState(state)
+            self.sessionStore.cloudSyncState = state
+            if let shareURL = state.shareURL {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(shareURL, forType: .string)
+            }
+            self.repository.clearIssue(kind: .snapshotSync)
+        } catch {
+            self.repository.recordIssue(AppIssue(kind: .snapshotSync, message: error.localizedDescription))
+        }
     }
 }

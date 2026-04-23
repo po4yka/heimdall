@@ -13,9 +13,12 @@ public struct SnapshotSyncCoordinator: SnapshotSyncing {
         self.store = store
     }
 
-    public func syncLatestSnapshot() async throws -> MobileSnapshotEnvelope {
+    public func syncLatestSnapshot() async throws -> SyncedAggregateEnvelope {
         let snapshot = try await self.client.fetchMobileSnapshot()
-        try await self.store.saveLatestSnapshot(snapshot)
-        return snapshot
+        return try await self.store.saveLatestSnapshot(snapshot)
+    }
+
+    public func loadCloudSyncSpaceState() async throws -> CloudSyncSpaceState {
+        try await self.store.loadCloudSyncSpaceState()
     }
 }
