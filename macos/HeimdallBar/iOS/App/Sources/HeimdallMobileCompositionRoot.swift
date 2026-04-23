@@ -1,8 +1,22 @@
+import WidgetKit
 import HeimdallServices
 
 struct HeimdallMobileCompositionRoot {
     @MainActor
     func dashboardModel() -> MobileDashboardModel {
-        MobileDashboardModel(store: CloudKitSnapshotSyncStore())
+        MobileDashboardModel(
+            store: CloudKitSnapshotSyncStore(),
+            cache: FileBackedSyncedAggregateCache(),
+            widgetSnapshotCoordinator: WidgetSnapshotCoordinator(
+                writer: AppGroupWidgetSnapshotStore(),
+                reloader: MobileWidgetCenterReloader()
+            )
+        )
+    }
+}
+
+private struct MobileWidgetCenterReloader: WidgetReloading {
+    func reloadAllTimelines() {
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }

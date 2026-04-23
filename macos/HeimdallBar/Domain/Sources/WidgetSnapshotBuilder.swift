@@ -2,6 +2,34 @@ import Foundation
 
 public enum WidgetSnapshotBuilder {
     public static func snapshot(
+        aggregate: SyncedAggregateEnvelope,
+        defaultRefreshIntervalSeconds: Int = 900
+    ) -> WidgetSnapshot {
+        let providerEntries: [(String, WidgetProviderSnapshot)] = aggregate.aggregateProviderViews.compactMap { view in
+            guard let providerID = view.providerID else { return nil }
+            return (
+                providerID.rawValue,
+                self.providerSnapshot(
+                    providerID: providerID,
+                    aggregateView: view
+                )
+            )
+        }
+        let providers = Dictionary(uniqueKeysWithValues: providerEntries)
+
+        let issues = providers.isEmpty
+            ? [WidgetSnapshotIssue(code: "no-providers", message: "No synced providers are available yet.", severity: .warning)]
+            : []
+
+        return WidgetSnapshot(
+            generatedAt: aggregate.generatedAt,
+            defaultRefreshIntervalSeconds: defaultRefreshIntervalSeconds,
+            providers: providers,
+            issues: issues
+        )
+    }
+
+    public static func snapshot(
         providers: [ProviderID],
         snapshots: [ProviderID: ProviderSnapshot],
         adjuncts: [ProviderID: DashboardAdjunctSnapshot],
@@ -104,6 +132,69 @@ public enum WidgetSnapshotBuilder {
                     lastUpdatedAt: $0.lastUpdated
                 )
             }
+        )
+    }
+
+    public static func providerSnapshot(
+        providerID: ProviderID,
+        aggregateView: SyncedAggregateProviderView
+    ) -> WidgetProviderSnapshot {
+        let snapshot = aggregateView.providerSnapshot
+        let requestedSource = self.sourcePreference(
+            primary: snapshot.sourceUsed,
+            fallback: snapshot.lastAttemptedSource
+        )
+        let auth = self.authSnapshot(from: snapshot.auth)
+        let freshness = WidgetProviderFreshnessSnapshot(
+            visualState: self.visualState(
+                statusIndicator: snapshot.status?.indicator,
+                stale: snapshot.stale,
+                error: snapshot.error
+            ),
+            available: snapshot.available,
+            stale: snapshot.stale,
+            lastRefreshAt: snapshot.lastRefresh,
+            error: snapshot.error,
+            statusIndicator: snapshot.status?.indicator,
+            statusDescription: snapshot.status?.description
+        )
+
+        let lanes = [
+            self.laneSnapshot(slot: 0, title: "Session", window: snapshot.primary),
+            self.laneSnapshot(slot: 1, title: "Weekly", window: snapshot.secondary),
+            self.laneSnapshot(slot: 2, title: "Extra", window: snapshot.tertiary),
+        ].compactMap { $0 }
+
+        let cost = WidgetProviderCostSnapshot(
+            todayTokens: snapshot.costSummary.todayTokens,
+            todayCostUSD: snapshot.costSummary.todayCostUSD,
+            last30DaysTokens: snapshot.costSummary.last30DaysTokens,
+            last30DaysCostUSD: snapshot.costSummary.last30DaysCostUSD,
+            daily: snapshot.costSummary.daily
+        )
+
+        return WidgetProviderSnapshot(
+            provider: providerID,
+            source: WidgetProviderSourceSnapshot(
+                requested: requestedSource,
+                effective: requestedSource,
+                detail: snapshot.sourceUsed,
+                usesFallback: snapshot.resolvedViaFallback,
+                isUnsupported: false,
+                usageAvailable: snapshot.available || snapshot.error == nil
+            ),
+            freshness: freshness,
+            auth: auth,
+            identity: self.redactedIdentity(snapshot.identity),
+            lanes: lanes,
+            credits: snapshot.credits,
+            cost: cost,
+            issues: self.providerIssues(
+                aggregateView: aggregateView,
+                auth: auth,
+                freshness: freshness
+            ),
+            adjunct: nil
         )
     }
 
@@ -212,6 +303,69 @@ public enum WidgetSnapshotBuilder {
         }
 
         return issues.uniqued(by: \.id)
+    }
+
+    private static func providerIssues(
+        aggregateView: SyncedAggregateProviderView,
+        auth: WidgetProviderAuthSnapshot,
+        freshness: WidgetProviderFreshnessSnapshot
+    ) -> [WidgetSnapshotIssue] {
+        let snapshot = aggregateView.providerSnapshot
+        var issues = [WidgetSnapshotIssue]()
+
+        if let error = freshness.error, !error.isEmpty {
+            issues.append(WidgetSnapshotIssue(code: "refresh-error", message: error, severity: .error))
+        }
+        if freshness.visualState == .incident, let description = freshness.statusDescription {
+            issues.append(WidgetSnapshotIssue(code: "incident", message: description, severity: .error))
+        } else if freshness.visualState == .degraded, let description = freshness.statusDescription {
+            issues.append(WidgetSnapshotIssue(code: "degraded", message: description, severity: .warning))
+        }
+        if freshness.stale {
+            let message = aggregateView.staleInstallationIDs.isEmpty
+                ? "Synced provider data is stale."
+                : "Synced provider data is stale on \(aggregateView.staleInstallationIDs.count) installation(s)."
+            issues.append(WidgetSnapshotIssue(code: "stale", message: message, severity: .warning))
+        }
+        if !snapshot.available && freshness.error == nil {
+            issues.append(
+                WidgetSnapshotIssue(
+                    code: "source-unavailable",
+                    message: "Current limit data is unavailable in the synced snapshot.",
+                    severity: .info
+                )
+            )
+        }
+        if auth.requiresRelogin {
+            issues.append(
+                WidgetSnapshotIssue(
+                    code: "login-required",
+                    message: auth.failureReason ?? "The synced provider requires reauthentication on the source Mac.",
+                    severity: .warning
+                )
+            )
+        }
+        if snapshot.resolvedViaFallback {
+            issues.append(
+                WidgetSnapshotIssue(
+                    code: "fallback",
+                    message: "The source Mac resolved this provider through a fallback source.",
+                    severity: .info
+                )
+            )
+        }
+
+        return issues.uniqued(by: \.id)
+    }
+
+    private static func sourcePreference(primary: String, fallback: String?) -> UsageSourcePreference {
+        if let match = UsageSourcePreference(rawValue: primary.lowercased()) {
+            return match
+        }
+        if let fallback, let match = UsageSourcePreference(rawValue: fallback.lowercased()) {
+            return match
+        }
+        return .auto
     }
 
     private static func visualState(

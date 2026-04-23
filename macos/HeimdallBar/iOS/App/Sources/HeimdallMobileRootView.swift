@@ -3,6 +3,7 @@ import Observation
 import SwiftUI
 
 struct HeimdallMobileRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State var model: MobileDashboardModel
 
     var body: some View {
@@ -22,7 +23,7 @@ struct HeimdallMobileRootView: View {
                                 .tabItem { Label("Overview", systemImage: "rectangle.grid.2x2") }
                             HistoryTab(model: self.model, aggregate: aggregate)
                                 .tabItem { Label("History", systemImage: "chart.line.uptrend.xyaxis") }
-                            FreshnessTab(aggregate: aggregate)
+                            FreshnessTab(model: self.model, aggregate: aggregate)
                                 .tabItem { Label("Freshness", systemImage: "clock") }
                         }
                     }
@@ -44,16 +45,20 @@ struct HeimdallMobileRootView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Reload") {
-                        Task { await self.model.load() }
+                        Task { await self.model.refresh(reason: .manual) }
                     }
                 }
             }
         }
         .task {
-            await self.model.load()
+            await self.model.refresh(reason: .startup)
         }
         .onOpenURL { url in
             Task { await self.model.acceptShareURL(url) }
+        }
+        .onChange(of: self.scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task { await self.model.refresh(reason: .foreground) }
         }
     }
 }
@@ -140,6 +145,9 @@ private struct OverviewTab: View {
             }
             .padding()
         }
+        .refreshable {
+            await self.model.refresh(reason: .manual)
+        }
     }
 }
 
@@ -178,14 +186,36 @@ private struct HistoryTab: View {
                 }
             }
         }
+        .refreshable {
+            await self.model.refresh(reason: .manual)
+        }
     }
 }
 
 private struct FreshnessTab: View {
+    @Bindable var model: MobileDashboardModel
     let aggregate: SyncedAggregateEnvelope
 
     var body: some View {
         List {
+            Section("Cloud Sync") {
+                LabeledContent("Status", value: self.model.cloudSyncStatusTitle)
+                Text(self.model.cloudSyncStatusDetail)
+                    .foregroundStyle(.secondary)
+                LabeledContent(
+                    "Last successful refresh",
+                    value: self.model.lastSuccessfulRefreshAt.map(displayTimestamp) ?? "Never"
+                )
+                LabeledContent(
+                    "Newest installation publish",
+                    value: self.model.newestPublishedAt.map(displayTimestamp) ?? "Unavailable"
+                )
+                if let lastRefreshError = self.model.lastRefreshError {
+                    Text("Last refresh error: \(lastRefreshError)")
+                        .foregroundStyle(.orange)
+                }
+            }
+
             Section("Snapshot") {
                 LabeledContent("Generated", value: displayTimestamp(self.aggregate.generatedAt))
                 LabeledContent("Installations", value: "\(self.aggregate.installations.count)")
@@ -211,6 +241,9 @@ private struct FreshnessTab: View {
                     }
                 }
             }
+        }
+        .refreshable {
+            await self.model.refresh(reason: .manual)
         }
     }
 }

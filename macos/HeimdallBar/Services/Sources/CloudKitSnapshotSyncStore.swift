@@ -366,7 +366,7 @@ public struct CloudKitSnapshotSyncStore: SnapshotSyncStore {
         try await self.backingStore.loadLegacySnapshot()
     }
 
-    public func loadAggregateSnapshot() async throws -> SyncedAggregateEnvelope? {
+    public func loadLiveAggregateSnapshot() async throws -> SyncedAggregateEnvelope? {
         let state = try await self.loadCloudSyncSpaceState()
         let installations = try await self.backingStore.fetchInstallationSnapshots(state: state)
         if !installations.isEmpty {
@@ -375,6 +375,23 @@ public struct CloudKitSnapshotSyncStore: SnapshotSyncStore {
                 installations: installations,
                 generatedAt: generatedAt
             )
+        }
+        return nil
+    }
+
+    public func loadAggregateSnapshot() async throws -> SyncedAggregateEnvelope? {
+        do {
+            if let aggregate = try await self.loadLiveAggregateSnapshot() {
+                return aggregate
+            }
+        } catch {
+            if let legacy = try await self.backingStore.loadLegacySnapshot() {
+                return SyncedAggregateEnvelope.legacy(
+                    mobileSnapshot: legacy,
+                    installationID: self.installationID
+                )
+            }
+            throw error
         }
         if let legacy = try await self.backingStore.loadLegacySnapshot() {
             return SyncedAggregateEnvelope.legacy(

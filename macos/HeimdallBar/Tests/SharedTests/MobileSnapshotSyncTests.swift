@@ -218,6 +218,10 @@ private actor InMemorySnapshotSyncStore: SnapshotSyncStore {
         self.snapshot
     }
 
+    func loadLiveAggregateSnapshot() async throws -> SyncedAggregateEnvelope? {
+        self.snapshot.map { SyncedAggregateEnvelope.legacy(mobileSnapshot: $0, installationID: "test-installation") }
+    }
+
     func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws -> SyncedAggregateEnvelope {
         self.snapshot = snapshot
         return SyncedAggregateEnvelope.legacy(mobileSnapshot: snapshot, installationID: "test-installation")

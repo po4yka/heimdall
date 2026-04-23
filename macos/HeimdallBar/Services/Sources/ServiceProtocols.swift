@@ -227,6 +227,27 @@ public protocol CloudSyncStatePersisting: Sendable {
     func saveCloudSyncSpaceState(_ state: CloudSyncSpaceState)
 }
 
+public struct CachedSyncedAggregateEnvelope: Codable, Sendable {
+    public var aggregate: SyncedAggregateEnvelope
+    public var cachedAt: String
+    public var lastSuccessfulRefreshAt: String
+
+    public init(
+        aggregate: SyncedAggregateEnvelope,
+        cachedAt: String,
+        lastSuccessfulRefreshAt: String
+    ) {
+        self.aggregate = aggregate
+        self.cachedAt = cachedAt
+        self.lastSuccessfulRefreshAt = lastSuccessfulRefreshAt
+    }
+}
+
+public protocol SyncedAggregateCaching: Sendable {
+    func loadCachedAggregate() async throws -> CachedSyncedAggregateEnvelope?
+    func saveCachedAggregate(_ cached: CachedSyncedAggregateEnvelope) async throws
+}
+
 public enum NotificationAuthorizationStatus: Sendable, Equatable {
     case notDetermined
     case denied
@@ -312,6 +333,7 @@ public protocol CloudSyncControlling: Sendable {
 }
 
 public protocol SnapshotSyncStore: CloudSyncControlling {
+    func loadLiveAggregateSnapshot() async throws -> SyncedAggregateEnvelope?
     func loadLegacySnapshot() async throws -> MobileSnapshotEnvelope?
     func saveLatestSnapshot(_ snapshot: MobileSnapshotEnvelope) async throws -> SyncedAggregateEnvelope
 }
