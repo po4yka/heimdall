@@ -15,7 +15,9 @@ struct TerminalAuthCommandRunnerTests {
 
         #expect(script.contains("trap cleanup EXIT HUP INT TERM"))
         #expect(script.contains("rm -f -- \"$SCRIPT_PATH\""))
-        #expect(script.contains("codex login"))
+        #expect(script.contains("candidate=\"$(/bin/zsh -ilc 'command -v -- codex'"))
+        #expect(script.contains("CLI_PATH=\"$(resolve_cli_path)\""))
+        #expect(script.contains("\"$CLI_PATH\" 'login'"))
     }
 
     @Test
@@ -40,6 +42,19 @@ struct TerminalAuthCommandRunnerTests {
         #expect(FileManager.default.fileExists(atPath: launchedPath))
         #expect(contents.contains("Claude Auth Recovery"))
         #expect(contents.contains("trap cleanup EXIT HUP INT TERM"))
+        #expect(contents.contains("\"$CLI_PATH\" '/login'"))
+    }
+
+    @Test
+    func deviceAuthUsesResolvedExecutablePath() {
+        let script = TerminalAuthCommandRunner.scriptContents(
+            provider: .codex,
+            title: "Codex Device Login",
+            command: "codex login --device-auth",
+            scriptPath: "/tmp/heimdallbar-codex-auth.command"
+        )
+
+        #expect(script.contains("\"$CLI_PATH\" 'login' '--device-auth'"))
     }
 
     @Test

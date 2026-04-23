@@ -48,20 +48,37 @@ public struct TerminalAuthCommandRunner: AuthCommandRunning {
         command: String,
         scriptPath: String
     ) -> String {
-        """
+        let cliName = provider == .claude ? "claude" : "codex"
+        let cliInvocation = Self.cliInvocation(command: command)
+        return """
         #!/bin/zsh
         SCRIPT_PATH=\(Self.shellSingleQuoted(scriptPath))
+        CLI_NAME=\(Self.shellSingleQuoted(cliName))
         cleanup() {
           rm -f -- "$SCRIPT_PATH"
         }
         trap cleanup EXIT HUP INT TERM
         export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+        resolve_cli_path() {
+          local candidate=""
+          candidate="$(command -v -- "$CLI_NAME" 2>/dev/null || true)"
+          if [ -z "$candidate" ]; then
+            candidate="$(/bin/zsh -ilc 'command -v -- \(cliName)' 2>/dev/null | tail -n 1)"
+          fi
+          case "$candidate" in
+            /*) ;;
+            *) candidate="" ;;
+          esac
+          printf '%s' "$candidate"
+        }
+        CLI_PATH="$(resolve_cli_path)"
         clear
         echo "HeimdallBar \(provider.title) Auth Recovery"
         echo
-        if ! command -v \(provider == .claude ? "claude" : "codex") >/dev/null 2>&1; then
-          echo "\(provider.title) CLI was not found in PATH."
-          echo "Run '\(command)' manually in a shell where the \(provider == .claude ? "claude" : "codex") command exists."
+        if [ -z "$CLI_PATH" ] || [ ! -x "$CLI_PATH" ]; then
+          echo "\(provider.title) CLI executable could not be resolved."
+          echo "HeimdallBar checked both Terminal's PATH and your login-shell PATH."
+          echo "Run '\(command)' manually in a shell where the \(cliName) command exists."
           echo
           read -k '?Press any key to close...'
           exit 1
@@ -70,7 +87,7 @@ public struct TerminalAuthCommandRunner: AuthCommandRunning {
         echo
         echo "Running: \(command)"
         echo
-        \(command)
+        \(cliInvocation)
         echo
         if [ "\(provider.rawValue)" = "claude" ]; then
           if [ "$(uname)" = "Darwin" ]; then
@@ -100,6 +117,18 @@ public struct TerminalAuthCommandRunner: AuthCommandRunning {
         echo
         read -k '?Press any key to close...'
         """
+    }
+
+    private static func cliInvocation(command: String) -> String {
+        let arguments = command
+            .split(whereSeparator: \.isWhitespace)
+            .dropFirst()
+            .map { Self.shellSingleQuoted(String($0)) }
+            .joined(separator: " ")
+        if arguments.isEmpty {
+            return "\"$CLI_PATH\""
+        }
+        return "\"$CLI_PATH\" \(arguments)"
     }
 
     private static func shellSingleQuoted(_ value: String) -> String {
