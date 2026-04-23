@@ -4,6 +4,7 @@ import type { LiveMonitorFocus, LiveMonitorResponse } from '../state/types';
 export type LiveMonitorDensity = 'expanded' | 'compact';
 export type LiveMonitorPanelId =
   | 'active_block'
+  | 'predictive_insights'
   | 'depletion_forecast'
   | 'quota_suggestions'
   | 'context_window'
@@ -19,6 +20,7 @@ export interface LiveMonitorPreferences {
 export const LIVE_MONITOR_PREFERENCE_KEY = 'heimdall.live_monitor.preferences.v1';
 export const LIVE_MONITOR_PANEL_OPTIONS: Array<{ id: LiveMonitorPanelId; label: string }> = [
   { id: 'active_block', label: 'Active Block' },
+  { id: 'predictive_insights', label: 'Predictive Signals' },
   { id: 'depletion_forecast', label: 'Depletion Forecast' },
   { id: 'quota_suggestions', label: 'Suggested Quotas' },
   { id: 'context_window', label: 'Context Window' },

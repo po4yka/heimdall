@@ -13,7 +13,7 @@ function collectText(node: unknown): string[] {
 }
 
 describe('StatsCards', () => {
-  it('renders the depletion forecast card only when billing-block data carries the field', () => {
+  it('renders predictive billing-block cards only when the fields are present', () => {
     const withForecast = StatsCards({
       totals: {
         sessions: 1,
@@ -43,6 +43,30 @@ describe('StatsCards', () => {
           summary_label: 'Billing block projected to reach 91% before reset',
           severity: 'danger',
         },
+        predictive_insights: {
+          rolling_hour_burn: {
+            tokens_per_min: 3200,
+            cost_per_hour_nanos: 1_500_000_000,
+            coverage_minutes: 45,
+            tier: 'moderate',
+          },
+          historical_envelope: {
+            sample_count: 8,
+            tokens: { average: 600_000, p50: 500_000, p75: 700_000, p90: 900_000, p95: 950_000 },
+            cost_usd: { average: 4.2, p50: 3.8, p75: 5.0, p90: 6.1, p95: 6.8 },
+            turns: { average: 18, p50: 16, p75: 20, p90: 24, p95: 26 },
+          },
+          limit_hit_analysis: {
+            sample_count: 8,
+            hit_count: 3,
+            hit_rate: 0.375,
+            threshold_tokens: 900_000,
+            threshold_percent: 90,
+            active_projected_hit: true,
+            risk_level: 'high',
+            summary_label: '3 of 8 completed blocks reached 90% of the configured limit · active block is on pace to join them',
+          },
+        },
         blocks: [],
       },
     });
@@ -67,6 +91,10 @@ describe('StatsCards', () => {
 
     expect(collectText(withForecast).join(' ')).toContain('Depletion Forecast');
     expect(collectText(withForecast).join(' ')).toContain('Billing block');
+    expect(collectText(withForecast).join(' ')).toContain('Predictive Signals');
+    expect(collectText(withForecast).join(' ')).toContain('ROLLING 1H BURN');
+    expect(collectText(withForecast).join(' ')).toContain('LIMIT-HIT RISK');
     expect(collectText(withoutForecast).join(' ')).not.toContain('Depletion Forecast');
+    expect(collectText(withoutForecast).join(' ')).not.toContain('Predictive Signals');
   });
 });

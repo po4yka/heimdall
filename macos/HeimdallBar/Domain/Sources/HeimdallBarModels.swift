@@ -831,6 +831,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
     public var claudeUsage: ClaudeUsageSnapshotPayload?
     public var quotaSuggestions: QuotaSuggestions?
     public var depletionForecast: DepletionForecast?
+    public var predictiveInsights: LivePredictiveInsights?
     public var lastRefresh: String
     public var stale: Bool
     public var error: String?
@@ -857,6 +858,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         claudeUsage: ClaudeUsageSnapshotPayload?,
         quotaSuggestions: QuotaSuggestions? = nil,
         depletionForecast: DepletionForecast? = nil,
+        predictiveInsights: LivePredictiveInsights? = nil,
         lastRefresh: String,
         stale: Bool,
         error: String?
@@ -879,6 +881,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         self.claudeUsage = claudeUsage
         self.quotaSuggestions = quotaSuggestions
         self.depletionForecast = depletionForecast
+        self.predictiveInsights = predictiveInsights
         self.lastRefresh = lastRefresh
         self.stale = stale
         self.error = error
@@ -903,6 +906,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         case claudeUsage = "claude_usage"
         case quotaSuggestions = "quota_suggestions"
         case depletionForecast = "depletion_forecast"
+        case predictiveInsights = "predictive_insights"
         case lastRefresh = "last_refresh"
         case stale
         case error
@@ -1244,6 +1248,9 @@ public struct QuotaSuggestionLevel: Codable, Sendable, Identifiable, Equatable {
 
 public struct QuotaSuggestions: Codable, Sendable, Equatable {
     public var sampleCount: Int
+    public var populationCount: Int?
+    public var sampleStrategy: String?
+    public var sampleLabel: String?
     public var recommendedKey: String
     public var levels: [QuotaSuggestionLevel]
     public var note: String?
@@ -1252,9 +1259,15 @@ public struct QuotaSuggestions: Codable, Sendable, Equatable {
         sampleCount: Int,
         recommendedKey: String,
         levels: [QuotaSuggestionLevel],
-        note: String? = nil
+        note: String? = nil,
+        populationCount: Int? = nil,
+        sampleStrategy: String? = nil,
+        sampleLabel: String? = nil
     ) {
         self.sampleCount = sampleCount
+        self.populationCount = populationCount
+        self.sampleStrategy = sampleStrategy
+        self.sampleLabel = sampleLabel
         self.recommendedKey = recommendedKey
         self.levels = levels
         self.note = note
@@ -1262,9 +1275,154 @@ public struct QuotaSuggestions: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case sampleCount = "sample_count"
+        case populationCount = "population_count"
+        case sampleStrategy = "sample_strategy"
+        case sampleLabel = "sample_label"
         case recommendedKey = "recommended_key"
         case levels
         case note
+    }
+}
+
+public struct LivePredictivePercentiles: Codable, Sendable, Equatable {
+    public var average: Double
+    public var p50: Double
+    public var p75: Double
+    public var p90: Double
+    public var p95: Double
+
+    public init(
+        average: Double,
+        p50: Double,
+        p75: Double,
+        p90: Double,
+        p95: Double
+    ) {
+        self.average = average
+        self.p50 = p50
+        self.p75 = p75
+        self.p90 = p90
+        self.p95 = p95
+    }
+}
+
+public struct LivePredictiveRollingHourBurn: Codable, Sendable, Equatable {
+    public var tokensPerMin: Double
+    public var costPerHourNanos: Int
+    public var coverageMinutes: Double
+    public var tier: String?
+
+    public init(
+        tokensPerMin: Double,
+        costPerHourNanos: Int,
+        coverageMinutes: Double,
+        tier: String? = nil
+    ) {
+        self.tokensPerMin = tokensPerMin
+        self.costPerHourNanos = costPerHourNanos
+        self.coverageMinutes = coverageMinutes
+        self.tier = tier
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case tokensPerMin = "tokens_per_min"
+        case costPerHourNanos = "cost_per_hour_nanos"
+        case coverageMinutes = "coverage_minutes"
+        case tier
+    }
+}
+
+public struct LivePredictiveHistoricalEnvelope: Codable, Sendable, Equatable {
+    public var sampleCount: Int
+    public var tokens: LivePredictivePercentiles
+    public var costUSD: LivePredictivePercentiles
+    public var turns: LivePredictivePercentiles
+
+    public init(
+        sampleCount: Int,
+        tokens: LivePredictivePercentiles,
+        costUSD: LivePredictivePercentiles,
+        turns: LivePredictivePercentiles
+    ) {
+        self.sampleCount = sampleCount
+        self.tokens = tokens
+        self.costUSD = costUSD
+        self.turns = turns
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case sampleCount = "sample_count"
+        case tokens
+        case costUSD = "cost_usd"
+        case turns
+    }
+}
+
+public struct LivePredictiveLimitHitAnalysis: Codable, Sendable, Equatable {
+    public var sampleCount: Int
+    public var hitCount: Int
+    public var hitRate: Double
+    public var thresholdTokens: Int?
+    public var thresholdPercent: Double?
+    public var activeCurrentHit: Bool?
+    public var activeProjectedHit: Bool?
+    public var riskLevel: String
+    public var summaryLabel: String
+
+    public init(
+        sampleCount: Int,
+        hitCount: Int,
+        hitRate: Double,
+        thresholdTokens: Int? = nil,
+        thresholdPercent: Double? = nil,
+        activeCurrentHit: Bool? = nil,
+        activeProjectedHit: Bool? = nil,
+        riskLevel: String,
+        summaryLabel: String
+    ) {
+        self.sampleCount = sampleCount
+        self.hitCount = hitCount
+        self.hitRate = hitRate
+        self.thresholdTokens = thresholdTokens
+        self.thresholdPercent = thresholdPercent
+        self.activeCurrentHit = activeCurrentHit
+        self.activeProjectedHit = activeProjectedHit
+        self.riskLevel = riskLevel
+        self.summaryLabel = summaryLabel
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case sampleCount = "sample_count"
+        case hitCount = "hit_count"
+        case hitRate = "hit_rate"
+        case thresholdTokens = "threshold_tokens"
+        case thresholdPercent = "threshold_percent"
+        case activeCurrentHit = "active_current_hit"
+        case activeProjectedHit = "active_projected_hit"
+        case riskLevel = "risk_level"
+        case summaryLabel = "summary_label"
+    }
+}
+
+public struct LivePredictiveInsights: Codable, Sendable, Equatable {
+    public var rollingHourBurn: LivePredictiveRollingHourBurn?
+    public var historicalEnvelope: LivePredictiveHistoricalEnvelope?
+    public var limitHitAnalysis: LivePredictiveLimitHitAnalysis?
+
+    public init(
+        rollingHourBurn: LivePredictiveRollingHourBurn? = nil,
+        historicalEnvelope: LivePredictiveHistoricalEnvelope? = nil,
+        limitHitAnalysis: LivePredictiveLimitHitAnalysis? = nil
+    ) {
+        self.rollingHourBurn = rollingHourBurn
+        self.historicalEnvelope = historicalEnvelope
+        self.limitHitAnalysis = limitHitAnalysis
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case rollingHourBurn = "rolling_hour_burn"
+        case historicalEnvelope = "historical_envelope"
+        case limitHitAnalysis = "limit_hit_analysis"
     }
 }
 
@@ -1370,6 +1528,7 @@ public struct LiveMonitorProvider: Codable, Sendable, Identifiable {
     public var recentSession: ProviderSession?
     public var quotaSuggestions: QuotaSuggestions?
     public var depletionForecast: DepletionForecast?
+    public var predictiveInsights: LivePredictiveInsights?
 
     public var id: String { self.provider }
     public var providerID: ProviderID? { ProviderID(rawValue: self.provider) }
@@ -1391,7 +1550,8 @@ public struct LiveMonitorProvider: Codable, Sendable, Identifiable {
         contextWindow: LiveMonitorContextWindow? = nil,
         recentSession: ProviderSession? = nil,
         quotaSuggestions: QuotaSuggestions? = nil,
-        depletionForecast: DepletionForecast? = nil
+        depletionForecast: DepletionForecast? = nil,
+        predictiveInsights: LivePredictiveInsights? = nil
     ) {
         self.provider = provider
         self.title = title
@@ -1410,6 +1570,7 @@ public struct LiveMonitorProvider: Codable, Sendable, Identifiable {
         self.recentSession = recentSession
         self.quotaSuggestions = quotaSuggestions
         self.depletionForecast = depletionForecast
+        self.predictiveInsights = predictiveInsights
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1430,6 +1591,7 @@ public struct LiveMonitorProvider: Codable, Sendable, Identifiable {
         case recentSession = "recent_session"
         case quotaSuggestions = "quota_suggestions"
         case depletionForecast = "depletion_forecast"
+        case predictiveInsights = "predictive_insights"
     }
 }
 
@@ -2224,6 +2386,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
     public var warningLabels: [String]
     public var quotaSuggestions: QuotaSuggestions?
     public var depletionForecast: DepletionForecast?
+    public var predictiveInsights: LivePredictiveInsights?
     public var visualState: ProviderVisualState
     public var stateLabel: String
     public var statusLabel: String?
@@ -2286,6 +2449,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         warningLabels: [String],
         quotaSuggestions: QuotaSuggestions? = nil,
         depletionForecast: DepletionForecast? = nil,
+        predictiveInsights: LivePredictiveInsights? = nil,
         visualState: ProviderVisualState,
         stateLabel: String,
         statusLabel: String?,
@@ -2337,6 +2501,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         self.warningLabels = warningLabels
         self.quotaSuggestions = quotaSuggestions
         self.depletionForecast = depletionForecast
+        self.predictiveInsights = predictiveInsights
         self.visualState = visualState
         self.stateLabel = stateLabel
         self.statusLabel = statusLabel

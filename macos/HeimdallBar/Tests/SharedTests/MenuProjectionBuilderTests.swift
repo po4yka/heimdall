@@ -270,6 +270,60 @@ struct MenuProjectionBuilderTests {
     }
 
     @Test
+    func projectionCarriesPredictiveInsightsFromSnapshot() {
+        var snapshot = Self.codexSnapshot()
+        snapshot.predictiveInsights = LivePredictiveInsights(
+            rollingHourBurn: LivePredictiveRollingHourBurn(
+                tokensPerMin: 12_450,
+                costPerHourNanos: 1_450_000_000,
+                coverageMinutes: 42,
+                tier: "moderate"
+            ),
+            historicalEnvelope: nil,
+            limitHitAnalysis: LivePredictiveLimitHitAnalysis(
+                sampleCount: 9,
+                hitCount: 2,
+                hitRate: 0.22,
+                thresholdTokens: 900_000,
+                thresholdPercent: 90,
+                activeCurrentHit: false,
+                activeProjectedHit: true,
+                riskLevel: "medium",
+                summaryLabel: "Projected to hit the suggested quota in 2 of the last 9 windows."
+            )
+        )
+        let presentation = ProviderPresentationState(
+            provider: .codex,
+            snapshot: snapshot,
+            adjunct: nil,
+            resolution: ProviderSourceResolution(
+                provider: .codex,
+                requestedSource: .auto,
+                effectiveSource: .cli,
+                effectiveSourceDetail: "cli-rpc",
+                sourceLabel: "Source: auto",
+                explanation: "Using the latest successful live snapshot.",
+                warnings: [],
+                fallbackChain: ["auto", "cli-rpc"],
+                usageAvailable: true,
+                isUnsupported: false,
+                requiresLogin: false,
+                usesFallback: false
+            )
+        )
+
+        let projection = MenuProjectionBuilder.projection(
+            from: presentation,
+            config: HeimdallBarConfig.default,
+            isRefreshing: false,
+            lastGlobalError: nil
+        )
+
+        #expect(projection.predictiveInsights?.rollingHourBurn?.tier == "moderate")
+        #expect(projection.predictiveInsights?.limitHitAnalysis?.activeProjectedHit == true)
+    }
+
+    @Test
     func menuTitleHonorsShowUsedValues() {
         let leftConfig = HeimdallBarConfig.default
         let usedConfig = HeimdallBarConfig(

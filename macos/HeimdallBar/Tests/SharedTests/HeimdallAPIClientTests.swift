@@ -45,6 +45,8 @@ struct HeimdallAPIClientTests {
         #expect(envelope.providers.count == 1)
         #expect(envelope.providers.first?.provider == "claude")
         #expect(envelope.providers.first?.depletionForecast?.primarySignal.kind == "primary_window")
+        #expect(envelope.providers.first?.quotaSuggestions?.populationCount == 9)
+        #expect(envelope.providers.first?.predictiveInsights?.rollingHourBurn?.tier == "moderate")
         #expect(envelope.localNotificationState?.conditions.first?.id == "claude-session-depleted")
         #expect(StubURLProtocol.requestCount == 2)
     }
@@ -182,6 +184,9 @@ struct HeimdallAPIClientTests {
                       },
                       "quota_suggestions": {
                         "sample_count": 4,
+                        "population_count": 9,
+                        "sample_strategy": "trailing_blocks",
+                        "sample_label": "4 of 9 completed blocks",
                         "recommended_key": "p90",
                         "levels": [
                           { "key": "p90", "label": "P90", "limit_tokens": 800000 },
@@ -189,6 +194,49 @@ struct HeimdallAPIClientTests {
                           { "key": "max", "label": "Max", "limit_tokens": 950000 }
                         ],
                         "note": "Based on fewer than 10 completed blocks."
+                      },
+                      "predictive_insights": {
+                        "rolling_hour_burn": {
+                          "tokens_per_min": 12450,
+                          "cost_per_hour_nanos": 1450000000,
+                          "coverage_minutes": 42,
+                          "tier": "moderate"
+                        },
+                        "historical_envelope": {
+                          "sample_count": 9,
+                          "tokens": {
+                            "average": 186000,
+                            "p50": 171000,
+                            "p75": 209000,
+                            "p90": 248000,
+                            "p95": 264000
+                          },
+                          "cost_usd": {
+                            "average": 1.82,
+                            "p50": 1.53,
+                            "p75": 1.94,
+                            "p90": 2.41,
+                            "p95": 2.66
+                          },
+                          "turns": {
+                            "average": 23,
+                            "p50": 21,
+                            "p75": 28,
+                            "p90": 34,
+                            "p95": 38
+                          }
+                        },
+                        "limit_hit_analysis": {
+                          "sample_count": 9,
+                          "hit_count": 2,
+                          "hit_rate": 0.22,
+                          "threshold_tokens": 900000,
+                          "threshold_percent": 90,
+                          "active_current_hit": false,
+                          "active_projected_hit": true,
+                          "risk_level": "medium",
+                          "summary_label": "Projected to hit the suggested quota in 2 of the last 9 windows."
+                        }
                       }
                     }
                   ]
@@ -204,7 +252,10 @@ struct HeimdallAPIClientTests {
         #expect(envelope.defaultFocus == .all)
         #expect(envelope.providers.first?.providerID == .claude)
         #expect(envelope.providers.first?.quotaSuggestions?.recommendedKey == "p90")
+        #expect(envelope.providers.first?.quotaSuggestions?.sampleLabel == "4 of 9 completed blocks")
         #expect(envelope.providers.first?.depletionForecast?.primarySignal.kind == "billing_block")
+        #expect(envelope.providers.first?.predictiveInsights?.historicalEnvelope?.sampleCount == 9)
+        #expect(envelope.providers.first?.predictiveInsights?.limitHitAnalysis?.activeProjectedHit == true)
     }
 
     private static func makeClient() -> HeimdallAPIClient {
@@ -272,6 +323,18 @@ struct HeimdallAPIClientTests {
                 "daily": []
               },
               "claude_usage": null,
+              "quota_suggestions": {
+                "sample_count": 4,
+                "population_count": 9,
+                "sample_strategy": "trailing_blocks",
+                "sample_label": "4 of 9 completed blocks",
+                "recommended_key": "p90",
+                "levels": [
+                  { "key": "p90", "label": "P90", "limit_tokens": 800000 },
+                  { "key": "p95", "label": "P95", "limit_tokens": 900000 }
+                ],
+                "note": "Based on fewer than 10 completed blocks."
+              },
               "depletion_forecast": {
                 "primary_signal": {
                   "kind": "primary_window",
@@ -285,6 +348,14 @@ struct HeimdallAPIClientTests {
                 "secondary_signals": [],
                 "summary_label": "Primary window currently at 25% used",
                 "severity": "ok"
+              },
+              "predictive_insights": {
+                "rolling_hour_burn": {
+                  "tokens_per_min": 12450,
+                  "cost_per_hour_nanos": 1450000000,
+                  "coverage_minutes": 42,
+                  "tier": "moderate"
+                }
               },
               "last_refresh": "2026-04-20T15:30:00Z",
               "stale": false,

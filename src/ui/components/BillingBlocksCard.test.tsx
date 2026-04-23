@@ -33,7 +33,10 @@ describe('BillingBlocksCard', () => {
       historical_max_tokens: 123_000,
       quota_suggestions: {
         sample_count: 3,
+        population_count: 3,
         recommended_key: 'p90',
+        sample_strategy: 'completed_blocks',
+        sample_label: '3 completed blocks',
         levels: [
           { key: 'p90', label: 'P90', limit_tokens: 500_000 },
           { key: 'p95', label: 'P95', limit_tokens: 600_000 },
@@ -61,7 +64,10 @@ describe('BillingBlocksCard', () => {
       historical_max_tokens: 0,
       quota_suggestions: {
         sample_count: 12,
+        population_count: 16,
         recommended_key: 'p90',
+        sample_strategy: 'near_limit_hits',
+        sample_label: '12 near-limit completed blocks',
         levels: [
           { key: 'p90', label: 'P90', limit_tokens: 800_000 },
           { key: 'p95', label: 'P95', limit_tokens: 900_000 },
@@ -85,6 +91,10 @@ describe('BillingBlocksCard', () => {
           burn_rate: {
             cost_per_hour_nanos: 2_500_000_000,
             tier: 'moderate',
+          },
+          projection: {
+            projected_cost_nanos: 4_000_000_000,
+            projected_tokens: 700_000,
           },
           quota: {
             used_tokens: 300_000,
@@ -112,6 +122,8 @@ describe('BillingBlocksCard', () => {
     expect(text).toContain('Configured');
     expect(text).toContain('1.0M');
     expect(text).toContain('P95');
+    expect(text).toContain('Projects');
+    expect(text).toContain('12 near-limit completed blocks');
     expect(bars).toHaveLength(2);
     expect(bars[0]?.props['value']).toBe(300_000);
     expect(bars[0]?.props['status']).toBe('success');

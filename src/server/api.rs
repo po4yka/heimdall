@@ -22,6 +22,10 @@ use crate::live_providers;
 use crate::models::ClaudeUsageResponse;
 use crate::models::DepletionForecast;
 use crate::models::LIVE_MONITOR_CONTRACT_VERSION;
+use crate::models::LiveFloatPercentiles;
+use crate::models::LiveHistoricalEnvelope;
+use crate::models::LiveIntegerPercentiles;
+use crate::models::LiveLimitHitAnalysis;
 use crate::models::LiveMonitorBillingBlock;
 use crate::models::LiveMonitorBurnRate;
 use crate::models::LiveMonitorContextWindow;
@@ -30,6 +34,8 @@ use crate::models::LiveMonitorProjection;
 use crate::models::LiveMonitorProvider;
 use crate::models::LiveMonitorQuota;
 use crate::models::LiveMonitorResponse;
+use crate::models::LivePredictiveBurnRate;
+use crate::models::LivePredictiveInsights;
 use crate::models::LiveProviderHistoryResponse;
 use crate::models::LiveProvidersResponse;
 use crate::models::LiveQuotaSuggestionLevel;
@@ -116,6 +122,8 @@ pub(crate) struct BillingBlocksApiResponse {
     pub quota_suggestions: Option<LiveQuotaSuggestions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depletion_forecast: Option<DepletionForecast>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub predictive_insights: Option<LivePredictiveInsights>,
     pub blocks: Vec<BillingBlockViewResponse>,
 }
 
@@ -577,6 +585,11 @@ fn build_live_monitor_response(
                     snapshot,
                     active_block.as_ref(),
                 ),
+                predictive_insights: if snapshot.provider == "claude" {
+                    billing_blocks.predictive_insights.clone()
+                } else {
+                    snapshot.predictive_insights.clone()
+                },
             }
         })
         .collect::<Vec<_>>();
@@ -824,7 +837,10 @@ fn live_quota_suggestions(
 ) -> LiveQuotaSuggestions {
     LiveQuotaSuggestions {
         sample_count: suggestions.sample_count,
+        population_count: suggestions.population_count,
         recommended_key: suggestions.recommended_key,
+        sample_strategy: suggestions.sample_strategy,
+        sample_label: suggestions.sample_label,
         levels: suggestions
             .levels
             .into_iter()
@@ -835,6 +851,66 @@ fn live_quota_suggestions(
             })
             .collect(),
         note: suggestions.note,
+    }
+}
+
+fn live_predictive_insights(
+    insights: crate::analytics::predictive::PredictiveInsights,
+) -> LivePredictiveInsights {
+    LivePredictiveInsights {
+        rolling_hour_burn: insights
+            .rolling_hour_burn
+            .map(|burn| LivePredictiveBurnRate {
+                tokens_per_min: burn.tokens_per_min,
+                cost_per_hour_nanos: burn.cost_per_hour_nanos,
+                coverage_minutes: burn.coverage_minutes,
+                tier: burn.tier,
+            }),
+        historical_envelope: insights
+            .historical_envelope
+            .map(|envelope| LiveHistoricalEnvelope {
+                sample_count: envelope.sample_count,
+                tokens: live_integer_percentiles(envelope.tokens),
+                cost_usd: live_float_percentiles(envelope.cost_usd),
+                turns: live_integer_percentiles(envelope.turns),
+            }),
+        limit_hit_analysis: insights
+            .limit_hit_analysis
+            .map(|analysis| LiveLimitHitAnalysis {
+                sample_count: analysis.sample_count,
+                hit_count: analysis.hit_count,
+                hit_rate: analysis.hit_rate,
+                threshold_tokens: analysis.threshold_tokens,
+                threshold_percent: analysis.threshold_percent,
+                active_current_hit: analysis.active_current_hit,
+                active_projected_hit: analysis.active_projected_hit,
+                risk_level: analysis.risk_level,
+                summary_label: analysis.summary_label,
+            }),
+    }
+}
+
+fn live_integer_percentiles(
+    percentiles: crate::analytics::predictive::IntegerPercentiles,
+) -> LiveIntegerPercentiles {
+    LiveIntegerPercentiles {
+        average: percentiles.average,
+        p50: percentiles.p50,
+        p75: percentiles.p75,
+        p90: percentiles.p90,
+        p95: percentiles.p95,
+    }
+}
+
+fn live_float_percentiles(
+    percentiles: crate::analytics::predictive::FloatPercentiles,
+) -> LiveFloatPercentiles {
+    LiveFloatPercentiles {
+        average: percentiles.average,
+        p50: percentiles.p50,
+        p75: percentiles.p75,
+        p90: percentiles.p90,
+        p95: percentiles.p95,
     }
 }
 
@@ -1238,6 +1314,7 @@ pub(crate) async fn load_billing_blocks_response(
     };
     use crate::analytics::burn_rate::{self as br, BurnRateConfig};
     use crate::analytics::depletion::{billing_block_signal, build_depletion_forecast};
+    use crate::analytics::predictive::compute_predictive_insights;
     use crate::analytics::quota::{compute_quota, compute_quota_suggestions};
 
     let db_path = state.db_path.clone();
@@ -1258,7 +1335,15 @@ pub(crate) async fn load_billing_blocks_response(
             .max()
             .unwrap_or(0);
 
-        let quota_suggestions = compute_quota_suggestions(&blocks).map(live_quota_suggestions);
+        let active_projection = blocks
+            .iter()
+            .find(|block| block.is_active && !block.is_gap)
+            .map(|block| {
+                let rate = calculate_burn_rate(block, now);
+                project_block_usage(block, rate, now).projected_tokens as i64
+            });
+        let quota_suggestions =
+            compute_quota_suggestions(&blocks, token_limit).map(live_quota_suggestions);
         let depletion_forecast = token_limit.and_then(|limit| {
             blocks
                 .iter()
@@ -1279,6 +1364,9 @@ pub(crate) async fn load_billing_blocks_response(
                 })
                 .flatten()
         });
+        let predictive_insights =
+            compute_predictive_insights(&blocks, token_limit, active_projection, now)
+                .map(live_predictive_insights);
 
         let blocks = blocks
             .iter()
@@ -1357,6 +1445,7 @@ pub(crate) async fn load_billing_blocks_response(
             historical_max_tokens,
             quota_suggestions,
             depletion_forecast,
+            predictive_insights,
             blocks,
         })
     })

@@ -94,7 +94,10 @@ export interface QuotaSuggestionLevel {
 
 export interface QuotaSuggestions {
   sample_count: number;
+  population_count: number;
   recommended_key: QuotaSuggestionKey | string;
+  sample_strategy: string;
+  sample_label: string;
   levels: QuotaSuggestionLevel[];
   note?: string | null;
 }
@@ -119,6 +122,54 @@ export interface DepletionForecast {
   summary_label: string;
   severity: QuotaSeverity;
   note?: string | null;
+}
+
+export interface PredictiveBurnRate {
+  tokens_per_min: number;
+  cost_per_hour_nanos: number;
+  coverage_minutes: number;
+  tier: BurnRateTier | string;
+}
+
+export interface IntegerPercentiles {
+  average: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  p95: number;
+}
+
+export interface FloatPercentiles {
+  average: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  p95: number;
+}
+
+export interface HistoricalEnvelope {
+  sample_count: number;
+  tokens: IntegerPercentiles;
+  cost_usd: FloatPercentiles;
+  turns: IntegerPercentiles;
+}
+
+export interface LimitHitAnalysis {
+  sample_count: number;
+  hit_count: number;
+  hit_rate: number;
+  threshold_tokens: number;
+  threshold_percent: number;
+  active_current_hit?: boolean | null;
+  active_projected_hit?: boolean | null;
+  risk_level: string;
+  summary_label: string;
+}
+
+export interface PredictiveInsights {
+  rolling_hour_burn?: PredictiveBurnRate | null;
+  historical_envelope?: HistoricalEnvelope | null;
+  limit_hit_analysis?: LimitHitAnalysis | null;
 }
 
 export interface BlockTokens {
@@ -150,6 +201,7 @@ export interface BillingBlocksResponse {
   historical_max_tokens: number;
   quota_suggestions?: QuotaSuggestions | null;
   depletion_forecast?: DepletionForecast | null;
+  predictive_insights?: PredictiveInsights | null;
   blocks: BillingBlockView[];
 }
 

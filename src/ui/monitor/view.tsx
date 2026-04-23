@@ -1,6 +1,7 @@
 import type { JSX } from 'preact';
 import { SegmentedProgressBar } from '../components/SegmentedProgressBar';
 import { DepletionForecastCard } from '../components/DepletionForecastCard';
+import { PredictiveInsightsCard } from '../components/PredictiveInsightsCard';
 import { fmt, fmtCostCompact, fmtRelativeTime, fmtResetTime } from '../lib/format';
 import type {
   LiveMonitorBlock,
@@ -30,6 +31,7 @@ function providerHasVisibleDetails(
 ): boolean {
   return (
     (!hiddenPanels.has('active_block') && !!provider.active_block) ||
+    (!hiddenPanels.has('predictive_insights') && !!provider.predictive_insights) ||
     (!hiddenPanels.has('depletion_forecast') && !!provider.depletion_forecast) ||
     (!hiddenPanels.has('quota_suggestions') && !!provider.quota_suggestions) ||
     (!hiddenPanels.has('context_window') && !!provider.context_window) ||
@@ -162,6 +164,11 @@ function BlockPanel({ block, density }: { block: LiveMonitorBlock; density: Live
             {fmt(totalTokens)} tokens · {fmtCostCompact(block.burn_rate.cost_per_hour_nanos / 1e9)}/hr
           </div>
         )}
+        {block.projection && (
+          <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+            Projects {fmt(block.projection.projected_tokens)} tokens · {fmtCostCompact(block.projection.projected_cost_nanos / 1e9)}
+          </div>
+        )}
         {block.quota && (
           <div style={{ marginTop: density === 'compact' ? '10px' : '12px' }}>
             <SegmentedProgressBar
@@ -237,7 +244,7 @@ function QuotaSuggestionsPanel({
       <div class="stat-content">
         <div class="stat-label">Suggested Quotas</div>
         <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
-          {suggestions.sample_count} completed blocks
+          {suggestions.sample_label}
         </div>
         <div style={{ display: 'grid', gap: density === 'compact' ? '6px' : '8px', marginTop: density === 'compact' ? '10px' : '12px' }}>
           {suggestions.levels.map(level => (
@@ -255,6 +262,11 @@ function QuotaSuggestionsPanel({
         {suggestions.note && (
           <div class="stat-sub" style={{ marginTop: '10px', fontStyle: 'italic', fontSize: density === 'compact' ? '11px' : undefined }}>
             {suggestions.note}
+          </div>
+        )}
+        {suggestions.sample_count !== suggestions.population_count && (
+          <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+            Drawn from {suggestions.population_count} completed blocks, weighted toward near-limit history.
           </div>
         )}
       </div>
@@ -279,6 +291,9 @@ function ProviderDetails({
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: density === 'compact' ? '12px' : '16px' }}>
         {!hiddenPanels.has('active_block') && provider.active_block && <BlockPanel block={provider.active_block} density={density} />}
+        {!hiddenPanels.has('predictive_insights') && provider.predictive_insights && (
+          <PredictiveInsightsCard insights={provider.predictive_insights} />
+        )}
         {!hiddenPanels.has('depletion_forecast') && provider.depletion_forecast && <DepletionForecastCard forecast={provider.depletion_forecast} />}
         {!hiddenPanels.has('quota_suggestions') && <QuotaSuggestionsPanel provider={provider} density={density} />}
         {!hiddenPanels.has('context_window') && provider.context_window && <ContextPanel data={provider.context_window} density={density} />}

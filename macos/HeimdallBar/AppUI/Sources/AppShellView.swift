@@ -553,6 +553,12 @@ private struct WindowLiveMonitorDetailSection: View {
                     }
                 }
 
+                if let predictive = PredictiveInsightsSummaryModel.make(insights: self.provider.predictiveInsights) {
+                    WindowLiveMonitorDetailCard(title: "Predictive Insights", density: self.density) {
+                        WindowPredictiveInsightsCardBody(model: predictive, density: self.density)
+                    }
+                }
+
                 if !self.hiddenPanels.contains(.contextWindow), let context = self.provider.contextWindow {
                     WindowLiveMonitorDetailCard(title: "Context Window", density: self.density) {
                         Text(Self.compactNumber(context.totalInputTokens))
@@ -1264,6 +1270,7 @@ struct WindowQuotaSuggestionsModel: Equatable {
     }
 
     let sampleCount: Int
+    let sampleContextLabel: String
     let items: [Item]
     let note: String?
 
@@ -1271,6 +1278,7 @@ struct WindowQuotaSuggestionsModel: Equatable {
         guard let suggestions, !suggestions.levels.isEmpty else { return nil }
         return Self(
             sampleCount: suggestions.sampleCount,
+            sampleContextLabel: self.sampleContextLabel(for: suggestions),
             items: suggestions.levels.map { level in
                 Item(
                     key: level.key,
@@ -1281,6 +1289,23 @@ struct WindowQuotaSuggestionsModel: Equatable {
             },
             note: suggestions.note
         )
+    }
+
+    private static func sampleContextLabel(for suggestions: QuotaSuggestions) -> String {
+        if let sampleLabel = suggestions.sampleLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !sampleLabel.isEmpty {
+            return sampleLabel
+        }
+
+        var fragments = ["\(suggestions.sampleCount) completed blocks"]
+        if let populationCount = suggestions.populationCount {
+            fragments.append("from \(populationCount)")
+        }
+        if let sampleStrategy = suggestions.sampleStrategy?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !sampleStrategy.isEmpty {
+            fragments.append(sampleStrategy.replacingOccurrences(of: "_", with: " "))
+        }
+        return fragments.joined(separator: " · ")
     }
 
     private static func compactTokenCount(_ value: Int) -> String {
@@ -1295,12 +1320,139 @@ struct WindowQuotaSuggestionsModel: Equatable {
     }
 }
 
+struct PredictiveInsightsSummaryModel: Equatable {
+    struct RollingHourBurn: Equatable {
+        let tokensPerMinuteLabel: String
+        let costPerHourLabel: String
+        let coverageLabel: String
+        let tierLabel: String?
+    }
+
+    struct HistoricalEnvelope: Equatable {
+        let sampleLabel: String
+        let tokensRangeLabel: String
+        let costRangeLabel: String
+        let turnsRangeLabel: String
+        let averagesLabel: String
+    }
+
+    struct LimitHitAnalysis: Equatable {
+        let riskLevel: String
+        let summaryLabel: String
+        let hitRateLabel: String
+        let thresholdLabel: String?
+        let activityLabel: String?
+    }
+
+    let rollingHourBurn: RollingHourBurn?
+    let historicalEnvelope: HistoricalEnvelope?
+    let limitHitAnalysis: LimitHitAnalysis?
+
+    var hasContent: Bool {
+        self.rollingHourBurn != nil || self.historicalEnvelope != nil || self.limitHitAnalysis != nil
+    }
+
+    static func make(insights: LivePredictiveInsights?) -> Self? {
+        guard let insights else { return nil }
+        let model = Self(
+            rollingHourBurn: insights.rollingHourBurn.map { burn in
+                RollingHourBurn(
+                    tokensPerMinuteLabel: "\(self.compactValue(burn.tokensPerMin)) tok/min",
+                    costPerHourLabel: "\(self.currencyLabel(nanos: burn.costPerHourNanos))/h",
+                    coverageLabel: "Coverage \(self.compactValue(burn.coverageMinutes))m",
+                    tierLabel: burn.tier?.uppercased()
+                )
+            },
+            historicalEnvelope: insights.historicalEnvelope.map { envelope in
+                HistoricalEnvelope(
+                    sampleLabel: "\(envelope.sampleCount) historical samples",
+                    tokensRangeLabel: "\(self.compactValue(envelope.tokens.p50))-\(self.compactValue(envelope.tokens.p95)) tok",
+                    costRangeLabel: "\(self.currencyLabel(usd: envelope.costUSD.p50))-\(self.currencyLabel(usd: envelope.costUSD.p95))",
+                    turnsRangeLabel: "\(self.compactValue(envelope.turns.p50))-\(self.compactValue(envelope.turns.p95)) turns",
+                    averagesLabel: "Avg \(self.compactValue(envelope.tokens.average)) tok · \(self.currencyLabel(usd: envelope.costUSD.average)) · \(self.compactValue(envelope.turns.average)) turns"
+                )
+            },
+            limitHitAnalysis: insights.limitHitAnalysis.map { analysis in
+                LimitHitAnalysis(
+                    riskLevel: analysis.riskLevel,
+                    summaryLabel: analysis.summaryLabel,
+                    hitRateLabel: "\(analysis.hitCount)/\(analysis.sampleCount) hits · \(self.percentLabel(analysis.hitRate))",
+                    thresholdLabel: self.thresholdLabel(for: analysis),
+                    activityLabel: self.activityLabel(for: analysis)
+                )
+            }
+        )
+        return model.hasContent ? model : nil
+    }
+
+    private static func thresholdLabel(for analysis: LivePredictiveLimitHitAnalysis) -> String? {
+        var fragments: [String] = []
+        if let thresholdTokens = analysis.thresholdTokens {
+            fragments.append("\(self.compactValue(Double(thresholdTokens))) tok")
+        }
+        if let thresholdPercent = analysis.thresholdPercent {
+            fragments.append(self.percentLabel(thresholdPercent))
+        }
+        guard !fragments.isEmpty else { return nil }
+        return "Threshold " + fragments.joined(separator: " · ")
+    }
+
+    private static func activityLabel(for analysis: LivePredictiveLimitHitAnalysis) -> String? {
+        switch (analysis.activeCurrentHit ?? false, analysis.activeProjectedHit ?? false) {
+        case (true, true):
+            return "Active now + projected"
+        case (true, false):
+            return "Active now"
+        case (false, true):
+            return "Projected to hit"
+        default:
+            return nil
+        }
+    }
+
+    fileprivate static func compactValue(_ value: Double) -> String {
+        let absolute = abs(value)
+        if absolute >= 1_000_000 {
+            return String(format: "%.1fM", value / 1_000_000)
+        }
+        if absolute >= 1_000 {
+            return String(format: "%.1fK", value / 1_000)
+        }
+        if value.rounded() == value {
+            return String(format: "%.0f", value)
+        }
+        return String(format: "%.1f", value)
+    }
+
+    fileprivate static func currencyLabel(nanos: Int) -> String {
+        self.currencyLabel(usd: Double(nanos) / 1_000_000_000)
+    }
+
+    fileprivate static func currencyLabel(usd: Double) -> String {
+        switch abs(usd) {
+        case 100...:
+            return String(format: "$%.0f", usd)
+        case 10...:
+            return String(format: "$%.1f", usd)
+        case 1...:
+            return String(format: "$%.2f", usd)
+        default:
+            return String(format: "$%.3f", usd)
+        }
+    }
+
+    fileprivate static func percentLabel(_ value: Double) -> String {
+        let normalized = value <= 1.0 ? value * 100 : value
+        return "\(Int(normalized.rounded()))%"
+    }
+}
+
 private struct WindowQuotaSuggestionRows: View {
     let model: WindowQuotaSuggestionsModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("\(self.model.sampleCount) completed blocks")
+            Text(self.model.sampleContextLabel)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -1891,6 +2043,10 @@ private struct WindowOverviewProviderCard: View {
         WindowDepletionForecastModel.make(forecast: self.item.depletionForecast)
     }
 
+    private var predictiveInsights: PredictiveInsightsSummaryModel? {
+        PredictiveInsightsSummaryModel.make(insights: self.item.predictiveInsights)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
@@ -1940,6 +2096,10 @@ private struct WindowOverviewProviderCard: View {
 
                 if let quotaSuggestions = self.quotaSuggestions {
                     WindowOverviewQuotaSuggestionStrip(model: quotaSuggestions)
+                }
+
+                if let predictiveInsights = self.predictiveInsights {
+                    WindowOverviewPredictiveInsightsStrip(model: predictiveInsights)
                 }
 
                 if !self.costInsights.stats.isEmpty || self.costInsights.mixLabel != nil {
@@ -2036,6 +2196,206 @@ private struct WindowOverviewQuotaSuggestionStrip: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+private struct WindowOverviewPredictiveInsightsStrip: View {
+    let model: PredictiveInsightsSummaryModel
+
+    private let columns = [
+        GridItem(.flexible(minimum: 120), spacing: 8),
+        GridItem(.flexible(minimum: 120), spacing: 8),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Predictive insights")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.primary.opacity(0.72))
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+                Spacer(minLength: 8)
+                if let analysis = self.model.limitHitAnalysis {
+                    Text(analysis.riskLevel.uppercased())
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(self.riskColor(for: analysis.riskLevel))
+                }
+            }
+
+            LazyVGrid(columns: self.columns, spacing: 8) {
+                if let burn = self.model.rollingHourBurn {
+                    PredictiveInsightsMetricCard(
+                        title: "Rolling Hour",
+                        value: burn.tokensPerMinuteLabel,
+                        secondaryValue: burn.costPerHourLabel,
+                        detail: [burn.coverageLabel, burn.tierLabel].compactMap { $0 }.joined(separator: " · "),
+                        accent: .primary
+                    )
+                }
+
+                if let envelope = self.model.historicalEnvelope {
+                    PredictiveInsightsMetricCard(
+                        title: "Envelope",
+                        value: envelope.tokensRangeLabel,
+                        secondaryValue: envelope.costRangeLabel,
+                        detail: "\(envelope.sampleLabel) · \(envelope.turnsRangeLabel)",
+                        accent: .primary
+                    )
+                }
+
+                if let analysis = self.model.limitHitAnalysis {
+                    PredictiveInsightsMetricCard(
+                        title: "Limit Hits",
+                        value: analysis.hitRateLabel,
+                        secondaryValue: analysis.thresholdLabel,
+                        detail: [analysis.summaryLabel, analysis.activityLabel].compactMap { $0 }.joined(separator: " · "),
+                        accent: self.riskColor(for: analysis.riskLevel)
+                    )
+                }
+            }
+        }
+    }
+
+    private func riskColor(for riskLevel: String) -> Color {
+        switch riskLevel.lowercased() {
+        case "critical", "high":
+            return .red
+        case "warn", "warning", "medium", "moderate":
+            return .orange
+        default:
+            return Color.primary.opacity(0.8)
+        }
+    }
+}
+
+private struct WindowPredictiveInsightsCardBody: View {
+    let model: PredictiveInsightsSummaryModel
+    let density: LiveMonitorDensity
+
+    private var spacing: CGFloat {
+        self.density == .compact ? 8 : 10
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: self.spacing) {
+            if let burn = self.model.rollingHourBurn {
+                PredictiveInsightsDetailSection(
+                    title: "Rolling hour burn",
+                    value: burn.tokensPerMinuteLabel,
+                    secondaryValue: burn.costPerHourLabel,
+                    detail: [burn.coverageLabel, burn.tierLabel].compactMap { $0 }.joined(separator: " · "),
+                    density: self.density
+                )
+            }
+
+            if let envelope = self.model.historicalEnvelope {
+                PredictiveInsightsDetailSection(
+                    title: "Historical envelope",
+                    value: envelope.tokensRangeLabel,
+                    secondaryValue: envelope.costRangeLabel,
+                    detail: "\(envelope.sampleLabel) · \(envelope.turnsRangeLabel)\n\(envelope.averagesLabel)",
+                    density: self.density
+                )
+            }
+
+            if let analysis = self.model.limitHitAnalysis {
+                PredictiveInsightsDetailSection(
+                    title: "Limit hit analysis",
+                    value: analysis.hitRateLabel,
+                    secondaryValue: analysis.thresholdLabel,
+                    detail: [analysis.summaryLabel, analysis.activityLabel].compactMap { $0 }.joined(separator: " · "),
+                    density: self.density,
+                    accent: self.riskColor(for: analysis.riskLevel)
+                )
+            }
+        }
+    }
+
+    private func riskColor(for riskLevel: String) -> Color {
+        switch riskLevel.lowercased() {
+        case "critical", "high":
+            return .red
+        case "warn", "warning", "medium", "moderate":
+            return .orange
+        default:
+            return Color.primary.opacity(0.8)
+        }
+    }
+}
+
+private struct PredictiveInsightsMetricCard: View {
+    let title: String
+    let value: String
+    let secondaryValue: String?
+    let detail: String
+    let accent: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(self.title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .tracking(0.4)
+
+            Text(self.value)
+                .font(.callout.monospacedDigit().weight(.semibold))
+
+            if let secondaryValue, !secondaryValue.isEmpty {
+                Text(secondaryValue)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(self.accent.opacity(0.9))
+            }
+
+            Text(self.detail)
+                .font(.caption2)
+                .foregroundStyle(Color.primary.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .menuCardBackground(opacity: 0.03, cornerRadius: 10)
+    }
+}
+
+private struct PredictiveInsightsDetailSection: View {
+    let title: String
+    let value: String
+    let secondaryValue: String?
+    let detail: String
+    let density: LiveMonitorDensity
+    var accent: Color = Color.primary.opacity(0.82)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: self.density == .compact ? 5 : 6) {
+            Text(self.title.uppercased())
+                .font((self.density == .compact ? Font.caption2 : .caption2).weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.4)
+
+            Text(self.value)
+                .font((self.density == .compact ? Font.callout : .headline).monospacedDigit().weight(.semibold))
+
+            if let secondaryValue, !secondaryValue.isEmpty {
+                Text(secondaryValue)
+                    .font(self.density == .compact ? .caption2.weight(.semibold) : .caption.weight(.semibold))
+                    .foregroundStyle(self.accent)
+            }
+
+            Text(self.detail)
+                .font(self.density == .compact ? .caption2 : .caption)
+                .foregroundStyle(Color.primary.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, self.density == .compact ? 10 : 12)
+        .padding(.vertical, self.density == .compact ? 8 : 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.primary.opacity(0.035))
+        )
     }
 }
 

@@ -572,6 +572,8 @@ pub struct LiveProviderSnapshot {
     pub quota_suggestions: Option<LiveQuotaSuggestions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depletion_forecast: Option<DepletionForecast>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub predictive_insights: Option<LivePredictiveInsights>,
     pub last_refresh: String,
     pub stale: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -696,10 +698,72 @@ pub struct LiveQuotaSuggestionLevel {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct LiveQuotaSuggestions {
     pub sample_count: usize,
+    pub population_count: usize,
     pub recommended_key: String,
+    pub sample_strategy: String,
+    pub sample_label: String,
     pub levels: Vec<LiveQuotaSuggestionLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LivePredictiveBurnRate {
+    pub tokens_per_min: f64,
+    pub cost_per_hour_nanos: i64,
+    pub coverage_minutes: i64,
+    pub tier: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LiveIntegerPercentiles {
+    pub average: i64,
+    pub p50: i64,
+    pub p75: i64,
+    pub p90: i64,
+    pub p95: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LiveFloatPercentiles {
+    pub average: f64,
+    pub p50: f64,
+    pub p75: f64,
+    pub p90: f64,
+    pub p95: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LiveHistoricalEnvelope {
+    pub sample_count: usize,
+    pub tokens: LiveIntegerPercentiles,
+    pub cost_usd: LiveFloatPercentiles,
+    pub turns: LiveIntegerPercentiles,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LiveLimitHitAnalysis {
+    pub sample_count: usize,
+    pub hit_count: usize,
+    pub hit_rate: f64,
+    pub threshold_tokens: i64,
+    pub threshold_percent: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_current_hit: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_projected_hit: Option<bool>,
+    pub risk_level: String,
+    pub summary_label: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LivePredictiveInsights {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rolling_hour_burn: Option<LivePredictiveBurnRate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub historical_envelope: Option<LiveHistoricalEnvelope>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_hit_analysis: Option<LiveLimitHitAnalysis>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -759,6 +823,8 @@ pub struct LiveMonitorProvider {
     pub quota_suggestions: Option<LiveQuotaSuggestions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depletion_forecast: Option<DepletionForecast>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub predictive_insights: Option<LivePredictiveInsights>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

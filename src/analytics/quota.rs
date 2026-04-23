@@ -56,7 +56,10 @@ pub struct QuotaSuggestionLevel {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct QuotaSuggestions {
     pub sample_count: usize,
+    pub population_count: usize,
     pub recommended_key: String,
+    pub sample_strategy: String,
+    pub sample_label: String,
     pub levels: Vec<QuotaSuggestionLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
@@ -94,10 +97,33 @@ pub fn compute_quota(
     })
 }
 
-pub fn compute_quota_suggestions(blocks: &[BillingBlock]) -> Option<QuotaSuggestions> {
-    let mut totals = blocks
+const LIMIT_HIT_SAMPLE_THRESHOLD_FRACTION: f64 = 0.90;
+
+pub fn compute_quota_suggestions(
+    blocks: &[BillingBlock],
+    configured_limit_tokens: Option<i64>,
+) -> Option<QuotaSuggestions> {
+    let completed = blocks
         .iter()
         .filter(|block| !block.is_gap && !block.is_active)
+        .collect::<Vec<_>>();
+    let population_count = completed.len();
+
+    let sample_blocks = configured_limit_tokens
+        .filter(|limit| *limit > 0)
+        .map(|limit| {
+            let threshold = (limit as f64 * LIMIT_HIT_SAMPLE_THRESHOLD_FRACTION).round() as i64;
+            completed
+                .iter()
+                .copied()
+                .filter(|block| block.tokens.total() >= threshold)
+                .collect::<Vec<_>>()
+        })
+        .filter(|hits| !hits.is_empty())
+        .unwrap_or_else(|| completed.clone());
+
+    let mut totals = sample_blocks
+        .iter()
         .map(|block| block.tokens.total())
         .collect::<Vec<_>>();
 
@@ -107,10 +133,22 @@ pub fn compute_quota_suggestions(blocks: &[BillingBlock]) -> Option<QuotaSuggest
 
     totals.sort_unstable();
     let sample_count = totals.len();
+    let used_limit_hits = sample_count != population_count;
 
     Some(QuotaSuggestions {
         sample_count,
+        population_count,
         recommended_key: "p90".into(),
+        sample_strategy: if used_limit_hits {
+            "near_limit_hits".into()
+        } else {
+            "completed_blocks".into()
+        },
+        sample_label: if used_limit_hits {
+            format!("{sample_count} near-limit completed blocks")
+        } else {
+            format!("{sample_count} completed blocks")
+        },
         levels: vec![
             QuotaSuggestionLevel {
                 key: "p90".into(),
@@ -128,8 +166,11 @@ pub fn compute_quota_suggestions(blocks: &[BillingBlock]) -> Option<QuotaSuggest
                 limit_tokens: *totals.last().unwrap_or(&0),
             },
         ],
-        note: (sample_count < LOW_HISTORY_THRESHOLD)
-            .then_some("Based on fewer than 10 completed blocks.".into()),
+        note: (sample_count < LOW_HISTORY_THRESHOLD).then_some(if used_limit_hits {
+            "Based on fewer than 10 near-limit completed blocks.".into()
+        } else {
+            "Based on fewer than 10 completed blocks.".into()
+        }),
     })
 }
 
@@ -271,7 +312,7 @@ mod tests {
     #[test]
     fn compute_quota_suggestions_returns_none_without_completed_history() {
         let active = make_block(400_000);
-        assert!(compute_quota_suggestions(&[active]).is_none());
+        assert!(compute_quota_suggestions(&[active], None).is_none());
     }
 
     #[test]
@@ -279,9 +320,11 @@ mod tests {
         let mut block = make_block(750_000);
         block.is_active = false;
 
-        let suggestions = compute_quota_suggestions(&[block]).expect("suggestions");
+        let suggestions = compute_quota_suggestions(&[block], None).expect("suggestions");
         assert_eq!(suggestions.sample_count, 1);
+        assert_eq!(suggestions.population_count, 1);
         assert_eq!(suggestions.recommended_key, "p90");
+        assert_eq!(suggestions.sample_strategy, "completed_blocks");
         assert_eq!(suggestions.levels.len(), 3);
         assert!(suggestions.note.is_some());
         assert_eq!(suggestions.levels[0].limit_tokens, 750_000);
@@ -304,7 +347,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        let suggestions = compute_quota_suggestions(&blocks).expect("suggestions");
+        let suggestions = compute_quota_suggestions(&blocks, None).expect("suggestions");
         assert_eq!(suggestions.note, None);
         assert_eq!(suggestions.levels[0].limit_tokens, 900_000);
         assert_eq!(suggestions.levels[1].limit_tokens, 1_000_000);
@@ -324,7 +367,7 @@ mod tests {
         gap.is_gap = true;
 
         let suggestions =
-            compute_quota_suggestions(&[historical, active, gap]).expect("suggestions");
+            compute_quota_suggestions(&[historical, active, gap], None).expect("suggestions");
         assert_eq!(suggestions.sample_count, 1);
         assert_eq!(suggestions.levels[2].limit_tokens, 400_000);
     }
@@ -347,16 +390,36 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(
-            compute_quota_suggestions(&sparse)
+            compute_quota_suggestions(&sparse, None)
                 .expect("sparse suggestions")
                 .note
                 .is_some()
         );
         assert!(
-            compute_quota_suggestions(&dense)
+            compute_quota_suggestions(&dense, None)
                 .expect("dense suggestions")
                 .note
                 .is_none()
         );
+    }
+
+    #[test]
+    fn compute_quota_suggestions_prefers_near_limit_completed_blocks() {
+        let blocks = [300_000, 890_000, 920_000, 980_000]
+            .into_iter()
+            .map(|total| {
+                let mut block = make_block(total);
+                block.is_active = false;
+                block
+            })
+            .collect::<Vec<_>>();
+
+        let suggestions = compute_quota_suggestions(&blocks, Some(1_000_000)).expect("suggestions");
+
+        assert_eq!(suggestions.population_count, 4);
+        assert_eq!(suggestions.sample_count, 2);
+        assert_eq!(suggestions.sample_strategy, "near_limit_hits");
+        assert_eq!(suggestions.sample_label, "2 near-limit completed blocks");
+        assert_eq!(suggestions.levels[0].limit_tokens, 980_000);
     }
 }

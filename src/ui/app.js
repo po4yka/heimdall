@@ -7120,10 +7120,12 @@ ${row.project}` : row.project;
     return /* @__PURE__ */ u4("div", { style: { marginTop: "12px", display: "grid", gap: "8px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
         /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "SUGGESTED QUOTAS" }),
-        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
-          suggestions.sample_count,
-          " completed blocks"
-        ] })
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: suggestions.sample_label })
+      ] }),
+      suggestions.sample_count !== suggestions.population_count && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontStyle: "italic" }, children: [
+        "Derived from ",
+        suggestions.population_count,
+        " completed blocks, biased toward near-limit history."
       ] }),
       data.token_limit != null && /* @__PURE__ */ u4(
         "div",
@@ -7333,6 +7335,12 @@ ${row.project}` : row.project;
               children: tierLabel(activeBlock.burn_rate.tier)
             }
           )
+        ] }),
+        activeBlock.projection && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "4px" }, children: [
+          "Projects ",
+          fmtTokens(activeBlock.projection.projected_tokens),
+          " tokens \xB7 $",
+          (activeBlock.projection.projected_cost_nanos / 1e9).toFixed(4)
         ] })
       ] }),
       /* @__PURE__ */ u4(QuotaSection, { block: activeBlock }),
@@ -7475,6 +7483,128 @@ ${row.project}` : row.project;
     ] }) });
   }
 
+  // src/ui/components/PredictiveInsightsCard.tsx
+  function fmtTokensPerMin(value) {
+    return `${fmt(Math.round(value))}/min`;
+  }
+  function burnTone(tier) {
+    if (tier === "high") return "var(--accent)";
+    if (tier === "moderate") return "var(--warning)";
+    return void 0;
+  }
+  function riskTone(level) {
+    if (level === "high") return "var(--accent)";
+    if (level === "elevated") return "var(--warning)";
+    return void 0;
+  }
+  function EnvelopeRow({
+    label,
+    average,
+    p50,
+    p75,
+    p90,
+    p95,
+    formatter
+  }) {
+    return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "4px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
+        /* @__PURE__ */ u4("span", { class: "stat-sub", children: label }),
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
+          "avg ",
+          formatter(average)
+        ] })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
+        "P50 ",
+        formatter(p50),
+        " \xB7 P75 ",
+        formatter(p75),
+        " \xB7 P90 ",
+        formatter(p90),
+        " \xB7 P95 ",
+        formatter(p95)
+      ] })
+    ] });
+  }
+  function HistoricalEnvelopeSection({ envelope }) {
+    return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "8px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "HISTORICAL ENVELOPES" }),
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
+          envelope.sample_count,
+          " completed blocks"
+        ] })
+      ] }),
+      /* @__PURE__ */ u4(EnvelopeRow, { label: "Tokens", formatter: (value) => fmt(value), ...envelope.tokens }),
+      /* @__PURE__ */ u4(EnvelopeRow, { label: "Cost", formatter: (value) => fmtCostCompact(value), ...envelope.cost_usd }),
+      /* @__PURE__ */ u4(EnvelopeRow, { label: "Turns", formatter: (value) => fmt(value), ...envelope.turns })
+    ] });
+  }
+  function RollingBurnSection({ burn }) {
+    return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "6px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "ROLLING 1H BURN" }),
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { color: burnTone(String(burn.tier)) }, children: String(burn.tier).toUpperCase() })
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: "8px" }, children: [
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Tokens" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmtTokensPerMin(burn.tokens_per_min) })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: [
+            fmtCostCompact(burn.cost_per_hour_nanos / 1e9),
+            "/hr"
+          ] })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Coverage" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: [
+            burn.coverage_minutes,
+            "m"
+          ] })
+        ] })
+      ] })
+    ] });
+  }
+  function LimitHitSection({ analysis }) {
+    return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "6px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "LIMIT-HIT RISK" }),
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { color: riskTone(analysis.risk_level) }, children: analysis.risk_level.toUpperCase() })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", children: analysis.summary_label }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
+        analysis.hit_count,
+        "/",
+        analysis.sample_count,
+        " hits \xB7 ",
+        (analysis.hit_rate * 100).toFixed(0),
+        "% rate \xB7 threshold ",
+        fmt(analysis.threshold_tokens)
+      ] })
+    ] });
+  }
+  function PredictiveInsightsCard({
+    insights,
+    title = "Predictive Signals"
+  }) {
+    const hasAny = !!insights.rolling_hour_burn || !!insights.historical_envelope || !!insights.limit_hit_analysis;
+    if (!hasAny) {
+      return null;
+    }
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", style: { display: "grid", gap: "12px" }, children: [
+      /* @__PURE__ */ u4("div", { children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: title }),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Heuristic forecast from rolling burn and completed billing blocks." })
+      ] }),
+      insights.rolling_hour_burn && /* @__PURE__ */ u4(RollingBurnSection, { burn: insights.rolling_hour_burn }),
+      insights.limit_hit_analysis && /* @__PURE__ */ u4(LimitHitSection, { analysis: insights.limit_hit_analysis }),
+      insights.historical_envelope && /* @__PURE__ */ u4(HistoricalEnvelopeSection, { envelope: insights.historical_envelope })
+    ] }) });
+  }
+
   // src/ui/components/StatsCards.tsx
   function StatsCards({
     totals,
@@ -7518,6 +7648,7 @@ ${row.project}` : row.project;
       ] }) }),
       billingBlocks && /* @__PURE__ */ u4(BillingBlocksCard, { data: billingBlocks }),
       billingBlocks?.depletion_forecast && /* @__PURE__ */ u4(DepletionForecastCard, { forecast: billingBlocks.depletion_forecast }),
+      billingBlocks?.predictive_insights && /* @__PURE__ */ u4(PredictiveInsightsCard, { insights: billingBlocks.predictive_insights }),
       /* @__PURE__ */ u4(ContextWindowCard, { data: contextWindow ?? null }),
       cacheEfficiency && /* @__PURE__ */ u4(CacheEfficiencyCard, { data: cacheEfficiency })
     ] });
@@ -8884,6 +9015,7 @@ ${row.project}` : row.project;
   var LIVE_MONITOR_PREFERENCE_KEY = "heimdall.live_monitor.preferences.v1";
   var LIVE_MONITOR_PANEL_OPTIONS = [
     { id: "active_block", label: "Active Block" },
+    { id: "predictive_insights", label: "Predictive Signals" },
     { id: "depletion_forecast", label: "Depletion Forecast" },
     { id: "quota_suggestions", label: "Suggested Quotas" },
     { id: "context_window", label: "Context Window" },
@@ -9160,7 +9292,7 @@ ${row.project}` : row.project;
     return focus === "all" ? data.providers : data.providers.filter((provider) => provider.provider === focus);
   }
   function providerHasVisibleDetails(provider, hiddenPanels) {
-    return !hiddenPanels.has("active_block") && !!provider.active_block || !hiddenPanels.has("depletion_forecast") && !!provider.depletion_forecast || !hiddenPanels.has("quota_suggestions") && !!provider.quota_suggestions || !hiddenPanels.has("context_window") && !!provider.context_window || !hiddenPanels.has("recent_session") && !!provider.recent_session || !hiddenPanels.has("warnings") && provider.warnings.length > 0;
+    return !hiddenPanels.has("active_block") && !!provider.active_block || !hiddenPanels.has("predictive_insights") && !!provider.predictive_insights || !hiddenPanels.has("depletion_forecast") && !!provider.depletion_forecast || !hiddenPanels.has("quota_suggestions") && !!provider.quota_suggestions || !hiddenPanels.has("context_window") && !!provider.context_window || !hiddenPanels.has("recent_session") && !!provider.recent_session || !hiddenPanels.has("warnings") && provider.warnings.length > 0;
   }
   function detailProviders(data, focus, hiddenPanels) {
     if (focus !== "all") {
@@ -9264,6 +9396,12 @@ ${row.project}` : row.project;
         fmtCostCompact(block.burn_rate.cost_per_hour_nanos / 1e9),
         "/hr"
       ] }),
+      block.projection && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+        "Projects ",
+        fmt(block.projection.projected_tokens),
+        " tokens \xB7 ",
+        fmtCostCompact(block.projection.projected_cost_nanos / 1e9)
+      ] }),
       block.quota && /* @__PURE__ */ u4("div", { style: { marginTop: density === "compact" ? "10px" : "12px" }, children: [
         /* @__PURE__ */ u4(
           SegmentedProgressBar,
@@ -9332,10 +9470,7 @@ ${row.project}` : row.project;
     }
     return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Suggested Quotas" }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
-        suggestions.sample_count,
-        " completed blocks"
-      ] }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: suggestions.sample_label }),
       /* @__PURE__ */ u4("div", { style: { display: "grid", gap: density === "compact" ? "6px" : "8px", marginTop: density === "compact" ? "10px" : "12px" }, children: suggestions.levels.map((level) => /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
         /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
           level.label,
@@ -9343,7 +9478,12 @@ ${row.project}` : row.project;
         ] }),
         /* @__PURE__ */ u4("span", { class: "stat-value", style: { fontSize: "18px" }, children: fmt(level.limit_tokens) })
       ] }, level.key)) }),
-      suggestions.note && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "10px", fontStyle: "italic", fontSize: density === "compact" ? "11px" : void 0 }, children: suggestions.note })
+      suggestions.note && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "10px", fontStyle: "italic", fontSize: density === "compact" ? "11px" : void 0 }, children: suggestions.note }),
+      suggestions.sample_count !== suggestions.population_count && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+        "Drawn from ",
+        suggestions.population_count,
+        " completed blocks, weighted toward near-limit history."
+      ] })
     ] }) });
   }
   function ProviderDetails({
@@ -9361,6 +9501,7 @@ ${row.project}` : row.project;
       ] }),
       /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: density === "compact" ? "12px" : "16px" }, children: [
         !hiddenPanels.has("active_block") && provider.active_block && /* @__PURE__ */ u4(BlockPanel, { block: provider.active_block, density }),
+        !hiddenPanels.has("predictive_insights") && provider.predictive_insights && /* @__PURE__ */ u4(PredictiveInsightsCard, { insights: provider.predictive_insights }),
         !hiddenPanels.has("depletion_forecast") && provider.depletion_forecast && /* @__PURE__ */ u4(DepletionForecastCard, { forecast: provider.depletion_forecast }),
         !hiddenPanels.has("quota_suggestions") && /* @__PURE__ */ u4(QuotaSuggestionsPanel, { provider, density }),
         !hiddenPanels.has("context_window") && provider.context_window && /* @__PURE__ */ u4(ContextPanel, { data: provider.context_window, density }),

@@ -10,13 +10,16 @@ use crate::analytics::blocks::identify_blocks;
 use crate::analytics::depletion::{
     billing_block_signal, build_depletion_forecast, primary_window_signal, secondary_window_signal,
 };
+use crate::analytics::predictive::compute_predictive_insights;
 use crate::analytics::quota::compute_quota_suggestions;
 use crate::models::{
-    LIVE_PROVIDERS_CONTRACT_VERSION, LiveProviderHistoryResponse, LiveProviderIdentity,
-    LiveProviderSnapshot, LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse,
-    LiveQuotaSuggestionLevel, LiveQuotaSuggestions, LocalNotificationCondition,
-    LocalNotificationState, MOBILE_SNAPSHOT_CONTRACT_VERSION, MobileProviderHistorySeries,
-    MobileSnapshotEnvelope, MobileSnapshotFreshness, MobileSnapshotTotals, ProviderCostSummary,
+    LIVE_PROVIDERS_CONTRACT_VERSION, LiveFloatPercentiles, LiveHistoricalEnvelope,
+    LiveIntegerPercentiles, LiveLimitHitAnalysis, LivePredictiveBurnRate, LivePredictiveInsights,
+    LiveProviderHistoryResponse, LiveProviderIdentity, LiveProviderSnapshot,
+    LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse, LiveQuotaSuggestionLevel,
+    LiveQuotaSuggestions, LocalNotificationCondition, LocalNotificationState,
+    MOBILE_SNAPSHOT_CONTRACT_VERSION, MobileProviderHistorySeries, MobileSnapshotEnvelope,
+    MobileSnapshotFreshness, MobileSnapshotTotals, ProviderCostSummary,
 };
 use crate::oauth::credentials;
 use crate::oauth::models::{BudgetInfo, Identity, Plan, UsageWindowsResponse, WindowInfo};
@@ -786,8 +789,16 @@ async fn build_claude_snapshot(
         let cost_summary = provider_cost_summary(&conn, "claude")?;
         let turns = db::load_all_turns(&conn)?;
         let blocks = identify_blocks(&turns, session_length_hours);
-        let quota_suggestions = compute_quota_suggestions(&blocks).map(live_quota_suggestions);
         let now = chrono::Utc::now();
+        let active_projection = blocks
+            .iter()
+            .find(|block| block.is_active && !block.is_gap)
+            .map(|block| {
+                let projection = project_block_usage(block, calculate_burn_rate(block, now), now);
+                projection.projected_tokens as i64
+            });
+        let quota_suggestions =
+            compute_quota_suggestions(&blocks, blocks_token_limit).map(live_quota_suggestions);
         let primary = usage_clone.session.as_ref().map(window_to_live);
         let secondary = usage_clone.weekly.as_ref().map(window_to_live);
         let depletion_forecast = {
@@ -829,6 +840,9 @@ async fn build_claude_snapshot(
             }
             build_depletion_forecast(signals)
         };
+        let predictive_insights =
+            compute_predictive_insights(&blocks, blocks_token_limit, active_projection, now)
+                .map(live_predictive_insights);
 
         let mut source_attempts = Vec::new();
         if usage_clone.available {
@@ -893,6 +907,7 @@ async fn build_claude_snapshot(
             claude_usage,
             quota_suggestions,
             depletion_forecast,
+            predictive_insights,
             last_refresh: chrono::Utc::now().to_rfc3339(),
             stale: !usage_clone.available,
             error: if source_used == "unavailable" {
@@ -1018,6 +1033,7 @@ async fn build_codex_snapshot(
         claude_usage: None,
         quota_suggestions: None,
         depletion_forecast,
+        predictive_insights: None,
         last_refresh: chrono::Utc::now().to_rfc3339(),
         stale: !resolution.available,
         error: resolution.error,
@@ -1080,6 +1096,7 @@ async fn build_codex_bootstrap_snapshot(
         claude_usage: None,
         quota_suggestions: None,
         depletion_forecast: None,
+        predictive_insights: None,
         last_refresh: chrono::Utc::now().to_rfc3339(),
         stale: true,
         error: None,
@@ -1091,7 +1108,10 @@ fn live_quota_suggestions(
 ) -> LiveQuotaSuggestions {
     LiveQuotaSuggestions {
         sample_count: suggestions.sample_count,
+        population_count: suggestions.population_count,
         recommended_key: suggestions.recommended_key,
+        sample_strategy: suggestions.sample_strategy,
+        sample_label: suggestions.sample_label,
         levels: suggestions
             .levels
             .into_iter()
@@ -1102,6 +1122,66 @@ fn live_quota_suggestions(
             })
             .collect(),
         note: suggestions.note,
+    }
+}
+
+fn live_predictive_insights(
+    insights: crate::analytics::predictive::PredictiveInsights,
+) -> LivePredictiveInsights {
+    LivePredictiveInsights {
+        rolling_hour_burn: insights
+            .rolling_hour_burn
+            .map(|burn| LivePredictiveBurnRate {
+                tokens_per_min: burn.tokens_per_min,
+                cost_per_hour_nanos: burn.cost_per_hour_nanos,
+                coverage_minutes: burn.coverage_minutes,
+                tier: burn.tier,
+            }),
+        historical_envelope: insights
+            .historical_envelope
+            .map(|envelope| LiveHistoricalEnvelope {
+                sample_count: envelope.sample_count,
+                tokens: live_integer_percentiles(envelope.tokens),
+                cost_usd: live_float_percentiles(envelope.cost_usd),
+                turns: live_integer_percentiles(envelope.turns),
+            }),
+        limit_hit_analysis: insights
+            .limit_hit_analysis
+            .map(|analysis| LiveLimitHitAnalysis {
+                sample_count: analysis.sample_count,
+                hit_count: analysis.hit_count,
+                hit_rate: analysis.hit_rate,
+                threshold_tokens: analysis.threshold_tokens,
+                threshold_percent: analysis.threshold_percent,
+                active_current_hit: analysis.active_current_hit,
+                active_projected_hit: analysis.active_projected_hit,
+                risk_level: analysis.risk_level,
+                summary_label: analysis.summary_label,
+            }),
+    }
+}
+
+fn live_integer_percentiles(
+    percentiles: crate::analytics::predictive::IntegerPercentiles,
+) -> LiveIntegerPercentiles {
+    LiveIntegerPercentiles {
+        average: percentiles.average,
+        p50: percentiles.p50,
+        p75: percentiles.p75,
+        p90: percentiles.p90,
+        p95: percentiles.p95,
+    }
+}
+
+fn live_float_percentiles(
+    percentiles: crate::analytics::predictive::FloatPercentiles,
+) -> LiveFloatPercentiles {
+    LiveFloatPercentiles {
+        average: percentiles.average,
+        p50: percentiles.p50,
+        p75: percentiles.p75,
+        p90: percentiles.p90,
+        p95: percentiles.p95,
     }
 }
 
@@ -1430,6 +1510,7 @@ mod tests {
                 claude_usage: None,
                 quota_suggestions: None,
                 depletion_forecast: None,
+                predictive_insights: None,
                 last_refresh: "2026-01-01T00:00:00Z".into(),
                 stale: false,
                 error: None,

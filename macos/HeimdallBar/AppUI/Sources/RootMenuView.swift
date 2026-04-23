@@ -244,6 +244,9 @@ struct ProviderMenuCard: View {
                 showsTrailingMetric: self.projection.laneDetails.first?.remainingPercent != nil
             )
             AuthStatusSection(model: self.providerModel, projection: projection)
+            if let predictiveInsights = PredictiveInsightsSummaryModel.make(insights: projection.predictiveInsights) {
+                PredictiveInsightsMenuSection(model: predictiveInsights)
+            }
             if projection.laneDetails.count > 1 {
                 Divider()
                     .padding(.vertical, 1)
@@ -509,6 +512,105 @@ struct ProviderMenuCard: View {
             && projection.historyBreakdowns.contains(where: { !$0.isEmpty })
     }
 
+}
+
+private struct PredictiveInsightsMenuSection: View {
+    let model: PredictiveInsightsSummaryModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Predictive")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                if let analysis = self.model.limitHitAnalysis {
+                    Text(analysis.riskLevel.uppercased())
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(self.riskColor(for: analysis.riskLevel))
+                }
+            }
+
+            if let burn = self.model.rollingHourBurn {
+                PredictiveInsightsMenuRow(
+                    title: "1h burn",
+                    value: burn.tokensPerMinuteLabel,
+                    secondary: burn.costPerHourLabel,
+                    detail: [burn.coverageLabel, burn.tierLabel].compactMap { $0 }.joined(separator: " · "),
+                    accent: .primary
+                )
+            }
+
+            if let envelope = self.model.historicalEnvelope {
+                PredictiveInsightsMenuRow(
+                    title: "Envelope",
+                    value: envelope.tokensRangeLabel,
+                    secondary: envelope.costRangeLabel,
+                    detail: "\(envelope.sampleLabel) · \(envelope.turnsRangeLabel)",
+                    accent: .primary
+                )
+            }
+
+            if let analysis = self.model.limitHitAnalysis {
+                PredictiveInsightsMenuRow(
+                    title: "Limit hits",
+                    value: analysis.hitRateLabel,
+                    secondary: analysis.thresholdLabel,
+                    detail: [analysis.summaryLabel, analysis.activityLabel].compactMap { $0 }.joined(separator: " · "),
+                    accent: self.riskColor(for: analysis.riskLevel)
+                )
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func riskColor(for riskLevel: String) -> Color {
+        switch riskLevel.lowercased() {
+        case "critical", "high":
+            return .red
+        case "warn", "warning", "medium", "moderate":
+            return .orange
+        default:
+            return Color.primary.opacity(0.82)
+        }
+    }
+}
+
+private struct PredictiveInsightsMenuRow: View {
+    let title: String
+    let value: String
+    let secondary: String?
+    let detail: String
+    let accent: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(self.title.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(0.4)
+                Spacer(minLength: 8)
+                Text(self.value)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+            }
+
+            if let secondary, !secondary.isEmpty {
+                Text(secondary)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(self.accent.opacity(0.9))
+            }
+
+            Text(self.detail)
+                .font(.caption2)
+                .foregroundStyle(Color.primary.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .menuCardBackground(opacity: 0.025, cornerRadius: 8)
+    }
 }
 
 struct OverviewMenuCard: View {

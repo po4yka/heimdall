@@ -61,13 +61,40 @@ describe('renderLiveMonitorView', () => {
           },
           quota_suggestions: {
             sample_count: 4,
+            population_count: 7,
             recommended_key: 'p90',
+            sample_strategy: 'near_limit_hits',
+            sample_label: '4 near-limit completed blocks',
             levels: [
               { key: 'p90', label: 'P90', limit_tokens: 800_000 },
               { key: 'p95', label: 'P95', limit_tokens: 900_000 },
               { key: 'max', label: 'Max', limit_tokens: 950_000 },
             ],
             note: 'Based on fewer than 10 completed blocks.',
+          },
+          predictive_insights: {
+            rolling_hour_burn: {
+              tokens_per_min: 2800,
+              cost_per_hour_nanos: 1_200_000_000,
+              coverage_minutes: 40,
+              tier: 'moderate',
+            },
+            historical_envelope: {
+              sample_count: 7,
+              tokens: { average: 640_000, p50: 600_000, p75: 700_000, p90: 900_000, p95: 940_000 },
+              cost_usd: { average: 3.8, p50: 3.1, p75: 4.6, p90: 5.4, p95: 5.8 },
+              turns: { average: 14, p50: 12, p75: 16, p90: 20, p95: 22 },
+            },
+            limit_hit_analysis: {
+              sample_count: 7,
+              hit_count: 2,
+              hit_rate: 2 / 7,
+              threshold_tokens: 900_000,
+              threshold_percent: 90,
+              active_projected_hit: true,
+              risk_level: 'high',
+              summary_label: '2 of 7 completed blocks reached 90% of the configured limit · active block is on pace to join them',
+            },
           },
           depletion_forecast: {
             primary_signal: {
@@ -116,6 +143,8 @@ describe('renderLiveMonitorView', () => {
     expect(text).toContain('SUPPORTING SIGNALS');
     expect(text).toContain('P90');
     expect(text).toContain('[RECOMMENDED]');
+    expect(text).toContain('Predictive Signals');
+    expect(text).toContain('ROLLING 1H BURN');
     expect(text).toContain('Based on fewer than 10 completed blocks.');
   });
 
@@ -168,12 +197,13 @@ describe('renderLiveMonitorView', () => {
 
     liveMonitorData.value = data;
     liveMonitorFocus.value = 'all';
-    liveMonitorHiddenPanels.value = ['active_block', 'warnings'];
+    liveMonitorHiddenPanels.value = ['active_block', 'predictive_insights', 'warnings'];
 
     const text = collectText(renderLiveMonitorView()).join(' ');
     expect(text).toContain('Provider Lanes');
     expect(text).toContain('Claude');
     expect(text).not.toContain('Active Block');
+    expect(text).not.toContain('Predictive Signals');
     expect(text).not.toContain('Warnings');
     expect(text).toContain('Context Window');
   });

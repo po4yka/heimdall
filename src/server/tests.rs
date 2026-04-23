@@ -189,7 +189,10 @@ mod tests {
                     claude_usage: None,
                     quota_suggestions: Some(crate::models::LiveQuotaSuggestions {
                         sample_count: 3,
+                        population_count: 3,
                         recommended_key: "p90".into(),
+                        sample_strategy: "completed_blocks".into(),
+                        sample_label: "3 completed blocks".into(),
                         levels: vec![
                             crate::models::LiveQuotaSuggestionLevel {
                                 key: "p90".into(),
@@ -225,6 +228,49 @@ mod tests {
                         summary_label: "Primary window currently at 42% used".into(),
                         severity: "ok".into(),
                         note: None,
+                    }),
+                    predictive_insights: Some(crate::models::LivePredictiveInsights {
+                        rolling_hour_burn: Some(crate::models::LivePredictiveBurnRate {
+                            tokens_per_min: 2800.0,
+                            cost_per_hour_nanos: 1_200_000_000,
+                            coverage_minutes: 40,
+                            tier: "moderate".into(),
+                        }),
+                        historical_envelope: Some(crate::models::LiveHistoricalEnvelope {
+                            sample_count: 7,
+                            tokens: crate::models::LiveIntegerPercentiles {
+                                average: 640_000,
+                                p50: 600_000,
+                                p75: 700_000,
+                                p90: 900_000,
+                                p95: 940_000,
+                            },
+                            cost_usd: crate::models::LiveFloatPercentiles {
+                                average: 3.8,
+                                p50: 3.1,
+                                p75: 4.6,
+                                p90: 5.4,
+                                p95: 5.8,
+                            },
+                            turns: crate::models::LiveIntegerPercentiles {
+                                average: 14,
+                                p50: 12,
+                                p75: 16,
+                                p90: 20,
+                                p95: 22,
+                            },
+                        }),
+                        limit_hit_analysis: Some(crate::models::LiveLimitHitAnalysis {
+                            sample_count: 7,
+                            hit_count: 2,
+                            hit_rate: 2.0 / 7.0,
+                            threshold_tokens: 900_000,
+                            threshold_percent: 90.0,
+                            active_current_hit: Some(false),
+                            active_projected_hit: Some(true),
+                            risk_level: "high".into(),
+                            summary_label: "2 of 7 completed blocks reached 90% of the configured limit · active block is on pace to join them".into(),
+                        }),
                     }),
                     last_refresh: "2026-04-21T09:00:00Z".into(),
                     stale: false,
@@ -271,6 +317,7 @@ mod tests {
                         severity: "ok".into(),
                         note: None,
                     }),
+                    predictive_insights: None,
                     last_refresh: "2026-04-21T08:30:00Z".into(),
                     stale: stale_codex,
                     error: None,
@@ -1039,6 +1086,7 @@ mod tests {
                             claude_usage: None,
                             quota_suggestions: None,
                             depletion_forecast: None,
+                            predictive_insights: None,
                             last_refresh: "2026-01-01T00:00:00Z".into(),
                             stale: false,
                             error: None,
@@ -1062,6 +1110,7 @@ mod tests {
                             claude_usage: None,
                             quota_suggestions: None,
                             depletion_forecast: None,
+                            predictive_insights: None,
                             last_refresh: "2026-01-01T00:00:00Z".into(),
                             stale: false,
                             error: None,
@@ -1138,6 +1187,7 @@ mod tests {
             .unwrap();
         assert!(claude.get("quota_suggestions").is_some());
         assert!(claude.get("depletion_forecast").is_some());
+        assert!(claude.get("predictive_insights").is_some());
 
         let codex = data["providers"]
             .as_array()
@@ -1147,6 +1197,7 @@ mod tests {
             .unwrap();
         assert!(codex.get("quota_suggestions").is_none());
         assert!(codex.get("depletion_forecast").is_some());
+        assert!(codex.get("predictive_insights").is_none());
     }
 
     #[tokio::test]
@@ -1347,6 +1398,7 @@ mod tests {
         assert!(claude.get("recent_session").is_some());
         assert!(claude.get("quota_suggestions").is_some());
         assert!(claude.get("depletion_forecast").is_some());
+        assert!(claude.get("predictive_insights").is_some());
 
         let codex = data["providers"]
             .as_array()
@@ -1358,6 +1410,7 @@ mod tests {
         assert!(codex.get("active_block").is_none());
         assert!(codex.get("quota_suggestions").is_none());
         assert!(codex.get("depletion_forecast").is_some());
+        assert!(codex.get("predictive_insights").is_none());
     }
 
     #[tokio::test]
@@ -3209,6 +3262,7 @@ mod tests {
         assert!(json["token_limit"].is_null());
         assert!(json.get("quota_suggestions").is_some());
         assert!(json.get("depletion_forecast").is_none());
+        assert!(json.get("predictive_insights").is_some());
         // blocks must be an array.
         assert!(json["blocks"].is_array());
         // At least one block from the seeded turn.

@@ -4,6 +4,7 @@ import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { BillingBlocksCard } from './BillingBlocksCard';
 import { ContextWindowCard } from './ContextWindowCard';
 import { DepletionForecastCard } from './DepletionForecastCard';
+import { PredictiveInsightsCard } from './PredictiveInsightsCard';
 import type { Totals, StatCard, DailyAgg, CacheEfficiency, BillingBlocksResponse, ContextWindowResponse } from '../state/types';
 
 interface StatsCardsProps {
@@ -88,6 +89,9 @@ export function StatsCards({
       )}
       {billingBlocks?.depletion_forecast && (
         <DepletionForecastCard forecast={billingBlocks.depletion_forecast} />
+      )}
+      {billingBlocks?.predictive_insights && (
+        <PredictiveInsightsCard insights={billingBlocks.predictive_insights} />
       )}
       {/* Phase 5: Context window card — hides automatically when data unavailable */}
       <ContextWindowCard data={contextWindow ?? null} />

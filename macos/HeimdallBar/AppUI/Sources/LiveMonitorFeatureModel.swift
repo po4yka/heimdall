@@ -186,6 +186,7 @@ public final class LiveMonitorFeatureModel {
         (!self.hiddenPanels.contains(.activeBlock) && provider.activeBlock != nil)
             || (!self.hiddenPanels.contains(.depletionForecast) && provider.depletionForecast != nil)
             || (!self.hiddenPanels.contains(.quotaSuggestions) && provider.quotaSuggestions != nil)
+            || provider.predictiveInsights != nil
             || (!self.hiddenPanels.contains(.contextWindow) && provider.contextWindow != nil)
             || (!self.hiddenPanels.contains(.recentSession) && provider.recentSession != nil)
             || (!self.hiddenPanels.contains(.warnings) && !provider.warnings.isEmpty)

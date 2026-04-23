@@ -372,18 +372,79 @@ struct AppShellViewTests {
                 recommendedKey: "p90",
                 levels: [
                     QuotaSuggestionLevel(key: "p90", label: "P90", limitTokens: 800_000),
-                    QuotaSuggestionLevel(key: "p95", label: "P95", limitTokens: 900_000),
-                    QuotaSuggestionLevel(key: "max", label: "Max", limitTokens: 950_000),
-                ],
-                note: "Based on fewer than 10 completed blocks."
+                QuotaSuggestionLevel(key: "p95", label: "P95", limitTokens: 900_000),
+                QuotaSuggestionLevel(key: "max", label: "Max", limitTokens: 950_000),
+            ],
+                note: "Based on fewer than 10 completed blocks.",
+                populationCount: 9,
+                sampleStrategy: "trailing_blocks",
+                sampleLabel: "4 of 9 completed blocks"
             )
         )
 
         #expect(model?.sampleCount == 4)
+        #expect(model?.sampleContextLabel == "4 of 9 completed blocks")
         #expect(model?.items.first?.label == "P90")
         #expect(model?.items.first?.isRecommended == true)
         #expect(model?.items.first?.value == "800.0K")
         #expect(model?.note == "Based on fewer than 10 completed blocks.")
+    }
+
+    @Test
+    func predictiveInsightsModelFormatsRollingEnvelopeAndRisk() {
+        let model = PredictiveInsightsSummaryModel.make(
+            insights: LivePredictiveInsights(
+                rollingHourBurn: LivePredictiveRollingHourBurn(
+                    tokensPerMin: 12_450,
+                    costPerHourNanos: 1_450_000_000,
+                    coverageMinutes: 42,
+                    tier: "p90"
+                ),
+                historicalEnvelope: LivePredictiveHistoricalEnvelope(
+                    sampleCount: 9,
+                    tokens: LivePredictivePercentiles(
+                        average: 186_000,
+                        p50: 171_000,
+                        p75: 209_000,
+                        p90: 248_000,
+                        p95: 264_000
+                    ),
+                    costUSD: LivePredictivePercentiles(
+                        average: 1.82,
+                        p50: 1.53,
+                        p75: 1.94,
+                        p90: 2.41,
+                        p95: 2.66
+                    ),
+                    turns: LivePredictivePercentiles(
+                        average: 23,
+                        p50: 21,
+                        p75: 28,
+                        p90: 34,
+                        p95: 38
+                    )
+                ),
+                limitHitAnalysis: LivePredictiveLimitHitAnalysis(
+                    sampleCount: 9,
+                    hitCount: 2,
+                    hitRate: 0.22,
+                    thresholdTokens: 900_000,
+                    thresholdPercent: 90,
+                    activeCurrentHit: false,
+                    activeProjectedHit: true,
+                    riskLevel: "medium",
+                    summaryLabel: "Projected to hit the suggested quota in 2 of the last 9 windows."
+                )
+            )
+        )
+
+        #expect(model?.rollingHourBurn?.tokensPerMinuteLabel == "12.4K tok/min")
+        #expect(model?.rollingHourBurn?.costPerHourLabel == "$1.45/h")
+        #expect(model?.historicalEnvelope?.tokensRangeLabel == "171.0K-264.0K tok")
+        #expect(model?.historicalEnvelope?.sampleLabel == "9 historical samples")
+        #expect(model?.limitHitAnalysis?.hitRateLabel == "2/9 hits · 22%")
+        #expect(model?.limitHitAnalysis?.thresholdLabel == "Threshold 900.0K tok · 90%")
+        #expect(model?.limitHitAnalysis?.activityLabel == "Projected to hit")
     }
 
     @Test
@@ -632,6 +693,7 @@ struct AppShellViewTests {
         warningLabels: [String] = [],
         quotaSuggestions: QuotaSuggestions? = nil,
         depletionForecast: DepletionForecast? = nil,
+        predictiveInsights: LivePredictiveInsights? = nil,
         incidentLabel: String? = nil,
         todayCostUSD: Double = 6.8,
         last30DaysCostUSD: Double = 42,
@@ -658,6 +720,7 @@ struct AppShellViewTests {
             warningLabels: warningLabels,
             quotaSuggestions: quotaSuggestions,
             depletionForecast: depletionForecast,
+            predictiveInsights: predictiveInsights,
             visualState: .healthy,
             stateLabel: "Operational",
             statusLabel: nil,

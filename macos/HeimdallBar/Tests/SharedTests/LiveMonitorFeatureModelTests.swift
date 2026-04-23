@@ -155,6 +155,46 @@ struct LiveMonitorFeatureModelTests {
         ))
     }
 
+    @MainActor
+    @Test
+    func predictiveInsightsKeepProviderVisibleInDetailArea() async {
+        let client = StubLiveMonitorClient(envelope: Self.sampleEnvelope(
+            defaultFocus: .all,
+            providers: [
+                LiveMonitorProvider(
+                    provider: "claude",
+                    title: "Claude",
+                    visualState: "healthy",
+                    sourceLabel: "Source: oauth",
+                    warnings: [],
+                    identityLabel: "pro",
+                    primary: nil,
+                    todayCostUSD: 3.2,
+                    projectedWeeklySpendUSD: 20,
+                    lastRefresh: "2026-04-22T10:00:00Z",
+                    lastRefreshLabel: "Updated just now",
+                    predictiveInsights: LivePredictiveInsights(
+                        rollingHourBurn: LivePredictiveRollingHourBurn(
+                            tokensPerMin: 12_450,
+                            costPerHourNanos: 1_450_000_000,
+                            coverageMinutes: 42,
+                            tier: "moderate"
+                        )
+                    )
+                )
+            ]
+        ))
+        let model = LiveMonitorFeatureModel(
+            sessionStore: AppSessionStore(persistence: TestAppSessionStateStore()),
+            clientFactory: { _ in client }
+        )
+
+        await model.refresh()
+
+        #expect(model.detailProviders.count == 1)
+        #expect(model.detailProviders.first?.predictiveInsights?.rollingHourBurn?.tier == "moderate")
+    }
+
     private static func sampleEnvelope(
         defaultFocus: LiveMonitorFocus,
         providers: [LiveMonitorProvider]? = nil

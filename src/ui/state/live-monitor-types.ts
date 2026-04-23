@@ -2,6 +2,7 @@ import type {
   BurnRateTier,
   ContextWindowSeverity,
   DepletionForecast,
+  PredictiveInsights,
   QuotaSeverity,
   QuotaSuggestions,
 } from './billing-types';
@@ -107,6 +108,7 @@ export interface LiveMonitorProvider {
   recent_session?: LiveMonitorRecentSession | null;
   quota_suggestions?: QuotaSuggestions | null;
   depletion_forecast?: DepletionForecast | null;
+  predictive_insights?: PredictiveInsights | null;
 }
 
 export interface LiveMonitorResponse {

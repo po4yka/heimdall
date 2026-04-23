@@ -64,9 +64,15 @@ function QuotaSuggestionsSection({ data }: { data: BillingBlocksResponse }) {
           SUGGESTED QUOTAS
         </span>
         <span class="stat-sub" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
-          {suggestions.sample_count} completed blocks
+          {suggestions.sample_label}
         </span>
       </div>
+
+      {suggestions.sample_count !== suggestions.population_count && (
+        <div class="stat-sub" style={{ fontStyle: 'italic' }}>
+          Derived from {suggestions.population_count} completed blocks, biased toward near-limit history.
+        </div>
+      )}
 
       {data.token_limit != null && (
         <div
@@ -300,6 +306,12 @@ export function BillingBlocksCard({ data }: BillingBlocksCardProps) {
                 {tierLabel(activeBlock.burn_rate.tier)}
               </span>
             )}
+          </div>
+        )}
+        {activeBlock.projection && (
+          <div class="stat-sub" style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', marginTop: '4px' }}>
+            Projects {fmtTokens(activeBlock.projection.projected_tokens)} tokens · $
+            {(activeBlock.projection.projected_cost_nanos / 1e9).toFixed(4)}
           </div>
         )}
       </div>
