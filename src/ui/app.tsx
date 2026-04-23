@@ -7,11 +7,15 @@ import { InlineStatus } from './components/InlineStatus';
 import { createDashboardRuntime } from './dashboard/runtime';
 import { MonitorHeader } from './monitor/MonitorHeader';
 import { createLiveMonitorRuntime } from './monitor/runtime';
+import { hydrateLiveMonitorPreferences } from './monitor/store';
 import { applyTheme, getTheme } from './lib/theme';
 import { rawData, syncDashboardUrl } from './state/store';
 
 applyTheme(getTheme());
 const isMonitorRoute = window.location.pathname === '/monitor';
+if (isMonitorRoute) {
+  hydrateLiveMonitorPreferences();
+}
 const dashboardRuntime = !isMonitorRoute ? createDashboardRuntime() : null;
 const monitorRuntime = isMonitorRoute ? createLiveMonitorRuntime() : null;
 

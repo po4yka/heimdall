@@ -136,13 +136,82 @@ public struct SessionImportOperationState: Sendable, Equatable {
 public struct PersistedAppSessionState: Codable, Sendable, Equatable {
     public var selectedProvider: ProviderID
     public var selectedMergeTab: MergeMenuTab
+    public var liveMonitorPreferences: LiveMonitorPreferences?
 
     public init(
         selectedProvider: ProviderID = .claude,
-        selectedMergeTab: MergeMenuTab = .overview
+        selectedMergeTab: MergeMenuTab = .overview,
+        liveMonitorPreferences: LiveMonitorPreferences? = nil
     ) {
         self.selectedProvider = selectedProvider
         self.selectedMergeTab = selectedMergeTab
+        self.liveMonitorPreferences = liveMonitorPreferences
+    }
+}
+
+public enum LiveMonitorDensity: String, Codable, CaseIterable, Sendable, Identifiable {
+    case expanded
+    case compact
+
+    public var id: String { self.rawValue }
+
+    public var title: String {
+        switch self {
+        case .expanded:
+            return "Expanded"
+        case .compact:
+            return "Compact"
+        }
+    }
+}
+
+public enum LiveMonitorPanelID: String, Codable, CaseIterable, Sendable, Identifiable {
+    case activeBlock = "active_block"
+    case depletionForecast = "depletion_forecast"
+    case quotaSuggestions = "quota_suggestions"
+    case contextWindow = "context_window"
+    case recentSession = "recent_session"
+    case warnings = "warnings"
+
+    public var id: String { self.rawValue }
+
+    public var title: String {
+        switch self {
+        case .activeBlock:
+            return "Active Block"
+        case .depletionForecast:
+            return "Depletion Forecast"
+        case .quotaSuggestions:
+            return "Suggested Quotas"
+        case .contextWindow:
+            return "Context Window"
+        case .recentSession:
+            return "Recent Session"
+        case .warnings:
+            return "Warnings"
+        }
+    }
+}
+
+public struct LiveMonitorPreferences: Codable, Sendable, Equatable {
+    public var focus: LiveMonitorFocus
+    public var density: LiveMonitorDensity
+    public var hiddenPanels: [LiveMonitorPanelID]
+
+    public static let `default` = LiveMonitorPreferences(
+        focus: .all,
+        density: .expanded,
+        hiddenPanels: []
+    )
+
+    public init(
+        focus: LiveMonitorFocus = .all,
+        density: LiveMonitorDensity = .expanded,
+        hiddenPanels: [LiveMonitorPanelID] = []
+    ) {
+        self.focus = focus
+        self.density = density
+        self.hiddenPanels = hiddenPanels
     }
 }
 

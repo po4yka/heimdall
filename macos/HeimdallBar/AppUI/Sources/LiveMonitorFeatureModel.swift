@@ -8,6 +8,8 @@ import Observation
 public final class LiveMonitorFeatureModel {
     public var envelope: LiveMonitorEnvelope?
     public var focus: LiveMonitorFocus
+    public var density: LiveMonitorDensity
+    public var hiddenPanels: Set<LiveMonitorPanelID>
     public var isRefreshing: Bool
     public var issue: String?
 
@@ -32,7 +34,10 @@ public final class LiveMonitorFeatureModel {
         self.pollInterval = pollInterval
         self.reconnectInitialDelayNanoseconds = reconnectInitialDelayNanoseconds
         self.reconnectMaxDelayNanoseconds = reconnectMaxDelayNanoseconds
-        self.focus = .all
+        let savedPreferences = sessionStore.liveMonitorPreferences
+        self.focus = savedPreferences?.focus ?? .all
+        self.density = savedPreferences?.density ?? .expanded
+        self.hiddenPanels = Set(savedPreferences?.hiddenPanels ?? [])
         self.isRefreshing = false
     }
 
@@ -49,15 +54,34 @@ public final class LiveMonitorFeatureModel {
     public var detailProviders: [LiveMonitorProvider] {
         let providers = self.providers
         if self.focus != .all {
-            return providers
+            return providers.filter { self.hasVisibleDetailPanels(for: $0) }
         }
-        return providers.filter {
-            $0.activeBlock != nil
-                || $0.contextWindow != nil
-                || $0.recentSession != nil
-                || $0.depletionForecast != nil
-                || !$0.warnings.isEmpty
+        return providers.filter { self.hasVisibleDetailPanels(for: $0) }
+    }
+
+    public func setFocus(_ focus: LiveMonitorFocus) {
+        self.focus = focus
+        self.persistPreferences()
+    }
+
+    public func setDensity(_ density: LiveMonitorDensity) {
+        self.density = density
+        self.persistPreferences()
+    }
+
+    public func isPanelHidden(_ panelID: LiveMonitorPanelID) -> Bool {
+        self.hiddenPanels.contains(panelID)
+    }
+
+    public func setPanelVisibility(_ panelID: LiveMonitorPanelID, isVisible: Bool) {
+        var updatedHiddenPanels = self.hiddenPanels
+        if isVisible {
+            updatedHiddenPanels.remove(panelID)
+        } else {
+            updatedHiddenPanels.insert(panelID)
         }
+        self.hiddenPanels = updatedHiddenPanels
+        self.persistPreferences()
     }
 
     public func updateActivity(isSelected: Bool, appIsActive: Bool) {
@@ -78,7 +102,7 @@ public final class LiveMonitorFeatureModel {
         do {
             let envelope = try await self.clientFactory(self.sessionStore.config.helperPort).fetchLiveMonitor()
             self.envelope = envelope
-            self.focus = envelope.defaultFocus
+            self.applyResolvedFocus(for: envelope)
             self.issue = envelope.globalIssue
         } catch {
             self.issue = error.localizedDescription
@@ -136,5 +160,42 @@ public final class LiveMonitorFeatureModel {
                 }
             }
         }
+    }
+
+    private func applyResolvedFocus(for envelope: LiveMonitorEnvelope) {
+        let savedFocus = self.sessionStore.liveMonitorPreferences?.focus
+        if let savedFocus {
+            let resolvedFocus = self.resolveFocus(savedFocus, in: envelope)
+            self.focus = resolvedFocus
+            if resolvedFocus != savedFocus {
+                self.persistPreferences()
+            }
+            return
+        }
+        self.focus = self.resolveFocus(envelope.defaultFocus, in: envelope)
+    }
+
+    private func resolveFocus(_ focus: LiveMonitorFocus, in envelope: LiveMonitorEnvelope) -> LiveMonitorFocus {
+        if focus == .all {
+            return .all
+        }
+        return envelope.providers.contains(where: { $0.provider == focus.rawValue }) ? focus : .all
+    }
+
+    private func hasVisibleDetailPanels(for provider: LiveMonitorProvider) -> Bool {
+        (!self.hiddenPanels.contains(.activeBlock) && provider.activeBlock != nil)
+            || (!self.hiddenPanels.contains(.depletionForecast) && provider.depletionForecast != nil)
+            || (!self.hiddenPanels.contains(.quotaSuggestions) && provider.quotaSuggestions != nil)
+            || (!self.hiddenPanels.contains(.contextWindow) && provider.contextWindow != nil)
+            || (!self.hiddenPanels.contains(.recentSession) && provider.recentSession != nil)
+            || (!self.hiddenPanels.contains(.warnings) && !provider.warnings.isEmpty)
+    }
+
+    private func persistPreferences() {
+        self.sessionStore.liveMonitorPreferences = LiveMonitorPreferences(
+            focus: self.focus,
+            density: self.density,
+            hiddenPanels: self.hiddenPanels.sorted { $0.rawValue < $1.rawValue }
+        )
     }
 }

@@ -300,7 +300,7 @@ private struct WindowLiveMonitorView: View {
                 )
                 Picker("Provider focus", selection: Binding(
                     get: { self.model.focus },
-                    set: { self.model.focus = $0 }
+                    set: { self.model.setFocus($0) }
                 )) {
                     ForEach(LiveMonitorFocus.allCases) { focus in
                         Text(focus.title).tag(focus)
@@ -308,6 +308,37 @@ private struct WindowLiveMonitorView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 320)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                WindowSectionHeader(
+                    title: "Preferences",
+                    subtitle: "Persisted locally for this Mac app"
+                )
+
+                Picker("Detail density", selection: Binding(
+                    get: { self.model.density },
+                    set: { self.model.setDensity($0) }
+                )) {
+                    ForEach(LiveMonitorDensity.allCases) { density in
+                        Text(density.title).tag(density)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 320)
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
+                    ForEach(LiveMonitorPanelID.allCases) { panel in
+                        Toggle(
+                            panel.title,
+                            isOn: Binding(
+                                get: { !self.model.isPanelHidden(panel) },
+                                set: { self.model.setPanelVisibility(panel, isVisible: $0) }
+                            )
+                        )
+                        .toggleStyle(.switch)
+                    }
+                }
             }
 
             if let envelope = self.model.envelope {
@@ -327,7 +358,11 @@ private struct WindowLiveMonitorView: View {
                 }
 
                 ForEach(self.model.detailProviders) { provider in
-                    WindowLiveMonitorDetailSection(provider: provider)
+                    WindowLiveMonitorDetailSection(
+                        provider: provider,
+                        density: self.model.density,
+                        hiddenPanels: self.model.hiddenPanels
+                    )
                 }
             } else {
                 ContentUnavailableView(
@@ -475,75 +510,79 @@ private struct WindowLiveMonitorProviderCard: View {
 
 private struct WindowLiveMonitorDetailSection: View {
     let provider: LiveMonitorProvider
+    let density: LiveMonitorDensity
+    let hiddenPanels: Set<LiveMonitorPanelID>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: self.density == .compact ? 10 : 14) {
             WindowSectionHeader(
                 title: "\(self.provider.title) Details",
                 subtitle: self.provider.lastRefreshLabel
             )
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 16)], spacing: 16) {
-                if let block = self.provider.activeBlock {
-                    WindowLiveMonitorDetailCard(title: "Active Block") {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: self.density == .compact ? 12 : 16)], spacing: self.density == .compact ? 12 : 16) {
+                if !self.hiddenPanels.contains(.activeBlock), let block = self.provider.activeBlock {
+                    WindowLiveMonitorDetailCard(title: "Active Block", density: self.density) {
                         let totalTokens = block.tokens.total
                         Text(Self.compactNumber(totalTokens))
                             .font(.system(size: 28, weight: .semibold).monospacedDigit())
                         Text("\(block.entryCount) entries · ends \(Self.shortTime(block.end))")
-                            .font(.caption)
+                            .font(self.density == .compact ? .caption2 : .caption)
                             .foregroundStyle(.secondary)
                         if let quota = block.quota {
                             ProgressView(value: min(quota.projectedPercent, 1.0), total: 1.0)
                                 .tint(quota.projectedSeverity == "danger" ? .red : quota.projectedSeverity == "warn" ? .orange : .primary)
                             Text("\(Int(quota.projectedPercent * 100))% projected · \(Self.compactNumber(quota.remainingTokens)) tokens left")
-                                .font(.caption)
+                                .font(self.density == .compact ? .caption2 : .caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
                 }
 
-                if let suggestions = WindowQuotaSuggestionsModel.make(suggestions: self.provider.quotaSuggestions) {
-                    WindowLiveMonitorDetailCard(title: "Suggested Quotas") {
+                if !self.hiddenPanels.contains(.quotaSuggestions),
+                   let suggestions = WindowQuotaSuggestionsModel.make(suggestions: self.provider.quotaSuggestions) {
+                    WindowLiveMonitorDetailCard(title: "Suggested Quotas", density: self.density) {
                         WindowQuotaSuggestionRows(model: suggestions)
                     }
                 }
 
-                if let forecast = WindowDepletionForecastModel.make(forecast: self.provider.depletionForecast) {
-                    WindowLiveMonitorDetailCard(title: "Depletion Forecast") {
+                if !self.hiddenPanels.contains(.depletionForecast),
+                   let forecast = WindowDepletionForecastModel.make(forecast: self.provider.depletionForecast) {
+                    WindowLiveMonitorDetailCard(title: "Depletion Forecast", density: self.density) {
                         WindowDepletionForecastCardBody(model: forecast)
                     }
                 }
 
-                if let context = self.provider.contextWindow {
-                    WindowLiveMonitorDetailCard(title: "Context Window") {
+                if !self.hiddenPanels.contains(.contextWindow), let context = self.provider.contextWindow {
+                    WindowLiveMonitorDetailCard(title: "Context Window", density: self.density) {
                         Text(Self.compactNumber(context.totalInputTokens))
                             .font(.system(size: 28, weight: .semibold).monospacedDigit())
                         Text("of \(Self.compactNumber(context.contextWindowSize)) · \(Int(context.pct * 100))%")
-                            .font(.caption)
+                            .font(self.density == .compact ? .caption2 : .caption)
                             .foregroundStyle(.secondary)
                         ProgressView(value: context.pct, total: 1.0)
                             .tint(context.severity == "danger" ? .red : context.severity == "warn" ? .orange : .primary)
                     }
                 }
 
-                if let session = self.provider.recentSession {
-                    WindowLiveMonitorDetailCard(title: "Recent Session") {
+                if !self.hiddenPanels.contains(.recentSession), let session = self.provider.recentSession {
+                    WindowLiveMonitorDetailCard(title: "Recent Session", density: self.density) {
                         Text(session.displayName)
                             .font(.headline)
                         Text("\(session.turns) turns · \(session.durationMinutes)m · \(Self.currency(session.costUSD))")
-                            .font(.caption)
+                            .font(self.density == .compact ? .caption2 : .caption)
                             .foregroundStyle(.secondary)
                         if let model = session.model {
                             Text(model)
-                                .font(.caption)
+                                .font(self.density == .compact ? .caption2 : .caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
                 }
             }
 
-            if !self.provider.warnings.isEmpty {
-                WindowLiveMonitorDetailCard(title: "Warnings") {
+            if !self.hiddenPanels.contains(.warnings), !self.provider.warnings.isEmpty {
+                WindowLiveMonitorDetailCard(title: "Warnings", density: self.density) {
                     ForEach(self.provider.warnings, id: \.self) { warning in
                         Text("• \(warning)")
                             .font(.body)
@@ -578,22 +617,24 @@ private struct WindowLiveMonitorDetailSection: View {
 
 private struct WindowLiveMonitorDetailCard<Content: View>: View {
     let title: String
+    let density: LiveMonitorDensity
     let content: Content
 
-    init(title: String, @ViewBuilder content: () -> Content) {
+    init(title: String, density: LiveMonitorDensity = .expanded, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.density = density
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: self.density == .compact ? 8 : 10) {
             Text(self.title)
-                .font(.caption.weight(.semibold))
+                .font((self.density == .compact ? Font.caption2 : .caption).weight(.semibold))
                 .foregroundStyle(.secondary)
             self.content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
+        .padding(self.density == .compact ? 14 : 18)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))

@@ -6,6 +6,9 @@ public final class UserDefaultsAppSessionStateStore: @unchecked Sendable, AppSes
     private enum Keys {
         static let selectedProvider = "heimdallbar.app_session.selected_provider"
         static let selectedMergeTab = "heimdallbar.app_session.selected_merge_tab"
+        static let liveMonitorFocus = "heimdallbar.app_session.live_monitor.focus"
+        static let liveMonitorDensity = "heimdallbar.app_session.live_monitor.density"
+        static let liveMonitorHiddenPanels = "heimdallbar.app_session.live_monitor.hidden_panels"
     }
 
     private let defaults: UserDefaults
@@ -15,21 +18,67 @@ public final class UserDefaultsAppSessionStateStore: @unchecked Sendable, AppSes
     }
 
     public func loadAppSessionState() -> PersistedAppSessionState? {
-        guard let providerRaw = self.defaults.string(forKey: Keys.selectedProvider),
-              let mergeTabRaw = self.defaults.string(forKey: Keys.selectedMergeTab),
-              let provider = ProviderID(rawValue: providerRaw),
-              let mergeTab = MergeMenuTab(rawValue: mergeTabRaw) else {
+        let hasStoredState =
+            self.defaults.object(forKey: Keys.selectedProvider) != nil
+            || self.defaults.object(forKey: Keys.selectedMergeTab) != nil
+            || self.defaults.object(forKey: Keys.liveMonitorFocus) != nil
+            || self.defaults.object(forKey: Keys.liveMonitorDensity) != nil
+            || self.defaults.object(forKey: Keys.liveMonitorHiddenPanels) != nil
+        guard hasStoredState else {
             return nil
         }
+
+        let provider = self.defaults.string(forKey: Keys.selectedProvider)
+            .flatMap(ProviderID.init(rawValue:))
+            ?? .claude
+        let mergeTab = self.defaults.string(forKey: Keys.selectedMergeTab)
+            .flatMap(MergeMenuTab.init(rawValue:))
+            ?? .overview
+        let liveMonitorPreferences = self.loadLiveMonitorPreferences()
         return PersistedAppSessionState(
             selectedProvider: provider,
-            selectedMergeTab: mergeTab
+            selectedMergeTab: mergeTab,
+            liveMonitorPreferences: liveMonitorPreferences
         )
     }
 
     public func saveAppSessionState(_ state: PersistedAppSessionState) {
         self.defaults.set(state.selectedProvider.rawValue, forKey: Keys.selectedProvider)
         self.defaults.set(state.selectedMergeTab.rawValue, forKey: Keys.selectedMergeTab)
+        if let preferences = state.liveMonitorPreferences {
+            self.defaults.set(preferences.focus.rawValue, forKey: Keys.liveMonitorFocus)
+            self.defaults.set(preferences.density.rawValue, forKey: Keys.liveMonitorDensity)
+            self.defaults.set(preferences.hiddenPanels.map(\.rawValue), forKey: Keys.liveMonitorHiddenPanels)
+        } else {
+            self.defaults.removeObject(forKey: Keys.liveMonitorFocus)
+            self.defaults.removeObject(forKey: Keys.liveMonitorDensity)
+            self.defaults.removeObject(forKey: Keys.liveMonitorHiddenPanels)
+        }
+    }
+
+    private func loadLiveMonitorPreferences() -> LiveMonitorPreferences? {
+        let hasPreferences =
+            self.defaults.object(forKey: Keys.liveMonitorFocus) != nil
+            || self.defaults.object(forKey: Keys.liveMonitorDensity) != nil
+            || self.defaults.object(forKey: Keys.liveMonitorHiddenPanels) != nil
+        guard hasPreferences else {
+            return nil
+        }
+
+        let focus = self.defaults.string(forKey: Keys.liveMonitorFocus)
+            .flatMap(LiveMonitorFocus.init(rawValue:))
+            ?? .all
+        let density = self.defaults.string(forKey: Keys.liveMonitorDensity)
+            .flatMap(LiveMonitorDensity.init(rawValue:))
+            ?? .expanded
+        let hiddenPanels = (self.defaults.array(forKey: Keys.liveMonitorHiddenPanels) as? [String] ?? [])
+            .compactMap(LiveMonitorPanelID.init(rawValue:))
+
+        return LiveMonitorPreferences(
+            focus: focus,
+            density: density,
+            hiddenPanels: Array(Set(hiddenPanels)).sorted { $0.rawValue < $1.rawValue }
+        )
     }
 }
 
@@ -47,6 +96,11 @@ public final class AppSessionStore {
             self.persistSelections()
         }
     }
+    public var liveMonitorPreferences: LiveMonitorPreferences? {
+        didSet {
+            self.persistSelections()
+        }
+    }
 
     private let persistence: any AppSessionStatePersisting
 
@@ -54,6 +108,7 @@ public final class AppSessionStore {
         config: HeimdallBarConfig = .default,
         selectedProvider: ProviderID = .claude,
         selectedMergeTab: MergeMenuTab = .overview,
+        liveMonitorPreferences: LiveMonitorPreferences? = nil,
         persistence: any AppSessionStatePersisting = UserDefaultsAppSessionStateStore()
     ) {
         self.config = config
@@ -61,6 +116,7 @@ public final class AppSessionStore {
         let persistedState = persistence.loadAppSessionState()
         self.selectedProvider = persistedState?.selectedProvider ?? selectedProvider
         self.selectedMergeTab = persistedState?.selectedMergeTab ?? selectedMergeTab
+        self.liveMonitorPreferences = persistedState?.liveMonitorPreferences ?? liveMonitorPreferences
     }
 
     public var visibleProviders: [ProviderID] {
@@ -75,7 +131,8 @@ public final class AppSessionStore {
         self.persistence.saveAppSessionState(
             PersistedAppSessionState(
                 selectedProvider: self.selectedProvider,
-                selectedMergeTab: self.selectedMergeTab
+                selectedMergeTab: self.selectedMergeTab,
+                liveMonitorPreferences: self.liveMonitorPreferences
             )
         )
     }

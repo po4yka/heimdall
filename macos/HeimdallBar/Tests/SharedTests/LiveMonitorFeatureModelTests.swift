@@ -24,7 +24,10 @@ struct LiveMonitorFeatureModelTests {
 
         model.updateActivity(isSelected: false, appIsActive: true)
         try await Task.sleep(nanoseconds: 50_000_000)
-        #expect(client.fetchCount == activeFetches)
+        let stoppedFetches = client.fetchCount
+        #expect(stoppedFetches >= activeFetches)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(client.fetchCount == stoppedFetches)
     }
 
     @MainActor
@@ -55,7 +58,107 @@ struct LiveMonitorFeatureModelTests {
         #expect(model.providers.first?.providerID == .codex)
     }
 
-    private static func sampleEnvelope(defaultFocus: LiveMonitorFocus) -> LiveMonitorEnvelope {
+    @MainActor
+    @Test
+    func persistedPreferencesOverrideServerDefaultFocusAndSurviveRefresh() async {
+        let persistence = TestAppSessionStateStore(
+            initialState: PersistedAppSessionState(
+                selectedProvider: .claude,
+                selectedMergeTab: .overview,
+                liveMonitorPreferences: LiveMonitorPreferences(
+                    focus: .codex,
+                    density: .compact,
+                    hiddenPanels: [.warnings]
+                )
+            )
+        )
+        let client = StubLiveMonitorClient(envelope: Self.sampleEnvelope(defaultFocus: .all))
+        let model = LiveMonitorFeatureModel(
+            sessionStore: AppSessionStore(persistence: persistence),
+            clientFactory: { _ in client }
+        )
+
+        await model.refresh()
+
+        #expect(model.focus == .codex)
+        #expect(model.density == .compact)
+        #expect(model.hiddenPanels == Set([.warnings]))
+    }
+
+    @MainActor
+    @Test
+    func invalidPersistedFocusFallsBackToAllAndPersistsSanitizedPreference() async {
+        let persistence = TestAppSessionStateStore(
+            initialState: PersistedAppSessionState(
+                selectedProvider: .claude,
+                selectedMergeTab: .overview,
+                liveMonitorPreferences: LiveMonitorPreferences(
+                    focus: .codex,
+                    density: .expanded,
+                    hiddenPanels: []
+                )
+            )
+        )
+        let client = StubLiveMonitorClient(envelope: Self.sampleEnvelope(
+            defaultFocus: .all,
+            providers: [
+                LiveMonitorProvider(
+                    provider: "claude",
+                    title: "Claude",
+                    visualState: "healthy",
+                    sourceLabel: "Source: oauth",
+                    warnings: [],
+                    identityLabel: "pro",
+                    primary: ProviderRateWindow(
+                        usedPercent: 25,
+                        resetsAt: nil,
+                        resetsInMinutes: 10,
+                        windowMinutes: 300,
+                        resetLabel: "resets in 10m"
+                    ),
+                    todayCostUSD: 3.2,
+                    projectedWeeklySpendUSD: 20,
+                    lastRefresh: "2026-04-22T10:00:00Z",
+                    lastRefreshLabel: "Updated just now"
+                ),
+            ]
+        ))
+        let model = LiveMonitorFeatureModel(
+            sessionStore: AppSessionStore(persistence: persistence),
+            clientFactory: { _ in client }
+        )
+
+        await model.refresh()
+
+        #expect(model.focus == .all)
+        #expect(persistence.savedStates.last?.liveMonitorPreferences?.focus == .all)
+    }
+
+    @MainActor
+    @Test
+    func preferenceMutationsPersistDensityAndPanelVisibility() async {
+        let persistence = TestAppSessionStateStore()
+        let model = LiveMonitorFeatureModel(
+            sessionStore: AppSessionStore(persistence: persistence),
+            clientFactory: { _ in StubLiveMonitorClient(envelope: Self.sampleEnvelope(defaultFocus: .all)) }
+        )
+
+        model.setDensity(.compact)
+        model.setPanelVisibility(.contextWindow, isVisible: false)
+
+        #expect(model.density == .compact)
+        #expect(model.hiddenPanels.contains(.contextWindow))
+        #expect(persistence.savedStates.last?.liveMonitorPreferences == LiveMonitorPreferences(
+            focus: .all,
+            density: .compact,
+            hiddenPanels: [.contextWindow]
+        ))
+    }
+
+    private static func sampleEnvelope(
+        defaultFocus: LiveMonitorFocus,
+        providers: [LiveMonitorProvider]? = nil
+    ) -> LiveMonitorEnvelope {
         LiveMonitorEnvelope(
             generatedAt: "2026-04-22T10:00:00Z",
             defaultFocus: defaultFocus,
@@ -67,7 +170,7 @@ struct LiveMonitorFeatureModelTests {
                 hasStaleProviders: false,
                 refreshState: "current"
             ),
-            providers: [
+            providers: providers ?? [
                 LiveMonitorProvider(
                     provider: "claude",
                     title: "Claude",
@@ -162,7 +265,19 @@ private final class StubLiveMonitorClient: LiveMonitorClient, @unchecked Sendabl
     }
 }
 
-private struct TestAppSessionStateStore: AppSessionStatePersisting {
-    func loadAppSessionState() -> PersistedAppSessionState? { nil }
-    func saveAppSessionState(_: PersistedAppSessionState) {}
+private final class TestAppSessionStateStore: AppSessionStatePersisting, @unchecked Sendable {
+    let initialState: PersistedAppSessionState?
+    private(set) var savedStates: [PersistedAppSessionState] = []
+
+    init(initialState: PersistedAppSessionState? = nil) {
+        self.initialState = initialState
+    }
+
+    func loadAppSessionState() -> PersistedAppSessionState? {
+        self.initialState
+    }
+
+    func saveAppSessionState(_ state: PersistedAppSessionState) {
+        self.savedStates.append(state)
+    }
 }

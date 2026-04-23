@@ -8881,14 +8881,120 @@ ${row.project}` : row.project;
   }
 
   // src/ui/monitor/store.ts
+  var LIVE_MONITOR_PREFERENCE_KEY = "heimdall.live_monitor.preferences.v1";
+  var LIVE_MONITOR_PANEL_OPTIONS = [
+    { id: "active_block", label: "Active Block" },
+    { id: "depletion_forecast", label: "Depletion Forecast" },
+    { id: "quota_suggestions", label: "Suggested Quotas" },
+    { id: "context_window", label: "Context Window" },
+    { id: "recent_session", label: "Recent Session" },
+    { id: "warnings", label: "Warnings" }
+  ];
+  var LIVE_MONITOR_FOCUS_OPTIONS = ["all", "claude", "codex"];
+  var LIVE_MONITOR_DENSITY_OPTIONS = ["expanded", "compact"];
+  var LIVE_MONITOR_PANEL_IDS = LIVE_MONITOR_PANEL_OPTIONS.map((option) => option.id);
   var liveMonitorData = y3(null);
   var liveMonitorFocus = y3("all");
+  var liveMonitorDensity = y3("expanded");
+  var liveMonitorHiddenPanels = y3([]);
   var liveMonitorRefreshing = y3(false);
   var liveMonitorError = y3(null);
+  var liveMonitorPreferencesHydrated = y3(false);
   function setLiveMonitorData(data) {
     liveMonitorData.value = data;
-    liveMonitorFocus.value = data.default_focus;
+    if (liveMonitorPreferencesHydrated.value) {
+      const previousFocus = liveMonitorFocus.value;
+      const resolvedFocus = normalizeFocusForProviders(previousFocus, data);
+      liveMonitorFocus.value = resolvedFocus;
+      if (resolvedFocus !== previousFocus) {
+        persistLiveMonitorPreferences();
+      }
+    } else {
+      liveMonitorFocus.value = normalizeFocusForProviders(data.default_focus, data);
+    }
     liveMonitorError.value = null;
+  }
+  function hydrateLiveMonitorPreferences() {
+    if (liveMonitorPreferencesHydrated.value) {
+      return;
+    }
+    const saved = readLiveMonitorPreferences();
+    if (saved) {
+      liveMonitorFocus.value = saved.focus;
+      liveMonitorDensity.value = saved.density;
+      liveMonitorHiddenPanels.value = saved.hiddenPanels;
+    } else {
+      liveMonitorFocus.value = "all";
+      liveMonitorDensity.value = "expanded";
+      liveMonitorHiddenPanels.value = [];
+    }
+    liveMonitorPreferencesHydrated.value = saved != null;
+  }
+  function setLiveMonitorFocus(focus) {
+    liveMonitorFocus.value = focus;
+    liveMonitorPreferencesHydrated.value = true;
+    persistLiveMonitorPreferences();
+  }
+  function setLiveMonitorDensity(density) {
+    liveMonitorDensity.value = density;
+    liveMonitorPreferencesHydrated.value = true;
+    persistLiveMonitorPreferences();
+  }
+  function toggleLiveMonitorPanel(panelId) {
+    const hiddenPanels = new Set(liveMonitorHiddenPanels.value);
+    if (hiddenPanels.has(panelId)) {
+      hiddenPanels.delete(panelId);
+    } else {
+      hiddenPanels.add(panelId);
+    }
+    liveMonitorHiddenPanels.value = [...hiddenPanels].sort();
+    liveMonitorPreferencesHydrated.value = true;
+    persistLiveMonitorPreferences();
+  }
+  function isLiveMonitorPanelHidden(panelId) {
+    return liveMonitorHiddenPanels.value.includes(panelId);
+  }
+  function normalizeFocusForProviders(focus, data) {
+    if (focus === "all") {
+      return "all";
+    }
+    return data.providers.some((provider) => provider.provider === focus) ? focus : "all";
+  }
+  function normalizeLiveMonitorPreferences(value) {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const candidate = value;
+    const focus = LIVE_MONITOR_FOCUS_OPTIONS.includes(candidate.focus) ? candidate.focus : "all";
+    const density = LIVE_MONITOR_DENSITY_OPTIONS.includes(candidate.density) ? candidate.density : "expanded";
+    const hiddenPanels = Array.isArray(candidate.hiddenPanels) ? Array.from(new Set(candidate.hiddenPanels.filter(
+      (panel) => LIVE_MONITOR_PANEL_IDS.includes(panel)
+    ))).sort() : [];
+    return { focus, density, hiddenPanels };
+  }
+  function readLiveMonitorPreferences() {
+    try {
+      const raw = localStorage.getItem(LIVE_MONITOR_PREFERENCE_KEY);
+      if (!raw) {
+        return null;
+      }
+      return normalizeLiveMonitorPreferences(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  }
+  function persistLiveMonitorPreferences() {
+    try {
+      localStorage.setItem(
+        LIVE_MONITOR_PREFERENCE_KEY,
+        JSON.stringify({
+          focus: liveMonitorFocus.value,
+          density: liveMonitorDensity.value,
+          hiddenPanels: liveMonitorHiddenPanels.value
+        })
+      );
+    } catch {
+    }
   }
 
   // src/ui/monitor/MonitorHeader.tsx
@@ -8938,7 +9044,7 @@ ${row.project}` : row.project;
           {
             type: "button",
             onClick: () => {
-              liveMonitorFocus.value = option;
+              setLiveMonitorFocus(option);
             },
             style: {
               padding: "8px 12px",
@@ -8954,6 +9060,69 @@ ${row.project}` : row.project;
           },
           option
         )) }),
+        /* @__PURE__ */ u4("div", { style: { display: "inline-flex", border: "1px solid var(--border-visible)", borderRadius: "999px", overflow: "hidden" }, children: ["expanded", "compact"].map((option) => /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setLiveMonitorDensity(option);
+            },
+            style: {
+              padding: "8px 12px",
+              border: "none",
+              borderRight: option === "compact" ? "none" : "1px solid var(--border-visible)",
+              background: liveMonitorDensity.value === option ? "var(--text-primary)" : "transparent",
+              color: liveMonitorDensity.value === option ? "var(--bg)" : "var(--text-primary)",
+              fontSize: "12px",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase"
+            },
+            children: option
+          },
+          option
+        )) }),
+        /* @__PURE__ */ u4(
+          "details",
+          {
+            style: {
+              border: "1px solid var(--border-visible)",
+              borderRadius: "18px",
+              padding: "8px 12px",
+              minWidth: "220px"
+            },
+            children: [
+              /* @__PURE__ */ u4(
+                "summary",
+                {
+                  style: {
+                    cursor: "pointer",
+                    listStyle: "none",
+                    fontSize: "12px",
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase"
+                  },
+                  children: "Panels"
+                }
+              ),
+              /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "8px", marginTop: "10px" }, children: LIVE_MONITOR_PANEL_OPTIONS.map((panel) => {
+                const visible = !isLiveMonitorPanelHidden(panel.id);
+                return /* @__PURE__ */ u4("label", { style: { display: "flex", alignItems: "center", gap: "8px", fontSize: "12px" }, children: [
+                  /* @__PURE__ */ u4(
+                    "input",
+                    {
+                      type: "checkbox",
+                      checked: visible,
+                      onInput: () => {
+                        toggleLiveMonitorPanel(panel.id);
+                      }
+                    }
+                  ),
+                  /* @__PURE__ */ u4("span", { children: panel.label })
+                ] }, panel.id);
+              }) })
+            ]
+          }
+        ),
         /* @__PURE__ */ u4(
           "a",
           {
@@ -8990,13 +9159,16 @@ ${row.project}` : row.project;
   function providersForFocus(data, focus) {
     return focus === "all" ? data.providers : data.providers.filter((provider) => provider.provider === focus);
   }
-  function detailProviders(data, focus) {
+  function providerHasVisibleDetails(provider, hiddenPanels) {
+    return !hiddenPanels.has("active_block") && !!provider.active_block || !hiddenPanels.has("depletion_forecast") && !!provider.depletion_forecast || !hiddenPanels.has("quota_suggestions") && !!provider.quota_suggestions || !hiddenPanels.has("context_window") && !!provider.context_window || !hiddenPanels.has("recent_session") && !!provider.recent_session || !hiddenPanels.has("warnings") && provider.warnings.length > 0;
+  }
+  function detailProviders(data, focus, hiddenPanels) {
     if (focus !== "all") {
-      return data.providers.filter((provider) => provider.provider === focus);
+      return data.providers.filter(
+        (provider) => provider.provider === focus && providerHasVisibleDetails(provider, hiddenPanels)
+      );
     }
-    return data.providers.filter(
-      (provider) => provider.active_block || provider.context_window || provider.recent_session || provider.depletion_forecast || provider.warnings.length > 0
-    );
+    return data.providers.filter((provider) => providerHasVisibleDetails(provider, hiddenPanels));
   }
   function stateTone(state) {
     switch (state) {
@@ -9076,23 +9248,23 @@ ${row.project}` : row.project;
       ] })
     ] });
   }
-  function BlockPanel({ block }) {
+  function BlockPanel({ block, density }) {
     const totalTokens2 = block.tokens.input + block.tokens.output + block.tokens.cache_read + block.tokens.cache_creation + block.tokens.reasoning_output;
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Active Block" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", children: fmt(totalTokens2) }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
         block.entry_count,
         " entries \xB7 ends ",
         new Date(block.end).toLocaleTimeString()
       ] }),
-      block.burn_rate && /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+      block.burn_rate && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
         fmt(totalTokens2),
         " tokens \xB7 ",
         fmtCostCompact(block.burn_rate.cost_per_hour_nanos / 1e9),
         "/hr"
       ] }),
-      block.quota && /* @__PURE__ */ u4("div", { style: { marginTop: "12px" }, children: [
+      block.quota && /* @__PURE__ */ u4("div", { style: { marginTop: density === "compact" ? "10px" : "12px" }, children: [
         /* @__PURE__ */ u4(
           SegmentedProgressBar,
           {
@@ -9102,7 +9274,7 @@ ${row.project}` : row.project;
             "aria-label": "Projected billing block quota"
           }
         ),
-        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "8px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "8px", fontSize: density === "compact" ? "11px" : void 0 }, children: [
           Math.min(block.quota.projected_pct * 100, 999).toFixed(0),
           "% projected \xB7 ",
           fmt(block.quota.remaining_tokens),
@@ -9111,18 +9283,18 @@ ${row.project}` : row.project;
       ] })
     ] }) });
   }
-  function ContextPanel({ data }) {
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+  function ContextPanel({ data, density }) {
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Context Window" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", children: fmt(data.total_input_tokens) }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
         "of ",
         fmt(data.context_window_size),
         " \xB7 ",
         (data.pct * 100).toFixed(1),
         "%"
       ] }),
-      /* @__PURE__ */ u4("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u4(
+      /* @__PURE__ */ u4("div", { style: { marginTop: density === "compact" ? "10px" : "12px" }, children: /* @__PURE__ */ u4(
         SegmentedProgressBar,
         {
           value: data.total_input_tokens,
@@ -9133,61 +9305,68 @@ ${row.project}` : row.project;
       ) })
     ] }) });
   }
-  function SessionPanel({ provider }) {
+  function SessionPanel({ provider, density }) {
     if (!provider.recent_session) return null;
     const session = provider.recent_session;
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Recent Session" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "22px" }, children: provider.title }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", children: session.display_name }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: session.display_name }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
         session.turns,
         " turns \xB7 ",
         session.duration_minutes,
         "m \xB7 ",
         fmtCostCompact(session.cost_usd)
       ] }),
-      session.model && /* @__PURE__ */ u4("div", { class: "stat-sub", children: session.model })
+      session.model && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: session.model })
     ] }) });
   }
-  function QuotaSuggestionsPanel({ provider }) {
+  function QuotaSuggestionsPanel({
+    provider,
+    density
+  }) {
     const suggestions = provider.quota_suggestions;
     if (!suggestions || suggestions.levels.length === 0) {
       return null;
     }
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Suggested Quotas" }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
         suggestions.sample_count,
         " completed blocks"
       ] }),
-      /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "8px", marginTop: "12px" }, children: suggestions.levels.map((level) => /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
-        /* @__PURE__ */ u4("span", { class: "stat-sub", children: [
+      /* @__PURE__ */ u4("div", { style: { display: "grid", gap: density === "compact" ? "6px" : "8px", marginTop: density === "compact" ? "10px" : "12px" }, children: suggestions.levels.map((level) => /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
           level.label,
           level.key === suggestions.recommended_key && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--success)" }, children: "[RECOMMENDED]" })
         ] }),
         /* @__PURE__ */ u4("span", { class: "stat-value", style: { fontSize: "18px" }, children: fmt(level.limit_tokens) })
       ] }, level.key)) }),
-      suggestions.note && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "10px", fontStyle: "italic" }, children: suggestions.note })
+      suggestions.note && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "10px", fontStyle: "italic", fontSize: density === "compact" ? "11px" : void 0 }, children: suggestions.note })
     ] }) });
   }
-  function ProviderDetails({ provider }) {
-    return /* @__PURE__ */ u4("section", { style: { display: "grid", gap: "14px" }, children: [
-      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline", flexWrap: "wrap" }, children: [
+  function ProviderDetails({
+    provider,
+    density,
+    hiddenPanels
+  }) {
+    return /* @__PURE__ */ u4("section", { style: { display: "grid", gap: density === "compact" ? "10px" : "14px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: density === "compact" ? "10px" : "12px", alignItems: "baseline", flexWrap: "wrap" }, children: [
         /* @__PURE__ */ u4("h2", { style: { margin: 0 }, children: [
           provider.title,
           " Details"
         ] }),
-        /* @__PURE__ */ u4("div", { class: "stat-sub", children: provider.last_refresh_label })
+        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: provider.last_refresh_label })
       ] }),
-      /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "16px" }, children: [
-        provider.active_block && /* @__PURE__ */ u4(BlockPanel, { block: provider.active_block }),
-        provider.depletion_forecast && /* @__PURE__ */ u4(DepletionForecastCard, { forecast: provider.depletion_forecast }),
-        /* @__PURE__ */ u4(QuotaSuggestionsPanel, { provider }),
-        provider.context_window && /* @__PURE__ */ u4(ContextPanel, { data: provider.context_window }),
-        /* @__PURE__ */ u4(SessionPanel, { provider })
+      /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: density === "compact" ? "12px" : "16px" }, children: [
+        !hiddenPanels.has("active_block") && provider.active_block && /* @__PURE__ */ u4(BlockPanel, { block: provider.active_block, density }),
+        !hiddenPanels.has("depletion_forecast") && provider.depletion_forecast && /* @__PURE__ */ u4(DepletionForecastCard, { forecast: provider.depletion_forecast }),
+        !hiddenPanels.has("quota_suggestions") && /* @__PURE__ */ u4(QuotaSuggestionsPanel, { provider, density }),
+        !hiddenPanels.has("context_window") && provider.context_window && /* @__PURE__ */ u4(ContextPanel, { data: provider.context_window, density }),
+        !hiddenPanels.has("recent_session") && /* @__PURE__ */ u4(SessionPanel, { provider, density })
       ] }),
-      provider.warnings.length > 0 && /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px 18px" }, children: [
+      !hiddenPanels.has("warnings") && provider.warnings.length > 0 && /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px 18px" }, children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Warnings" }),
         /* @__PURE__ */ u4("ul", { style: { margin: "10px 0 0", paddingLeft: "18px" }, children: provider.warnings.map((warning) => /* @__PURE__ */ u4("li", { children: warning }, warning)) })
       ] })
@@ -9202,7 +9381,9 @@ ${row.project}` : row.project;
       ] });
     }
     const laneProviders = providersForFocus(data, liveMonitorFocus.value);
-    const details = detailProviders(data, liveMonitorFocus.value);
+    const hiddenPanels = new Set(liveMonitorHiddenPanels.value);
+    const density = liveMonitorDensity.value;
+    const details = detailProviders(data, liveMonitorFocus.value, hiddenPanels);
     return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "24px" }, children: [
       /* @__PURE__ */ u4("section", { style: { display: "grid", gap: "14px" }, children: [
         /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline", flexWrap: "wrap" }, children: [
@@ -9211,7 +9392,15 @@ ${row.project}` : row.project;
         ] }),
         /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: "16px" }, children: laneProviders.map((provider) => /* @__PURE__ */ u4(ProviderLaneCard, { provider }, provider.provider)) })
       ] }),
-      details.map((provider) => /* @__PURE__ */ u4(ProviderDetails, { provider }, `details-${provider.provider}`))
+      details.map((provider) => /* @__PURE__ */ u4(
+        ProviderDetails,
+        {
+          provider,
+          density,
+          hiddenPanels
+        },
+        `details-${provider.provider}`
+      ))
     ] });
   }
 
@@ -9304,6 +9493,9 @@ ${row.project}` : row.project;
   // src/ui/app.tsx
   applyTheme(getTheme());
   var isMonitorRoute = window.location.pathname === "/monitor";
+  if (isMonitorRoute) {
+    hydrateLiveMonitorPreferences();
+  }
   var dashboardRuntime = !isMonitorRoute ? createDashboardRuntime() : null;
   var monitorRuntime = isMonitorRoute ? createLiveMonitorRuntime() : null;
   function toggleTheme() {

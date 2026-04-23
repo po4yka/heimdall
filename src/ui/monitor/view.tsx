@@ -9,7 +9,14 @@ import type {
   LiveMonitorProvider,
   LiveMonitorResponse,
 } from '../state/types';
-import { liveMonitorData, liveMonitorFocus } from './store';
+import {
+  type LiveMonitorDensity,
+  type LiveMonitorPanelId,
+  liveMonitorData,
+  liveMonitorDensity,
+  liveMonitorFocus,
+  liveMonitorHiddenPanels,
+} from './store';
 
 function providersForFocus(data: LiveMonitorResponse, focus: LiveMonitorFocus): LiveMonitorProvider[] {
   return focus === 'all'
@@ -17,17 +24,31 @@ function providersForFocus(data: LiveMonitorResponse, focus: LiveMonitorFocus): 
     : data.providers.filter(provider => provider.provider === focus);
 }
 
-function detailProviders(data: LiveMonitorResponse, focus: LiveMonitorFocus): LiveMonitorProvider[] {
-  if (focus !== 'all') {
-    return data.providers.filter(provider => provider.provider === focus);
-  }
-  return data.providers.filter(provider =>
-    provider.active_block
-    || provider.context_window
-    || provider.recent_session
-    || provider.depletion_forecast
-    || provider.warnings.length > 0
+function providerHasVisibleDetails(
+  provider: LiveMonitorProvider,
+  hiddenPanels: Set<LiveMonitorPanelId>
+): boolean {
+  return (
+    (!hiddenPanels.has('active_block') && !!provider.active_block) ||
+    (!hiddenPanels.has('depletion_forecast') && !!provider.depletion_forecast) ||
+    (!hiddenPanels.has('quota_suggestions') && !!provider.quota_suggestions) ||
+    (!hiddenPanels.has('context_window') && !!provider.context_window) ||
+    (!hiddenPanels.has('recent_session') && !!provider.recent_session) ||
+    (!hiddenPanels.has('warnings') && provider.warnings.length > 0)
   );
+}
+
+function detailProviders(
+  data: LiveMonitorResponse,
+  focus: LiveMonitorFocus,
+  hiddenPanels: Set<LiveMonitorPanelId>
+): LiveMonitorProvider[] {
+  if (focus !== 'all') {
+    return data.providers.filter(provider =>
+      provider.provider === focus && providerHasVisibleDetails(provider, hiddenPanels)
+    );
+  }
+  return data.providers.filter(provider => providerHasVisibleDetails(provider, hiddenPanels));
 }
 
 function stateTone(state: LiveMonitorProvider['visual_state']): string {
@@ -120,7 +141,7 @@ function ProviderLaneCard({ provider }: { provider: LiveMonitorProvider }) {
   );
 }
 
-function BlockPanel({ block }: { block: LiveMonitorBlock }) {
+function BlockPanel({ block, density }: { block: LiveMonitorBlock; density: LiveMonitorDensity }) {
   const totalTokens =
     block.tokens.input +
     block.tokens.output +
@@ -129,25 +150,27 @@ function BlockPanel({ block }: { block: LiveMonitorBlock }) {
     block.tokens.reasoning_output;
 
   return (
-    <div class="card stat-card">
+    <div class="card stat-card" style={{ padding: density === 'compact' ? '14px' : '18px' }}>
       <div class="stat-content">
         <div class="stat-label">Active Block</div>
         <div class="stat-value">{fmt(totalTokens)}</div>
-        <div class="stat-sub">{block.entry_count} entries · ends {new Date(block.end).toLocaleTimeString()}</div>
+        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+          {block.entry_count} entries · ends {new Date(block.end).toLocaleTimeString()}
+        </div>
         {block.burn_rate && (
-          <div class="stat-sub">
+          <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
             {fmt(totalTokens)} tokens · {fmtCostCompact(block.burn_rate.cost_per_hour_nanos / 1e9)}/hr
           </div>
         )}
         {block.quota && (
-          <div style={{ marginTop: '12px' }}>
+          <div style={{ marginTop: density === 'compact' ? '10px' : '12px' }}>
             <SegmentedProgressBar
               value={block.quota.projected_pct * 100}
               max={100}
               status={block.quota.projected_severity === 'danger' ? 'accent' : block.quota.projected_severity === 'warn' ? 'warning' : 'success'}
               aria-label="Projected billing block quota"
             />
-            <div class="stat-sub" style={{ marginTop: '8px' }}>
+            <div class="stat-sub" style={{ marginTop: '8px', fontSize: density === 'compact' ? '11px' : undefined }}>
               {Math.min(block.quota.projected_pct * 100, 999).toFixed(0)}% projected · {fmt(block.quota.remaining_tokens)} tokens left
             </div>
           </div>
@@ -157,14 +180,16 @@ function BlockPanel({ block }: { block: LiveMonitorBlock }) {
   );
 }
 
-function ContextPanel({ data }: { data: LiveMonitorContextWindow }) {
+function ContextPanel({ data, density }: { data: LiveMonitorContextWindow; density: LiveMonitorDensity }) {
   return (
-    <div class="card stat-card">
+    <div class="card stat-card" style={{ padding: density === 'compact' ? '14px' : '18px' }}>
       <div class="stat-content">
         <div class="stat-label">Context Window</div>
         <div class="stat-value">{fmt(data.total_input_tokens)}</div>
-        <div class="stat-sub">of {fmt(data.context_window_size)} · {(data.pct * 100).toFixed(1)}%</div>
-        <div style={{ marginTop: '12px' }}>
+        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+          of {fmt(data.context_window_size)} · {(data.pct * 100).toFixed(1)}%
+        </div>
+        <div style={{ marginTop: density === 'compact' ? '10px' : '12px' }}>
           <SegmentedProgressBar
             value={data.total_input_tokens}
             max={data.context_window_size}
@@ -177,37 +202,47 @@ function ContextPanel({ data }: { data: LiveMonitorContextWindow }) {
   );
 }
 
-function SessionPanel({ provider }: { provider: LiveMonitorProvider }) {
+function SessionPanel({ provider, density }: { provider: LiveMonitorProvider; density: LiveMonitorDensity }) {
   if (!provider.recent_session) return null;
   const session = provider.recent_session;
   return (
-    <div class="card stat-card">
+    <div class="card stat-card" style={{ padding: density === 'compact' ? '14px' : '18px' }}>
       <div class="stat-content">
         <div class="stat-label">Recent Session</div>
         <div class="stat-value" style={{ fontSize: '22px' }}>{provider.title}</div>
-        <div class="stat-sub">{session.display_name}</div>
-        <div class="stat-sub">{session.turns} turns · {session.duration_minutes}m · {fmtCostCompact(session.cost_usd)}</div>
-        {session.model && <div class="stat-sub">{session.model}</div>}
+        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>{session.display_name}</div>
+        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+          {session.turns} turns · {session.duration_minutes}m · {fmtCostCompact(session.cost_usd)}
+        </div>
+        {session.model && <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>{session.model}</div>}
       </div>
     </div>
   );
 }
 
-function QuotaSuggestionsPanel({ provider }: { provider: LiveMonitorProvider }) {
+function QuotaSuggestionsPanel({
+  provider,
+  density,
+}: {
+  provider: LiveMonitorProvider;
+  density: LiveMonitorDensity;
+}) {
   const suggestions = provider.quota_suggestions;
   if (!suggestions || suggestions.levels.length === 0) {
     return null;
   }
 
   return (
-    <div class="card stat-card">
+    <div class="card stat-card" style={{ padding: density === 'compact' ? '14px' : '18px' }}>
       <div class="stat-content">
         <div class="stat-label">Suggested Quotas</div>
-        <div class="stat-sub">{suggestions.sample_count} completed blocks</div>
-        <div style={{ display: 'grid', gap: '8px', marginTop: '12px' }}>
+        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+          {suggestions.sample_count} completed blocks
+        </div>
+        <div style={{ display: 'grid', gap: density === 'compact' ? '6px' : '8px', marginTop: density === 'compact' ? '10px' : '12px' }}>
           {suggestions.levels.map(level => (
             <div key={level.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline' }}>
-              <span class="stat-sub">
+              <span class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
                 {level.label}
                 {level.key === suggestions.recommended_key && (
                   <span style={{ marginLeft: '6px', color: 'var(--success)' }}>[RECOMMENDED]</span>
@@ -215,10 +250,10 @@ function QuotaSuggestionsPanel({ provider }: { provider: LiveMonitorProvider }) 
               </span>
               <span class="stat-value" style={{ fontSize: '18px' }}>{fmt(level.limit_tokens)}</span>
             </div>
-          ))}
+        ))}
         </div>
         {suggestions.note && (
-          <div class="stat-sub" style={{ marginTop: '10px', fontStyle: 'italic' }}>
+          <div class="stat-sub" style={{ marginTop: '10px', fontStyle: 'italic', fontSize: density === 'compact' ? '11px' : undefined }}>
             {suggestions.note}
           </div>
         )}
@@ -227,21 +262,29 @@ function QuotaSuggestionsPanel({ provider }: { provider: LiveMonitorProvider }) 
   );
 }
 
-function ProviderDetails({ provider }: { provider: LiveMonitorProvider }) {
+function ProviderDetails({
+  provider,
+  density,
+  hiddenPanels,
+}: {
+  provider: LiveMonitorProvider;
+  density: LiveMonitorDensity;
+  hiddenPanels: Set<LiveMonitorPanelId>;
+}) {
   return (
-    <section style={{ display: 'grid', gap: '14px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline', flexWrap: 'wrap' }}>
+    <section style={{ display: 'grid', gap: density === 'compact' ? '10px' : '14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: density === 'compact' ? '10px' : '12px', alignItems: 'baseline', flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0 }}>{provider.title} Details</h2>
-        <div class="stat-sub">{provider.last_refresh_label}</div>
+        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>{provider.last_refresh_label}</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: '16px' }}>
-        {provider.active_block && <BlockPanel block={provider.active_block} />}
-        {provider.depletion_forecast && <DepletionForecastCard forecast={provider.depletion_forecast} />}
-        <QuotaSuggestionsPanel provider={provider} />
-        {provider.context_window && <ContextPanel data={provider.context_window} />}
-        <SessionPanel provider={provider} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: density === 'compact' ? '12px' : '16px' }}>
+        {!hiddenPanels.has('active_block') && provider.active_block && <BlockPanel block={provider.active_block} density={density} />}
+        {!hiddenPanels.has('depletion_forecast') && provider.depletion_forecast && <DepletionForecastCard forecast={provider.depletion_forecast} />}
+        {!hiddenPanels.has('quota_suggestions') && <QuotaSuggestionsPanel provider={provider} density={density} />}
+        {!hiddenPanels.has('context_window') && provider.context_window && <ContextPanel data={provider.context_window} density={density} />}
+        {!hiddenPanels.has('recent_session') && <SessionPanel provider={provider} density={density} />}
       </div>
-      {provider.warnings.length > 0 && (
+      {!hiddenPanels.has('warnings') && provider.warnings.length > 0 && (
         <div class="card" style={{ padding: '16px 18px' }}>
           <div class="stat-label">Warnings</div>
           <ul style={{ margin: '10px 0 0', paddingLeft: '18px' }}>
@@ -265,7 +308,9 @@ export function renderLiveMonitorView(): JSX.Element {
   }
 
   const laneProviders = providersForFocus(data, liveMonitorFocus.value);
-  const details = detailProviders(data, liveMonitorFocus.value);
+  const hiddenPanels = new Set(liveMonitorHiddenPanels.value);
+  const density = liveMonitorDensity.value;
+  const details = detailProviders(data, liveMonitorFocus.value, hiddenPanels);
 
   return (
     <div style={{ display: 'grid', gap: '24px' }}>
@@ -281,7 +326,14 @@ export function renderLiveMonitorView(): JSX.Element {
         </div>
       </section>
 
-      {details.map(provider => <ProviderDetails key={`details-${provider.provider}`} provider={provider} />)}
+      {details.map(provider => (
+        <ProviderDetails
+          key={`details-${provider.provider}`}
+          provider={provider}
+          density={density}
+          hiddenPanels={hiddenPanels}
+        />
+      ))}
     </div>
   );
 }

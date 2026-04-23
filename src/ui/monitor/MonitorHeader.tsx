@@ -1,5 +1,15 @@
 import { themeMode } from '../state/store';
-import { liveMonitorData, liveMonitorFocus, liveMonitorRefreshing } from './store';
+import {
+  isLiveMonitorPanelHidden,
+  LIVE_MONITOR_PANEL_OPTIONS,
+  liveMonitorData,
+  liveMonitorDensity,
+  liveMonitorFocus,
+  liveMonitorRefreshing,
+  setLiveMonitorDensity,
+  setLiveMonitorFocus,
+  toggleLiveMonitorPanel,
+} from './store';
 
 interface MonitorHeaderProps {
   onThemeToggle: () => void;
@@ -60,7 +70,7 @@ export function MonitorHeader({ onThemeToggle, onRefresh }: MonitorHeaderProps) 
             <button
               key={option}
               type="button"
-              onClick={() => { liveMonitorFocus.value = option; }}
+              onClick={() => { setLiveMonitorFocus(option); }}
               style={{
                 padding: '8px 12px',
                 border: 'none',
@@ -76,6 +86,62 @@ export function MonitorHeader({ onThemeToggle, onRefresh }: MonitorHeaderProps) 
             </button>
           ))}
         </div>
+        <div style={{ display: 'inline-flex', border: '1px solid var(--border-visible)', borderRadius: '999px', overflow: 'hidden' }}>
+          {(['expanded', 'compact'] as const).map(option => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => { setLiveMonitorDensity(option); }}
+              style={{
+                padding: '8px 12px',
+                border: 'none',
+                borderRight: option === 'compact' ? 'none' : '1px solid var(--border-visible)',
+                background: liveMonitorDensity.value === option ? 'var(--text-primary)' : 'transparent',
+                color: liveMonitorDensity.value === option ? 'var(--bg)' : 'var(--text-primary)',
+                fontSize: '12px',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <details
+          style={{
+            border: '1px solid var(--border-visible)',
+            borderRadius: '18px',
+            padding: '8px 12px',
+            minWidth: '220px',
+          }}
+        >
+          <summary
+            style={{
+              cursor: 'pointer',
+              listStyle: 'none',
+              fontSize: '12px',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Panels
+          </summary>
+          <div style={{ display: 'grid', gap: '8px', marginTop: '10px' }}>
+            {LIVE_MONITOR_PANEL_OPTIONS.map(panel => {
+              const visible = !isLiveMonitorPanelHidden(panel.id);
+              return (
+                <label key={panel.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                  <input
+                    type="checkbox"
+                    checked={visible}
+                    onInput={() => { toggleLiveMonitorPanel(panel.id); }}
+                  />
+                  <span>{panel.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </details>
         <a
           href="/"
           style={{
