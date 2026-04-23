@@ -13,6 +13,7 @@ struct MenuProjectionBuilderTests {
             refreshIntervalSeconds: 120,
             resetDisplayMode: .countdown,
             checkProviderStatus: true,
+            localNotificationsEnabled: false,
             helperPort: 8787
         )
         let presentation = ProviderPresentationState(
@@ -221,6 +222,54 @@ struct MenuProjectionBuilderTests {
     }
 
     @Test
+    func projectionCarriesDepletionForecastFromSnapshot() {
+        var snapshot = Self.codexSnapshot()
+        snapshot.depletionForecast = DepletionForecast(
+            primarySignal: DepletionForecastSignal(
+                kind: "primary_window",
+                title: "Primary window",
+                usedPercent: 64,
+                remainingPercent: 36,
+                resetsInMinutes: 45,
+                paceLabel: "Steady",
+                endTime: "2026-04-23T10:45:00Z"
+            ),
+            secondarySignals: [],
+            summaryLabel: "Primary window currently at 64% used",
+            severity: "warn"
+        )
+        let presentation = ProviderPresentationState(
+            provider: .codex,
+            snapshot: snapshot,
+            adjunct: nil,
+            resolution: ProviderSourceResolution(
+                provider: .codex,
+                requestedSource: .auto,
+                effectiveSource: .cli,
+                effectiveSourceDetail: "cli-rpc",
+                sourceLabel: "Source: auto",
+                explanation: "Using the latest successful live snapshot.",
+                warnings: [],
+                fallbackChain: ["auto", "cli-rpc"],
+                usageAvailable: true,
+                isUnsupported: false,
+                requiresLogin: false,
+                usesFallback: false
+            )
+        )
+
+        let projection = MenuProjectionBuilder.projection(
+            from: presentation,
+            config: HeimdallBarConfig.default,
+            isRefreshing: false,
+            lastGlobalError: nil
+        )
+
+        #expect(projection.depletionForecast?.primarySignal.kind == "primary_window")
+        #expect(projection.depletionForecast?.severity == "warn")
+    }
+
+    @Test
     func menuTitleHonorsShowUsedValues() {
         let leftConfig = HeimdallBarConfig.default
         let usedConfig = HeimdallBarConfig(
@@ -231,6 +280,7 @@ struct MenuProjectionBuilderTests {
             refreshIntervalSeconds: HeimdallBarConfig.default.refreshIntervalSeconds,
             resetDisplayMode: HeimdallBarConfig.default.resetDisplayMode,
             checkProviderStatus: HeimdallBarConfig.default.checkProviderStatus,
+            localNotificationsEnabled: HeimdallBarConfig.default.localNotificationsEnabled,
             helperPort: HeimdallBarConfig.default.helperPort
         )
         let presentation = ProviderPresentationState(

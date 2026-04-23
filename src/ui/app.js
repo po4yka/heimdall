@@ -7398,6 +7398,83 @@ ${row.project}` : row.project;
     ] });
   }
 
+  // src/ui/components/DepletionForecastCard.tsx
+  function severityToStatus3(severity) {
+    if (severity === "danger") return "accent";
+    if (severity === "warn") return "warning";
+    return "success";
+  }
+  function primaryValueLabel(signal) {
+    const percent = signal.projected_percent ?? signal.used_percent;
+    return `${Math.round(percent)}% ${signal.projected_percent != null ? "projected" : "used"}`;
+  }
+  function remainingLabel(signal) {
+    if (signal.remaining_tokens != null) {
+      return `${fmt(signal.remaining_tokens)} tokens left`;
+    }
+    if (signal.remaining_percent != null) {
+      return `${Math.round(signal.remaining_percent)}% remaining`;
+    }
+    return null;
+  }
+  function timingLabel(signal) {
+    if (signal.resets_in_minutes != null) {
+      return `Resets in ${fmtResetTime(signal.resets_in_minutes)}`;
+    }
+    if (!signal.end_time) return null;
+    const date = new Date(signal.end_time);
+    if (Number.isNaN(date.getTime())) return signal.end_time;
+    return `Ends ${date.toISOString().slice(11, 16)} UTC`;
+  }
+  function supportValue(signal) {
+    const percent = signal.projected_percent ?? signal.used_percent;
+    return `${Math.round(percent)}%`;
+  }
+  function DepletionForecastCard({
+    forecast,
+    title = "Depletion Forecast"
+  }) {
+    const primary = forecast.primary_signal;
+    const primaryPercent = Math.max(0, primary.projected_percent ?? primary.used_percent);
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", style: { display: "grid", gap: "12px" }, children: [
+      /* @__PURE__ */ u4("div", { children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: title }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "22px" }, children: primary.title }),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", children: forecast.summary_label })
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "6px" }, children: [
+        /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
+          /* @__PURE__ */ u4("span", { class: "stat-sub", children: primaryValueLabel(primary) }),
+          primary.pace_label && /* @__PURE__ */ u4("span", { class: "stat-sub", children: primary.pace_label })
+        ] }),
+        /* @__PURE__ */ u4(
+          SegmentedProgressBar,
+          {
+            value: Math.min(primaryPercent, 100),
+            max: 100,
+            status: severityToStatus3(forecast.severity),
+            "aria-label": "Depletion forecast pressure"
+          }
+        ),
+        /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "3px" }, children: [
+          timingLabel(primary) && /* @__PURE__ */ u4("div", { class: "stat-sub", children: timingLabel(primary) }),
+          remainingLabel(primary) && /* @__PURE__ */ u4("div", { class: "stat-sub", children: remainingLabel(primary) })
+        ] })
+      ] }),
+      forecast.secondary_signals.length > 0 && /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "8px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "SUPPORTING SIGNALS" }),
+        forecast.secondary_signals.map((signal) => /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "2px" }, children: [
+          /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
+            /* @__PURE__ */ u4("span", { class: "stat-sub", children: signal.title }),
+            /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: supportValue(signal) })
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: [timingLabel(signal), remainingLabel(signal)].filter(Boolean).join(" \xB7 ") })
+        ] }, `${signal.kind}-${signal.title}`))
+      ] }),
+      forecast.note && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontStyle: "italic" }, children: forecast.note })
+    ] }) });
+  }
+
   // src/ui/components/StatsCards.tsx
   function StatsCards({
     totals,
@@ -7440,6 +7517,7 @@ ${row.project}` : row.project;
         /* @__PURE__ */ u4("div", { class: "stat-sub", children: activeDays !== void 0 && activeDays !== null && activeDays > 0 ? `${activeDays} active ${activeDays === 1 ? "day" : "days"}` : "no spend" })
       ] }) }),
       billingBlocks && /* @__PURE__ */ u4(BillingBlocksCard, { data: billingBlocks }),
+      billingBlocks?.depletion_forecast && /* @__PURE__ */ u4(DepletionForecastCard, { forecast: billingBlocks.depletion_forecast }),
       /* @__PURE__ */ u4(ContextWindowCard, { data: contextWindow ?? null }),
       cacheEfficiency && /* @__PURE__ */ u4(CacheEfficiencyCard, { data: cacheEfficiency })
     ] });
@@ -8917,7 +8995,7 @@ ${row.project}` : row.project;
       return data.providers.filter((provider) => provider.provider === focus);
     }
     return data.providers.filter(
-      (provider) => provider.active_block || provider.context_window || provider.recent_session || provider.warnings.length > 0
+      (provider) => provider.active_block || provider.context_window || provider.recent_session || provider.depletion_forecast || provider.warnings.length > 0
     );
   }
   function stateTone(state) {
@@ -9104,6 +9182,7 @@ ${row.project}` : row.project;
       ] }),
       /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: "16px" }, children: [
         provider.active_block && /* @__PURE__ */ u4(BlockPanel, { block: provider.active_block }),
+        provider.depletion_forecast && /* @__PURE__ */ u4(DepletionForecastCard, { forecast: provider.depletion_forecast }),
         /* @__PURE__ */ u4(QuotaSuggestionsPanel, { provider }),
         provider.context_window && /* @__PURE__ */ u4(ContextPanel, { data: provider.context_window }),
         /* @__PURE__ */ u4(SessionPanel, { provider })

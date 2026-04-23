@@ -7,18 +7,25 @@ use anyhow::{Result, anyhow, bail};
 
 use crate::agent_status::models::ProviderStatus;
 use crate::analytics::blocks::identify_blocks;
+use crate::analytics::depletion::{
+    billing_block_signal, build_depletion_forecast, primary_window_signal, secondary_window_signal,
+};
 use crate::analytics::quota::compute_quota_suggestions;
 use crate::models::{
     LIVE_PROVIDERS_CONTRACT_VERSION, LiveProviderHistoryResponse, LiveProviderIdentity,
     LiveProviderSnapshot, LiveProviderSourceAttempt, LiveProviderStatus, LiveProvidersResponse,
-    MOBILE_SNAPSHOT_CONTRACT_VERSION, MobileProviderHistorySeries, MobileSnapshotEnvelope,
-    MobileSnapshotFreshness, MobileSnapshotTotals, ProviderCostSummary, LiveQuotaSuggestionLevel,
-    LiveQuotaSuggestions,
+    LiveQuotaSuggestionLevel, LiveQuotaSuggestions, LocalNotificationCondition,
+    LocalNotificationState, MOBILE_SNAPSHOT_CONTRACT_VERSION, MobileProviderHistorySeries,
+    MobileSnapshotEnvelope, MobileSnapshotFreshness, MobileSnapshotTotals, ProviderCostSummary,
 };
 use crate::oauth::credentials;
 use crate::oauth::models::{BudgetInfo, Identity, Plan, UsageWindowsResponse, WindowInfo};
 use crate::scanner::db;
-use crate::server::api::{AppState, refresh_agent_status, refresh_usage_windows};
+use crate::server::api::{
+    AppState, refresh_agent_status, refresh_community_signal, refresh_usage_windows,
+};
+use crate::status_aggregator::models::{CommunitySignal, SignalLevel};
+use crate::tz::TzParams;
 
 pub mod codex;
 
@@ -73,14 +80,8 @@ pub async fn load_snapshots(
         force_refresh,
         startup,
         |provider, scope, force_refresh, startup| async move {
-            fetch_live_provider_response(
-                state,
-                provider.as_deref(),
-                scope,
-                force_refresh,
-                startup,
-            )
-            .await
+            fetch_live_provider_response(state, provider.as_deref(), scope, force_refresh, startup)
+                .await
         },
     )
     .await
@@ -333,6 +334,13 @@ async fn fetch_live_provider_response(
     } else {
         None
     };
+    let community_signal = if startup {
+        cached_community_signal(state).await
+    } else if state.aggregator_config.enabled {
+        refresh_community_signal(state).await.ok().flatten()
+    } else {
+        None
+    };
 
     let mut providers = Vec::with_capacity(providers_to_build.len());
     for provider in providers_to_build.iter().copied() {
@@ -374,6 +382,13 @@ async fn fetch_live_provider_response(
             other => bail!("unsupported live provider: {}", other),
         }
     }
+    let local_notification_state = build_local_notification_state(
+        state,
+        agent_status.as_ref(),
+        claude_usage.as_ref(),
+        community_signal.as_ref(),
+    )
+    .await?;
 
     Ok(LiveProvidersResponse {
         contract_version: LIVE_PROVIDERS_CONTRACT_VERSION,
@@ -390,6 +405,7 @@ async fn fetch_live_provider_response(
         } else {
             Vec::new()
         },
+        local_notification_state: Some(local_notification_state),
     })
 }
 
@@ -406,6 +422,221 @@ async fn cached_or_unavailable_claude_usage(state: &Arc<AppState>) -> UsageWindo
         .as_ref()
         .map(|(_, response)| response.clone())
         .unwrap_or_else(UsageWindowsResponse::unavailable)
+}
+
+async fn cached_community_signal(state: &Arc<AppState>) -> Option<CommunitySignal> {
+    if !state.aggregator_config.enabled {
+        return None;
+    }
+
+    let cache = state.aggregator_cache.read().await;
+    cache.as_ref().map(|(_, signal)| signal.clone())
+}
+
+async fn build_local_notification_state(
+    state: &Arc<AppState>,
+    agent_status: Option<&crate::agent_status::models::AgentStatusSnapshot>,
+    claude_usage: Option<&UsageWindowsResponse>,
+    community_signal: Option<&CommunitySignal>,
+) -> Result<LocalNotificationState> {
+    let generated_at = chrono::Utc::now().to_rfc3339();
+    let cost_threshold_usd = state.webhook_config.cost_threshold;
+    let mut conditions = Vec::new();
+
+    if let Some(session) = claude_usage.and_then(|usage| usage.session.as_ref()) {
+        let depleted = session.used_percent >= 99.99;
+        conditions.push(LocalNotificationCondition {
+            id: "claude-session-depleted".into(),
+            kind: "session_depleted".into(),
+            provider: Some("claude".into()),
+            service_label: "Claude".into(),
+            is_active: depleted,
+            activation_title: "Claude session depleted".into(),
+            activation_body: match session.resets_in_minutes {
+                Some(minutes) => {
+                    format!("Claude session is depleted. Resets in {minutes} minutes.")
+                }
+                None => "Claude session is depleted.".into(),
+            },
+            recovery_title: Some("Claude session restored".into()),
+            recovery_body: Some("Claude session capacity is available again.".into()),
+            day_key: None,
+        });
+    }
+
+    if let Some(status) = agent_status.and_then(|snapshot| snapshot.claude.as_ref()) {
+        conditions.push(provider_status_condition(
+            "claude-service-degraded",
+            "claude",
+            "Claude",
+            status,
+        ));
+    }
+    if let Some(status) = agent_status.and_then(|snapshot| snapshot.openai.as_ref()) {
+        conditions.push(provider_status_condition(
+            "codex-service-degraded",
+            "codex",
+            "OpenAI",
+            status,
+        ));
+    }
+
+    if state.aggregator_config.enabled
+        && let Some(signal) = community_signal
+        && signal.enabled
+    {
+        let claude_major = agent_status
+            .and_then(|snapshot| snapshot.claude.as_ref())
+            .map(|status| status.indicator.is_alert_worthy())
+            .unwrap_or(false);
+        let codex_major = agent_status
+            .and_then(|snapshot| snapshot.openai.as_ref())
+            .map(|status| status.indicator.is_alert_worthy())
+            .unwrap_or(false);
+
+        conditions.push(community_spike_condition(
+            "claude-community-spike",
+            "claude",
+            "Claude",
+            &signal.claude,
+            claude_major,
+        ));
+        conditions.push(community_spike_condition(
+            "codex-community-spike",
+            "codex",
+            "OpenAI",
+            &signal.openai,
+            codex_major,
+        ));
+    }
+
+    if let Some(threshold) = cost_threshold_usd {
+        let (day_key, daily_cost_usd) = load_today_cost_snapshot(state).await?;
+        conditions.push(LocalNotificationCondition {
+            id: "daily-cost-threshold".into(),
+            kind: "daily_cost_threshold".into(),
+            provider: None,
+            service_label: "Heimdall".into(),
+            is_active: daily_cost_usd > threshold,
+            activation_title: "Daily cost threshold crossed".into(),
+            activation_body: format!(
+                "Today's Heimdall cost reached ${daily_cost_usd:.2}, above the configured ${threshold:.2} threshold."
+            ),
+            recovery_title: None,
+            recovery_body: None,
+            day_key: Some(day_key),
+        });
+    }
+
+    Ok(LocalNotificationState {
+        generated_at,
+        cost_threshold_usd,
+        conditions,
+    })
+}
+
+fn provider_status_condition(
+    id: &str,
+    provider: &str,
+    service_label: &str,
+    status: &ProviderStatus,
+) -> LocalNotificationCondition {
+    let active = status.indicator.is_alert_worthy();
+    let activation_title = if provider == "codex" {
+        "Codex service degraded"
+    } else {
+        "Claude service degraded"
+    };
+    let recovery_title = if provider == "codex" {
+        "Codex service restored"
+    } else {
+        "Claude service restored"
+    };
+
+    LocalNotificationCondition {
+        id: id.into(),
+        kind: "provider_degraded".into(),
+        provider: Some(provider.into()),
+        service_label: service_label.into(),
+        is_active: active,
+        activation_title: activation_title.into(),
+        activation_body: if provider == "codex" {
+            format!(
+                "OpenAI status is degraded for Codex. {}",
+                status.description
+            )
+        } else {
+            format!("Claude status is degraded. {}", status.description)
+        },
+        recovery_title: Some(recovery_title.into()),
+        recovery_body: Some(if provider == "codex" {
+            "OpenAI status returned to a non-alert state for Codex.".into()
+        } else {
+            "Claude status returned to a non-alert state.".into()
+        }),
+        day_key: None,
+    }
+}
+
+fn community_spike_condition(
+    id: &str,
+    provider: &str,
+    service_label: &str,
+    signals: &[crate::status_aggregator::models::ServiceSignal],
+    official_is_major: bool,
+) -> LocalNotificationCondition {
+    let is_spike = signals
+        .iter()
+        .any(|signal| signal.level == SignalLevel::Spike);
+    let is_active = is_spike && !official_is_major;
+    let activation_title = if provider == "codex" {
+        "Codex community spike detected"
+    } else {
+        "Claude community spike detected"
+    };
+
+    LocalNotificationCondition {
+        id: id.into(),
+        kind: "community_spike".into(),
+        provider: Some(provider.into()),
+        service_label: service_label.into(),
+        is_active,
+        activation_title: activation_title.into(),
+        activation_body: if provider == "codex" {
+            "OpenAI community reports spiked while official status remains below major.".into()
+        } else {
+            "Claude community reports spiked while official status remains below major.".into()
+        },
+        recovery_title: None,
+        recovery_body: None,
+        day_key: None,
+    }
+}
+
+async fn load_today_cost_snapshot(state: &Arc<AppState>) -> Result<(String, f64)> {
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || -> Result<(String, f64)> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+
+        let now = chrono::Local::now();
+        let tz = TzParams {
+            tz_offset_min: Some(now.offset().local_minus_utc() / 60),
+            week_starts_on: None,
+        };
+        let today = now.format("%Y-%m-%d").to_string();
+        let data = db::get_dashboard_data(&conn, tz)?;
+        let daily_cost_usd = data
+            .daily_by_model
+            .iter()
+            .filter(|row| row.day == today)
+            .map(|row| row.cost)
+            .sum();
+
+        Ok((today, daily_cost_usd))
+    })
+    .await
+    .map_err(|err| anyhow!("failed to load daily cost snapshot: {}", err))?
 }
 
 async fn cached_response(state: &Arc<AppState>) -> Option<LiveProvidersResponse> {
@@ -478,6 +709,7 @@ fn merge_provider_snapshot(base: &mut LiveProvidersResponse, update: &LiveProvid
     }
     sort_snapshots(&mut base.providers);
     base.fetched_at = chrono::Utc::now().to_rfc3339();
+    base.local_notification_state = update.local_notification_state.clone();
 }
 
 fn filter_response(
@@ -508,6 +740,7 @@ fn filter_response(
         } else {
             response.refreshed_providers.clone()
         },
+        local_notification_state: response.local_notification_state.clone(),
     }
 }
 
@@ -536,6 +769,7 @@ async fn build_claude_snapshot(
 ) -> Result<LiveProviderSnapshot> {
     let started_at = Instant::now();
     let db_path = state.db_path.clone();
+    let blocks_token_limit = state.blocks_token_limit;
     let usage_clone = usage.clone();
     let status = status.cloned();
     let env = std::env::vars().collect::<Vec<_>>();
@@ -543,14 +777,58 @@ async fn build_claude_snapshot(
     let auth = resolved_auth.health.clone();
     let resolved_identity = resolved_auth.identity.clone();
     tokio::task::spawn_blocking(move || {
+        use crate::analytics::blocks::{calculate_burn_rate, project_block_usage};
+        use crate::analytics::quota::compute_quota;
+
         let conn = db::open_db(&db_path)?;
         db::init_db(&conn)?;
         let claude_usage = db::get_latest_claude_usage_response(&conn)?.latest_snapshot;
         let cost_summary = provider_cost_summary(&conn, "claude")?;
         let turns = db::load_all_turns(&conn)?;
         let blocks = identify_blocks(&turns, session_length_hours);
-        let quota_suggestions =
-            compute_quota_suggestions(&blocks).map(live_quota_suggestions);
+        let quota_suggestions = compute_quota_suggestions(&blocks).map(live_quota_suggestions);
+        let now = chrono::Utc::now();
+        let primary = usage_clone.session.as_ref().map(window_to_live);
+        let secondary = usage_clone.weekly.as_ref().map(window_to_live);
+        let depletion_forecast = {
+            let mut signals = Vec::new();
+            if let Some(limit) = blocks_token_limit
+                && let Some(active_block) =
+                    blocks.iter().find(|block| block.is_active && !block.is_gap)
+            {
+                let projection =
+                    project_block_usage(active_block, calculate_burn_rate(active_block, now), now);
+                if let Some(quota) = compute_quota(active_block, &projection, limit) {
+                    signals.push(billing_block_signal(
+                        "Billing block",
+                        quota.current_pct * 100.0,
+                        Some(quota.projected_pct * 100.0),
+                        Some(quota.remaining_tokens),
+                        Some(100.0 - (quota.current_pct * 100.0)),
+                        Some(active_block.end.to_rfc3339()),
+                    ));
+                }
+            }
+            if let Some(window) = primary.as_ref() {
+                signals.push(primary_window_signal(
+                    window.used_percent,
+                    Some(100.0 - window.used_percent),
+                    window.resets_in_minutes,
+                    None,
+                    window.resets_at.clone(),
+                ));
+            }
+            if let Some(window) = secondary.as_ref() {
+                signals.push(secondary_window_signal(
+                    window.used_percent,
+                    Some(100.0 - window.used_percent),
+                    window.resets_in_minutes,
+                    None,
+                    window.resets_at.clone(),
+                ));
+            }
+            build_depletion_forecast(signals)
+        };
 
         let mut source_attempts = Vec::new();
         if usage_clone.available {
@@ -601,8 +879,8 @@ async fn build_claude_snapshot(
                 .as_ref()
                 .map(identity_to_live)
                 .or_else(|| resolved_identity.as_ref().map(identity_to_live)),
-            primary: usage_clone.session.as_ref().map(window_to_live),
-            secondary: usage_clone.weekly.as_ref().map(window_to_live),
+            primary,
+            secondary,
             tertiary: usage_clone
                 .weekly_opus
                 .as_ref()
@@ -614,6 +892,7 @@ async fn build_claude_snapshot(
             cost_summary,
             claude_usage,
             quota_suggestions,
+            depletion_forecast,
             last_refresh: chrono::Utc::now().to_rfc3339(),
             stale: !usage_clone.available,
             error: if source_used == "unavailable" {
@@ -697,6 +976,28 @@ async fn build_codex_snapshot(
             error: resolution.error.as_deref(),
         },
     );
+    let depletion_forecast = {
+        let mut signals = Vec::new();
+        if let Some(window) = resolution.primary.as_ref() {
+            signals.push(primary_window_signal(
+                window.used_percent,
+                Some(100.0 - window.used_percent),
+                window.resets_in_minutes,
+                None,
+                window.resets_at.clone(),
+            ));
+        }
+        if let Some(window) = resolution.secondary.as_ref() {
+            signals.push(secondary_window_signal(
+                window.used_percent,
+                Some(100.0 - window.used_percent),
+                window.resets_in_minutes,
+                None,
+                window.resets_at.clone(),
+            ));
+        }
+        build_depletion_forecast(signals)
+    };
 
     Ok(LiveProviderSnapshot {
         provider: "codex".into(),
@@ -716,6 +1017,7 @@ async fn build_codex_snapshot(
         cost_summary,
         claude_usage: None,
         quota_suggestions: None,
+        depletion_forecast,
         last_refresh: chrono::Utc::now().to_rfc3339(),
         stale: !resolution.available,
         error: resolution.error,
@@ -777,6 +1079,7 @@ async fn build_codex_bootstrap_snapshot(
         cost_summary,
         claude_usage: None,
         quota_suggestions: None,
+        depletion_forecast: None,
         last_refresh: chrono::Utc::now().to_rfc3339(),
         stale: true,
         error: None,
@@ -1126,6 +1429,7 @@ mod tests {
                 cost_summary: ProviderCostSummary::default(),
                 claude_usage: None,
                 quota_suggestions: None,
+                depletion_forecast: None,
                 last_refresh: "2026-01-01T00:00:00Z".into(),
                 stale: false,
                 error: None,
@@ -1135,6 +1439,7 @@ mod tests {
             response_scope: "provider".into(),
             cache_hit: false,
             refreshed_providers: vec![provider.to_string()],
+            local_notification_state: None,
         }
     }
 

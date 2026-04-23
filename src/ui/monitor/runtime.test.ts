@@ -82,7 +82,9 @@ describe('live monitor runtime', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(intervals).toHaveLength(1);
 
-    intervals[0]();
+    const firstInterval = intervals[0];
+    expect(firstInterval).toBeDefined();
+    firstInterval?.();
     await flushAsyncWork();
     expect(fetchSpy).toHaveBeenCalledTimes(2);
 
@@ -136,7 +138,9 @@ describe('live monitor runtime', () => {
     await flushAsyncWork();
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    intervals[0]();
+    const firstInterval = intervals[0];
+    expect(firstInterval).toBeDefined();
+    firstInterval?.();
     await flushAsyncWork();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 

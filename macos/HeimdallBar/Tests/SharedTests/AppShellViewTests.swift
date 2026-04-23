@@ -387,6 +387,43 @@ struct AppShellViewTests {
     }
 
     @Test
+    func windowDepletionForecastModelMapsPrimaryAndSupportingSignals() {
+        let model = WindowDepletionForecastModel.make(
+            forecast: DepletionForecast(
+                primarySignal: DepletionForecastSignal(
+                    kind: "billing_block",
+                    title: "Billing block",
+                    usedPercent: 61,
+                    projectedPercent: 93,
+                    remainingTokens: 390_000,
+                    remainingPercent: 39,
+                    endTime: "2026-04-23T12:00:00Z"
+                ),
+                secondarySignals: [
+                    DepletionForecastSignal(
+                        kind: "primary_window",
+                        title: "Primary window",
+                        usedPercent: 64,
+                        remainingPercent: 36,
+                        resetsInMinutes: 40,
+                        paceLabel: "Steady",
+                        endTime: "2026-04-23T10:40:00Z"
+                    )
+                ],
+                summaryLabel: "Billing block projected to reach 93% before reset",
+                severity: "danger"
+            )
+        )
+
+        #expect(model?.primary.title == "Billing block")
+        #expect(model?.primary.valueLabel == "93% projected")
+        #expect(model?.primary.remainingLabel == "390.0K tokens left")
+        #expect(model?.secondary.first?.title == "Primary window")
+        #expect(model?.secondary.first?.timingLabel == "Resets in 40m")
+        #expect(model?.severity == "danger")
+    }
+
+    @Test
     func windowOverviewWeeklyProjectionAggregatesProjectedAndActualBurnAcrossProviders() {
         let claude = self.makeProjection(
             laneDetails: [
@@ -594,6 +631,7 @@ struct AppShellViewTests {
         authHeadline: String? = nil,
         warningLabels: [String] = [],
         quotaSuggestions: QuotaSuggestions? = nil,
+        depletionForecast: DepletionForecast? = nil,
         incidentLabel: String? = nil,
         todayCostUSD: Double = 6.8,
         last30DaysCostUSD: Double = 42,
@@ -619,6 +657,7 @@ struct AppShellViewTests {
             authRecoveryActions: [],
             warningLabels: warningLabels,
             quotaSuggestions: quotaSuggestions,
+            depletionForecast: depletionForecast,
             visualState: .healthy,
             stateLabel: "Operational",
             statusLabel: nil,

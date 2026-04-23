@@ -33,6 +33,7 @@ struct SettingsView: View {
                 Toggle("Merge Icons", isOn: self.$model.draftConfig.mergeIcons)
                 Toggle("Show Used Values", isOn: self.$model.draftConfig.showUsedValues)
                 Toggle("Check Provider Status", isOn: self.$model.draftConfig.checkProviderStatus)
+                Toggle("Enable Local Notifications", isOn: self.$model.draftConfig.localNotificationsEnabled)
                 Picker("Reset Display", selection: self.$model.draftConfig.resetDisplayMode) {
                     ForEach(ResetDisplayMode.allCases, id: \.self) { mode in
                         Text(mode.rawValue.capitalized).tag(mode)
@@ -48,7 +49,7 @@ struct SettingsView: View {
 
             Section {
                 Button("Save Settings") {
-                    self.model.save()
+                    Task { await self.model.save() }
                 }
                 Button("Refresh Data") {
                     Task { await self.model.refreshAll() }

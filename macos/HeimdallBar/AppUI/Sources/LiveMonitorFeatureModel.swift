@@ -52,7 +52,11 @@ public final class LiveMonitorFeatureModel {
             return providers
         }
         return providers.filter {
-            $0.activeBlock != nil || $0.contextWindow != nil || $0.recentSession != nil || !$0.warnings.isEmpty
+            $0.activeBlock != nil
+                || $0.contextWindow != nil
+                || $0.recentSession != nil
+                || $0.depletionForecast != nil
+                || !$0.warnings.isEmpty
         }
     }
 

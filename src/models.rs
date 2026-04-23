@@ -570,10 +570,38 @@ pub struct LiveProviderSnapshot {
     pub claude_usage: Option<ClaudeUsageSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quota_suggestions: Option<LiveQuotaSuggestions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depletion_forecast: Option<DepletionForecast>,
     pub last_refresh: String,
     pub stale: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LocalNotificationCondition {
+    pub id: String,
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    pub service_label: String,
+    pub is_active: bool,
+    pub activation_title: String,
+    pub activation_body: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_body: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub day_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct LocalNotificationState {
+    pub generated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cost_threshold_usd: Option<f64>,
+    pub conditions: Vec<LocalNotificationCondition>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -586,6 +614,8 @@ pub struct LiveProvidersResponse {
     pub response_scope: String,
     pub cache_hit: bool,
     pub refreshed_providers: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_notification_state: Option<LocalNotificationState>,
 }
 
 pub const LIVE_MONITOR_CONTRACT_VERSION: u32 = 1;
@@ -625,6 +655,35 @@ pub struct LiveMonitorQuota {
     pub remaining_tokens: i64,
     pub current_severity: String,
     pub projected_severity: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct DepletionForecastSignal {
+    pub kind: String,
+    pub title: String,
+    pub used_percent: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub projected_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remaining_tokens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remaining_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resets_in_minutes: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pace_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+pub struct DepletionForecast {
+    pub primary_signal: DepletionForecastSignal,
+    pub secondary_signals: Vec<DepletionForecastSignal>,
+    pub summary_label: String,
+    pub severity: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -698,6 +757,8 @@ pub struct LiveMonitorProvider {
     pub recent_session: Option<ProviderSession>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quota_suggestions: Option<LiveQuotaSuggestions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depletion_forecast: Option<DepletionForecast>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

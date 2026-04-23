@@ -55,8 +55,8 @@ public final class ProviderFeatureModel {
 
     public var issue: AppIssue? {
         let candidate = self.repository.issue(for: self.provider) ?? self.repository.issue(for: nil)
-        if let candidate, candidate.kind == .widgetPersistence {
-            Self.logger.debug("Suppressing widgetPersistence issue from UI: \(candidate.message)")
+        if let candidate, candidate.kind == .widgetPersistence || candidate.kind == .localNotifications {
+            Self.logger.debug("Suppressing \(candidate.kind.rawValue) issue from UI: \(candidate.message)")
             return nil
         }
         return candidate

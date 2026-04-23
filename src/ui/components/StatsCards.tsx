@@ -3,6 +3,7 @@ import { Sparkline } from './charts/Sparkline';
 import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { BillingBlocksCard } from './BillingBlocksCard';
 import { ContextWindowCard } from './ContextWindowCard';
+import { DepletionForecastCard } from './DepletionForecastCard';
 import type { Totals, StatCard, DailyAgg, CacheEfficiency, BillingBlocksResponse, ContextWindowResponse } from '../state/types';
 
 interface StatsCardsProps {
@@ -84,6 +85,9 @@ export function StatsCards({
       {/* Phase 2: Billing block quota card — most time-sensitive, rendered first */}
       {billingBlocks && (
         <BillingBlocksCard data={billingBlocks} />
+      )}
+      {billingBlocks?.depletion_forecast && (
+        <DepletionForecastCard forecast={billingBlocks.depletion_forecast} />
       )}
       {/* Phase 5: Context window card — hides automatically when data unavailable */}
       <ContextWindowCard data={contextWindow ?? null} />

@@ -151,6 +151,9 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
     let (scan_event_tx, _scan_event_rx) = tokio::sync::broadcast::channel::<String>(16);
 
     let state = build_state(&options, scan_event_tx.clone());
+    let app = build_router(state.clone());
+    let addr = format!("{}:{}", options.host, options.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     if options.background_poll {
         start_background_pollers(state.clone());
@@ -229,11 +232,6 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
     } else {
         None
     };
-
-    let app = build_router(state);
-
-    let addr = format!("{}:{}", options.host, options.port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("Dashboard running at http://{}", addr);
     eprintln!("Dashboard running at http://{addr}");
     eprintln!("Press Ctrl+C to stop.");
@@ -327,6 +325,7 @@ where
 {
     tokio::spawn(async move {
         let interval_secs = interval_secs.max(1);
+        tokio::time::sleep(background_poll_startup_delay(name, interval_secs)).await;
         loop {
             if let Err(status) = refresh().await {
                 tracing::warn!("background poller '{}' failed: {}", name, status);
@@ -334,4 +333,18 @@ where
             tokio::time::sleep(Duration::from_secs(interval_secs)).await;
         }
     })
+}
+
+pub(crate) fn background_poll_startup_delay(name: &str, interval_secs: u64) -> Duration {
+    const BASE_DELAY_SECS: u64 = 5;
+    const JITTER_WINDOW_SECS: u64 = 5;
+
+    let interval_secs = interval_secs.max(1);
+    let jitter = name
+        .bytes()
+        .fold(14_695_981_039_346_656_037_u64, |acc, byte| {
+            (acc ^ u64::from(byte)).wrapping_mul(1_099_511_628_211)
+        })
+        % JITTER_WINDOW_SECS;
+    Duration::from_secs((BASE_DELAY_SECS + jitter).min(interval_secs))
 }

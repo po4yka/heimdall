@@ -5,6 +5,27 @@ import HeimdallDomain
 
 struct HeimdallAPIClientTests {
     @Test
+    func fetchStartupSnapshotsUsesStartupQuery() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.handler = { request, _ in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/api/live-providers")
+            #expect(request.url?.query == "startup=true")
+            return Self.jsonResponse(
+                url: try #require(request.url),
+                body: Self.snapshotEnvelopeJSON(provider: "claude")
+            )
+        }
+
+        let client = Self.makeClient()
+        let envelope = try await client.fetchStartupSnapshots()
+
+        #expect(envelope.providers.count == 1)
+        #expect(envelope.providers.first?.provider == "claude")
+        #expect(StubURLProtocol.requestCount == 1)
+    }
+
+    @Test
     func fetchSnapshotsRetriesTransientConnectionRefused() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.handler = { request, attempt in
@@ -20,6 +41,33 @@ struct HeimdallAPIClientTests {
 
         let client = Self.makeClient()
         let envelope = try await client.fetchSnapshots()
+
+        #expect(envelope.providers.count == 1)
+        #expect(envelope.providers.first?.provider == "claude")
+        #expect(envelope.providers.first?.depletionForecast?.primarySignal.kind == "primary_window")
+        #expect(envelope.localNotificationState?.conditions.first?.id == "claude-session-depleted")
+        #expect(StubURLProtocol.requestCount == 2)
+    }
+
+    @Test
+    func fetchStartupSnapshotsUsesStartupQueryAndShorterTimeout() async throws {
+        StubURLProtocol.reset()
+        StubURLProtocol.handler = { request, attempt in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/api/live-providers")
+            #expect(request.url?.query == "startup=true")
+            #expect(request.timeoutInterval == 1.5)
+            if attempt == 1 {
+                throw URLError(.cannotConnectToHost)
+            }
+            return Self.jsonResponse(
+                url: try #require(request.url),
+                body: Self.snapshotEnvelopeJSON(provider: "claude")
+            )
+        }
+
+        let client = Self.makeClient()
+        let envelope = try await client.fetchStartupSnapshots()
 
         #expect(envelope.providers.count == 1)
         #expect(envelope.providers.first?.provider == "claude")
@@ -108,6 +156,30 @@ struct HeimdallAPIClientTests {
                       "active_block": null,
                       "context_window": null,
                       "recent_session": null,
+                      "depletion_forecast": {
+                        "primary_signal": {
+                          "kind": "billing_block",
+                          "title": "Billing block",
+                          "used_percent": 58,
+                          "projected_percent": 92,
+                          "remaining_tokens": 420000,
+                          "remaining_percent": 42,
+                          "end_time": "2026-04-22T12:00:00Z"
+                        },
+                        "secondary_signals": [
+                          {
+                            "kind": "primary_window",
+                            "title": "Primary window",
+                            "used_percent": 25,
+                            "remaining_percent": 75,
+                            "resets_in_minutes": 10,
+                            "pace_label": "Comfortable",
+                            "end_time": "2026-04-22T10:10:00Z"
+                          }
+                        ],
+                        "summary_label": "Billing block projected to reach 92% before reset",
+                        "severity": "danger"
+                      },
                       "quota_suggestions": {
                         "sample_count": 4,
                         "recommended_key": "p90",
@@ -132,6 +204,7 @@ struct HeimdallAPIClientTests {
         #expect(envelope.defaultFocus == .all)
         #expect(envelope.providers.first?.providerID == .claude)
         #expect(envelope.providers.first?.quotaSuggestions?.recommendedKey == "p90")
+        #expect(envelope.providers.first?.depletionForecast?.primarySignal.kind == "billing_block")
     }
 
     private static func makeClient() -> HeimdallAPIClient {
@@ -199,6 +272,20 @@ struct HeimdallAPIClientTests {
                 "daily": []
               },
               "claude_usage": null,
+              "depletion_forecast": {
+                "primary_signal": {
+                  "kind": "primary_window",
+                  "title": "Primary window",
+                  "used_percent": 25,
+                  "remaining_percent": 75,
+                  "resets_in_minutes": 10,
+                  "pace_label": "Comfortable",
+                  "end_time": "2026-04-20T15:40:00Z"
+                },
+                "secondary_signals": [],
+                "summary_label": "Primary window currently at 25% used",
+                "severity": "ok"
+              },
               "last_refresh": "2026-04-20T15:30:00Z",
               "stale": false,
               "error": null
@@ -208,7 +295,24 @@ struct HeimdallAPIClientTests {
           "requested_provider": null,
           "response_scope": "all",
           "cache_hit": false,
-          "refreshed_providers": ["\(provider)"]
+          "refreshed_providers": ["\(provider)"],
+          "local_notification_state": {
+            "generated_at": "2026-04-20T15:30:00Z",
+            "cost_threshold_usd": 25,
+            "conditions": [
+              {
+                "id": "claude-session-depleted",
+                "kind": "session_depleted",
+                "provider": "claude",
+                "service_label": "Claude",
+                "is_active": false,
+                "activation_title": "Claude session depleted",
+                "activation_body": "Claude session is depleted.",
+                "recovery_title": "Claude session restored",
+                "recovery_body": "Claude session capacity is available again."
+              }
+            ]
+          }
         }
         """
     }

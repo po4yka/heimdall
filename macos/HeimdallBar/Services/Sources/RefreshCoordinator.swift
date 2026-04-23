@@ -4,6 +4,12 @@ import os.log
 
 @MainActor
 public final class RefreshCoordinator {
+    private struct AdjunctLoadRequest {
+        let provider: ProviderID
+        let config: ProviderConfig
+        let snapshot: ProviderSnapshot?
+    }
+
     private let sessionStore: AppSessionStore
     private let repository: ProviderRepository
     private let helperRuntime: any HelperRuntime
@@ -12,7 +18,9 @@ public final class RefreshCoordinator {
     private let widgetSnapshotCoordinator: WidgetSnapshotCoordinator
     private let providerDataSource: any ProviderDataSource
     private let snapshotSyncer: (any SnapshotSyncing)?
+    private let localNotificationCoordinator: any LocalNotificationCoordinating
     private var pollTask: Task<Void, Never>?
+    private var enrichmentTask: Task<Void, Never>?
     private var started = false
     private static let logger = Logger(subsystem: "dev.heimdall.HeimdallBar", category: "RefreshCoordinator")
 
@@ -24,7 +32,8 @@ public final class RefreshCoordinator {
         browserSessionManager: any BrowserSessionManaging,
         widgetSnapshotCoordinator: WidgetSnapshotCoordinator,
         providerDataSource: any ProviderDataSource,
-        snapshotSyncer: (any SnapshotSyncing)? = nil
+        snapshotSyncer: (any SnapshotSyncing)? = nil,
+        localNotificationCoordinator: any LocalNotificationCoordinating = NoopLocalNotificationCoordinator()
     ) {
         self.sessionStore = sessionStore
         self.repository = repository
@@ -34,6 +43,7 @@ public final class RefreshCoordinator {
         self.widgetSnapshotCoordinator = widgetSnapshotCoordinator
         self.providerDataSource = providerDataSource
         self.snapshotSyncer = snapshotSyncer
+        self.localNotificationCoordinator = localNotificationCoordinator
     }
 
     public func start() {
@@ -41,7 +51,7 @@ public final class RefreshCoordinator {
         self.started = true
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await self.refresh(force: false, provider: nil)
+            await self.refresh(force: false, provider: nil, startupOptimized: true)
             self.startPollingLoop()
         }
     }
@@ -49,11 +59,19 @@ public final class RefreshCoordinator {
     public func stop() async {
         self.pollTask?.cancel()
         self.pollTask = nil
+        self.enrichmentTask?.cancel()
+        self.enrichmentTask = nil
         await self.helperRuntime.stopOwnedHelper()
     }
 
     public func refresh(force: Bool, provider: ProviderID? = nil) async {
+        await self.refresh(force: force, provider: provider, startupOptimized: false)
+    }
+
+    private func refresh(force: Bool, provider: ProviderID?, startupOptimized: Bool) async {
         self.repository.beginRefresh(provider: provider)
+        self.enrichmentTask?.cancel()
+        self.enrichmentTask = nil
 
         let helperReady = await self.helperRuntime.ensureServerRunning(port: self.sessionStore.config.helperPort)
         guard helperReady else {
@@ -64,44 +82,30 @@ public final class RefreshCoordinator {
         }
 
         do {
-            let envelope = try await self.providerDataSource.fetchSnapshots(
-                config: self.sessionStore.config,
-                refresh: force,
-                provider: provider
+            let envelope = try await self.fetchSnapshots(
+                force: force,
+                provider: provider,
+                startupOptimized: startupOptimized
             )
             self.repository.apply(envelope.providers, replacing: provider == nil)
-            await self.loadAdjuncts(for: provider.map { [$0] } ?? self.sessionStore.visibleProviders, forceRefresh: force)
-            await self.loadImportedSessions(for: provider.map { [$0] } ?? ProviderID.allCases)
             self.repository.syncSelections(sessionStore: self.sessionStore)
             self.repository.finishRefresh(issue: nil)
-
-            do {
-                let snapshot = WidgetSnapshotBuilder.snapshot(
-                    providers: self.sessionStore.visibleProviders,
-                    snapshots: self.repository.snapshotsByProvider,
-                    adjuncts: self.repository.adjunctSnapshots,
-                    config: self.sessionStore.config,
-                    generatedAt: ISO8601DateFormatter().string(from: Date())
-                )
-                _ = try self.widgetSnapshotCoordinator.persist(snapshot)
-                self.repository.clearIssue(kind: .widgetPersistence)
-            } catch {
-                self.repository.recordIssue(
-                    AppIssue(kind: .widgetPersistence, message: error.localizedDescription)
-                )
-            }
-
-            if provider == nil, let snapshotSyncer = self.snapshotSyncer {
-                do {
-                    _ = try await snapshotSyncer.syncLatestSnapshot()
-                    self.repository.clearIssue(kind: .snapshotSync)
-                } catch {
-                    Self.logger.error("Snapshot sync failed: \(error.localizedDescription)")
-                    self.repository.recordIssue(
-                        AppIssue(kind: .snapshotSync, message: error.localizedDescription)
-                    )
+            if provider == nil {
+                if let notificationIssue = await self.localNotificationCoordinator.process(
+                    envelope: envelope,
+                    config: self.sessionStore.config
+                ) {
+                    self.repository.recordIssue(notificationIssue)
+                } else {
+                    self.repository.clearIssue(kind: .localNotifications)
                 }
             }
+            self.scheduleEnrichment(
+                envelope: envelope,
+                provider: provider,
+                forceRefresh: force,
+                startupOptimized: startupOptimized
+            )
         } catch {
             self.repository.finishRefresh(
                 issue: AppIssue(kind: .refresh, provider: provider, message: error.localizedDescription)
@@ -165,26 +169,219 @@ public final class RefreshCoordinator {
         }
     }
 
+    private func fetchSnapshots(
+        force: Bool,
+        provider: ProviderID?,
+        startupOptimized: Bool
+    ) async throws -> ProviderSnapshotEnvelope {
+        if startupOptimized,
+           !force,
+           provider == nil,
+           let startupDataSource = self.providerDataSource as? any StartupOptimizedProviderDataSource {
+            do {
+                return try await startupDataSource.fetchStartupSnapshots(config: self.sessionStore.config)
+            } catch {
+                Self.logger.error("Startup snapshot fetch failed, falling back to standard fetch: \(error.localizedDescription)")
+            }
+        }
+
+        return try await self.providerDataSource.fetchSnapshots(
+            config: self.sessionStore.config,
+            refresh: force,
+            provider: provider
+        )
+    }
+
+    private func scheduleEnrichment(
+        envelope: ProviderSnapshotEnvelope,
+        provider: ProviderID?,
+        forceRefresh: Bool,
+        startupOptimized: Bool
+    ) {
+        let adjunctProviders = provider.map { [$0] } ?? self.sessionStore.visibleProviders
+        let importedSessionProviders = provider.map { [$0] } ?? ProviderID.allCases
+
+        self.enrichmentTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.runEnrichment(
+                envelope: envelope,
+                provider: provider,
+                adjunctProviders: adjunctProviders,
+                importedSessionProviders: importedSessionProviders,
+                forceRefresh: forceRefresh,
+                startupOptimized: startupOptimized
+            )
+        }
+    }
+
+    private func runEnrichment(
+        envelope: ProviderSnapshotEnvelope,
+        provider: ProviderID?,
+        adjunctProviders: [ProviderID],
+        importedSessionProviders: [ProviderID],
+        forceRefresh: Bool,
+        startupOptimized: Bool
+    ) async {
+        var enrichmentEnvelope = envelope
+        if startupOptimized, provider == nil, !forceRefresh {
+            do {
+                enrichmentEnvelope = try await self.providerDataSource.fetchSnapshots(
+                    config: self.sessionStore.config,
+                    refresh: false,
+                    provider: nil
+                )
+                self.repository.apply(enrichmentEnvelope.providers, replacing: true)
+                self.repository.syncSelections(sessionStore: self.sessionStore)
+            } catch {
+                Self.logger.error("Warm startup refresh failed: \(error.localizedDescription)")
+            }
+        }
+
+        let adjunctRequests = adjunctProviders.map { provider in
+            AdjunctLoadRequest(
+                provider: provider,
+                config: self.sessionStore.config.providerConfig(for: provider),
+                snapshot: self.repository.snapshot(for: provider)
+            )
+        }
+
+        async let adjunctResults = Self.loadAdjunctResults(
+            loader: self.adjunctLoader,
+            requests: adjunctRequests,
+            forceRefresh: forceRefresh
+        )
+        async let importedSessions = Self.loadImportedSessions(
+            manager: self.browserSessionManager,
+            providers: importedSessionProviders
+        )
+        async let snapshotSyncIssue = Self.snapshotSyncIssue(
+            provider: provider,
+            snapshotSyncer: self.snapshotSyncer
+        )
+
+        let resolvedAdjuncts = await adjunctResults
+        guard !Task.isCancelled else { return }
+        for (provider, snapshot) in resolvedAdjuncts {
+            self.repository.setAdjunctSnapshot(snapshot, for: provider)
+        }
+
+        let resolvedImportedSessions = await importedSessions
+        guard !Task.isCancelled else { return }
+        for (provider, session) in resolvedImportedSessions {
+            self.repository.importedSessions[provider] = session
+        }
+
+        do {
+            let snapshot = WidgetSnapshotBuilder.snapshot(
+                providers: self.sessionStore.visibleProviders,
+                snapshots: self.repository.snapshotsByProvider,
+                adjuncts: self.repository.adjunctSnapshots,
+                config: self.sessionStore.config,
+                generatedAt: ISO8601DateFormatter().string(from: Date())
+            )
+            _ = try self.widgetSnapshotCoordinator.persist(snapshot)
+            self.repository.clearIssue(kind: .widgetPersistence)
+        } catch {
+            self.repository.recordIssue(
+                AppIssue(kind: .widgetPersistence, message: error.localizedDescription)
+            )
+        }
+
+        if let snapshotSyncIssue = await snapshotSyncIssue {
+            Self.logger.error("Snapshot sync failed: \(snapshotSyncIssue.message)")
+            self.repository.recordIssue(snapshotSyncIssue)
+        } else if provider == nil, self.snapshotSyncer != nil {
+            self.repository.clearIssue(kind: .snapshotSync)
+        }
+    }
+
+    nonisolated private static func loadAdjunctResults(
+        loader: any DashboardAdjunctLoading,
+        requests: [AdjunctLoadRequest],
+        forceRefresh: Bool
+    ) async -> [ProviderID: DashboardAdjunctSnapshot?] {
+        await withTaskGroup(of: (ProviderID, DashboardAdjunctSnapshot?).self, returning: [ProviderID: DashboardAdjunctSnapshot?].self) { group in
+            for request in requests {
+                group.addTask {
+                    let snapshot = await loader.loadAdjunct(
+                        provider: request.provider,
+                        config: request.config,
+                        snapshot: request.snapshot,
+                        forceRefresh: forceRefresh,
+                        allowLiveNavigation: true
+                    )
+                    return (request.provider, snapshot)
+                }
+            }
+
+            var results: [ProviderID: DashboardAdjunctSnapshot?] = [:]
+            for await (provider, snapshot) in group {
+                results[provider] = snapshot
+            }
+            return results
+        }
+    }
+
+    nonisolated private static func loadImportedSessions(
+        manager: any BrowserSessionManaging,
+        providers: [ProviderID]
+    ) async -> [ProviderID: ImportedBrowserSession?] {
+        await withTaskGroup(of: (ProviderID, ImportedBrowserSession?).self, returning: [ProviderID: ImportedBrowserSession?].self) { group in
+            for provider in providers {
+                group.addTask {
+                    (provider, await manager.importedSession(provider: provider))
+                }
+            }
+
+            var sessions: [ProviderID: ImportedBrowserSession?] = [:]
+            for await (provider, session) in group {
+                sessions[provider] = session
+            }
+            return sessions
+        }
+    }
+
+    nonisolated private static func snapshotSyncIssue(
+        provider: ProviderID?,
+        snapshotSyncer: (any SnapshotSyncing)?
+    ) async -> AppIssue? {
+        guard provider == nil, let snapshotSyncer else { return nil }
+        do {
+            _ = try await snapshotSyncer.syncLatestSnapshot()
+            return nil
+        } catch {
+            return AppIssue(kind: .snapshotSync, message: error.localizedDescription)
+        }
+    }
+
     private func loadAdjuncts(
         for providers: [ProviderID],
         forceRefresh: Bool
     ) async {
-        for provider in providers {
-            let providerConfig = self.sessionStore.config.providerConfig(for: provider)
-            let adjunct = await self.adjunctLoader.loadAdjunct(
+        let requests = providers.map { provider in
+            AdjunctLoadRequest(
                 provider: provider,
-                config: providerConfig,
-                snapshot: self.repository.snapshot(for: provider),
-                forceRefresh: forceRefresh,
-                allowLiveNavigation: true
+                config: self.sessionStore.config.providerConfig(for: provider),
+                snapshot: self.repository.snapshot(for: provider)
             )
-            self.repository.setAdjunctSnapshot(adjunct, for: provider)
+        }
+        let results = await Self.loadAdjunctResults(
+            loader: self.adjunctLoader,
+            requests: requests,
+            forceRefresh: forceRefresh
+        )
+        for (provider, snapshot) in results {
+            self.repository.setAdjunctSnapshot(snapshot, for: provider)
         }
     }
 
     private func loadImportedSessions(for providers: [ProviderID]) async {
-        for provider in providers {
-            self.repository.importedSessions[provider] = await self.browserSessionManager.importedSession(provider: provider)
+        let sessions = await Self.loadImportedSessions(
+            manager: self.browserSessionManager,
+            providers: providers
+        )
+        for (provider, session) in sessions {
+            self.repository.importedSessions[provider] = session
         }
     }
 

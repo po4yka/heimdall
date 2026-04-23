@@ -14,6 +14,7 @@ public final class SettingsFeatureModel {
     private let repository: ProviderRepository
     private let settingsStore: any SettingsStore
     private let refreshCoordinator: RefreshCoordinator
+    private let localNotificationCoordinator: any LocalNotificationCoordinating
 
     private static let logger = Logger(subsystem: "dev.heimdall.HeimdallBar", category: "SettingsFeatureModel")
 
@@ -21,12 +22,14 @@ public final class SettingsFeatureModel {
         sessionStore: AppSessionStore,
         repository: ProviderRepository,
         settingsStore: any SettingsStore,
-        refreshCoordinator: RefreshCoordinator
+        refreshCoordinator: RefreshCoordinator,
+        localNotificationCoordinator: any LocalNotificationCoordinating
     ) {
         self.sessionStore = sessionStore
         self.repository = repository
         self.settingsStore = settingsStore
         self.refreshCoordinator = refreshCoordinator
+        self.localNotificationCoordinator = localNotificationCoordinator
         self.onSettingsSaved = nil
         self.draftConfig = sessionStore.config
     }
@@ -44,13 +47,24 @@ public final class SettingsFeatureModel {
         return candidate
     }
 
-    public func save() {
+    public func save() async {
         let draftConfig = self.draftConfig
+        let previousConfig = self.sessionStore.config
         do {
             try self.settingsStore.save(draftConfig)
             self.sessionStore.config = draftConfig
             self.draftConfig = draftConfig
-            self.repository.setIssue(nil)
+            self.repository.clearIssue(kind: .settingsSave)
+            if previousConfig.localNotificationsEnabled != draftConfig.localNotificationsEnabled {
+                if let issue = await self.localNotificationCoordinator.handleConfigChange(
+                    previous: previousConfig,
+                    current: draftConfig
+                ) {
+                    self.repository.recordIssue(issue)
+                } else {
+                    self.repository.clearIssue(kind: .localNotifications)
+                }
+            }
             self.onSettingsSaved?()
         } catch {
             self.repository.setIssue(

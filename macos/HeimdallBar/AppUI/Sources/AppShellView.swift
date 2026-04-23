@@ -508,6 +508,12 @@ private struct WindowLiveMonitorDetailSection: View {
                     }
                 }
 
+                if let forecast = WindowDepletionForecastModel.make(forecast: self.provider.depletionForecast) {
+                    WindowLiveMonitorDetailCard(title: "Depletion Forecast") {
+                        WindowDepletionForecastCardBody(model: forecast)
+                    }
+                }
+
                 if let context = self.provider.contextWindow {
                     WindowLiveMonitorDetailCard(title: "Context Window") {
                         Text(Self.compactNumber(context.totalInputTokens))
@@ -1285,6 +1291,197 @@ private struct WindowQuotaSuggestionRows: View {
     }
 }
 
+struct WindowDepletionForecastModel: Equatable {
+    struct Signal: Equatable, Identifiable {
+        let id: String
+        let title: String
+        let valueLabel: String
+        let timingLabel: String?
+        let remainingLabel: String?
+        let paceLabel: String?
+    }
+
+    let primary: Signal
+    let secondary: [Signal]
+    let summaryLabel: String
+    let severity: String
+    let note: String?
+
+    static func make(forecast: DepletionForecast?) -> Self? {
+        guard let forecast else { return nil }
+        return Self(
+            primary: self.signal(from: forecast.primarySignal),
+            secondary: forecast.secondarySignals.map(self.signal(from:)),
+            summaryLabel: forecast.summaryLabel,
+            severity: forecast.severity,
+            note: forecast.note
+        )
+    }
+
+    fileprivate static func signal(from signal: DepletionForecastSignal) -> Signal {
+        let percent = signal.projectedPercent ?? signal.usedPercent
+        let valueLabel = "\(Int(percent.rounded()))% \(signal.projectedPercent != nil ? "projected" : "used")"
+        let timingLabel: String?
+        if let resetsInMinutes = signal.resetsInMinutes {
+            timingLabel = "Resets in \(Self.resetLabel(minutes: resetsInMinutes))"
+        } else if let endTime = signal.endTime {
+            timingLabel = "Ends \(Self.shortTime(endTime))"
+        } else {
+            timingLabel = nil
+        }
+        let remainingLabel: String?
+        if let remainingTokens = signal.remainingTokens {
+            remainingLabel = "\(Self.compactNumber(remainingTokens)) tokens left"
+        } else if let remainingPercent = signal.remainingPercent {
+            remainingLabel = "\(Int(remainingPercent.rounded()))% remaining"
+        } else {
+            remainingLabel = nil
+        }
+
+        return Signal(
+            id: signal.id,
+            title: signal.title,
+            valueLabel: valueLabel,
+            timingLabel: timingLabel,
+            remainingLabel: remainingLabel,
+            paceLabel: signal.paceLabel
+        )
+    }
+
+    private static func compactNumber(_ value: Int) -> String {
+        let absolute = abs(value)
+        if absolute >= 1_000_000 {
+            return String(format: "%.1fM", Double(value) / 1_000_000)
+        }
+        if absolute >= 1_000 {
+            return String(format: "%.1fK", Double(value) / 1_000)
+        }
+        return "\(value)"
+    }
+
+    private static func resetLabel(minutes: Int) -> String {
+        if minutes >= 1_440 {
+            return "\(minutes / 1_440)d \((minutes % 1_440) / 60)h"
+        }
+        if minutes >= 60 {
+            return "\(minutes / 60)h \(minutes % 60)m"
+        }
+        return "\(minutes)m"
+    }
+
+    private static func shortTime(_ iso: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: iso) else { return iso }
+        return date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+private struct WindowDepletionForecastCardBody: View {
+    let model: WindowDepletionForecastModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(self.model.primary.title)
+                .font(.headline)
+            Text(self.model.summaryLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(self.model.primary.valueLabel)
+                        .font(.callout.monospacedDigit().weight(.semibold))
+                    if let paceLabel = self.model.primary.paceLabel {
+                        Text(paceLabel.uppercased())
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(self.toneColor.opacity(0.9))
+                    }
+                }
+
+                if let timingLabel = self.model.primary.timingLabel {
+                    Text(timingLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let remainingLabel = self.model.primary.remainingLabel {
+                    Text(remainingLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !self.model.secondary.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SUPPORTING SIGNALS")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Color.primary.opacity(0.72))
+                        .tracking(0.4)
+
+                    ForEach(self.model.secondary) { signal in
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(signal.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 8)
+                                Text(signal.valueLabel)
+                                    .font(.caption.monospacedDigit())
+                            }
+                            Text([signal.timingLabel, signal.remainingLabel].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption2)
+                                .foregroundStyle(Color.primary.opacity(0.66))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+
+            if let note = self.model.note {
+                Text(note)
+                    .font(.caption2)
+                    .foregroundStyle(Color.primary.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var toneColor: Color {
+        switch self.model.severity {
+        case "danger":
+            return .red
+        case "warn":
+            return .orange
+        default:
+            return .primary
+        }
+    }
+}
+
+private struct WindowOverviewDepletionForecastStrip: View {
+    let model: WindowDepletionForecastModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Depletion forecast")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.primary.opacity(0.72))
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+                Spacer(minLength: 8)
+                Text(self.model.primary.valueLabel)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            WindowDepletionForecastCardBody(model: self.model)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .menuCardBackground(opacity: 0.03, cornerRadius: 10)
+        }
+    }
+}
+
 struct WindowOverviewQuotaWindowsModel: Equatable {
     struct Lane: Equatable, Identifiable {
         let title: String
@@ -1649,6 +1846,10 @@ private struct WindowOverviewProviderCard: View {
         WindowQuotaSuggestionsModel.make(suggestions: self.item.quotaSuggestions)
     }
 
+    private var depletionForecast: WindowDepletionForecastModel? {
+        WindowDepletionForecastModel.make(forecast: self.item.depletionForecast)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
@@ -1690,6 +1891,10 @@ private struct WindowOverviewProviderCard: View {
                 if !self.quotaWindows.lanes.isEmpty {
                     WindowOverviewQuotaWindowsStrip(model: self.quotaWindows)
                     WindowOverviewQuotaBurnChart(model: self.quotaWindows)
+                }
+
+                if let depletionForecast = self.depletionForecast {
+                    WindowOverviewDepletionForecastStrip(model: depletionForecast)
                 }
 
                 if let quotaSuggestions = self.quotaSuggestions {
@@ -1886,6 +2091,10 @@ private struct WindowProviderView: View {
             )
 
             ProviderMenuCard(providerModel: self.model)
+
+            if let forecast = WindowDepletionForecastModel.make(forecast: self.model.projection.depletionForecast) {
+                WindowOverviewDepletionForecastStrip(model: forecast)
+            }
 
             ProviderSessionDetails(model: self.model)
         }

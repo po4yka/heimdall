@@ -7,6 +7,7 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
     private let session: URLSession
     private let retryPolicy: RetryPolicy
     private static let defaultRequestTimeout: TimeInterval = 3
+    private static let startupRequestTimeout: TimeInterval = 1.5
     private static let forcedRefreshTimeout: TimeInterval = 12
 
     struct RetryPolicy: Sendable, Equatable {
@@ -31,6 +32,22 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
 
     public func fetchSnapshots() async throws -> ProviderSnapshotEnvelope {
         try self.validate(try await self.fetch(path: "/api/live-providers", as: ProviderSnapshotEnvelope.self))
+    }
+
+    public func fetchStartupSnapshots() async throws -> ProviderSnapshotEnvelope {
+        var components = URLComponents(
+            url: self.baseURL.appendingPathComponent("/api/live-providers"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "startup", value: "true")]
+
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = Self.startupRequestTimeout
+        let (data, response) = try await self.data(for: request, retryPolicy: Self.startupRetryPolicy)
+        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+            throw URLError(.badServerResponse)
+        }
+        return try self.validate(try JSONDecoder().decode(ProviderSnapshotEnvelope.self, from: data))
     }
 
     public func refresh(provider: ProviderID?) async throws -> ProviderSnapshotEnvelope {
@@ -109,7 +126,14 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
     }
 
     private func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await self.withRetry(policy: self.retryPolicy) {
+        try await self.data(for: request, retryPolicy: self.retryPolicy)
+    }
+
+    private func data(
+        for request: URLRequest,
+        retryPolicy: RetryPolicy
+    ) async throws -> (Data, URLResponse) {
+        try await self.withRetry(policy: retryPolicy) {
             try await self.session.data(for: request)
         }
     }
@@ -141,6 +165,15 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
                 250_000_000,
                 500_000_000,
                 1_000_000_000,
+            ]
+        )
+    }
+
+    private static var startupRetryPolicy: RetryPolicy {
+        RetryPolicy(
+            attempts: 2,
+            backoffNanoseconds: [
+                150_000_000,
             ]
         )
     }

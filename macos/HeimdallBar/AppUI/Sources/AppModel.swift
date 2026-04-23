@@ -23,6 +23,7 @@ public final class AppModel {
         let authCoordinator = runtime.authCoordinator
         let settingsStore = runtime.settingsStore
         let credentialInspector = runtime.credentialInspector
+        let localNotificationCoordinator = runtime.localNotificationCoordinator
 
         self.sessionStore = sessionStore
         self.shell = AppShellModel(sessionStore: sessionStore)
@@ -39,7 +40,8 @@ public final class AppModel {
             sessionStore: sessionStore,
             repository: providerRepository,
             settingsStore: settingsStore,
-            refreshCoordinator: refreshCoordinator
+            refreshCoordinator: refreshCoordinator,
+            localNotificationCoordinator: localNotificationCoordinator
         )
         self.refreshCoordinator = refreshCoordinator
         self.providerRepository = providerRepository

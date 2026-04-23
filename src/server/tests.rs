@@ -24,8 +24,8 @@ mod tests {
         AppState, CostReconciliationParams, HeatmapParams, api_agent_status, api_billing_blocks,
         api_claude_usage, api_community_signal, api_context_window, api_cost_reconciliation,
         api_data, api_heatmap, api_live_monitor, api_live_provider_history,
-        api_live_provider_refresh, api_live_providers, api_mobile_snapshot, api_rescan,
-        api_stream, api_usage_windows,
+        api_live_provider_refresh, api_live_providers, api_mobile_snapshot, api_rescan, api_stream,
+        api_usage_windows,
     };
     use crate::server::assets;
     use crate::server::{ServeOptions, build_router, build_state, start_background_pollers_with};
@@ -209,6 +209,23 @@ mod tests {
                         ],
                         note: Some("Based on fewer than 10 completed blocks.".into()),
                     }),
+                    depletion_forecast: Some(crate::models::DepletionForecast {
+                        primary_signal: crate::models::DepletionForecastSignal {
+                            kind: "primary_window".into(),
+                            title: "Primary window".into(),
+                            used_percent: 42.0,
+                            projected_percent: None,
+                            remaining_tokens: None,
+                            remaining_percent: Some(58.0),
+                            resets_in_minutes: Some(120),
+                            pace_label: Some("Steady".into()),
+                            end_time: Some("2026-04-21T18:00:00Z".into()),
+                        },
+                        secondary_signals: vec![],
+                        summary_label: "Primary window currently at 42% used".into(),
+                        severity: "ok".into(),
+                        note: None,
+                    }),
                     last_refresh: "2026-04-21T09:00:00Z".into(),
                     stale: false,
                     error: None,
@@ -237,6 +254,23 @@ mod tests {
                     cost_summary: crate::models::ProviderCostSummary::default(),
                     claude_usage: None,
                     quota_suggestions: None,
+                    depletion_forecast: Some(crate::models::DepletionForecast {
+                        primary_signal: crate::models::DepletionForecastSignal {
+                            kind: "primary_window".into(),
+                            title: "Primary window".into(),
+                            used_percent: 18.0,
+                            projected_percent: None,
+                            remaining_tokens: None,
+                            remaining_percent: Some(82.0),
+                            resets_in_minutes: Some(90),
+                            pace_label: Some("Comfortable".into()),
+                            end_time: Some("2026-04-21T17:30:00Z".into()),
+                        },
+                        secondary_signals: vec![],
+                        summary_label: "Primary window currently at 18% used".into(),
+                        severity: "ok".into(),
+                        note: None,
+                    }),
                     last_refresh: "2026-04-21T08:30:00Z".into(),
                     stale: stale_codex,
                     error: None,
@@ -247,6 +281,22 @@ mod tests {
             response_scope: "all".into(),
             cache_hit: false,
             refreshed_providers: vec!["claude".into(), "codex".into()],
+            local_notification_state: Some(crate::models::LocalNotificationState {
+                generated_at: "2026-04-21T09:00:00Z".into(),
+                cost_threshold_usd: Some(25.0),
+                conditions: vec![crate::models::LocalNotificationCondition {
+                    id: "claude-session-depleted".into(),
+                    kind: "session_depleted".into(),
+                    provider: Some("claude".into()),
+                    service_label: "Claude".into(),
+                    is_active: false,
+                    activation_title: "Claude session depleted".into(),
+                    activation_body: "Claude session is depleted.".into(),
+                    recovery_title: Some("Claude session restored".into()),
+                    recovery_body: Some("Claude session capacity is available again.".into()),
+                    day_key: None,
+                }],
+            }),
         }
     }
 
@@ -988,6 +1038,7 @@ mod tests {
                             cost_summary: crate::models::ProviderCostSummary::default(),
                             claude_usage: None,
                             quota_suggestions: None,
+                            depletion_forecast: None,
                             last_refresh: "2026-01-01T00:00:00Z".into(),
                             stale: false,
                             error: None,
@@ -1010,6 +1061,7 @@ mod tests {
                             cost_summary: crate::models::ProviderCostSummary::default(),
                             claude_usage: None,
                             quota_suggestions: None,
+                            depletion_forecast: None,
                             last_refresh: "2026-01-01T00:00:00Z".into(),
                             stale: false,
                             error: None,
@@ -1020,6 +1072,7 @@ mod tests {
                     response_scope: "all".into(),
                     cache_hit: false,
                     refreshed_providers: vec![],
+                    local_notification_state: None,
                 },
             ));
         }
@@ -1056,7 +1109,10 @@ mod tests {
         let state = Arc::new(base_state(db_path, projects));
         {
             let mut cache = state.live_provider_cache.write().await;
-            *cache = Some((std::time::Instant::now(), cached_live_provider_response(false)));
+            *cache = Some((
+                std::time::Instant::now(),
+                cached_live_provider_response(false),
+            ));
         }
 
         let app = crate::server::build_router(state);
@@ -1081,6 +1137,7 @@ mod tests {
             .find(|provider| provider["provider"] == "claude")
             .unwrap();
         assert!(claude.get("quota_suggestions").is_some());
+        assert!(claude.get("depletion_forecast").is_some());
 
         let codex = data["providers"]
             .as_array()
@@ -1089,6 +1146,125 @@ mod tests {
             .find(|provider| provider["provider"] == "codex")
             .unwrap();
         assert!(codex.get("quota_suggestions").is_none());
+        assert!(codex.get("depletion_forecast").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_api_live_providers_exposes_local_notification_state() {
+        use crate::agent_status::models::{AgentStatusSnapshot, ProviderStatus, StatusIndicator};
+        use crate::status_aggregator::models::{CommunitySignal, ServiceSignal, SignalLevel};
+
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let mut raw_state = base_state(db_path, projects);
+        raw_state.aggregator_config.enabled = true;
+        raw_state.webhook_config.cost_threshold = Some(50.0);
+        let state = Arc::new(raw_state);
+
+        {
+            let mut oauth_cache = state.oauth_cache.write().await;
+            *oauth_cache = Some((
+                std::time::Instant::now(),
+                available_usage_response(100.0, 30, "pro"),
+            ));
+        }
+        {
+            let mut agent_status_cache = state.agent_status_cache.write().await;
+            *agent_status_cache = Some((
+                std::time::Instant::now(),
+                AgentStatusSnapshot {
+                    claude: Some(ProviderStatus {
+                        indicator: StatusIndicator::None,
+                        description: "All systems operational".into(),
+                        components: vec![],
+                        active_incidents: vec![],
+                        page_url: "https://status.claude.com".into(),
+                    }),
+                    openai: Some(ProviderStatus {
+                        indicator: StatusIndicator::Major,
+                        description: "Major outage".into(),
+                        components: vec![],
+                        active_incidents: vec![],
+                        page_url: "https://status.openai.com".into(),
+                    }),
+                    fetched_at: chrono::Utc::now().to_rfc3339(),
+                },
+                None,
+            ));
+        }
+        {
+            state.aggregator_cache.write().await.replace((
+                std::time::Instant::now(),
+                CommunitySignal {
+                    fetched_at: chrono::Utc::now().to_rfc3339(),
+                    enabled: true,
+                    claude: vec![ServiceSignal {
+                        slug: "claude-ai".into(),
+                        name: "Claude AI".into(),
+                        level: SignalLevel::Spike,
+                        report_count_last_hour: Some(31),
+                        report_baseline: Some(10),
+                        detail: "Spike".into(),
+                        source_url: "https://statusgator.com/services/claude-ai".into(),
+                    }],
+                    openai: vec![ServiceSignal {
+                        slug: "openai".into(),
+                        name: "OpenAI".into(),
+                        level: SignalLevel::Normal,
+                        report_count_last_hour: Some(1),
+                        report_baseline: Some(10),
+                        detail: "Normal".into(),
+                        source_url: "https://statusgator.com/services/openai".into(),
+                    }],
+                },
+            ));
+        }
+
+        let app = crate::server::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/live-providers?startup=true")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        let notification_state = data
+            .get("local_notification_state")
+            .expect("local_notification_state should be present");
+        assert_eq!(notification_state["cost_threshold_usd"], 50.0);
+
+        let conditions = notification_state["conditions"].as_array().unwrap();
+        let session = conditions
+            .iter()
+            .find(|condition| condition["id"] == "claude-session-depleted")
+            .unwrap();
+        assert_eq!(session["is_active"], true);
+
+        let degraded = conditions
+            .iter()
+            .find(|condition| condition["id"] == "codex-service-degraded")
+            .unwrap();
+        assert_eq!(degraded["is_active"], true);
+        assert_eq!(degraded["service_label"], "OpenAI");
+
+        let spike = conditions
+            .iter()
+            .find(|condition| condition["id"] == "claude-community-spike")
+            .unwrap();
+        assert_eq!(spike["is_active"], true);
+
+        let daily = conditions
+            .iter()
+            .find(|condition| condition["id"] == "daily-cost-threshold")
+            .unwrap();
+        assert!(daily.get("day_key").is_some());
     }
 
     #[tokio::test]
@@ -1100,15 +1276,16 @@ mod tests {
         {
             let mut cache = state.live_provider_cache.write().await;
             let mut response = cached_live_provider_response(false);
-            response.providers[0].cost_summary.recent_sessions = vec![crate::models::ProviderSession {
-                session_id: "claude-session".into(),
-                display_name: "Claude session".into(),
-                started_at: "2026-04-21T09:00:00Z".into(),
-                duration_minutes: 42,
-                turns: 9,
-                cost_usd: 2.5,
-                model: Some("claude-sonnet-4-6".into()),
-            }];
+            response.providers[0].cost_summary.recent_sessions =
+                vec![crate::models::ProviderSession {
+                    session_id: "claude-session".into(),
+                    display_name: "Claude session".into(),
+                    started_at: "2026-04-21T09:00:00Z".into(),
+                    duration_minutes: 42,
+                    turns: 9,
+                    cost_usd: 2.5,
+                    model: Some("claude-sonnet-4-6".into()),
+                }];
             *cache = Some((std::time::Instant::now(), response));
         }
 
@@ -1169,6 +1346,7 @@ mod tests {
         assert!(claude.get("context_window").is_some());
         assert!(claude.get("recent_session").is_some());
         assert!(claude.get("quota_suggestions").is_some());
+        assert!(claude.get("depletion_forecast").is_some());
 
         let codex = data["providers"]
             .as_array()
@@ -1179,6 +1357,7 @@ mod tests {
         assert!(codex.get("context_window").is_none());
         assert!(codex.get("active_block").is_none());
         assert!(codex.get("quota_suggestions").is_none());
+        assert!(codex.get("depletion_forecast").is_some());
     }
 
     #[tokio::test]
@@ -2506,7 +2685,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_background_loop_runs_immediately_and_survives_errors() {
+    async fn test_background_loop_delays_first_run_and_survives_errors() {
         let runs = Arc::new(AtomicUsize::new(0));
         let fail_once = Arc::new(AtomicBool::new(true));
 
@@ -2528,9 +2707,16 @@ mod tests {
         });
 
         tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            runs.load(Ordering::SeqCst),
+            0,
+            "background loop should wait before the first refresh"
+        );
+
+        tokio::time::sleep(Duration::from_millis(1100)).await;
         assert!(
             runs.load(Ordering::SeqCst) >= 1,
-            "background loop should run immediately on startup"
+            "background loop should run after the startup delay"
         );
 
         tokio::time::sleep(Duration::from_millis(1100)).await;
@@ -2540,6 +2726,27 @@ mod tests {
         );
 
         handle.abort();
+    }
+
+    #[test]
+    fn test_background_poll_startup_delay_is_staggered_and_bounded() {
+        let oauth_delay = crate::server::background_poll_startup_delay("oauth usage", 60);
+        let agent_delay = crate::server::background_poll_startup_delay("agent status", 60);
+        let short_delay = crate::server::background_poll_startup_delay("short", 3);
+
+        assert!(oauth_delay >= Duration::from_secs(1));
+        assert!(agent_delay >= Duration::from_secs(1));
+        assert!(oauth_delay <= Duration::from_secs(60));
+        assert!(agent_delay <= Duration::from_secs(60));
+        assert_ne!(
+            oauth_delay, agent_delay,
+            "different pollers should not all wake at the same instant"
+        );
+        assert_eq!(
+            short_delay,
+            Duration::from_secs(3),
+            "startup delay should never exceed the poll interval"
+        );
     }
 
     #[test]
@@ -2906,6 +3113,75 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_api_billing_blocks_exposes_depletion_forecast_for_active_block() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects").join("user").join("proj");
+        std::fs::create_dir_all(&projects).unwrap();
+
+        let filepath = projects.join("active.jsonl");
+        let mut f = std::fs::File::create(&filepath).unwrap();
+        let user_ts = (chrono::Utc::now() - chrono::Duration::minutes(30)).to_rfc3339();
+        let assistant_ts = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({
+                "type": "user",
+                "sessionId": "active-s1",
+                "timestamp": user_ts,
+                "cwd": "/home/user/project"
+            })
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({
+                "type": "assistant",
+                "sessionId": "active-s1",
+                "timestamp": assistant_ts,
+                "cwd": "/home/user/project",
+                "message": {
+                    "id": "active-msg-1",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 200000,
+                        "output_tokens": 100000,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 0
+                    },
+                    "content": []
+                }
+            })
+        )
+        .unwrap();
+
+        let db_path = tmp.path().join("usage.db");
+        scanner::scan(Some(vec![tmp.path().join("projects")]), &db_path, false).unwrap();
+        let app = test_app_with_token_limit(db_path, tmp.path().join("projects"), Some(1_000_000));
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/billing-blocks")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert!(json.get("depletion_forecast").is_some());
+        assert_eq!(
+            json["depletion_forecast"]["primary_signal"]["kind"],
+            "billing_block"
+        );
+    }
+
+    #[tokio::test]
     async fn test_api_billing_blocks_shape() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
@@ -2932,6 +3208,7 @@ mod tests {
         // token_limit should be null when not configured.
         assert!(json["token_limit"].is_null());
         assert!(json.get("quota_suggestions").is_some());
+        assert!(json.get("depletion_forecast").is_none());
         // blocks must be an array.
         assert!(json["blocks"].is_array());
         // At least one block from the seeded turn.

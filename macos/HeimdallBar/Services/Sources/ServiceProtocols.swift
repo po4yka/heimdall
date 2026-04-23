@@ -58,6 +58,7 @@ public enum AppIssueKind: String, Sendable, Equatable {
     case authRecovery
     case snapshotSync
     case widgetPersistence
+    case localNotifications
 }
 
 public struct AppIssue: Error, Sendable, Equatable, Identifiable, LocalizedError {
@@ -150,10 +151,68 @@ public protocol AppSessionStatePersisting: Sendable {
     func saveAppSessionState(_ state: PersistedAppSessionState)
 }
 
+public enum NotificationAuthorizationStatus: Sendable, Equatable {
+    case notDetermined
+    case denied
+    case authorized
+}
+
+public struct LocalNotificationRequest: Sendable, Equatable {
+    public var identifier: String
+    public var title: String
+    public var body: String
+
+    public init(identifier: String, title: String, body: String) {
+        self.identifier = identifier
+        self.title = title
+        self.body = body
+    }
+}
+
+public struct PersistedLocalNotificationState: Codable, Sendable, Equatable {
+    public var lastKnownActive: [String: Bool]
+    public var lastFiredDayKeys: [String: String]
+
+    public init(
+        lastKnownActive: [String: Bool] = [:],
+        lastFiredDayKeys: [String: String] = [:]
+    ) {
+        self.lastKnownActive = lastKnownActive
+        self.lastFiredDayKeys = lastFiredDayKeys
+    }
+}
+
+public protocol NotificationAuthorizationManaging: Sendable {
+    func authorizationStatus() async -> NotificationAuthorizationStatus
+    func requestAuthorization() async throws -> Bool
+}
+
+public protocol LocalNotificationScheduling: Sendable {
+    func schedule(_ request: LocalNotificationRequest) async throws
+}
+
+public protocol LocalNotificationStatePersisting: Sendable {
+    func loadState() -> PersistedLocalNotificationState
+    func saveState(_ state: PersistedLocalNotificationState)
+    func clearState()
+}
+
+public protocol LocalNotificationCoordinating: Sendable {
+    func handleConfigChange(previous: HeimdallBarConfig, current: HeimdallBarConfig) async -> AppIssue?
+    func process(envelope: ProviderSnapshotEnvelope, config: HeimdallBarConfig) async -> AppIssue?
+}
+
 public protocol LiveProviderClient: Sendable {
     func fetchSnapshots() async throws -> ProviderSnapshotEnvelope
+    func fetchStartupSnapshots() async throws -> ProviderSnapshotEnvelope
     func refresh(provider: ProviderID?) async throws -> ProviderSnapshotEnvelope
     func fetchCostSummary(provider: ProviderID) async throws -> CostSummaryEnvelope
+}
+
+public extension LiveProviderClient {
+    func fetchStartupSnapshots() async throws -> ProviderSnapshotEnvelope {
+        try await self.fetchSnapshots()
+    }
 }
 
 public protocol LiveMonitorClient: Sendable {
@@ -188,6 +247,16 @@ public protocol ProviderDataSource: Sendable {
         config: HeimdallBarConfig,
         provider: ProviderID
     ) async throws -> CostSummaryEnvelope
+}
+
+public protocol StartupOptimizedProviderDataSource: ProviderDataSource {
+    func fetchStartupSnapshots(config: HeimdallBarConfig) async throws -> ProviderSnapshotEnvelope
+}
+
+public extension StartupOptimizedProviderDataSource {
+    func fetchStartupSnapshots(config: HeimdallBarConfig) async throws -> ProviderSnapshotEnvelope {
+        try await self.fetchSnapshots(config: config, refresh: false, provider: nil)
+    }
 }
 
 public protocol HelperRuntime: Sendable {

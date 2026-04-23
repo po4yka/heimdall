@@ -99,6 +99,28 @@ export interface QuotaSuggestions {
   note?: string | null;
 }
 
+export type DepletionSignalKind = 'billing_block' | 'primary_window' | 'secondary_window' | string;
+
+export interface DepletionForecastSignal {
+  kind: DepletionSignalKind;
+  title: string;
+  used_percent: number;
+  projected_percent?: number | null;
+  remaining_tokens?: number | null;
+  remaining_percent?: number | null;
+  resets_in_minutes?: number | null;
+  pace_label?: string | null;
+  end_time?: string | null;
+}
+
+export interface DepletionForecast {
+  primary_signal: DepletionForecastSignal;
+  secondary_signals: DepletionForecastSignal[];
+  summary_label: string;
+  severity: QuotaSeverity;
+  note?: string | null;
+}
+
 export interface BlockTokens {
   input: number;
   output: number;
@@ -127,6 +149,7 @@ export interface BillingBlocksResponse {
   token_limit: number | null;
   historical_max_tokens: number;
   quota_suggestions?: QuotaSuggestions | null;
+  depletion_forecast?: DepletionForecast | null;
   blocks: BillingBlockView[];
 }
 

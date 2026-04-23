@@ -181,6 +181,7 @@ public final class ProviderRepository {
             self.issues.issue(for: .authRecovery),
             self.issues.issue(for: .snapshotSync),
             self.issues.issue(for: .widgetPersistence),
+            self.issues.issue(for: .localNotifications),
             self.issues.issue(for: .helperStartup),
         ]
         .compactMap { $0 }
@@ -251,7 +252,7 @@ public final class ProviderRepository {
             self.refreshState.state.lastIssue = issue
         case .browserImport:
             self.browserSessionState.state.lastIssue = issue
-        case .settingsSave, .authRecovery, .snapshotSync, .widgetPersistence:
+        case .settingsSave, .authRecovery, .snapshotSync, .widgetPersistence, .localNotifications:
             break
         }
     }
@@ -292,7 +293,7 @@ public final class ProviderRepository {
             if self.browserSessionState.state.lastIssue?.kind == kind {
                 self.browserSessionState.state.lastIssue = nil
             }
-        case .settingsSave, .authRecovery, .snapshotSync, .widgetPersistence:
+        case .settingsSave, .authRecovery, .snapshotSync, .widgetPersistence, .localNotifications:
             break
         }
     }

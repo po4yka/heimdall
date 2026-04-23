@@ -116,6 +116,7 @@ public struct HeimdallBarConfig: Codable, Sendable {
     public var refreshIntervalSeconds: Int
     public var resetDisplayMode: ResetDisplayMode
     public var checkProviderStatus: Bool
+    public var localNotificationsEnabled: Bool
     public var helperPort: Int
 
     public static let `default` = HeimdallBarConfig(
@@ -126,6 +127,7 @@ public struct HeimdallBarConfig: Codable, Sendable {
         refreshIntervalSeconds: 300,
         resetDisplayMode: .countdown,
         checkProviderStatus: true,
+        localNotificationsEnabled: false,
         helperPort: 8787
     )
 
@@ -137,6 +139,7 @@ public struct HeimdallBarConfig: Codable, Sendable {
         refreshIntervalSeconds: Int,
         resetDisplayMode: ResetDisplayMode,
         checkProviderStatus: Bool,
+        localNotificationsEnabled: Bool,
         helperPort: Int
     ) {
         self.claude = claude
@@ -146,7 +149,33 @@ public struct HeimdallBarConfig: Codable, Sendable {
         self.refreshIntervalSeconds = refreshIntervalSeconds
         self.resetDisplayMode = resetDisplayMode
         self.checkProviderStatus = checkProviderStatus
+        self.localNotificationsEnabled = localNotificationsEnabled
         self.helperPort = helperPort
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case claude
+        case codex
+        case mergeIcons = "merge_icons"
+        case showUsedValues = "show_used_values"
+        case refreshIntervalSeconds = "refresh_interval_seconds"
+        case resetDisplayMode = "reset_display_mode"
+        case checkProviderStatus = "check_provider_status"
+        case localNotificationsEnabled = "local_notifications_enabled"
+        case helperPort = "helper_port"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.claude = try container.decodeIfPresent(ProviderConfig.self, forKey: .claude) ?? HeimdallBarConfig.default.claude
+        self.codex = try container.decodeIfPresent(ProviderConfig.self, forKey: .codex) ?? HeimdallBarConfig.default.codex
+        self.mergeIcons = try container.decodeIfPresent(Bool.self, forKey: .mergeIcons) ?? HeimdallBarConfig.default.mergeIcons
+        self.showUsedValues = try container.decodeIfPresent(Bool.self, forKey: .showUsedValues) ?? HeimdallBarConfig.default.showUsedValues
+        self.refreshIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .refreshIntervalSeconds) ?? HeimdallBarConfig.default.refreshIntervalSeconds
+        self.resetDisplayMode = try container.decodeIfPresent(ResetDisplayMode.self, forKey: .resetDisplayMode) ?? HeimdallBarConfig.default.resetDisplayMode
+        self.checkProviderStatus = try container.decodeIfPresent(Bool.self, forKey: .checkProviderStatus) ?? HeimdallBarConfig.default.checkProviderStatus
+        self.localNotificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .localNotificationsEnabled) ?? false
+        self.helperPort = try container.decodeIfPresent(Int.self, forKey: .helperPort) ?? HeimdallBarConfig.default.helperPort
     }
 
     public func providerConfig(for provider: ProviderID) -> ProviderConfig {
@@ -801,6 +830,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
     public var costSummary: ProviderCostSummary
     public var claudeUsage: ClaudeUsageSnapshotPayload?
     public var quotaSuggestions: QuotaSuggestions?
+    public var depletionForecast: DepletionForecast?
     public var lastRefresh: String
     public var stale: Bool
     public var error: String?
@@ -826,6 +856,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         costSummary: ProviderCostSummary,
         claudeUsage: ClaudeUsageSnapshotPayload?,
         quotaSuggestions: QuotaSuggestions? = nil,
+        depletionForecast: DepletionForecast? = nil,
         lastRefresh: String,
         stale: Bool,
         error: String?
@@ -847,6 +878,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         self.costSummary = costSummary
         self.claudeUsage = claudeUsage
         self.quotaSuggestions = quotaSuggestions
+        self.depletionForecast = depletionForecast
         self.lastRefresh = lastRefresh
         self.stale = stale
         self.error = error
@@ -870,6 +902,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         case costSummary = "cost_summary"
         case claudeUsage = "claude_usage"
         case quotaSuggestions = "quota_suggestions"
+        case depletionForecast = "depletion_forecast"
         case lastRefresh = "last_refresh"
         case stale
         case error
@@ -884,6 +917,7 @@ public struct ProviderSnapshotEnvelope: Codable, Sendable {
     public var responseScope: String
     public var cacheHit: Bool
     public var refreshedProviders: [String]
+    public var localNotificationState: LocalNotificationState?
 
     public init(
         contractVersion: Int = LiveProviderContract.version,
@@ -892,7 +926,8 @@ public struct ProviderSnapshotEnvelope: Codable, Sendable {
         requestedProvider: String?,
         responseScope: String,
         cacheHit: Bool,
-        refreshedProviders: [String]
+        refreshedProviders: [String],
+        localNotificationState: LocalNotificationState? = nil
     ) {
         self.contractVersion = contractVersion
         self.providers = providers
@@ -901,6 +936,7 @@ public struct ProviderSnapshotEnvelope: Codable, Sendable {
         self.responseScope = responseScope
         self.cacheHit = cacheHit
         self.refreshedProviders = refreshedProviders
+        self.localNotificationState = localNotificationState
     }
 
     enum CodingKeys: String, CodingKey {
@@ -911,6 +947,79 @@ public struct ProviderSnapshotEnvelope: Codable, Sendable {
         case responseScope = "response_scope"
         case cacheHit = "cache_hit"
         case refreshedProviders = "refreshed_providers"
+        case localNotificationState = "local_notification_state"
+    }
+}
+
+public struct LocalNotificationCondition: Codable, Sendable, Equatable, Identifiable {
+    public var id: String
+    public var kind: String
+    public var provider: String?
+    public var serviceLabel: String
+    public var isActive: Bool
+    public var activationTitle: String
+    public var activationBody: String
+    public var recoveryTitle: String?
+    public var recoveryBody: String?
+    public var dayKey: String?
+
+    public init(
+        id: String,
+        kind: String,
+        provider: String?,
+        serviceLabel: String,
+        isActive: Bool,
+        activationTitle: String,
+        activationBody: String,
+        recoveryTitle: String? = nil,
+        recoveryBody: String? = nil,
+        dayKey: String? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.provider = provider
+        self.serviceLabel = serviceLabel
+        self.isActive = isActive
+        self.activationTitle = activationTitle
+        self.activationBody = activationBody
+        self.recoveryTitle = recoveryTitle
+        self.recoveryBody = recoveryBody
+        self.dayKey = dayKey
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case kind
+        case provider
+        case serviceLabel = "service_label"
+        case isActive = "is_active"
+        case activationTitle = "activation_title"
+        case activationBody = "activation_body"
+        case recoveryTitle = "recovery_title"
+        case recoveryBody = "recovery_body"
+        case dayKey = "day_key"
+    }
+}
+
+public struct LocalNotificationState: Codable, Sendable, Equatable {
+    public var generatedAt: String
+    public var costThresholdUSD: Double?
+    public var conditions: [LocalNotificationCondition]
+
+    public init(
+        generatedAt: String,
+        costThresholdUSD: Double? = nil,
+        conditions: [LocalNotificationCondition]
+    ) {
+        self.generatedAt = generatedAt
+        self.costThresholdUSD = costThresholdUSD
+        self.conditions = conditions
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case costThresholdUSD = "cost_threshold_usd"
+        case conditions
     }
 }
 
@@ -1032,6 +1141,84 @@ public struct LiveMonitorQuota: Codable, Sendable {
         case remainingTokens = "remaining_tokens"
         case currentSeverity = "current_severity"
         case projectedSeverity = "projected_severity"
+    }
+}
+
+public struct DepletionForecastSignal: Codable, Sendable, Identifiable, Equatable {
+    public var kind: String
+    public var title: String
+    public var usedPercent: Double
+    public var projectedPercent: Double?
+    public var remainingTokens: Int?
+    public var remainingPercent: Double?
+    public var resetsInMinutes: Int?
+    public var paceLabel: String?
+    public var endTime: String?
+
+    public var id: String { "\(self.kind):\(self.title)" }
+
+    public init(
+        kind: String,
+        title: String,
+        usedPercent: Double,
+        projectedPercent: Double? = nil,
+        remainingTokens: Int? = nil,
+        remainingPercent: Double? = nil,
+        resetsInMinutes: Int? = nil,
+        paceLabel: String? = nil,
+        endTime: String? = nil
+    ) {
+        self.kind = kind
+        self.title = title
+        self.usedPercent = usedPercent
+        self.projectedPercent = projectedPercent
+        self.remainingTokens = remainingTokens
+        self.remainingPercent = remainingPercent
+        self.resetsInMinutes = resetsInMinutes
+        self.paceLabel = paceLabel
+        self.endTime = endTime
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case title
+        case usedPercent = "used_percent"
+        case projectedPercent = "projected_percent"
+        case remainingTokens = "remaining_tokens"
+        case remainingPercent = "remaining_percent"
+        case resetsInMinutes = "resets_in_minutes"
+        case paceLabel = "pace_label"
+        case endTime = "end_time"
+    }
+}
+
+public struct DepletionForecast: Codable, Sendable, Equatable {
+    public var primarySignal: DepletionForecastSignal
+    public var secondarySignals: [DepletionForecastSignal]
+    public var summaryLabel: String
+    public var severity: String
+    public var note: String?
+
+    public init(
+        primarySignal: DepletionForecastSignal,
+        secondarySignals: [DepletionForecastSignal],
+        summaryLabel: String,
+        severity: String,
+        note: String? = nil
+    ) {
+        self.primarySignal = primarySignal
+        self.secondarySignals = secondarySignals
+        self.summaryLabel = summaryLabel
+        self.severity = severity
+        self.note = note
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case primarySignal = "primary_signal"
+        case secondarySignals = "secondary_signals"
+        case summaryLabel = "summary_label"
+        case severity
+        case note
     }
 }
 
@@ -1182,6 +1369,7 @@ public struct LiveMonitorProvider: Codable, Sendable, Identifiable {
     public var contextWindow: LiveMonitorContextWindow?
     public var recentSession: ProviderSession?
     public var quotaSuggestions: QuotaSuggestions?
+    public var depletionForecast: DepletionForecast?
 
     public var id: String { self.provider }
     public var providerID: ProviderID? { ProviderID(rawValue: self.provider) }
@@ -1202,7 +1390,8 @@ public struct LiveMonitorProvider: Codable, Sendable, Identifiable {
         activeBlock: LiveMonitorBlock? = nil,
         contextWindow: LiveMonitorContextWindow? = nil,
         recentSession: ProviderSession? = nil,
-        quotaSuggestions: QuotaSuggestions? = nil
+        quotaSuggestions: QuotaSuggestions? = nil,
+        depletionForecast: DepletionForecast? = nil
     ) {
         self.provider = provider
         self.title = title
@@ -1220,6 +1409,7 @@ public struct LiveMonitorProvider: Codable, Sendable, Identifiable {
         self.contextWindow = contextWindow
         self.recentSession = recentSession
         self.quotaSuggestions = quotaSuggestions
+        self.depletionForecast = depletionForecast
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1239,6 +1429,7 @@ public struct LiveMonitorProvider: Codable, Sendable, Identifiable {
         case contextWindow = "context_window"
         case recentSession = "recent_session"
         case quotaSuggestions = "quota_suggestions"
+        case depletionForecast = "depletion_forecast"
     }
 }
 
@@ -2032,6 +2223,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
     public var authRecoveryActions: [AuthRecoveryAction]
     public var warningLabels: [String]
     public var quotaSuggestions: QuotaSuggestions?
+    public var depletionForecast: DepletionForecast?
     public var visualState: ProviderVisualState
     public var stateLabel: String
     public var statusLabel: String?
@@ -2093,6 +2285,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         authRecoveryActions: [AuthRecoveryAction],
         warningLabels: [String],
         quotaSuggestions: QuotaSuggestions? = nil,
+        depletionForecast: DepletionForecast? = nil,
         visualState: ProviderVisualState,
         stateLabel: String,
         statusLabel: String?,
@@ -2143,6 +2336,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         self.authRecoveryActions = authRecoveryActions
         self.warningLabels = warningLabels
         self.quotaSuggestions = quotaSuggestions
+        self.depletionForecast = depletionForecast
         self.visualState = visualState
         self.stateLabel = stateLabel
         self.statusLabel = statusLabel

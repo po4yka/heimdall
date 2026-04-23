@@ -9,6 +9,7 @@ public final class HeimdallAppRuntime {
     public let settingsStore: any SettingsStore
     public let credentialInspector: any ProviderCredentialInspecting
     public let liveMonitorClientFactory: @Sendable (Int) -> any LiveMonitorClient
+    public let localNotificationCoordinator: any LocalNotificationCoordinating
 
     public init(
         sessionStore: AppSessionStore,
@@ -17,7 +18,8 @@ public final class HeimdallAppRuntime {
         authCoordinator: AuthCoordinator,
         settingsStore: any SettingsStore,
         credentialInspector: any ProviderCredentialInspecting,
-        liveMonitorClientFactory: @escaping @Sendable (Int) -> any LiveMonitorClient
+        liveMonitorClientFactory: @escaping @Sendable (Int) -> any LiveMonitorClient,
+        localNotificationCoordinator: any LocalNotificationCoordinating
     ) {
         self.sessionStore = sessionStore
         self.providerRepository = providerRepository
@@ -26,5 +28,6 @@ public final class HeimdallAppRuntime {
         self.settingsStore = settingsStore
         self.credentialInspector = credentialInspector
         self.liveMonitorClientFactory = liveMonitorClientFactory
+        self.localNotificationCoordinator = localNotificationCoordinator
     }
 }

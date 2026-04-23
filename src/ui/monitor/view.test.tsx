@@ -11,7 +11,7 @@ function collectText(node: unknown): string[] {
   if (typeof vnode.type === 'function') {
     return collectText(vnode.type(vnode.props ?? {}));
   }
-  return collectText(vnode.props?.children);
+  return collectText(vnode.props?.['children']);
 }
 
 describe('renderLiveMonitorView', () => {
@@ -20,7 +20,7 @@ describe('renderLiveMonitorView', () => {
     liveMonitorFocus.value = 'all';
   });
 
-  it('renders quota suggestions only for providers carrying the field', () => {
+  it('renders quota suggestions and depletion forecast only for providers carrying the field', () => {
     const data: LiveMonitorResponse = {
       contract_version: 1,
       generated_at: '2026-04-23T10:00:00Z',
@@ -67,6 +67,29 @@ describe('renderLiveMonitorView', () => {
             ],
             note: 'Based on fewer than 10 completed blocks.',
           },
+          depletion_forecast: {
+            primary_signal: {
+              kind: 'billing_block',
+              title: 'Billing block',
+              used_percent: 58,
+              projected_percent: 92,
+              remaining_tokens: 420_000,
+              remaining_percent: 42,
+              end_time: '2026-04-23T12:00:00Z',
+            },
+            secondary_signals: [
+              {
+                kind: 'primary_window',
+                title: 'Primary window',
+                used_percent: 64,
+                remaining_percent: 36,
+                resets_in_minutes: 40,
+                pace_label: 'Steady',
+              },
+            ],
+            summary_label: 'Billing block projected to reach 92% before reset',
+            severity: 'danger',
+          },
         },
         {
           provider: 'codex',
@@ -86,6 +109,9 @@ describe('renderLiveMonitorView', () => {
 
     const text = collectText(renderLiveMonitorView()).join(' ');
     expect(text).toContain('Suggested Quotas');
+    expect(text).toContain('Depletion Forecast');
+    expect(text).toContain('Billing block projected to reach 92% before reset');
+    expect(text).toContain('SUPPORTING SIGNALS');
     expect(text).toContain('P90');
     expect(text).toContain('[RECOMMENDED]');
     expect(text).toContain('Based on fewer than 10 completed blocks.');

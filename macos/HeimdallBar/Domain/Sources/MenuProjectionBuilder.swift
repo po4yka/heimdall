@@ -135,6 +135,7 @@ public enum MenuProjectionBuilder {
             authRecoveryActions: auth?.recoveryActions ?? [],
             warningLabels: warningLabels,
             quotaSuggestions: snapshot?.quotaSuggestions,
+            depletionForecast: snapshot?.depletionForecast,
             visualState: displayState,
             stateLabel: stateLabel(for: displayState),
             statusLabel: statusLabel,

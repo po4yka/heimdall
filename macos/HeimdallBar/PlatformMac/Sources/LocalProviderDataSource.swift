@@ -1,11 +1,16 @@
 import HeimdallDomain
 import HeimdallServices
 
-public struct LocalProviderDataSource: ProviderDataSource {
+public struct LocalProviderDataSource: StartupOptimizedProviderDataSource {
     private let clientFactory: @Sendable (Int) -> any LiveProviderClient
 
     public init(clientFactory: @escaping @Sendable (Int) -> any LiveProviderClient) {
         self.clientFactory = clientFactory
+    }
+
+    public func fetchStartupSnapshots(config: HeimdallBarConfig) async throws -> ProviderSnapshotEnvelope {
+        let client = self.clientFactory(config.helperPort)
+        return try await client.fetchStartupSnapshots()
     }
 
     public func fetchSnapshots(

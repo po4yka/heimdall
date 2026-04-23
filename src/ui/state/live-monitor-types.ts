@@ -1,4 +1,10 @@
-import type { ContextWindowSeverity, QuotaSeverity, BurnRateTier, QuotaSuggestions } from './billing-types';
+import type {
+  BurnRateTier,
+  ContextWindowSeverity,
+  DepletionForecast,
+  QuotaSeverity,
+  QuotaSuggestions,
+} from './billing-types';
 
 export type LiveMonitorFocus = 'all' | 'claude' | 'codex';
 export type LiveMonitorVisualState = 'healthy' | 'degraded' | 'stale' | 'incident' | 'error';
@@ -100,6 +106,7 @@ export interface LiveMonitorProvider {
   context_window?: LiveMonitorContextWindow | null;
   recent_session?: LiveMonitorRecentSession | null;
   quota_suggestions?: QuotaSuggestions | null;
+  depletion_forecast?: DepletionForecast | null;
 }
 
 export interface LiveMonitorResponse {

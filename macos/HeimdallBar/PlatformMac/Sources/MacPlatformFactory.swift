@@ -43,6 +43,11 @@ public struct MacPlatformCompositionRoot: Sendable {
     public func appRuntime() -> HeimdallAppRuntime {
         let sessionStore = AppSessionStore(config: self.settingsStore.load())
         let providerRepository = ProviderRepository()
+        let localNotificationCoordinator = LocalNotificationCoordinator(
+            authorizationManager: UserNotificationAuthorizationManager(),
+            scheduler: UserNotificationScheduler(),
+            stateStore: UserDefaultsLocalNotificationStateStore()
+        )
         let liveProviderClient = HeimdallAPIClient(port: sessionStore.config.helperPort)
         let snapshotSyncer = Self.makeSnapshotSyncer(client: liveProviderClient)
         let refreshCoordinator = RefreshCoordinator(
@@ -56,7 +61,8 @@ public struct MacPlatformCompositionRoot: Sendable {
                 reloader: self.widgetReloader
             ),
             providerDataSource: self.providerDataSource,
-            snapshotSyncer: snapshotSyncer
+            snapshotSyncer: snapshotSyncer,
+            localNotificationCoordinator: localNotificationCoordinator
         )
         let authCoordinator = AuthCoordinator(runner: self.authCommandRunner)
 
@@ -67,7 +73,8 @@ public struct MacPlatformCompositionRoot: Sendable {
             authCoordinator: authCoordinator,
             settingsStore: self.settingsStore,
             credentialInspector: self.credentialInspector,
-            liveMonitorClientFactory: self.liveMonitorClientFactory
+            liveMonitorClientFactory: self.liveMonitorClientFactory,
+            localNotificationCoordinator: localNotificationCoordinator
         )
     }
 

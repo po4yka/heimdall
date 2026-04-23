@@ -48,8 +48,8 @@ public final class OverviewFeatureModel {
     /// and SettingsFeatureModel. The issue is still logged.
     private func presentableGlobalIssue() -> String? {
         guard let candidate = self.repository.issue(for: nil) else { return nil }
-        if candidate.kind == .widgetPersistence {
-            Self.logger.debug("Suppressing widgetPersistence issue from Overview UI: \(candidate.message)")
+        if candidate.kind == .widgetPersistence || candidate.kind == .localNotifications {
+            Self.logger.debug("Suppressing \(candidate.kind.rawValue) issue from Overview UI: \(candidate.message)")
             return nil
         }
         return candidate.message

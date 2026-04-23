@@ -346,13 +346,17 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        assert!(compute_quota_suggestions(&sparse)
-            .expect("sparse suggestions")
-            .note
-            .is_some());
-        assert!(compute_quota_suggestions(&dense)
-            .expect("dense suggestions")
-            .note
-            .is_none());
+        assert!(
+            compute_quota_suggestions(&sparse)
+                .expect("sparse suggestions")
+                .note
+                .is_some()
+        );
+        assert!(
+            compute_quota_suggestions(&dense)
+                .expect("dense suggestions")
+                .note
+                .is_none()
+        );
     }
 }

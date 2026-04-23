@@ -20,6 +20,7 @@ use crate::agent_status::models::AgentStatusSnapshot;
 use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
 use crate::live_providers;
 use crate::models::ClaudeUsageResponse;
+use crate::models::DepletionForecast;
 use crate::models::LIVE_MONITOR_CONTRACT_VERSION;
 use crate::models::LiveMonitorBillingBlock;
 use crate::models::LiveMonitorBurnRate;
@@ -29,10 +30,10 @@ use crate::models::LiveMonitorProjection;
 use crate::models::LiveMonitorProvider;
 use crate::models::LiveMonitorQuota;
 use crate::models::LiveMonitorResponse;
-use crate::models::LiveQuotaSuggestionLevel;
-use crate::models::LiveQuotaSuggestions;
 use crate::models::LiveProviderHistoryResponse;
 use crate::models::LiveProvidersResponse;
+use crate::models::LiveQuotaSuggestionLevel;
+use crate::models::LiveQuotaSuggestions;
 use crate::models::MobileSnapshotEnvelope;
 use crate::models::OpenAiReconciliation;
 use crate::models::TokenBreakdown;
@@ -113,6 +114,8 @@ pub(crate) struct BillingBlocksApiResponse {
     pub historical_max_tokens: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quota_suggestions: Option<LiveQuotaSuggestions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depletion_forecast: Option<DepletionForecast>,
     pub blocks: Vec<BillingBlockViewResponse>,
 }
 
@@ -499,10 +502,15 @@ pub async fn api_live_monitor(
     request: Request,
 ) -> Result<Json<LiveMonitorResponse>, StatusCode> {
     enforce_loopback_request(&request)?;
-    let snapshots =
-        live_providers::load_snapshots(&state, None, live_providers::ResponseScope::All, false, false)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let snapshots = live_providers::load_snapshots(
+        &state,
+        None,
+        live_providers::ResponseScope::All,
+        false,
+        false,
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let billing_blocks = load_billing_blocks_response(&state).await?;
     let context_window = load_context_window_response(&state).await?;
     Ok(Json(build_live_monitor_response(
@@ -518,14 +526,19 @@ fn build_live_monitor_response(
     context_window: ContextWindowApiResponse,
 ) -> LiveMonitorResponse {
     let now = chrono::Utc::now();
-    let active_block = billing_blocks.blocks.iter().find(|block| block.is_active).cloned();
+    let active_block = billing_blocks
+        .blocks
+        .iter()
+        .find(|block| block.is_active)
+        .cloned();
     let context_window_detail = build_live_monitor_context_window(&context_window);
 
     let providers = snapshots
         .providers
         .iter()
         .map(|snapshot| {
-            let warnings = build_monitor_warnings(snapshot, active_block.as_ref(), &context_window_detail);
+            let warnings =
+                build_monitor_warnings(snapshot, active_block.as_ref(), &context_window_detail);
             LiveMonitorProvider {
                 provider: snapshot.provider.clone(),
                 title: provider_title(&snapshot.provider).to_string(),
@@ -538,7 +551,10 @@ fn build_live_monitor_response(
                 today_cost_usd: snapshot.cost_summary.today_cost_usd,
                 projected_weekly_spend_usd: projected_weekly_spend(snapshot),
                 last_refresh: snapshot.last_refresh.clone(),
-                last_refresh_label: format!("Updated {}", relative_refresh_label(&snapshot.last_refresh, now)),
+                last_refresh_label: format!(
+                    "Updated {}",
+                    relative_refresh_label(&snapshot.last_refresh, now)
+                ),
                 active_block: if snapshot.provider == "claude" {
                     active_block
                         .as_ref()
@@ -557,6 +573,10 @@ fn build_live_monitor_response(
                 } else {
                     None
                 },
+                depletion_forecast: live_monitor_depletion_forecast(
+                    snapshot,
+                    active_block.as_ref(),
+                ),
             }
         })
         .collect::<Vec<_>>();
@@ -589,9 +609,15 @@ fn build_live_monitor_response(
             oldest_provider_refresh,
             has_stale_providers: !stale_providers.is_empty(),
             stale_providers,
-            refresh_state: if providers.iter().any(|provider| provider.visual_state == "error") {
+            refresh_state: if providers
+                .iter()
+                .any(|provider| provider.visual_state == "error")
+            {
                 "attention".into()
-            } else if providers.iter().any(|provider| provider.visual_state == "stale") {
+            } else if providers
+                .iter()
+                .any(|provider| provider.visual_state == "stale")
+            {
                 "stale".into()
             } else {
                 "current".into()
@@ -641,7 +667,8 @@ fn projected_weekly_spend(snapshot: &crate::models::LiveProviderSnapshot) -> Opt
         let avg = recent_days.iter().sum::<f64>() / recent_days.len() as f64;
         return Some(avg * 7.0);
     }
-    (snapshot.cost_summary.today_cost_usd > 0.0).then_some(snapshot.cost_summary.today_cost_usd * 7.0)
+    (snapshot.cost_summary.today_cost_usd > 0.0)
+        .then_some(snapshot.cost_summary.today_cost_usd * 7.0)
 }
 
 fn monitor_identity_label(snapshot: &crate::models::LiveProviderSnapshot) -> Option<String> {
@@ -657,7 +684,11 @@ fn monitor_identity_label(snapshot: &crate::models::LiveProviderSnapshot) -> Opt
             parts.push(account_email.clone());
         }
     }
-    if parts.is_empty() { None } else { Some(parts.join(" · ")) }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" · "))
+    }
 }
 
 fn push_warning(warnings: &mut Vec<String>, warning: Option<String>) {
@@ -683,7 +714,11 @@ fn build_monitor_warnings(
     {
         push_warning(
             &mut warnings,
-            Some(format!("{} status: {}", provider_title(&snapshot.provider), status.description)),
+            Some(format!(
+                "{} status: {}",
+                provider_title(&snapshot.provider),
+                status.description
+            )),
         );
     }
     if snapshot.provider == "claude"
@@ -693,7 +728,10 @@ fn build_monitor_warnings(
     {
         push_warning(
             &mut warnings,
-            Some(format!("Billing block projected {}", quota.projected_severity)),
+            Some(format!(
+                "Billing block projected {}",
+                quota.projected_severity
+            )),
         );
     }
     if snapshot.provider == "claude"
@@ -712,7 +750,10 @@ fn monitor_visual_state(
     snapshot: &crate::models::LiveProviderSnapshot,
     warnings: &[String],
 ) -> &'static str {
-    if snapshot.error.is_some() || snapshot.auth.requires_relogin || !snapshot.auth.is_source_compatible {
+    if snapshot.error.is_some()
+        || snapshot.auth.requires_relogin
+        || !snapshot.auth.is_source_compatible
+    {
         return "error";
     }
     if let Some(status) = snapshot.status.as_ref()
@@ -795,6 +836,59 @@ fn live_quota_suggestions(
             .collect(),
         note: suggestions.note,
     }
+}
+
+fn live_monitor_depletion_forecast(
+    snapshot: &crate::models::LiveProviderSnapshot,
+    active_block: Option<&BillingBlockViewResponse>,
+) -> Option<DepletionForecast> {
+    use crate::analytics::depletion::{
+        build_depletion_forecast, primary_window_signal, secondary_window_signal,
+    };
+
+    let mut signals = Vec::new();
+
+    if snapshot.provider == "claude"
+        && let Some(signal) = active_block.and_then(billing_block_depletion_signal)
+    {
+        signals.push(signal);
+    }
+    if let Some(window) = snapshot.primary.as_ref() {
+        signals.push(primary_window_signal(
+            window.used_percent,
+            Some(100.0 - window.used_percent),
+            window.resets_in_minutes,
+            None,
+            window.resets_at.clone(),
+        ));
+    }
+    if let Some(window) = snapshot.secondary.as_ref() {
+        signals.push(secondary_window_signal(
+            window.used_percent,
+            Some(100.0 - window.used_percent),
+            window.resets_in_minutes,
+            None,
+            window.resets_at.clone(),
+        ));
+    }
+
+    build_depletion_forecast(signals)
+}
+
+fn billing_block_depletion_signal(
+    block: &BillingBlockViewResponse,
+) -> Option<crate::models::DepletionForecastSignal> {
+    use crate::analytics::depletion::billing_block_signal;
+
+    let quota = block.quota.as_ref()?;
+    Some(billing_block_signal(
+        "Billing block",
+        quota.current_pct * 100.0,
+        Some(quota.projected_pct * 100.0),
+        Some(quota.remaining_tokens),
+        Some(100.0 - (quota.current_pct * 100.0)),
+        Some(block.end.clone()),
+    ))
 }
 
 fn live_monitor_billing_block(block: BillingBlockViewResponse) -> LiveMonitorBillingBlock {
@@ -1143,6 +1237,7 @@ pub(crate) async fn load_billing_blocks_response(
         calculate_burn_rate, identify_blocks_with_gaps, project_block_usage,
     };
     use crate::analytics::burn_rate::{self as br, BurnRateConfig};
+    use crate::analytics::depletion::{billing_block_signal, build_depletion_forecast};
     use crate::analytics::quota::{compute_quota, compute_quota_suggestions};
 
     let db_path = state.db_path.clone();
@@ -1164,6 +1259,26 @@ pub(crate) async fn load_billing_blocks_response(
             .unwrap_or(0);
 
         let quota_suggestions = compute_quota_suggestions(&blocks).map(live_quota_suggestions);
+        let depletion_forecast = token_limit.and_then(|limit| {
+            blocks
+                .iter()
+                .find(|block| block.is_active && !block.is_gap)
+                .and_then(|block| {
+                    let rate = calculate_burn_rate(block, now);
+                    let projection = project_block_usage(block, rate, now);
+                    compute_quota(block, &projection, limit).map(|quota| {
+                        build_depletion_forecast([billing_block_signal(
+                            "Billing block",
+                            quota.current_pct * 100.0,
+                            Some(quota.projected_pct * 100.0),
+                            Some(quota.remaining_tokens),
+                            Some(100.0 - (quota.current_pct * 100.0)),
+                            Some(block.end.to_rfc3339()),
+                        )])
+                    })
+                })
+                .flatten()
+        });
 
         let blocks = blocks
             .iter()
@@ -1196,12 +1311,14 @@ pub(crate) async fn load_billing_blocks_response(
                     burn_rate: rate.map(|rate| LiveMonitorBurnRate {
                         tokens_per_min: rate.tokens_per_min,
                         cost_per_hour_nanos: rate.cost_per_hour_nanos,
-                        tier: Some(match br::tier(rate.tokens_per_min, &BurnRateConfig::default()) {
-                            br::BurnRateTier::Normal => "normal",
-                            br::BurnRateTier::Moderate => "moderate",
-                            br::BurnRateTier::High => "high",
-                        }
-                        .into()),
+                        tier: Some(
+                            match br::tier(rate.tokens_per_min, &BurnRateConfig::default()) {
+                                br::BurnRateTier::Normal => "normal",
+                                br::BurnRateTier::Moderate => "moderate",
+                                br::BurnRateTier::High => "high",
+                            }
+                            .into(),
+                        ),
                     }),
                     projection: block.is_active.then_some(LiveMonitorProjection {
                         projected_cost_nanos: projection.projected_cost_nanos,
@@ -1239,6 +1356,7 @@ pub(crate) async fn load_billing_blocks_response(
             token_limit,
             historical_max_tokens,
             quota_suggestions,
+            depletion_forecast,
             blocks,
         })
     })
@@ -1322,12 +1440,14 @@ pub(crate) async fn load_context_window_response(
                     total_input_tokens: Some(row.context_input_tokens),
                     context_window_size: Some(row.context_window_size),
                     pct: Some(pct),
-                    severity: Some(match severity_for_pct(pct) {
-                        crate::analytics::quota::Severity::Ok => "ok",
-                        crate::analytics::quota::Severity::Warn => "warn",
-                        crate::analytics::quota::Severity::Danger => "danger",
-                    }
-                    .into()),
+                    severity: Some(
+                        match severity_for_pct(pct) {
+                            crate::analytics::quota::Severity::Ok => "ok",
+                            crate::analytics::quota::Severity::Warn => "warn",
+                            crate::analytics::quota::Severity::Danger => "danger",
+                        }
+                        .into(),
+                    ),
                     session_id: row.session_id,
                     captured_at: Some(row.captured_at),
                 }

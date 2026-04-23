@@ -1,5 +1,6 @@
 import type { JSX } from 'preact';
 import { SegmentedProgressBar } from '../components/SegmentedProgressBar';
+import { DepletionForecastCard } from '../components/DepletionForecastCard';
 import { fmt, fmtCostCompact, fmtRelativeTime, fmtResetTime } from '../lib/format';
 import type {
   LiveMonitorBlock,
@@ -21,7 +22,11 @@ function detailProviders(data: LiveMonitorResponse, focus: LiveMonitorFocus): Li
     return data.providers.filter(provider => provider.provider === focus);
   }
   return data.providers.filter(provider =>
-    provider.active_block || provider.context_window || provider.recent_session || provider.warnings.length > 0
+    provider.active_block
+    || provider.context_window
+    || provider.recent_session
+    || provider.depletion_forecast
+    || provider.warnings.length > 0
   );
 }
 
@@ -231,6 +236,7 @@ function ProviderDetails({ provider }: { provider: LiveMonitorProvider }) {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: '16px' }}>
         {provider.active_block && <BlockPanel block={provider.active_block} />}
+        {provider.depletion_forecast && <DepletionForecastCard forecast={provider.depletion_forecast} />}
         <QuotaSuggestionsPanel provider={provider} />
         {provider.context_window && <ContextPanel data={provider.context_window} />}
         <SessionPanel provider={provider} />
