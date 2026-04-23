@@ -1,9 +1,9 @@
-name: Release
+name: Release Smoke
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -46,7 +46,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
         with:
-          key: release-${{ matrix.target }}
+          key: release-smoke-${{ matrix.target }}
 
       - name: Install cross (Linux arm64 only)
         if: ${{ matrix.use_cross }}
@@ -69,7 +69,7 @@ jobs:
       - name: Determine version
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+        run: echo "version=smoke-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Package archive (Unix)
         if: matrix.archive_ext == 'tar.gz'
@@ -108,12 +108,12 @@ jobs:
       - name: Upload packaged archive
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.target }}
+          name: release-smoke-${{ matrix.target }}
           path: |
             heimdall-${{ steps.version.outputs.version }}-${{ matrix.target }}.${{ matrix.archive_ext }}
             heimdall-${{ steps.version.outputs.version }}-${{ matrix.target }}.${{ matrix.archive_ext }}.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
   macos-app:
     name: build-macos-app
@@ -134,12 +134,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
         with:
-          key: release-macos-app
+          key: release-smoke-macos-app
 
       - name: Determine version
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+        run: echo "version=smoke-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Install XcodeGen
         shell: bash
@@ -252,12 +252,12 @@ jobs:
       - name: Upload HeimdallBar app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-macos-app
+          name: release-smoke-macos-app
           path: |
             heimdallbar-${{ steps.version.outputs.version }}-macos-app.zip
             heimdallbar-${{ steps.version.outputs.version }}-macos-app.zip.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
       - name: Cleanup Apple signing keychain
         if: always()
@@ -274,18 +274,18 @@ jobs:
     steps:
       - uses: actions/download-artifact@v5
         with:
-          name: release-aarch64-apple-darwin
+          name: release-smoke-aarch64-apple-darwin
           path: dl-arm64
 
       - uses: actions/download-artifact@v5
         with:
-          name: release-x86_64-apple-darwin
+          name: release-smoke-x86_64-apple-darwin
           path: dl-x86
 
       - name: Determine version
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+        run: echo "version=smoke-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - name: Unpack both tarballs
         shell: bash
@@ -332,12 +332,12 @@ jobs:
       - name: Upload universal tarball
         uses: actions/upload-artifact@v4
         with:
-          name: release-macos-universal
+          name: release-smoke-macos-universal
           path: |
             heimdall-${{ steps.version.outputs.version }}-universal-apple-darwin.tar.gz
             heimdall-${{ steps.version.outputs.version }}-universal-apple-darwin.tar.gz.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
   consolidate-checksums:
     name: consolidate-checksums
@@ -346,53 +346,19 @@ jobs:
     steps:
       - uses: actions/download-artifact@v5
         with:
-          pattern: release-*
-          path: release-assets
+          pattern: release-smoke-*
+          path: release-smoke-assets
           merge-multiple: true
 
       - name: Merge into SHA256SUMS.txt
         run: |
-          cat release-assets/*.sha256 | sort > release-assets/SHA256SUMS.txt
-          cat release-assets/SHA256SUMS.txt
+          cat release-smoke-assets/*.sha256 | sort > release-smoke-assets/SHA256SUMS.txt
+          cat release-smoke-assets/SHA256SUMS.txt
 
       - name: Upload consolidated checksums
         uses: actions/upload-artifact@v4
         with:
-          name: release-checksums
-          path: release-assets/SHA256SUMS.txt
+          name: release-smoke-checksums
+          path: release-smoke-assets/SHA256SUMS.txt
           if-no-files-found: error
-          retention-days: 14
-
-  publish:
-    name: publish
-    needs: [build, macos-app, macos-universal, consolidate-checksums]
-    runs-on: ubuntu-latest
-    environment: release
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    steps:
-      - uses: actions/download-artifact@v5
-        with:
-          pattern: release-*
-          path: release-assets
-          merge-multiple: true
-
-      - name: Generate artifact attestations
-        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661  # v3
-        with:
-          subject-path: |
-            release-assets/*.tar.gz
-            release-assets/*.zip
-            release-assets/*.sha256
-            release-assets/SHA256SUMS.txt
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
-        with:
-          files: |
-            release-assets/*
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          generate_release_notes: true
+          retention-days: 7

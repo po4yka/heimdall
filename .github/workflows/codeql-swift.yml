@@ -1,0 +1,55 @@
+name: CodeQL Swift
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'macos/HeimdallBar/**'
+      - '.github/workflows/codeql-swift.yml'
+  schedule:
+    - cron: "17 5 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  codeql-swift:
+    name: codeql-swift
+    runs-on: macos-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate HeimdallBar project
+        run: |
+          cd macos/HeimdallBar
+          xcodegen generate --use-cache
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          queries: security-and-quality
+
+      - name: Build HeimdallBar for CodeQL
+        run: |
+          xcodebuild \
+            -project macos/HeimdallBar/HeimdallBar.xcodeproj \
+            -scheme HeimdallBarModules \
+            -destination 'platform=macOS' \
+            -derivedDataPath macos/HeimdallBar/.derived \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:swift"

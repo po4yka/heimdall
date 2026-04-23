@@ -6,26 +6,52 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  rust:
+  changes:
+    name: changes
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      matrix:
-        rust: [stable, "1.89"]
+      pull-requests: read
+    outputs:
+      ui: ${{ steps.filter.outputs.ui }}
+      native: ${{ steps.filter.outputs.native }}
+      release: ${{ steps.filter.outputs.release }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # master
+      - id: filter
+        uses: dorny/paths-filter@6852f92c20ea7fd3b0c25de3b5112db3a98da050  # v3
         with:
-          toolchain: ${{ matrix.rust }}
-          components: clippy, rustfmt
-      - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
-      - run: cargo test
+          filters: |
+            ui:
+              - 'src/ui/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+            native:
+              - 'macos/HeimdallBar/**'
+              - 'script/bundle_heimdall_helper.sh'
+              - 'script/package_heimdallbar_distribution.sh'
+              - 'script/sign_heimdallbar_distribution.sh'
+              - 'script/validate_heimdallbar_distribution.sh'
+              - '.github/workflows/release.yml'
+              - '.github/workflows/release-smoke.yml'
+              - '.github/workflows/codeql-swift.yml'
+            release:
+              - '.github/workflows/release.yml'
+              - '.github/workflows/release-smoke.yml'
+              - '.github/RELEASING.md'
+              - 'script/bundle_heimdall_helper.sh'
+              - 'script/package_heimdallbar_distribution.sh'
+              - 'script/sign_heimdallbar_distribution.sh'
+              - 'script/validate_heimdallbar_distribution.sh'
 
-  check_release_binaries_build:
-    name: Release binary build check
+  rust-stable:
+    name: rust-stable
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,21 +60,142 @@ jobs:
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
         with:
           toolchain: stable
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
-      - name: Build release binaries
-        run: |
-          cargo build --release \
-            --bin claude-usage-tracker \
-            --bin heimdall-hook
+      - run: cargo fmt --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo test
 
-  typecheck:
+  rust-msrv:
+    name: rust-msrv
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        with:
+          toolchain: "1.89"
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+        with:
+          shared-key: msrv-1-89
+      - run: cargo check --locked --all-targets
+
+  ui:
+    name: ui
+    runs-on: ubuntu-latest
+    needs: changes
+    permissions:
+      contents: read
+    steps:
+      - name: Skip when UI is unchanged
+        if: needs.changes.outputs.ui != 'true'
+        run: echo "No dashboard changes detected; skipping UI checks."
+
+      - uses: actions/checkout@v6
+        if: needs.changes.outputs.ui == 'true'
+
       - uses: actions/setup-node@v6
+        if: needs.changes.outputs.ui == 'true'
         with:
           node-version: 22
-      - run: npm ci
-      - run: ./node_modules/.bin/tsc --noEmit
+          cache: npm
+
+      - name: Install npm dependencies
+        if: needs.changes.outputs.ui == 'true'
+        run: npm ci
+
+      - name: Run UI tests
+        if: needs.changes.outputs.ui == 'true'
+        run: npm run test:ui
+
+      - name: Typecheck dashboard
+        if: needs.changes.outputs.ui == 'true'
+        run: npm run typecheck
+
+      - name: Rebuild committed dashboard bundle
+        if: needs.changes.outputs.ui == 'true'
+        run: npm run build:ui
+
+      - name: Verify generated dashboard artifacts are up to date
+        if: needs.changes.outputs.ui == 'true'
+        run: git diff --exit-code -- src/ui/app.js src/ui/style.css
+
+  dependency-review:
+    name: dependency-review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48  # v4.9.0
+        with:
+          fail-on-severity: high
+
+  native-smoke:
+    name: native-smoke
+    runs-on: macos-latest
+    needs: changes
+    permissions:
+      contents: read
+    steps:
+      - name: Skip when native surfaces are unchanged
+        if: needs.changes.outputs.native != 'true'
+        run: echo "No native workflow inputs changed; skipping macOS smoke checks."
+
+      - uses: actions/checkout@v6
+        if: needs.changes.outputs.native == 'true'
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # stable
+        if: needs.changes.outputs.native == 'true'
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+        if: needs.changes.outputs.native == 'true'
+        with:
+          key: native-smoke
+
+      - name: Install XcodeGen
+        if: needs.changes.outputs.native == 'true'
+        run: brew install xcodegen
+
+      - name: Generate HeimdallBar project
+        if: needs.changes.outputs.native == 'true'
+        run: |
+          cd macos/HeimdallBar
+          xcodegen generate --use-cache
+
+      - name: Run HeimdallBar module tests
+        if: needs.changes.outputs.native == 'true'
+        run: |
+          xcodebuild \
+            -project macos/HeimdallBar/HeimdallBar.xcodeproj \
+            -scheme HeimdallBarModules \
+            -destination 'platform=macOS' \
+            -derivedDataPath macos/HeimdallBar/.derived \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
+      - name: Build HeimdallBar app
+        if: needs.changes.outputs.native == 'true'
+        run: |
+          xcodebuild \
+            -project macos/HeimdallBar/HeimdallBar.xcodeproj \
+            -scheme HeimdallBarApp \
+            -configuration Release \
+            -derivedDataPath macos/HeimdallBar/.derived \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build HeimdallBar CLI
+        if: needs.changes.outputs.native == 'true'
+        run: |
+          xcodebuild \
+            -project macos/HeimdallBar/HeimdallBar.xcodeproj \
+            -scheme HeimdallBarCLI \
+            -configuration Release \
+            -derivedDataPath macos/HeimdallBar/.derived \
+            CODE_SIGNING_ALLOWED=NO \
+            build
