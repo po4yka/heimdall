@@ -93,6 +93,10 @@ mod tests {
             projects_dirs: Some(vec![projects_dir]),
             oauth_enabled: false,
             oauth_refresh_interval: 60,
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
@@ -136,6 +140,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
@@ -187,6 +197,7 @@ mod tests {
                     auth: crate::models::LiveProviderAuth::default(),
                     cost_summary: crate::models::ProviderCostSummary::default(),
                     claude_usage: None,
+                    claude_admin: None,
                     quota_suggestions: Some(crate::models::LiveQuotaSuggestions {
                         sample_count: 3,
                         population_count: 3,
@@ -299,6 +310,7 @@ mod tests {
                     auth: crate::models::LiveProviderAuth::default(),
                     cost_summary: crate::models::ProviderCostSummary::default(),
                     claude_usage: None,
+                    claude_admin: None,
                     quota_suggestions: None,
                     depletion_forecast: Some(crate::models::DepletionForecast {
                         primary_signal: crate::models::DepletionForecastSignal {
@@ -354,6 +366,7 @@ mod tests {
     ) -> UsageWindowsResponse {
         UsageWindowsResponse {
             available: true,
+            source: "oauth".into(),
             session: Some(WindowInfo {
                 used_percent,
                 resets_at: Some("2099-01-01T00:00:00Z".into()),
@@ -372,6 +385,7 @@ mod tests {
                 plan: Some(Plan::Pro),
                 rate_limit_tier: Some(tier.into()),
             }),
+            admin_fallback: None,
             error: None,
         }
     }
@@ -1084,6 +1098,7 @@ mod tests {
                             auth: crate::models::LiveProviderAuth::default(),
                             cost_summary: crate::models::ProviderCostSummary::default(),
                             claude_usage: None,
+                            claude_admin: None,
                             quota_suggestions: None,
                             depletion_forecast: None,
                             predictive_insights: None,
@@ -1108,6 +1123,7 @@ mod tests {
                             auth: crate::models::LiveProviderAuth::default(),
                             cost_summary: crate::models::ProviderCostSummary::default(),
                             claude_usage: None,
+                            claude_admin: None,
                             quota_suggestions: None,
                             depletion_forecast: None,
                             predictive_insights: None,
@@ -1472,6 +1488,11 @@ mod tests {
                 fetch_count.fetch_add(1, Ordering::SeqCst);
                 UsageWindowsResponse::with_error("should not fetch".into())
             }
+        }, || async {
+            crate::models::ClaudeAdminSummary {
+                error: Some("should not fetch admin".into()),
+                ..crate::models::ClaudeAdminSummary::default()
+            }
         })
         .await;
 
@@ -1506,6 +1527,11 @@ mod tests {
             move || async move {
                 fetch_count.fetch_add(1, Ordering::SeqCst);
                 fresh
+            }
+        }, || async {
+            crate::models::ClaudeAdminSummary {
+                error: Some("unused admin fetch".into()),
+                ..crate::models::ClaudeAdminSummary::default()
             }
         })
         .await;
@@ -1547,6 +1573,11 @@ mod tests {
                 fetch_count.fetch_add(1, Ordering::SeqCst);
                 UsageWindowsResponse::with_error("upstream unavailable".into())
             }
+        }, || async {
+            crate::models::ClaudeAdminSummary {
+                error: Some("admin unavailable".into()),
+                ..crate::models::ClaudeAdminSummary::default()
+            }
         })
         .await;
 
@@ -1575,6 +1606,11 @@ mod tests {
 
         let returned = crate::server::api::refresh_usage_windows_with(&state, || async {
             UsageWindowsResponse::with_error("token expired".into())
+        }, || async {
+            crate::models::ClaudeAdminSummary {
+                error: Some("admin unavailable".into()),
+                ..crate::models::ClaudeAdminSummary::default()
+            }
         })
         .await;
 
@@ -2426,6 +2462,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
@@ -2597,6 +2639,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
@@ -2684,6 +2732,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
@@ -2908,6 +2962,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
@@ -3007,6 +3067,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
@@ -3078,6 +3144,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,
@@ -3296,6 +3368,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 300,

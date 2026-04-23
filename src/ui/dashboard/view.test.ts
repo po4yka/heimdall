@@ -266,6 +266,7 @@ describe('dashboard view', () => {
     const previousValues: Array<number | null> = [];
     const usage: UsageWindowsResponse = {
       available: true,
+      source: 'oauth',
       session: {
         used_percent: 100,
         resets_at: '2026-04-19T13:00:00Z',
@@ -292,5 +293,37 @@ describe('dashboard view', () => {
       { message: 'Session depleted - resets in 42m', isError: true },
     ]);
     expect(store.planBadge.value).toBe('Pro');
+  });
+
+  it('renders Claude admin fallback cards in the existing usage lane', async () => {
+    const { view, elements } = await loadViewContext();
+    const usage: UsageWindowsResponse = {
+      available: true,
+      source: 'admin',
+      admin_fallback: {
+        organization_name: 'Acme Org',
+        lookback_days: 30,
+        start_date: '2026-03-21',
+        end_date: '2026-04-19',
+        data_latency_note: 'Org-wide · UTC daily aggregation · up to 1 hour delayed',
+        today_active_users: 12,
+        today_sessions: 34,
+        lookback_lines_accepted: 4567,
+        lookback_estimated_cost_usd: 89.12,
+        lookback_input_tokens: 1000,
+        lookback_output_tokens: 500,
+        lookback_cache_read_tokens: 250,
+        lookback_cache_creation_tokens: 100,
+      },
+    };
+
+    view.renderUsageWindows(usage, null, () => {}, () => {}, () => {});
+
+    const text = elements['usage-windows']?.textContent ?? '';
+    expect(text).toContain('Active Users Today');
+    expect(text).toContain('Sessions Today');
+    expect(text).toContain('Accepted Lines (30d)');
+    expect(text).toContain('Estimated Spend (30d)');
+    expect(text).toContain('Acme Org');
   });
 });

@@ -31,6 +31,10 @@ pub struct ServeOptions {
     pub projects_dirs: Option<Vec<PathBuf>>,
     pub oauth_enabled: bool,
     pub oauth_refresh_interval: u64,
+    pub claude_admin_enabled: bool,
+    pub claude_admin_key_env: String,
+    pub claude_admin_refresh_interval: u64,
+    pub claude_admin_lookback_days: i64,
     pub openai_enabled: bool,
     pub openai_admin_key_env: String,
     pub openai_refresh_interval: u64,
@@ -63,6 +67,12 @@ pub(crate) fn build_state(
         oauth_refresh_interval: options.oauth_refresh_interval,
         oauth_cache: RwLock::new(None),
         oauth_refresh_lock: Mutex::new(()),
+        claude_admin_enabled: options.claude_admin_enabled,
+        claude_admin_key_env: options.claude_admin_key_env.clone(),
+        claude_admin_refresh_interval: options.claude_admin_refresh_interval,
+        claude_admin_lookback_days: options.claude_admin_lookback_days,
+        claude_admin_cache: RwLock::new(None),
+        claude_admin_refresh_lock: Mutex::new(()),
         openai_enabled: options.openai_enabled,
         openai_admin_key_env: options.openai_admin_key_env.clone(),
         openai_refresh_interval: options.openai_refresh_interval,
@@ -262,6 +272,21 @@ where
                 let state = state.clone();
                 Box::pin(async move {
                     let _ = api::refresh_usage_windows(&state).await;
+                    Ok(())
+                })
+            }),
+        );
+    }
+
+    if state.claude_admin_enabled {
+        let state = state.clone();
+        spawn(
+            "Claude admin analytics",
+            state.claude_admin_refresh_interval,
+            Box::new(move || {
+                let state = state.clone();
+                Box::pin(async move {
+                    let _ = api::refresh_claude_admin_summary(&state).await;
                     Ok(())
                 })
             }),

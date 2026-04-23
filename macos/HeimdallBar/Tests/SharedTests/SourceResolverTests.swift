@@ -134,6 +134,7 @@ struct SourceResolverTests {
                 daily: []
             ),
             claudeUsage: nil,
+            claudeAdmin: nil,
             lastRefresh: ISO8601DateFormatter().string(from: Date()),
             stale: false,
             error: nil
@@ -170,5 +171,86 @@ struct SourceResolverTests {
             isLoginRequired: loginRequired,
             lastUpdated: ISO8601DateFormatter().string(from: Date())
         )
+    }
+
+    @Test
+    func requestedOAuthAcceptsAdminFallbackForClaude() {
+        let config = ProviderConfig(
+            enabled: true,
+            source: .oauth,
+            cookieSource: .auto,
+            dashboardExtrasEnabled: false
+        )
+        let snapshot = ProviderSnapshot(
+            provider: "claude",
+            available: true,
+            sourceUsed: "admin",
+            lastAttemptedSource: "oauth",
+            resolvedViaFallback: true,
+            refreshDurationMs: 88,
+            sourceAttempts: [
+                ProviderSourceAttempt(source: "oauth", outcome: "unavailable", message: "oauth unavailable"),
+                ProviderSourceAttempt(source: "admin", outcome: "success", message: "using admin fallback"),
+            ],
+            identity: nil,
+            primary: nil,
+            secondary: nil,
+            tertiary: nil,
+            credits: nil,
+            status: nil,
+            auth: ProviderAuthHealth(
+                loginMethod: nil,
+                credentialBackend: nil,
+                authMode: nil,
+                isAuthenticated: false,
+                isRefreshable: false,
+                isSourceCompatible: true,
+                requiresRelogin: false,
+                managedRestriction: nil,
+                diagnosticCode: nil,
+                failureReason: nil,
+                lastValidatedAt: nil,
+                recoveryActions: []
+            ),
+            costSummary: ProviderCostSummary(
+                todayTokens: 1200,
+                todayCostUSD: 3.8,
+                last30DaysTokens: 9000,
+                last30DaysCostUSD: 31.4,
+                daily: []
+            ),
+            claudeUsage: nil,
+            claudeAdmin: ClaudeAdminSummaryPayload(
+                organizationName: "Acme Org",
+                lookbackDays: 30,
+                startDate: "2026-03-21",
+                endDate: "2026-04-19",
+                dataLatencyNote: "Org-wide · UTC daily aggregation · up to 1 hour delayed",
+                todayActiveUsers: 9,
+                todaySessions: 21,
+                lookbackLinesAccepted: 3000,
+                lookbackEstimatedCostUSD: 44.5,
+                lookbackInputTokens: 1,
+                lookbackOutputTokens: 2,
+                lookbackCacheReadTokens: 3,
+                lookbackCacheCreationTokens: 4,
+                error: nil
+            ),
+            lastRefresh: ISO8601DateFormatter().string(from: Date()),
+            stale: false,
+            error: nil
+        )
+
+        let resolution = SourceResolver.resolve(
+            provider: .claude,
+            config: config,
+            snapshot: snapshot,
+            adjunct: nil
+        )
+
+        #expect(resolution.effectiveSource == .oauth)
+        #expect(resolution.effectiveSourceDetail == "admin")
+        #expect(resolution.usageAvailable)
+        #expect(resolution.warnings.contains(where: { $0.contains("Anthropic admin analytics fallback") }))
     }
 }

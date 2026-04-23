@@ -1,4 +1,4 @@
-import type { WindowInfo } from '../state/types';
+import type { ClaudeAdminSummary, WindowInfo } from '../state/types';
 import { fmtResetTime } from '../lib/format';
 import { SegmentedProgressBar } from './SegmentedProgressBar';
 
@@ -76,5 +76,55 @@ export function RateWindowUnavailable({ error }: UnavailableCardProps) {
         <div class="stat-sub">{error}</div>
       </div>
     </div>
+  );
+}
+
+interface ClaudeAdminCardProps {
+  label: string;
+  value: string;
+  subtitle: string;
+}
+
+export function ClaudeAdminCard({ label, value, subtitle }: ClaudeAdminCardProps) {
+  return (
+    <div class="card stat-card">
+      <div class="stat-content">
+        <div class="stat-label">{label}</div>
+        <div class="stat-value" style={{ fontSize: '24px' }}>{value}</div>
+        <div class="stat-sub">{subtitle}</div>
+      </div>
+    </div>
+  );
+}
+
+interface ClaudeAdminFallbackGridProps {
+  summary: ClaudeAdminSummary;
+}
+
+export function ClaudeAdminFallbackGrid({ summary }: ClaudeAdminFallbackGridProps) {
+  const subtitle = `${summary.organization_name || 'Org-wide'} · ${summary.data_latency_note}`;
+  return (
+    <>
+      <ClaudeAdminCard
+        label="Active Users Today"
+        value={summary.today_active_users.toLocaleString()}
+        subtitle={subtitle}
+      />
+      <ClaudeAdminCard
+        label="Sessions Today"
+        value={summary.today_sessions.toLocaleString()}
+        subtitle={subtitle}
+      />
+      <ClaudeAdminCard
+        label={`Accepted Lines (${summary.lookback_days}d)`}
+        value={summary.lookback_lines_accepted.toLocaleString()}
+        subtitle={subtitle}
+      />
+      <ClaudeAdminCard
+        label={`Estimated Spend (${summary.lookback_days}d)`}
+        value={`$${summary.lookback_estimated_cost_usd.toFixed(2)}`}
+        subtitle={subtitle}
+      />
+    </>
   );
 }

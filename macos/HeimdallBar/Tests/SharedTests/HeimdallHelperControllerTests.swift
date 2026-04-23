@@ -66,7 +66,7 @@ struct HeimdallHelperControllerTests {
 
     @Test
     func liveProvidersPayloadCompatibilityRequiresMatchingContractVersion() {
-        let compatible = Data(#"{"contract_version":1,"providers":[{"provider":"claude"},{"provider":"codex"}]}"#.utf8)
+        let compatible = Data(#"{"contract_version":2,"providers":[{"provider":"claude"},{"provider":"codex"}]}"#.utf8)
         let incompatible = Data(#"{"contract_version":999,"providers":[{"provider":"claude"},{"provider":"codex"}]}"#.utf8)
 
         #expect(HeimdallHelperController.liveProvidersPayloadIsCompatible(compatible))

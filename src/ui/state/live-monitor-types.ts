@@ -1,5 +1,6 @@
 import type {
   BurnRateTier,
+  ClaudeAdminSummary,
   ContextWindowSeverity,
   DepletionForecast,
   PredictiveInsights,
@@ -106,6 +107,7 @@ export interface LiveMonitorProvider {
   active_block?: LiveMonitorBlock | null;
   context_window?: LiveMonitorContextWindow | null;
   recent_session?: LiveMonitorRecentSession | null;
+  claude_admin?: ClaudeAdminSummary | null;
   quota_suggestions?: QuotaSuggestions | null;
   depletion_forecast?: DepletionForecast | null;
   predictive_insights?: PredictiveInsights | null;

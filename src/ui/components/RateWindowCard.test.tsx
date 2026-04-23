@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WindowInfo } from '../state/types';
 import { SegmentedProgressBar } from './SegmentedProgressBar';
-import { BudgetCard, RateWindowCard, RateWindowUnavailable } from './RateWindowCard';
+import { BudgetCard, ClaudeAdminFallbackGrid, RateWindowCard, RateWindowUnavailable } from './RateWindowCard';
 
 function collectText(node: unknown): string[] {
   if (typeof node === 'string' || typeof node === 'number') return [String(node)];
@@ -52,5 +52,30 @@ describe('RateWindowCard', () => {
     expect(collectText(budget)).toContain('USD');
     expect(collectText(unavailable)).toContain('Unavailable');
     expect(collectText(unavailable)).toContain('API offline');
+  });
+
+  it('renders Claude admin fallback summary cards', () => {
+    const vnode = ClaudeAdminFallbackGrid({
+      summary: {
+        organization_name: 'Acme Org',
+        lookback_days: 30,
+        start_date: '2026-03-21',
+        end_date: '2026-04-19',
+        data_latency_note: 'Org-wide · UTC daily aggregation · up to 1 hour delayed',
+        today_active_users: 7,
+        today_sessions: 19,
+        lookback_lines_accepted: 2048,
+        lookback_estimated_cost_usd: 12.34,
+        lookback_input_tokens: 1,
+        lookback_output_tokens: 2,
+        lookback_cache_read_tokens: 3,
+        lookback_cache_creation_tokens: 4,
+      },
+    });
+    const text = collectText(vnode).join(' ');
+    expect(text).toContain('Active Users Today');
+    expect(text).toContain('Accepted Lines (30d)');
+    expect(text).toContain('Acme Org');
+    expect(text).toContain('12.34');
   });
 });

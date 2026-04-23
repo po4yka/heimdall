@@ -20,6 +20,7 @@ const baseResponse: LiveMonitorResponse = {
       today_cost_usd: 1.5,
       last_refresh: '2026-04-23T10:00:00Z',
       last_refresh_label: 'Updated just now',
+      claude_admin: null,
     },
   ],
 };

@@ -8,6 +8,7 @@
 
 pub mod agent_status;
 pub mod analytics;
+pub mod claude_admin;
 pub mod config;
 pub mod currency;
 pub mod db;

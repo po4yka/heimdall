@@ -421,9 +421,15 @@ async fn cached_agent_status(
 
 async fn cached_or_unavailable_claude_usage(state: &Arc<AppState>) -> UsageWindowsResponse {
     let cache = state.oauth_cache.read().await;
-    cache
+    if let Some((_, response)) = cache.as_ref() {
+        return response.clone();
+    }
+    drop(cache);
+
+    let admin_cache = state.claude_admin_cache.read().await;
+    admin_cache
         .as_ref()
-        .map(|(_, response)| response.clone())
+        .map(|(_, summary)| UsageWindowsResponse::from_admin_fallback(summary.clone()))
         .unwrap_or_else(UsageWindowsResponse::unavailable)
 }
 
@@ -845,12 +851,41 @@ async fn build_claude_snapshot(
                 .map(live_predictive_insights);
 
         let mut source_attempts = Vec::new();
-        if usage_clone.available {
+        let source_used = if usage_clone.available && usage_clone.source == "oauth" {
             source_attempts.push(LiveProviderSourceAttempt {
                 source: "oauth".into(),
                 outcome: "success".into(),
                 message: None,
             });
+            "oauth"
+        } else if usage_clone.available && usage_clone.source == "admin" {
+            source_attempts.push(LiveProviderSourceAttempt {
+                source: "oauth".into(),
+                outcome: "unavailable".into(),
+                message: Some("OAuth usage unavailable; using Anthropic admin analytics.".into()),
+            });
+            source_attempts.push(LiveProviderSourceAttempt {
+                source: "admin".into(),
+                outcome: "success".into(),
+                message: Some("using org-wide Anthropic admin analytics".into()),
+            });
+            "admin"
+        } else if claude_usage.is_some() {
+            source_attempts.push(LiveProviderSourceAttempt {
+                source: "oauth".into(),
+                outcome: if usage_clone.error.is_some() {
+                    "error".into()
+                } else {
+                    "unavailable".into()
+                },
+                message: usage_clone.error.clone(),
+            });
+            source_attempts.push(LiveProviderSourceAttempt {
+                source: "local".into(),
+                outcome: "success".into(),
+                message: Some("using latest stored /usage factors".into()),
+            });
+            "local"
         } else {
             source_attempts.push(LiveProviderSourceAttempt {
                 source: "oauth".into(),
@@ -861,24 +896,10 @@ async fn build_claude_snapshot(
                 },
                 message: usage_clone.error.clone(),
             });
-            if claude_usage.is_some() {
-                source_attempts.push(LiveProviderSourceAttempt {
-                    source: "local".into(),
-                    outcome: "success".into(),
-                    message: Some("using latest stored /usage factors".into()),
-                });
-            }
-        }
-
-        let source_used = if usage_clone.available {
-            "oauth"
-        } else if claude_usage.is_some() {
-            "local"
-        } else {
             "unavailable"
         };
         let last_attempted_source = source_attempts.last().map(|attempt| attempt.source.clone());
-        let resolved_via_fallback = source_used == "local";
+        let resolved_via_fallback = source_used == "local" || source_used == "admin";
 
         Ok(LiveProviderSnapshot {
             provider: "claude".into(),
@@ -905,11 +926,12 @@ async fn build_claude_snapshot(
             auth,
             cost_summary,
             claude_usage,
+            claude_admin: usage_clone.admin_fallback.clone(),
             quota_suggestions,
             depletion_forecast,
             predictive_insights,
             last_refresh: chrono::Utc::now().to_rfc3339(),
-            stale: !usage_clone.available,
+            stale: false,
             error: if source_used == "unavailable" {
                 usage_clone.error.clone()
             } else {
@@ -1031,6 +1053,7 @@ async fn build_codex_snapshot(
         auth,
         cost_summary,
         claude_usage: None,
+        claude_admin: None,
         quota_suggestions: None,
         depletion_forecast,
         predictive_insights: None,
@@ -1094,6 +1117,7 @@ async fn build_codex_bootstrap_snapshot(
         auth,
         cost_summary,
         claude_usage: None,
+        claude_admin: None,
         quota_suggestions: None,
         depletion_forecast: None,
         predictive_insights: None,
@@ -1508,6 +1532,7 @@ mod tests {
                 auth: LiveProviderAuth::default(),
                 cost_summary: ProviderCostSummary::default(),
                 claude_usage: None,
+                claude_admin: None,
                 quota_suggestions: None,
                 depletion_forecast: None,
                 predictive_insights: None,
@@ -1532,6 +1557,12 @@ mod tests {
             oauth_refresh_interval: 60,
             oauth_cache: tokio::sync::RwLock::new(None),
             oauth_refresh_lock: tokio::sync::Mutex::new(()),
+            claude_admin_enabled: false,
+            claude_admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            claude_admin_refresh_interval: 300,
+            claude_admin_lookback_days: 30,
+            claude_admin_cache: tokio::sync::RwLock::new(None),
+            claude_admin_refresh_lock: tokio::sync::Mutex::new(()),
             openai_enabled: false,
             openai_admin_key_env: "OPENAI_ADMIN_KEY".into(),
             openai_refresh_interval: 60,

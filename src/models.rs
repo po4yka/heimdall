@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub const LIVE_PROVIDERS_CONTRACT_VERSION: u32 = 1;
+pub const LIVE_PROVIDERS_CONTRACT_VERSION: u32 = 2;
 pub const MOBILE_SNAPSHOT_CONTRACT_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Default)]
@@ -273,6 +273,25 @@ pub struct ClaudeUsageResponse {
     pub available: bool,
     pub last_run: Option<ClaudeUsageRunMeta>,
     pub latest_snapshot: Option<ClaudeUsageSnapshot>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClaudeAdminSummary {
+    pub organization_name: String,
+    pub lookback_days: i64,
+    pub start_date: String,
+    pub end_date: String,
+    pub data_latency_note: String,
+    pub today_active_users: i64,
+    pub today_sessions: i64,
+    pub lookback_lines_accepted: i64,
+    pub lookback_estimated_cost_usd: f64,
+    pub lookback_input_tokens: i64,
+    pub lookback_output_tokens: i64,
+    pub lookback_cache_read_tokens: i64,
+    pub lookback_cache_creation_tokens: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -569,6 +588,8 @@ pub struct LiveProviderSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claude_usage: Option<ClaudeUsageSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub claude_admin: Option<ClaudeAdminSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub quota_suggestions: Option<LiveQuotaSuggestions>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depletion_forecast: Option<DepletionForecast>,
@@ -620,7 +641,7 @@ pub struct LiveProvidersResponse {
     pub local_notification_state: Option<LocalNotificationState>,
 }
 
-pub const LIVE_MONITOR_CONTRACT_VERSION: u32 = 1;
+pub const LIVE_MONITOR_CONTRACT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct LiveMonitorFreshness {
@@ -819,6 +840,8 @@ pub struct LiveMonitorProvider {
     pub context_window: Option<LiveMonitorContextWindow>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recent_session: Option<ProviderSession>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claude_admin: Option<ClaudeAdminSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quota_suggestions: Option<LiveQuotaSuggestions>,
     #[serde(skip_serializing_if = "Option::is_none")]

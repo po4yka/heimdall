@@ -90,6 +90,7 @@ function makeDashboardData(): DashboardData {
 const dashboardData = makeDashboardData();
 const usageWindows: UsageWindowsResponse = {
   available: true,
+  source: 'oauth',
 };
 const claudeUsage: ClaudeUsageResponse = {
   available: true,

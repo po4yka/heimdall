@@ -1,11 +1,11 @@
 import Foundation
 
 public enum LiveProviderContract {
-    public static let version = 1
+    public static let version = 2
 }
 
 public enum LiveMonitorContract {
-    public static let version = 1
+    public static let version = 2
 }
 
 public enum MobileSnapshotContract {
@@ -261,6 +261,40 @@ public struct ProviderStatusSummary: Codable, Sendable {
         case indicator
         case description
         case pageURL = "page_url"
+    }
+}
+
+public struct ClaudeAdminSummaryPayload: Codable, Sendable {
+    public var organizationName: String
+    public var lookbackDays: Int
+    public var startDate: String
+    public var endDate: String
+    public var dataLatencyNote: String
+    public var todayActiveUsers: Int
+    public var todaySessions: Int
+    public var lookbackLinesAccepted: Int
+    public var lookbackEstimatedCostUSD: Double
+    public var lookbackInputTokens: Int
+    public var lookbackOutputTokens: Int
+    public var lookbackCacheReadTokens: Int
+    public var lookbackCacheCreationTokens: Int
+    public var error: String?
+
+    enum CodingKeys: String, CodingKey {
+        case organizationName = "organization_name"
+        case lookbackDays = "lookback_days"
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case dataLatencyNote = "data_latency_note"
+        case todayActiveUsers = "today_active_users"
+        case todaySessions = "today_sessions"
+        case lookbackLinesAccepted = "lookback_lines_accepted"
+        case lookbackEstimatedCostUSD = "lookback_estimated_cost_usd"
+        case lookbackInputTokens = "lookback_input_tokens"
+        case lookbackOutputTokens = "lookback_output_tokens"
+        case lookbackCacheReadTokens = "lookback_cache_read_tokens"
+        case lookbackCacheCreationTokens = "lookback_cache_creation_tokens"
+        case error
     }
 }
 
@@ -829,6 +863,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
     public var auth: ProviderAuthHealth
     public var costSummary: ProviderCostSummary
     public var claudeUsage: ClaudeUsageSnapshotPayload?
+    public var claudeAdmin: ClaudeAdminSummaryPayload?
     public var quotaSuggestions: QuotaSuggestions?
     public var depletionForecast: DepletionForecast?
     public var predictiveInsights: LivePredictiveInsights?
@@ -856,6 +891,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         auth: ProviderAuthHealth,
         costSummary: ProviderCostSummary,
         claudeUsage: ClaudeUsageSnapshotPayload?,
+        claudeAdmin: ClaudeAdminSummaryPayload? = nil,
         quotaSuggestions: QuotaSuggestions? = nil,
         depletionForecast: DepletionForecast? = nil,
         predictiveInsights: LivePredictiveInsights? = nil,
@@ -879,6 +915,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         self.auth = auth
         self.costSummary = costSummary
         self.claudeUsage = claudeUsage
+        self.claudeAdmin = claudeAdmin
         self.quotaSuggestions = quotaSuggestions
         self.depletionForecast = depletionForecast
         self.predictiveInsights = predictiveInsights
@@ -904,6 +941,7 @@ public struct ProviderSnapshot: Codable, Sendable, Identifiable {
         case auth
         case costSummary = "cost_summary"
         case claudeUsage = "claude_usage"
+        case claudeAdmin = "claude_admin"
         case quotaSuggestions = "quota_suggestions"
         case depletionForecast = "depletion_forecast"
         case predictiveInsights = "predictive_insights"

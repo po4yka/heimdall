@@ -70,6 +70,7 @@ async fn fetch_usage_inner(
 fn build_response(data: OAuthUsageResponse) -> UsageWindowsResponse {
     UsageWindowsResponse {
         available: true,
+        source: "oauth".into(),
         session: data.five_hour.as_ref().map(WindowInfo::from_usage_window),
         weekly: data.seven_day.as_ref().map(WindowInfo::from_usage_window),
         weekly_opus: data
@@ -85,6 +86,7 @@ fn build_response(data: OAuthUsageResponse) -> UsageWindowsResponse {
             .as_ref()
             .and_then(BudgetInfo::from_extra_usage),
         identity: None, // filled in by the caller from credentials
+        admin_fallback: None,
         error: None,
     }
 }

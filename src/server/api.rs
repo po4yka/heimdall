@@ -17,8 +17,10 @@ use crate::tz::TzParams;
 
 use crate::agent_status;
 use crate::agent_status::models::AgentStatusSnapshot;
+use crate::claude_admin;
 use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
 use crate::live_providers;
+use crate::models::ClaudeAdminSummary;
 use crate::models::ClaudeUsageResponse;
 use crate::models::DepletionForecast;
 use crate::models::LIVE_MONITOR_CONTRACT_VERSION;
@@ -59,6 +61,12 @@ pub struct AppState {
     pub oauth_refresh_interval: u64,
     pub oauth_cache: RwLock<Option<(Instant, UsageWindowsResponse)>>,
     pub oauth_refresh_lock: Mutex<()>,
+    pub claude_admin_enabled: bool,
+    pub claude_admin_key_env: String,
+    pub claude_admin_refresh_interval: u64,
+    pub claude_admin_lookback_days: i64,
+    pub claude_admin_cache: RwLock<Option<(Instant, ClaudeAdminSummary)>>,
+    pub claude_admin_refresh_lock: Mutex<()>,
     pub openai_enabled: bool,
     pub openai_admin_key_env: String,
     pub openai_refresh_interval: u64,
@@ -357,18 +365,24 @@ pub async fn api_usage_windows(
 }
 
 pub(crate) async fn refresh_usage_windows(state: &Arc<AppState>) -> UsageWindowsResponse {
-    refresh_usage_windows_with(state, || async { oauth::poll_usage().await }).await
+    refresh_usage_windows_with(state, || async { oauth::poll_usage().await }, || async {
+        refresh_claude_admin_summary(state).await
+    })
+    .await
 }
 
-pub(crate) async fn refresh_usage_windows_with<F, Fut>(
+pub(crate) async fn refresh_usage_windows_with<F, Fut, G, Gfut>(
     state: &Arc<AppState>,
     fetcher: F,
+    admin_fetcher: G,
 ) -> UsageWindowsResponse
 where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = UsageWindowsResponse>,
+    G: FnOnce() -> Gfut,
+    Gfut: std::future::Future<Output = ClaudeAdminSummary>,
 {
-    if !state.oauth_enabled {
+    if !state.oauth_enabled && !state.claude_admin_enabled {
         return UsageWindowsResponse::unavailable();
     }
 
@@ -391,8 +405,27 @@ where
         }
     }
 
-    let resp = fetcher().await;
-    if let Some(session) = resp.session.as_ref() {
+    let oauth_resp = if state.oauth_enabled {
+        fetcher().await
+    } else {
+        UsageWindowsResponse::unavailable()
+    };
+    let resp = if oauth_resp.available {
+        oauth_resp
+    } else if state.claude_admin_enabled {
+        let admin = admin_fetcher().await;
+        if admin.error.is_none() {
+            UsageWindowsResponse::from_admin_fallback(admin)
+        } else {
+            oauth_resp
+        }
+    } else {
+        oauth_resp
+    };
+
+    if resp.source == "oauth"
+        && let Some(session) = resp.session.as_ref()
+    {
         maybe_send_session_webhook(state, session.used_percent, session.resets_in_minutes).await;
     }
 
@@ -408,6 +441,79 @@ where
 
     {
         let mut cache = state.oauth_cache.write().await;
+        *cache = Some((Instant::now(), to_store.clone()));
+    }
+
+    to_store
+}
+
+pub(crate) async fn refresh_claude_admin_summary(state: &Arc<AppState>) -> ClaudeAdminSummary {
+    let admin_key = std::env::var(&state.claude_admin_key_env).ok();
+    refresh_claude_admin_summary_with(state, admin_key, |key, days| async move {
+        claude_admin::fetch_org_claude_code_summary(key.trim(), days).await
+    })
+    .await
+}
+
+pub(crate) async fn refresh_claude_admin_summary_with<F, Fut>(
+    state: &Arc<AppState>,
+    admin_key: Option<String>,
+    fetcher: F,
+) -> ClaudeAdminSummary
+where
+    F: FnOnce(String, i64) -> Fut,
+    Fut: std::future::Future<Output = ClaudeAdminSummary>,
+{
+    {
+        let cache = state.claude_admin_cache.read().await;
+        if let Some((fetched_at, ref data)) = *cache
+            && fetched_at.elapsed().as_secs() < state.claude_admin_refresh_interval
+        {
+            return data.clone();
+        }
+    }
+
+    let _refresh_guard = state.claude_admin_refresh_lock.lock().await;
+    {
+        let cache = state.claude_admin_cache.read().await;
+        if let Some((fetched_at, ref data)) = *cache
+            && fetched_at.elapsed().as_secs() < state.claude_admin_refresh_interval
+        {
+            return data.clone();
+        }
+    }
+
+    let summary = match admin_key {
+        Some(admin_key) if !admin_key.trim().is_empty() => {
+            fetcher(admin_key, state.claude_admin_lookback_days).await
+        }
+        _ => ClaudeAdminSummary {
+            lookback_days: state.claude_admin_lookback_days,
+            start_date: (chrono::Utc::now().date_naive()
+                - chrono::Duration::days(state.claude_admin_lookback_days.saturating_sub(1)))
+            .to_string(),
+            end_date: chrono::Utc::now().date_naive().to_string(),
+            data_latency_note: "Org-wide · UTC daily aggregation · up to 1 hour delayed".into(),
+            error: Some(format!(
+                "Set {} to enable Anthropic admin analytics fallback.",
+                state.claude_admin_key_env
+            )),
+            ..ClaudeAdminSummary::default()
+        },
+    };
+
+    let cached = {
+        let cache = state.claude_admin_cache.read().await;
+        cache.as_ref().map(|(_, data)| data.clone())
+    };
+    let to_store = if summary.error.is_none() {
+        summary.clone()
+    } else {
+        cached.unwrap_or_else(|| summary.clone())
+    };
+
+    {
+        let mut cache = state.claude_admin_cache.write().await;
         *cache = Some((Instant::now(), to_store.clone()));
     }
 
@@ -576,6 +682,7 @@ fn build_live_monitor_response(
                     None
                 },
                 recent_session: snapshot.cost_summary.recent_sessions.first().cloned(),
+                claude_admin: snapshot.claude_admin.clone(),
                 quota_suggestions: if snapshot.provider == "claude" {
                     billing_blocks.quota_suggestions.clone()
                 } else {
@@ -697,6 +804,13 @@ fn monitor_identity_label(snapshot: &crate::models::LiveProviderSnapshot) -> Opt
             parts.push(account_email.clone());
         }
     }
+    if snapshot.provider == "claude"
+        && snapshot.source_used == "admin"
+        && let Some(admin) = snapshot.claude_admin.as_ref()
+        && !admin.organization_name.is_empty()
+    {
+        parts.push(admin.organization_name.clone());
+    }
     if parts.is_empty() {
         None
     } else {
@@ -732,6 +846,14 @@ fn build_monitor_warnings(
                 provider_title(&snapshot.provider),
                 status.description
             )),
+        );
+    }
+    if snapshot.provider == "claude"
+        && snapshot.source_used == "admin"
+    {
+        push_warning(
+            &mut warnings,
+            Some("Using org-wide Anthropic admin analytics fallback.".into()),
         );
     }
     if snapshot.provider == "claude"

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::ClaudeAdminSummary;
+
 // ── Credential file types ──────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
@@ -90,6 +92,7 @@ pub struct ExtraUsage {
 #[derive(Debug, Clone, Serialize)]
 pub struct UsageWindowsResponse {
     pub available: bool,
+    pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session: Option<WindowInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,6 +105,8 @@ pub struct UsageWindowsResponse {
     pub budget: Option<BudgetInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity: Option<Identity>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub admin_fallback: Option<ClaudeAdminSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -125,12 +130,14 @@ impl UsageWindowsResponse {
     pub fn unavailable() -> Self {
         Self {
             available: false,
+            source: "unavailable".into(),
             session: None,
             weekly: None,
             weekly_opus: None,
             weekly_sonnet: None,
             budget: None,
             identity: None,
+            admin_fallback: None,
             error: None,
         }
     }
@@ -139,6 +146,15 @@ impl UsageWindowsResponse {
         Self {
             available: false,
             error: Some(msg),
+            ..Self::unavailable()
+        }
+    }
+
+    pub fn from_admin_fallback(summary: ClaudeAdminSummary) -> Self {
+        Self {
+            available: true,
+            source: "admin".into(),
+            admin_fallback: Some(summary),
             ..Self::unavailable()
         }
     }

@@ -31,6 +31,7 @@ function providerHasVisibleDetails(
 ): boolean {
   return (
     (!hiddenPanels.has('active_block') && !!provider.active_block) ||
+    (!!provider.claude_admin) ||
     (!hiddenPanels.has('predictive_insights') && !!provider.predictive_insights) ||
     (!hiddenPanels.has('depletion_forecast') && !!provider.depletion_forecast) ||
     (!hiddenPanels.has('quota_suggestions') && !!provider.quota_suggestions) ||
@@ -73,6 +74,7 @@ function stateLabel(state: LiveMonitorProvider['visual_state']): string {
 }
 
 function ProviderLaneCard({ provider }: { provider: LiveMonitorProvider }) {
+  const hasAdminFallback = !!provider.claude_admin;
   return (
     <div class="card" style={{ display: 'grid', gap: '14px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
@@ -96,25 +98,48 @@ function ProviderLaneCard({ provider }: { provider: LiveMonitorProvider }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gap: '12px' }}>
-        {[provider.primary, provider.secondary].filter(Boolean).map((window, index) => (
-          <div key={`${provider.provider}-${index}`} style={{ display: 'grid', gap: '6px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
-              <span class="stat-label">{index === 0 ? 'Primary' : 'Secondary'}</span>
-              <span class="stat-sub">{window?.used_percent.toFixed(1)}% used</span>
-            </div>
-            <SegmentedProgressBar
-              value={window?.used_percent ?? 0}
-              max={100}
-              status={window && window.used_percent >= 80 ? 'accent' : window && window.used_percent >= 50 ? 'warning' : 'success'}
-              aria-label={`${provider.title} ${index === 0 ? 'primary' : 'secondary'} quota`}
-            />
-            <div class="stat-sub">
-              {window?.resets_in_minutes != null ? `Resets in ${fmtResetTime(window.resets_in_minutes)}` : 'No reset time available'}
-            </div>
+      {hasAdminFallback ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: '12px' }}>
+          <div>
+            <div class="stat-label">Active Users Today</div>
+            <div class="stat-value" style={{ fontSize: '20px' }}>{fmt(provider.claude_admin?.today_active_users ?? 0)}</div>
           </div>
-        ))}
-      </div>
+          <div>
+            <div class="stat-label">Sessions Today</div>
+            <div class="stat-value" style={{ fontSize: '20px' }}>{fmt(provider.claude_admin?.today_sessions ?? 0)}</div>
+          </div>
+          <div>
+            <div class="stat-label">Accepted Lines</div>
+            <div class="stat-value" style={{ fontSize: '20px' }}>{fmt(provider.claude_admin?.lookback_lines_accepted ?? 0)}</div>
+            <div class="stat-sub">{provider.claude_admin?.lookback_days ?? 0}d window</div>
+          </div>
+          <div>
+            <div class="stat-label">Estimated Spend</div>
+            <div class="stat-value" style={{ fontSize: '20px' }}>{fmtCostCompact(provider.claude_admin?.lookback_estimated_cost_usd ?? 0)}</div>
+            <div class="stat-sub">{provider.claude_admin?.data_latency_note}</div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '12px' }}>
+          {[provider.primary, provider.secondary].filter(Boolean).map((window, index) => (
+            <div key={`${provider.provider}-${index}`} style={{ display: 'grid', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <span class="stat-label">{index === 0 ? 'Primary' : 'Secondary'}</span>
+                <span class="stat-sub">{window?.used_percent.toFixed(1)}% used</span>
+              </div>
+              <SegmentedProgressBar
+                value={window?.used_percent ?? 0}
+                max={100}
+                status={window && window.used_percent >= 80 ? 'accent' : window && window.used_percent >= 50 ? 'warning' : 'success'}
+                aria-label={`${provider.title} ${index === 0 ? 'primary' : 'secondary'} quota`}
+              />
+              <div class="stat-sub">
+                {window?.resets_in_minutes != null ? `Resets in ${fmtResetTime(window.resets_in_minutes)}` : 'No reset time available'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: '12px' }}>
         <div>

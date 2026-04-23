@@ -6641,6 +6641,50 @@
       /* @__PURE__ */ u4("div", { class: "stat-sub", children: error })
     ] }) });
   }
+  function ClaudeAdminCard({ label, value, subtitle }) {
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: label }),
+      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "24px" }, children: value }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", children: subtitle })
+    ] }) });
+  }
+  function ClaudeAdminFallbackGrid({ summary }) {
+    const subtitle = `${summary.organization_name || "Org-wide"} \xB7 ${summary.data_latency_note}`;
+    return /* @__PURE__ */ u4(S, { children: [
+      /* @__PURE__ */ u4(
+        ClaudeAdminCard,
+        {
+          label: "Active Users Today",
+          value: summary.today_active_users.toLocaleString(),
+          subtitle
+        }
+      ),
+      /* @__PURE__ */ u4(
+        ClaudeAdminCard,
+        {
+          label: "Sessions Today",
+          value: summary.today_sessions.toLocaleString(),
+          subtitle
+        }
+      ),
+      /* @__PURE__ */ u4(
+        ClaudeAdminCard,
+        {
+          label: `Accepted Lines (${summary.lookback_days}d)`,
+          value: summary.lookback_lines_accepted.toLocaleString(),
+          subtitle
+        }
+      ),
+      /* @__PURE__ */ u4(
+        ClaudeAdminCard,
+        {
+          label: `Estimated Spend (${summary.lookback_days}d)`,
+          value: `$${summary.lookback_estimated_cost_usd.toFixed(2)}`,
+          subtitle
+        }
+      )
+    ] });
+  }
 
   // src/ui/components/ReconciliationBlock.tsx
   function ReconciliationBlock({ reconciliation }) {
@@ -8452,6 +8496,18 @@ ${row.project}` : row.project;
       return;
     }
     setSectionVisibility("usage-windows", true, "grid");
+    if (data.source === "admin" && data.admin_fallback) {
+      R(
+        /* @__PURE__ */ u4(S, { children: [
+          /* @__PURE__ */ u4(ClaudeAdminFallbackGrid, { summary: data.admin_fallback }),
+          /* @__PURE__ */ u4("div", { style: { gridColumn: "1 / -1" }, children: /* @__PURE__ */ u4(InlineStatus, { placement: "rate-windows" }) })
+        ] }),
+        container
+      );
+      setPreviousSessionPercent(null);
+      clearStatusMessage();
+      return;
+    }
     R(
       /* @__PURE__ */ u4(S, { children: [
         data.session && /* @__PURE__ */ u4(RateWindowCard, { label: "Session (5h)", window: data.session }),
@@ -9292,7 +9348,7 @@ ${row.project}` : row.project;
     return focus === "all" ? data.providers : data.providers.filter((provider) => provider.provider === focus);
   }
   function providerHasVisibleDetails(provider, hiddenPanels) {
-    return !hiddenPanels.has("active_block") && !!provider.active_block || !hiddenPanels.has("predictive_insights") && !!provider.predictive_insights || !hiddenPanels.has("depletion_forecast") && !!provider.depletion_forecast || !hiddenPanels.has("quota_suggestions") && !!provider.quota_suggestions || !hiddenPanels.has("context_window") && !!provider.context_window || !hiddenPanels.has("recent_session") && !!provider.recent_session || !hiddenPanels.has("warnings") && provider.warnings.length > 0;
+    return !hiddenPanels.has("active_block") && !!provider.active_block || !!provider.claude_admin || !hiddenPanels.has("predictive_insights") && !!provider.predictive_insights || !hiddenPanels.has("depletion_forecast") && !!provider.depletion_forecast || !hiddenPanels.has("quota_suggestions") && !!provider.quota_suggestions || !hiddenPanels.has("context_window") && !!provider.context_window || !hiddenPanels.has("recent_session") && !!provider.recent_session || !hiddenPanels.has("warnings") && provider.warnings.length > 0;
   }
   function detailProviders(data, focus, hiddenPanels) {
     if (focus !== "all") {
@@ -9320,6 +9376,7 @@ ${row.project}` : row.project;
     return state.toUpperCase();
   }
   function ProviderLaneCard({ provider }) {
+    const hasAdminFallback = !!provider.claude_admin;
     return /* @__PURE__ */ u4("div", { class: "card", style: { display: "grid", gap: "14px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "flex-start" }, children: [
         /* @__PURE__ */ u4("div", { children: [
@@ -9343,7 +9400,29 @@ ${row.project}` : row.project;
           }
         )
       ] }),
-      /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "12px" }, children: [provider.primary, provider.secondary].filter(Boolean).map((window2, index) => /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "6px" }, children: [
+      hasAdminFallback ? /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "12px" }, children: [
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Active Users Today" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmt(provider.claude_admin?.today_active_users ?? 0) })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Sessions Today" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmt(provider.claude_admin?.today_sessions ?? 0) })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Accepted Lines" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmt(provider.claude_admin?.lookback_lines_accepted ?? 0) }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
+            provider.claude_admin?.lookback_days ?? 0,
+            "d window"
+          ] })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Estimated Spend" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmtCostCompact(provider.claude_admin?.lookback_estimated_cost_usd ?? 0) }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: provider.claude_admin?.data_latency_note })
+        ] })
+      ] }) : /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "12px" }, children: [provider.primary, provider.secondary].filter(Boolean).map((window2, index) => /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "6px" }, children: [
         /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px" }, children: [
           /* @__PURE__ */ u4("span", { class: "stat-label", children: index === 0 ? "Primary" : "Secondary" }),
           /* @__PURE__ */ u4("span", { class: "stat-sub", children: [

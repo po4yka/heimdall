@@ -282,8 +282,9 @@ struct AppShellViewTests {
     @Test
     func windowOverviewHistorySummaryHighlightsPeakTodayAndActiveDays() {
         let model = WindowOverviewHistorySummaryModel.make(fractions: [0.22, 0.0, 0.58, 0.11, 1.0, 0.34, 0.17])
+        let labels = ChartDayLabels.lastNDays(7)
 
-        #expect(model?.peakLabel == "Mon 100%")
+        #expect(model?.peakLabel == "\(labels[4]) 100%")
         #expect(model?.todayLabel == "17%")
         #expect(model?.activeDaysLabel == "6/7")
     }
@@ -291,8 +292,9 @@ struct AppShellViewTests {
     @Test
     func windowOverviewHistorySummaryPrefersTheFirstPeakWhenFractionsTie() {
         let model = WindowOverviewHistorySummaryModel.make(fractions: [0.12, 1.0, 0.48, 1.0, 0.03, 0.0, 0.2])
+        let labels = ChartDayLabels.lastNDays(7)
 
-        #expect(model?.peakLabel == "Fri 100%")
+        #expect(model?.peakLabel == "\(labels[1]) 100%")
         #expect(model?.todayLabel == "20%")
         #expect(model?.activeDaysLabel == "5/7")
     }

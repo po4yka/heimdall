@@ -45,6 +45,10 @@ pub struct Config {
     #[serde(default)]
     pub claude_usage_monitor: ClaudeUsageMonitorConfig,
 
+    /// Anthropic Admin API fallback for Claude Code analytics.
+    #[serde(default)]
+    pub claude_admin: ClaudeAdminConfig,
+
     /// Webhook notification settings.
     #[serde(default)]
     pub webhooks: WebhookConfig,
@@ -340,6 +344,31 @@ impl Default for ClaudeUsageMonitorConfig {
             claude_binary: None,
             working_dir: None,
             default_interval: "daily".into(),
+        }
+    }
+}
+
+/// Anthropic Admin API fallback configuration for Claude Code analytics.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(default)]
+pub struct ClaudeAdminConfig {
+    /// Enable Anthropic admin analytics fallback.
+    pub enabled: bool,
+    /// Environment variable name that stores the Anthropic admin key.
+    pub admin_key_env: String,
+    /// Seconds between API refreshes.
+    pub refresh_interval: u64,
+    /// Number of trailing UTC days to aggregate from the Claude Code analytics API.
+    pub lookback_days: i64,
+}
+
+impl Default for ClaudeAdminConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+            refresh_interval: 300,
+            lookback_days: 30,
         }
     }
 }
@@ -854,6 +883,35 @@ output = 8.0
             Some(PathBuf::from("/tmp"))
         );
         assert_eq!(config.claude_usage_monitor.default_interval, "hourly");
+    }
+
+    #[test]
+    fn test_claude_admin_config_defaults() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        std::fs::File::create(&path).unwrap();
+        let config = load_config_from(&path);
+        assert!(config.claude_admin.enabled);
+        assert_eq!(config.claude_admin.admin_key_env, "ANTHROPIC_ADMIN_KEY");
+        assert_eq!(config.claude_admin.refresh_interval, 300);
+        assert_eq!(config.claude_admin.lookback_days, 30);
+    }
+
+    #[test]
+    fn test_claude_admin_config_custom() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(
+            f,
+            "[claude_admin]\nenabled = false\nadmin_key_env = \"CUSTOM_ANTHROPIC_KEY\"\nrefresh_interval = 900\nlookback_days = 14\n"
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert!(!config.claude_admin.enabled);
+        assert_eq!(config.claude_admin.admin_key_env, "CUSTOM_ANTHROPIC_KEY");
+        assert_eq!(config.claude_admin.refresh_interval, 900);
+        assert_eq!(config.claude_admin.lookback_days, 14);
     }
 
     #[test]

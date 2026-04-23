@@ -24,7 +24,7 @@ describe('renderLiveMonitorView', () => {
 
   it('renders quota suggestions and depletion forecast only for providers carrying the field', () => {
     const data: LiveMonitorResponse = {
-      contract_version: 1,
+      contract_version: 2,
       generated_at: '2026-04-23T10:00:00Z',
       default_focus: 'all',
       freshness: {
@@ -44,6 +44,7 @@ describe('renderLiveMonitorView', () => {
           today_cost_usd: 3.2,
           last_refresh: '2026-04-23T10:00:00Z',
           last_refresh_label: 'Updated just now',
+          claude_admin: null,
           active_block: {
             start: '2026-04-23T07:00:00Z',
             end: '2026-04-23T12:00:00Z',
@@ -150,7 +151,7 @@ describe('renderLiveMonitorView', () => {
 
   it('omits hidden detail panels while keeping provider lanes visible', () => {
     const data: LiveMonitorResponse = {
-      contract_version: 1,
+      contract_version: 2,
       generated_at: '2026-04-23T10:00:00Z',
       default_focus: 'all',
       freshness: {
@@ -170,6 +171,7 @@ describe('renderLiveMonitorView', () => {
           today_cost_usd: 3.2,
           last_refresh: '2026-04-23T10:00:00Z',
           last_refresh_label: 'Updated just now',
+          claude_admin: null,
           active_block: {
             start: '2026-04-23T07:00:00Z',
             end: '2026-04-23T12:00:00Z',
@@ -206,5 +208,57 @@ describe('renderLiveMonitorView', () => {
     expect(text).not.toContain('Predictive Signals');
     expect(text).not.toContain('Warnings');
     expect(text).toContain('Context Window');
+  });
+
+  it('renders Claude admin fallback metrics in the provider lane', () => {
+    const data: LiveMonitorResponse = {
+      contract_version: 2,
+      generated_at: '2026-04-23T10:00:00Z',
+      default_focus: 'claude',
+      freshness: {
+        newest_provider_refresh: '2026-04-23T10:00:00Z',
+        oldest_provider_refresh: '2026-04-23T10:00:00Z',
+        stale_providers: [],
+        has_stale_providers: false,
+        refresh_state: 'current',
+      },
+      providers: [
+        {
+          provider: 'claude',
+          title: 'Claude',
+          visual_state: 'degraded',
+          source_label: 'Source: admin',
+          warnings: ['Using org-wide Anthropic admin analytics fallback.'],
+          identity_label: 'Acme Org',
+          today_cost_usd: 1.1,
+          last_refresh: '2026-04-23T10:00:00Z',
+          last_refresh_label: 'Updated just now',
+          claude_admin: {
+            organization_name: 'Acme Org',
+            lookback_days: 30,
+            start_date: '2026-03-21',
+            end_date: '2026-04-19',
+            data_latency_note: 'Org-wide · UTC daily aggregation · up to 1 hour delayed',
+            today_active_users: 9,
+            today_sessions: 21,
+            lookback_lines_accepted: 3000,
+            lookback_estimated_cost_usd: 44.5,
+            lookback_input_tokens: 1,
+            lookback_output_tokens: 2,
+            lookback_cache_read_tokens: 3,
+            lookback_cache_creation_tokens: 4,
+          },
+        },
+      ],
+    };
+
+    liveMonitorData.value = data;
+    liveMonitorFocus.value = 'claude';
+
+    const text = collectText(renderLiveMonitorView()).join(' ');
+    expect(text).toContain('Source: admin');
+    expect(text).toContain('Active Users Today');
+    expect(text).toContain('Accepted Lines');
+    expect(text).toContain('Acme Org');
   });
 });

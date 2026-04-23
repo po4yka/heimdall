@@ -15,7 +15,7 @@ import { ModelCostTable } from '../components/tables/ModelCostTable';
 import { OfficialSyncPanel } from '../components/OfficialSyncPanel';
 import { ProjectChart } from '../components/charts/ProjectChart';
 import { ProjectCostTable } from '../components/tables/ProjectCostTable';
-import { RateWindowCard, BudgetCard, RateWindowUnavailable } from '../components/RateWindowCard';
+import { RateWindowCard, BudgetCard, ClaudeAdminFallbackGrid, RateWindowUnavailable } from '../components/RateWindowCard';
 import { ReconciliationBlock } from '../components/ReconciliationBlock';
 import { ServiceTiersTable } from '../components/tables/ServiceTiers';
 import { SessionsTable } from '../components/tables/SessionsTable';
@@ -351,6 +351,20 @@ export function renderUsageWindows(
   }
 
   setSectionVisibility('usage-windows', true, 'grid');
+  if (data.source === 'admin' && data.admin_fallback) {
+    render(
+      <>
+        <ClaudeAdminFallbackGrid summary={data.admin_fallback} />
+        <div style={{ gridColumn: '1 / -1' }}>
+          <InlineStatus placement="rate-windows" />
+        </div>
+      </>,
+      container
+    );
+    setPreviousSessionPercent(null);
+    clearStatusMessage();
+    return;
+  }
   render(
     <>
       {data.session && <RateWindowCard label="Session (5h)" window={data.session} />}

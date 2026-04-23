@@ -124,7 +124,7 @@ struct HeimdallAPIClientTests {
                 url: try #require(request.url),
                 body: """
                 {
-                  "contract_version": 1,
+                  "contract_version": 2,
                   "generated_at": "2026-04-22T10:00:00Z",
                   "default_focus": "all",
                   "global_issue": "1 provider needs attention",
@@ -279,7 +279,7 @@ struct HeimdallAPIClientTests {
     private static func snapshotEnvelopeJSON(provider: String) -> String {
         """
         {
-          "contract_version": 1,
+          "contract_version": 2,
           "providers": [
             {
               "provider": "\(provider)",

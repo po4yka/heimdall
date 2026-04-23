@@ -582,6 +582,10 @@ fn main() -> Result<()> {
     let cfg_oauth_enabled = cfg.oauth.enabled;
     let cfg_oauth_refresh = cfg.oauth.refresh_interval;
     let cfg_claude_usage_monitor = cfg.claude_usage_monitor.clone();
+    let cfg_claude_admin_enabled = cfg.claude_admin.enabled;
+    let cfg_claude_admin_key_env = cfg.claude_admin.admin_key_env;
+    let cfg_claude_admin_refresh_interval = cfg.claude_admin.refresh_interval;
+    let cfg_claude_admin_lookback_days = cfg.claude_admin.lookback_days;
     let cfg_webhooks = cfg.webhooks;
     let cfg_openai_enabled = cfg.openai.enabled;
     let cfg_openai_admin_key_env = cfg.openai.admin_key_env;
@@ -717,6 +721,10 @@ fn main() -> Result<()> {
                 projects_dirs: dirs,
                 oauth_enabled: cfg_oauth_enabled,
                 oauth_refresh_interval: cfg_oauth_refresh,
+                claude_admin_enabled: cfg_claude_admin_enabled,
+                claude_admin_key_env: cfg_claude_admin_key_env,
+                claude_admin_refresh_interval: cfg_claude_admin_refresh_interval,
+                claude_admin_lookback_days: cfg_claude_admin_lookback_days,
                 openai_enabled: cfg_openai_enabled,
                 openai_admin_key_env: cfg_openai_admin_key_env,
                 openai_refresh_interval: cfg_openai_refresh_interval,

@@ -34,7 +34,7 @@ public enum SourceResolver {
                     explanation: snapshotExplanation(snapshot, requested: requestedSource, matched: true),
                     warnings: warnings + authWarnings(for: auth, requestedSource: requestedSource),
                     fallbackChain: fallbackChain,
-                    usageAvailable: snapshot.available && snapshot.primary != nil,
+                    usageAvailable: snapshot.available && (snapshot.primary != nil || snapshot.claudeAdmin != nil),
                     isUnsupported: false,
                     requiresLogin: authRequiresLogin(auth),
                     usesFallback: snapshot.resolvedViaFallback
@@ -167,6 +167,10 @@ public enum SourceResolver {
             }
 
             if liveSource == requestedSource, snapshot.available {
+                var warnings = authWarnings(for: auth, requestedSource: requestedSource)
+                if snapshot.sourceUsed == "admin" {
+                    warnings.append("OAuth is unavailable, so HeimdallBar is using Anthropic admin analytics fallback.")
+                }
                 return ProviderSourceResolution(
                     provider: provider,
                     requestedSource: requestedSource,
@@ -174,9 +178,9 @@ public enum SourceResolver {
                     effectiveSourceDetail: liveSourceDetail,
                     sourceLabel: "Source: \(liveSourceDetail ?? requestedSource.rawValue)",
                     explanation: snapshotExplanation(snapshot, requested: requestedSource, matched: true),
-                    warnings: authWarnings(for: auth, requestedSource: requestedSource),
+                    warnings: warnings,
                     fallbackChain: fallbackChain,
-                    usageAvailable: snapshot.primary != nil,
+                    usageAvailable: snapshot.primary != nil || snapshot.claudeAdmin != nil,
                     isUnsupported: false,
                     requiresLogin: authRequiresLogin(auth),
                     usesFallback: snapshot.resolvedViaFallback
@@ -240,6 +244,9 @@ public enum SourceResolver {
         if raw.hasPrefix("oauth") {
             return .oauth
         }
+        if raw == "admin" {
+            return .oauth
+        }
         if raw.hasPrefix("cli") {
             return .cli
         }
@@ -296,7 +303,12 @@ public enum SourceResolver {
         matched: Bool
     ) -> String {
         let refreshLabel = snapshot.refreshDurationMs > 0 ? " in \(snapshot.refreshDurationMs)ms" : ""
-        let sourceLabel = matched ? "Using \(requested.rawValue)" : "Resolved \(snapshot.sourceUsed)"
+        let sourceLabel: String
+        if matched && snapshot.sourceUsed == "admin" {
+            sourceLabel = "Using admin fallback for \(requested.rawValue)"
+        } else {
+            sourceLabel = matched ? "Using \(requested.rawValue)" : "Resolved \(snapshot.sourceUsed)"
+        }
         // Only surface the 'after attempting X' fallback tail when we ACTUALLY
         // fell through from a different source. If the attempted source and
         // the winning source are the same (e.g. oauth -> oauth), the tail is

@@ -16,14 +16,33 @@ export interface IdentityInfo {
   rate_limit_tier: string | null;
 }
 
+export interface ClaudeAdminSummary {
+  organization_name: string;
+  lookback_days: number;
+  start_date: string;
+  end_date: string;
+  data_latency_note: string;
+  today_active_users: number;
+  today_sessions: number;
+  lookback_lines_accepted: number;
+  lookback_estimated_cost_usd: number;
+  lookback_input_tokens: number;
+  lookback_output_tokens: number;
+  lookback_cache_read_tokens: number;
+  lookback_cache_creation_tokens: number;
+  error?: string | null;
+}
+
 export interface UsageWindowsResponse {
   available: boolean;
+  source: 'oauth' | 'admin' | 'unavailable' | string;
   session?: WindowInfo;
   weekly?: WindowInfo;
   weekly_opus?: WindowInfo;
   weekly_sonnet?: WindowInfo;
   budget?: BudgetInfo;
   identity?: IdentityInfo;
+  admin_fallback?: ClaudeAdminSummary;
   error?: string;
 }
 
