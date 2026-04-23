@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import HeimdallAppUI
@@ -49,5 +50,18 @@ struct AppLifecycleTests {
         )
 
         #expect(events == ["activate", "focus"])
+    }
+
+    @Test
+    @MainActor
+    func mainWindowIdentityViewNormalizesToolbarStyleFocusOnlyOutsideContentView() {
+        let contentView = NSView()
+        let contentChild = NSView()
+        contentView.addSubview(contentChild)
+        let toolbarView = NSView()
+
+        #expect(MainWindowFocusNormalizer.shouldNormalizeInitialFocus(firstResponder: nil, contentView: contentView))
+        #expect(!MainWindowFocusNormalizer.shouldNormalizeInitialFocus(firstResponder: contentChild, contentView: contentView))
+        #expect(MainWindowFocusNormalizer.shouldNormalizeInitialFocus(firstResponder: toolbarView, contentView: contentView))
     }
 }

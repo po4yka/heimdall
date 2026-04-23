@@ -193,6 +193,15 @@ struct MenuBarLabel: View {
     }
 }
 
+enum MainWindowFocusNormalizer {
+    static func shouldNormalizeInitialFocus(firstResponder: NSResponder?, contentView: NSView?) -> Bool {
+        guard let contentView else { return false }
+        guard let firstResponder else { return true }
+        guard let focusedView = firstResponder as? NSView else { return true }
+        return !focusedView.isDescendant(of: contentView)
+    }
+}
+
 private struct MainWindowIdentityTagger: NSViewRepresentable {
     let sceneID: String
 
@@ -210,6 +219,7 @@ private struct MainWindowIdentityTagger: NSViewRepresentable {
 
 private final class MainWindowIdentityView: NSView {
     var sceneID: String = HeimdallBarSceneID.mainWindow
+    private var didNormalizeInitialFocus = false
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -217,6 +227,22 @@ private final class MainWindowIdentityView: NSView {
     }
 
     func applyWindowIdentifierIfNeeded() {
-        self.window?.identifier = NSUserInterfaceItemIdentifier(self.sceneID)
+        guard let window else { return }
+        window.identifier = NSUserInterfaceItemIdentifier(self.sceneID)
+        self.normalizeInitialFocusIfNeeded(in: window)
+    }
+
+    private func normalizeInitialFocusIfNeeded(in window: NSWindow) {
+        guard !self.didNormalizeInitialFocus else { return }
+        guard MainWindowFocusNormalizer.shouldNormalizeInitialFocus(
+            firstResponder: window.firstResponder,
+            contentView: window.contentView
+        ) else { return }
+
+        self.didNormalizeInitialFocus = true
+        DispatchQueue.main.async { [weak window] in
+            guard let window else { return }
+            _ = window.makeFirstResponder(window.contentView)
+        }
     }
 }
