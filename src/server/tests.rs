@@ -808,6 +808,7 @@ mod tests {
             axum::extract::Query(crate::server::api::LiveProviderQuery {
                 provider: None,
                 scope: None,
+                startup: None,
             }),
             live_req,
         )
@@ -817,6 +818,7 @@ mod tests {
             axum::extract::Query(crate::server::api::LiveProviderQuery {
                 provider: None,
                 scope: None,
+                startup: None,
             }),
             refresh_req,
         )
@@ -826,6 +828,7 @@ mod tests {
             axum::extract::Query(crate::server::api::LiveProviderQuery {
                 provider: Some("claude".into()),
                 scope: None,
+                startup: None,
             }),
             history_req,
         )

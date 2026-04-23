@@ -74,6 +74,13 @@ struct HeimdallHelperControllerTests {
     }
 
     @Test
+    func readinessProbeURLRequestsStartupMode() {
+        let url = HeimdallHelperController.readinessProbeURL(port: 8787)
+
+        #expect(url?.absoluteString == "http://127.0.0.1:8787/api/live-providers?startup=true")
+    }
+
+    @Test
     func compatibleHealthyServerCanBeReusedAcrossLocalBuildPaths() {
         #expect(
             HeimdallHelperController.canReuseExistingServer(

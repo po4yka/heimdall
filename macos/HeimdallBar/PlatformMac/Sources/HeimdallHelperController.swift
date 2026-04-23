@@ -239,7 +239,7 @@ public actor HeimdallHelperController: HelperRuntime {
     }
 
     private static func liveProvidersProbeResult(port: Int) async -> LiveProvidersProbeResult {
-        guard let url = URL(string: "http://127.0.0.1:\(port)/api/live-providers") else {
+        guard let url = readinessProbeURL(port: port) else {
             return .unavailable
         }
 
@@ -264,6 +264,16 @@ public actor HeimdallHelperController: HelperRuntime {
             return false
         }
         return contractVersion == LiveProviderContract.version
+    }
+
+    static func readinessProbeURL(port: Int) -> URL? {
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = "127.0.0.1"
+        components.port = port
+        components.path = "/api/live-providers"
+        components.queryItems = [URLQueryItem(name: "startup", value: "true")]
+        return components.url
     }
 
     static func canReuseExistingServer(

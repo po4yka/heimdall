@@ -63,6 +63,7 @@ pub async fn load_snapshots(
     requested_provider: Option<&str>,
     scope: ResponseScope,
     force_refresh: bool,
+    startup: bool,
 ) -> Result<LiveProvidersResponse> {
     let requested_provider = normalize_provider(requested_provider)?.map(str::to_string);
     load_snapshots_with_fetcher(
@@ -70,8 +71,16 @@ pub async fn load_snapshots(
         requested_provider.clone(),
         scope,
         force_refresh,
-        |provider, scope, force_refresh| async move {
-            fetch_live_provider_response(state, provider.as_deref(), scope, force_refresh).await
+        startup,
+        |provider, scope, force_refresh, startup| async move {
+            fetch_live_provider_response(
+                state,
+                provider.as_deref(),
+                scope,
+                force_refresh,
+                startup,
+            )
+            .await
         },
     )
     .await
@@ -82,12 +91,34 @@ async fn load_snapshots_with_fetcher<F, Fut>(
     requested_provider: Option<String>,
     scope: ResponseScope,
     force_refresh: bool,
+    startup: bool,
     fetcher: F,
 ) -> Result<LiveProvidersResponse>
 where
-    F: Fn(Option<String>, ResponseScope, bool) -> Fut,
+    F: Fn(Option<String>, ResponseScope, bool, bool) -> Fut,
     Fut: Future<Output = Result<LiveProvidersResponse>>,
 {
+    if startup {
+        if let Some(cached) = cached_response(state).await {
+            return Ok(filter_response(
+                &cached,
+                requested_provider.as_deref(),
+                scope,
+                true,
+            ));
+        }
+        if let Some(cached) = cached_response_any(state).await {
+            return Ok(filter_response(
+                &cached,
+                requested_provider.as_deref(),
+                scope,
+                true,
+            ));
+        }
+
+        return fetcher(requested_provider, scope, force_refresh, true).await;
+    }
+
     if !force_refresh && let Some(cached) = cached_response(state).await {
         return Ok(filter_response(
             &cached,
@@ -132,7 +163,7 @@ where
         ));
     }
 
-    let response = fetcher(requested_provider.clone(), scope, force_refresh).await?;
+    let response = fetcher(requested_provider.clone(), scope, force_refresh, false).await?;
     update_cache_after_fetch(state, requested_provider.as_deref(), scope, &response).await;
     Ok(response)
 }
@@ -168,7 +199,7 @@ pub async fn load_provider_history(
 }
 
 pub async fn load_mobile_snapshot(state: &Arc<AppState>) -> Result<MobileSnapshotEnvelope> {
-    let response = load_snapshots(state, None, ResponseScope::All, false).await?;
+    let response = load_snapshots(state, None, ResponseScope::All, false, false).await?;
     let providers = response.providers.clone();
     let provider_names = providers
         .iter()
@@ -278,13 +309,16 @@ async fn fetch_live_provider_response(
     requested_provider: Option<&str>,
     scope: ResponseScope,
     force_refresh: bool,
+    startup: bool,
 ) -> Result<LiveProvidersResponse> {
     let providers_to_build: Vec<&str> = match (requested_provider, scope, force_refresh) {
         (Some(provider), ResponseScope::ProviderOnly, _) => vec![provider],
         _ => ALL_PROVIDERS.to_vec(),
     };
 
-    let agent_status = if providers_to_build
+    let agent_status = if startup {
+        cached_agent_status(state).await
+    } else if providers_to_build
         .iter()
         .any(|provider| *provider == "claude" || *provider == "codex")
     {
@@ -292,7 +326,9 @@ async fn fetch_live_provider_response(
     } else {
         None
     };
-    let claude_usage = if providers_to_build.contains(&"claude") {
+    let claude_usage = if startup && providers_to_build.contains(&"claude") {
+        Some(cached_or_unavailable_claude_usage(state).await)
+    } else if providers_to_build.contains(&"claude") {
         Some(refresh_usage_windows(state).await)
     } else {
         None
@@ -316,13 +352,23 @@ async fn fetch_live_provider_response(
                 providers.push(snapshot);
             }
             "codex" => {
-                let snapshot = build_codex_snapshot(
-                    state,
-                    agent_status
-                        .as_ref()
-                        .and_then(|status| status.openai.as_ref()),
-                )
-                .await?;
+                let snapshot = if startup {
+                    build_codex_bootstrap_snapshot(
+                        state,
+                        agent_status
+                            .as_ref()
+                            .and_then(|status| status.openai.as_ref()),
+                    )
+                    .await?
+                } else {
+                    build_codex_snapshot(
+                        state,
+                        agent_status
+                            .as_ref()
+                            .and_then(|status| status.openai.as_ref()),
+                    )
+                    .await?
+                };
                 providers.push(snapshot);
             }
             other => bail!("unsupported live provider: {}", other),
@@ -345,6 +391,21 @@ async fn fetch_live_provider_response(
             Vec::new()
         },
     })
+}
+
+async fn cached_agent_status(
+    state: &Arc<AppState>,
+) -> Option<crate::agent_status::models::AgentStatusSnapshot> {
+    let cache = state.agent_status_cache.read().await;
+    cache.as_ref().map(|(_, snapshot, _)| snapshot.clone())
+}
+
+async fn cached_or_unavailable_claude_usage(state: &Arc<AppState>) -> UsageWindowsResponse {
+    let cache = state.oauth_cache.read().await;
+    cache
+        .as_ref()
+        .map(|(_, response)| response.clone())
+        .unwrap_or_else(UsageWindowsResponse::unavailable)
 }
 
 async fn cached_response(state: &Arc<AppState>) -> Option<LiveProvidersResponse> {
@@ -658,6 +719,67 @@ async fn build_codex_snapshot(
         last_refresh: chrono::Utc::now().to_rfc3339(),
         stale: !resolution.available,
         error: resolution.error,
+    })
+}
+
+async fn build_codex_bootstrap_snapshot(
+    state: &Arc<AppState>,
+    status: Option<&ProviderStatus>,
+) -> Result<LiveProviderSnapshot> {
+    let started_at = Instant::now();
+    let cost_summary = load_provider_cost_summary(state, "codex").await?;
+    let env = std::env::vars().collect::<Vec<_>>();
+    let config_facts = codex::load_config_facts(&env);
+    let bootstrap = codex::resolve_bootstrap_auth(&env, &config_facts);
+    let identity = bootstrap.auth.as_ref().and_then(codex::decode_identity);
+    let source_used = if bootstrap.auth.is_some() {
+        "bootstrap"
+    } else {
+        "unavailable"
+    };
+    let source_attempts = if let Some(message) = bootstrap.load_error.clone() {
+        vec![LiveProviderSourceAttempt {
+            source: "oauth-auth".into(),
+            outcome: "unavailable".into(),
+            message: Some(message),
+        }]
+    } else {
+        Vec::new()
+    };
+    let auth = codex::build_auth_health(
+        &env,
+        &config_facts,
+        codex::CodexAuthHealthInput {
+            credential_store: bootstrap.credential_store,
+            auth: bootstrap.auth.as_ref(),
+            identity: identity.as_ref(),
+            available: false,
+            bootstrap_error: bootstrap.load_error.as_deref(),
+            error: None,
+        },
+    );
+
+    Ok(LiveProviderSnapshot {
+        provider: "codex".into(),
+        available: false,
+        source_used: source_used.into(),
+        last_attempted_source: source_attempts.last().map(|attempt| attempt.source.clone()),
+        resolved_via_fallback: false,
+        refresh_duration_ms: started_at.elapsed().as_millis() as u64,
+        source_attempts,
+        identity,
+        primary: None,
+        secondary: None,
+        tertiary: None,
+        credits: None,
+        status: status.map(status_to_live),
+        auth,
+        cost_summary,
+        claude_usage: None,
+        quota_suggestions: None,
+        last_refresh: chrono::Utc::now().to_rfc3339(),
+        stale: true,
+        error: None,
     })
 }
 
@@ -1068,9 +1190,10 @@ mod tests {
             Some("claude".to_string()),
             ResponseScope::ProviderOnly,
             false,
+            false,
             {
                 let counter = counter.clone();
-                move |_, _, _| {
+                move |_, _, _, _| {
                     let counter = counter.clone();
                     async move {
                         counter.fetch_add(1, Ordering::SeqCst);
@@ -1091,9 +1214,10 @@ mod tests {
             Some("codex".to_string()),
             ResponseScope::ProviderOnly,
             true,
+            false,
             {
                 let counter = counter.clone();
-                move |_, _, _| {
+                move |_, _, _, _| {
                     let counter = counter.clone();
                     async move {
                         counter.fetch_add(1, Ordering::SeqCst);
@@ -1145,7 +1269,8 @@ mod tests {
             Some("claude".to_string()),
             ResponseScope::ProviderOnly,
             false,
-            |_, _, _| async move {
+            false,
+            |_, _, _, _| async move {
                 panic!("cached read should not trigger a fetch while refresh is in flight")
             },
         )
@@ -1158,6 +1283,46 @@ mod tests {
         assert_eq!(response.providers[0].provider, "claude");
 
         drop(refresh_guard);
+    }
+
+    #[tokio::test]
+    async fn startup_mode_returns_stale_cached_response_without_fetch() {
+        let state = test_state();
+        {
+            let mut cache = state.live_provider_cache.write().await;
+            *cache = Some((Instant::now() - Duration::from_secs(300), {
+                let mut response = fixture_response("claude");
+                response.response_scope = "all".into();
+                response.requested_provider = None;
+                response
+            }));
+        }
+
+        let counter = Arc::new(AtomicUsize::new(0));
+        let response = load_snapshots_with_fetcher(
+            &state,
+            Some("claude".to_string()),
+            ResponseScope::ProviderOnly,
+            false,
+            true,
+            {
+                let counter = counter.clone();
+                move |_, _, _, _| {
+                    let counter = counter.clone();
+                    async move {
+                        counter.fetch_add(1, Ordering::SeqCst);
+                        Ok(fixture_response("codex"))
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(counter.load(Ordering::SeqCst), 0);
+        assert!(response.cache_hit);
+        assert_eq!(response.providers.len(), 1);
+        assert_eq!(response.providers[0].provider, "claude");
     }
 
     #[tokio::test]

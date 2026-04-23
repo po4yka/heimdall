@@ -430,6 +430,7 @@ pub async fn api_health() -> &'static str {
 pub struct LiveProviderQuery {
     pub provider: Option<String>,
     pub scope: Option<String>,
+    pub startup: Option<bool>,
 }
 
 pub async fn api_live_providers(
@@ -439,9 +440,15 @@ pub async fn api_live_providers(
 ) -> Result<Json<LiveProvidersResponse>, StatusCode> {
     enforce_loopback_request(&request)?;
     let scope = parse_live_provider_scope(query.scope.as_deref())?;
-    let response = live_providers::load_snapshots(&state, query.provider.as_deref(), scope, false)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let response = live_providers::load_snapshots(
+        &state,
+        query.provider.as_deref(),
+        scope,
+        false,
+        query.startup.unwrap_or(false),
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(response))
 }
 
@@ -456,9 +463,10 @@ pub async fn api_live_provider_refresh(
         let mut cache = state.live_provider_cache.write().await;
         *cache = None;
     }
-    let response = live_providers::load_snapshots(&state, query.provider.as_deref(), scope, true)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let response =
+        live_providers::load_snapshots(&state, query.provider.as_deref(), scope, true, false)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(response))
 }
 
@@ -491,9 +499,10 @@ pub async fn api_live_monitor(
     request: Request,
 ) -> Result<Json<LiveMonitorResponse>, StatusCode> {
     enforce_loopback_request(&request)?;
-    let snapshots = live_providers::load_snapshots(&state, None, live_providers::ResponseScope::All, false)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let snapshots =
+        live_providers::load_snapshots(&state, None, live_providers::ResponseScope::All, false, false)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let billing_blocks = load_billing_blocks_response(&state).await?;
     let context_window = load_context_window_response(&state).await?;
     Ok(Json(build_live_monitor_response(
