@@ -123,7 +123,10 @@ async fn fetch_org_claude_code_summary_inner(
                 .get(analytics_url)
                 .header("anthropic-version", API_VERSION)
                 .header("x-api-key", admin_key)
-                .query(&[("starting_at", day.to_string()), ("limit", "1000".to_string())]);
+                .query(&[
+                    ("starting_at", day.to_string()),
+                    ("limit", "1000".to_string()),
+                ]);
             if let Some(cursor) = page.as_deref() {
                 request = request.query(&[("page", cursor)]);
             }
@@ -196,7 +199,11 @@ async fn fetch_org_claude_code_summary_inner(
     })
 }
 
-async fn fetch_organization_name(client: &Client, org_url: &str, admin_key: &str) -> Result<String> {
+async fn fetch_organization_name(
+    client: &Client,
+    org_url: &str,
+    admin_key: &str,
+) -> Result<String> {
     let response = client
         .get(org_url)
         .header("anthropic-version", API_VERSION)

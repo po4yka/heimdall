@@ -1482,18 +1482,22 @@ mod tests {
         let state = Arc::new(state);
 
         let fetch_count = Arc::new(AtomicUsize::new(0));
-        let returned = crate::server::api::refresh_usage_windows_with(&state, {
-            let fetch_count = fetch_count.clone();
-            move || async move {
-                fetch_count.fetch_add(1, Ordering::SeqCst);
-                UsageWindowsResponse::with_error("should not fetch".into())
-            }
-        }, || async {
-            crate::models::ClaudeAdminSummary {
-                error: Some("should not fetch admin".into()),
-                ..crate::models::ClaudeAdminSummary::default()
-            }
-        })
+        let returned = crate::server::api::refresh_usage_windows_with(
+            &state,
+            {
+                let fetch_count = fetch_count.clone();
+                move || async move {
+                    fetch_count.fetch_add(1, Ordering::SeqCst);
+                    UsageWindowsResponse::with_error("should not fetch".into())
+                }
+            },
+            || async {
+                crate::models::ClaudeAdminSummary {
+                    error: Some("should not fetch admin".into()),
+                    ..crate::models::ClaudeAdminSummary::default()
+                }
+            },
+        )
         .await;
 
         assert_eq!(fetch_count.load(Ordering::SeqCst), 0);
@@ -1521,19 +1525,23 @@ mod tests {
         let state = Arc::new(state);
 
         let fetch_count = Arc::new(AtomicUsize::new(0));
-        let returned = crate::server::api::refresh_usage_windows_with(&state, {
-            let fetch_count = fetch_count.clone();
-            let fresh = fresh.clone();
-            move || async move {
-                fetch_count.fetch_add(1, Ordering::SeqCst);
-                fresh
-            }
-        }, || async {
-            crate::models::ClaudeAdminSummary {
-                error: Some("unused admin fetch".into()),
-                ..crate::models::ClaudeAdminSummary::default()
-            }
-        })
+        let returned = crate::server::api::refresh_usage_windows_with(
+            &state,
+            {
+                let fetch_count = fetch_count.clone();
+                let fresh = fresh.clone();
+                move || async move {
+                    fetch_count.fetch_add(1, Ordering::SeqCst);
+                    fresh
+                }
+            },
+            || async {
+                crate::models::ClaudeAdminSummary {
+                    error: Some("unused admin fetch".into()),
+                    ..crate::models::ClaudeAdminSummary::default()
+                }
+            },
+        )
         .await;
 
         assert_eq!(fetch_count.load(Ordering::SeqCst), 1);
@@ -1567,18 +1575,22 @@ mod tests {
         let state = Arc::new(state);
 
         let fetch_count = Arc::new(AtomicUsize::new(0));
-        let returned = crate::server::api::refresh_usage_windows_with(&state, {
-            let fetch_count = fetch_count.clone();
-            move || async move {
-                fetch_count.fetch_add(1, Ordering::SeqCst);
-                UsageWindowsResponse::with_error("upstream unavailable".into())
-            }
-        }, || async {
-            crate::models::ClaudeAdminSummary {
-                error: Some("admin unavailable".into()),
-                ..crate::models::ClaudeAdminSummary::default()
-            }
-        })
+        let returned = crate::server::api::refresh_usage_windows_with(
+            &state,
+            {
+                let fetch_count = fetch_count.clone();
+                move || async move {
+                    fetch_count.fetch_add(1, Ordering::SeqCst);
+                    UsageWindowsResponse::with_error("upstream unavailable".into())
+                }
+            },
+            || async {
+                crate::models::ClaudeAdminSummary {
+                    error: Some("admin unavailable".into()),
+                    ..crate::models::ClaudeAdminSummary::default()
+                }
+            },
+        )
         .await;
 
         assert_eq!(fetch_count.load(Ordering::SeqCst), 1);
@@ -1604,14 +1616,16 @@ mod tests {
         state.oauth_enabled = true;
         let state = Arc::new(state);
 
-        let returned = crate::server::api::refresh_usage_windows_with(&state, || async {
-            UsageWindowsResponse::with_error("token expired".into())
-        }, || async {
-            crate::models::ClaudeAdminSummary {
-                error: Some("admin unavailable".into()),
-                ..crate::models::ClaudeAdminSummary::default()
-            }
-        })
+        let returned = crate::server::api::refresh_usage_windows_with(
+            &state,
+            || async { UsageWindowsResponse::with_error("token expired".into()) },
+            || async {
+                crate::models::ClaudeAdminSummary {
+                    error: Some("admin unavailable".into()),
+                    ..crate::models::ClaudeAdminSummary::default()
+                }
+            },
+        )
         .await;
 
         assert!(!returned.available);

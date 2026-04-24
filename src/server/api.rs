@@ -365,9 +365,11 @@ pub async fn api_usage_windows(
 }
 
 pub(crate) async fn refresh_usage_windows(state: &Arc<AppState>) -> UsageWindowsResponse {
-    refresh_usage_windows_with(state, || async { oauth::poll_usage().await }, || async {
-        refresh_claude_admin_summary(state).await
-    })
+    refresh_usage_windows_with(
+        state,
+        || async { oauth::poll_usage().await },
+        || async { refresh_claude_admin_summary(state).await },
+    )
     .await
 }
 
@@ -848,9 +850,7 @@ fn build_monitor_warnings(
             )),
         );
     }
-    if snapshot.provider == "claude"
-        && snapshot.source_used == "admin"
-    {
+    if snapshot.provider == "claude" && snapshot.source_used == "admin" {
         push_warning(
             &mut warnings,
             Some("Using org-wide Anthropic admin analytics fallback.".into()),
