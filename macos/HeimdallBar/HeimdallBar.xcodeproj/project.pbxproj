@@ -36,6 +36,9 @@
 		26DCEC4036CEB44A594CCC13 /* HeimdallCLI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B3E69C8ABD0E401A9CC79AAE /* HeimdallCLI.framework */; };
 		28372B1F4049585AFD711A43 /* VersionDistributionDonut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740486CF6AE09ED168C9B399 /* VersionDistributionDonut.swift */; };
 		29C19B7ED4DFED25A3BB3DCA /* MobileDashboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60B13957456DDC92CE830FB5 /* MobileDashboardModel.swift */; };
+		A1D50011A4B54F4A90010001 /* MobileDashboardProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D50021A4B54F4A90010001 /* MobileDashboardProjection.swift */; };
+		A1D50012A4B54F4A90010002 /* MobileDashboardPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D50022A4B54F4A90010002 /* MobileDashboardPreferences.swift */; };
+		A1D50013A4B54F4A90010003 /* MobileSyncedAggregateCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D50023A4B54F4A90010003 /* MobileSyncedAggregateCache.swift */; };
 		2AA929E7F560DA293A9726E2 /* HeimdallDomain.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6B361431C8E1A60029FB1575 /* HeimdallDomain.framework */; };
 		2AF540B96D11311C4562B20D /* BrowserSessionImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68CA97104DE7E5129E8F6E25 /* BrowserSessionImporter.swift */; };
 		2C667FC398E81821AB47C987 /* ModelDistributionDonut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 055501589FD6D551720D8662 /* ModelDistributionDonut.swift */; };
@@ -529,6 +532,9 @@
 		59C497E2262263D7B75075D6 /* ProviderCredentialInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderCredentialInspector.swift; sourceTree = "<group>"; };
 		5CD49122C12EE482D41E2AC8 /* ProviderDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDataSource.swift; sourceTree = "<group>"; };
 		60B13957456DDC92CE830FB5 /* MobileDashboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDashboardModel.swift; sourceTree = "<group>"; };
+		A1D50021A4B54F4A90010001 /* MobileDashboardProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDashboardProjection.swift; sourceTree = "<group>"; };
+		A1D50022A4B54F4A90010002 /* MobileDashboardPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDashboardPreferences.swift; sourceTree = "<group>"; };
+		A1D50023A4B54F4A90010003 /* MobileSyncedAggregateCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileSyncedAggregateCache.swift; sourceTree = "<group>"; };
 		614EE993CEC601741A995F6C /* CloudKitRetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitRetryPolicyTests.swift; sourceTree = "<group>"; };
 		62518196343306440CB4365F /* WidgetTimelineProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetTimelineProvider.swift; sourceTree = "<group>"; };
 		649D6E9DE532A0FBB224FABD /* HeimdallPlatformMac.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = HeimdallPlatformMac.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -770,6 +776,9 @@
 				4D740C5D01A8A4EC749DE80B /* HeimdallMobileCompositionRoot.swift */,
 				1C9691DC07EFA05CD441CE30 /* HeimdallMobileRootView.swift */,
 				60B13957456DDC92CE830FB5 /* MobileDashboardModel.swift */,
+				A1D50021A4B54F4A90010001 /* MobileDashboardProjection.swift */,
+				A1D50022A4B54F4A90010002 /* MobileDashboardPreferences.swift */,
+				A1D50023A4B54F4A90010003 /* MobileSyncedAggregateCache.swift */,
 			);
 			name = Sources;
 			path = iOS/App/Sources;
@@ -1575,6 +1584,9 @@
 				DEAE8CB14A8C318A9F2EEBEE /* HeimdallMobileCompositionRoot.swift in Sources */,
 				E216D075BA24468C1EA41E2F /* HeimdallMobileRootView.swift in Sources */,
 				29C19B7ED4DFED25A3BB3DCA /* MobileDashboardModel.swift in Sources */,
+				A1D50011A4B54F4A90010001 /* MobileDashboardProjection.swift in Sources */,
+				A1D50012A4B54F4A90010002 /* MobileDashboardPreferences.swift in Sources */,
+				A1D50013A4B54F4A90010003 /* MobileSyncedAggregateCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
