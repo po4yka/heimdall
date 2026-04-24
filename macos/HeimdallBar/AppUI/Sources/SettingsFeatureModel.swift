@@ -142,4 +142,44 @@ public final class SettingsFeatureModel {
             self.repository.recordIssue(AppIssue(kind: .snapshotSync, message: error.localizedDescription))
         }
     }
+
+    public var cloudSyncDiagnostics: CloudSyncDiagnostics {
+        let stateSize: Int? = {
+            guard let url = try? FileBackedCloudKitSyncEngineStateStore.defaultURL() else {
+                return nil
+            }
+            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+            return (attrs?[.size] as? NSNumber)?.intValue
+        }()
+        return CloudSyncDiagnostics(
+            containerIdentifier: CloudKitSnapshotSyncStore.defaultContainerIdentifier,
+            zoneName: self.cloudSyncState.zoneName ?? SnapshotCloudEngine.zoneName,
+            zoneOwner: self.cloudSyncState.zoneOwnerName ?? "_defaultOwner",
+            installationID: self.sessionStore.installationID,
+            engineStateFileBytes: stateSize,
+            lastPublishedAt: self.cloudSyncState.lastPublishedAt,
+            lastAcceptedAt: self.cloudSyncState.lastAcceptedAt,
+            role: self.cloudSyncState.role,
+            status: self.cloudSyncState.status
+        )
+    }
+}
+
+public struct CloudSyncDiagnostics: Sendable {
+    public var containerIdentifier: String
+    public var zoneName: String
+    public var zoneOwner: String
+    public var installationID: String
+    public var engineStateFileBytes: Int?
+    public var lastPublishedAt: String?
+    public var lastAcceptedAt: String?
+    public var role: CloudSyncRole
+    public var status: CloudSyncStatus
+
+    public var truncatedInstallationID: String {
+        guard self.installationID.count > 12 else { return self.installationID }
+        let prefix = self.installationID.prefix(8)
+        let suffix = self.installationID.suffix(4)
+        return "\(prefix)…\(suffix)"
+    }
 }

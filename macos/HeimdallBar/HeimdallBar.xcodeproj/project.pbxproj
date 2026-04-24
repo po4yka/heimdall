@@ -132,6 +132,7 @@
 		CECC6E6EE1778CEA90691450 /* HeimdallWidgets.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1531C689E1BC09BAA2C378AF /* HeimdallWidgets.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D20910158E3549AD451A26CD /* CumulativeSpendChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = C13C78DF7345C32A9E6692D0 /* CumulativeSpendChart.swift */; };
 		D4DC97E90A0346A372AEA3FB /* HeimdallServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CA7C2377DFAE3941FC632BCB /* HeimdallServices.framework */; };
+		D55096782267601191225FCA /* CloudSyncDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E2F578318A48E2397D67DED /* CloudSyncDiagnosticsView.swift */; };
 		D6F808357B8EC4A88CA1A0C1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1B9F8F96266EC4601E6FEDFB /* Assets.xcassets */; };
 		D7A60BCD969731DE13CC4998 /* ProviderFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 586E3C9F0FA18FC7BAC16393 /* ProviderFeatureModel.swift */; };
 		D7AD70F014EA520D77269FE3 /* AppRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92154E2C242C122F2B2F4B2B /* AppRuntime.swift */; };
@@ -485,6 +486,7 @@
 		080E76F40A2F0062FBDFC99B /* HeimdallAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeimdallAPIClient.swift; sourceTree = "<group>"; };
 		0AAEB5D0ED4A6D67B752D92F /* AppShellViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellViewTests.swift; sourceTree = "<group>"; };
 		0D6DBF13AFFE807A89EF0F9B /* SessionsTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsTable.swift; sourceTree = "<group>"; };
+		0E2F578318A48E2397D67DED /* CloudSyncDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncDiagnosticsView.swift; sourceTree = "<group>"; };
 		14BBF6D1571BCC2C4E63F470 /* SpendSparkline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendSparkline.swift; sourceTree = "<group>"; };
 		1531C689E1BC09BAA2C378AF /* HeimdallWidgets.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = HeimdallWidgets.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		167E96E8ED0DB6053873CF6C /* CacheHitTrendChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheHitTrendChart.swift; sourceTree = "<group>"; };
@@ -742,6 +744,7 @@
 				38A96F043A5A2E6C7684CFF1 /* AppModel.swift */,
 				E67AEA1FEA4074A97E4B1BBF /* AppShellModel.swift */,
 				B2BE9DAF34F63D1E8E819D43 /* AppShellView.swift */,
+				0E2F578318A48E2397D67DED /* CloudSyncDiagnosticsView.swift */,
 				D7E64EF761EFC29ACD504758 /* HeimdallBarScenes.swift */,
 				70D53B0B0DE5AA6C0C02EC5E /* LiveMonitorFeatureModel.swift */,
 				D17442394B8F9E3D5D5F2F43 /* MenuBarMeterRenderer.swift */,
@@ -1510,6 +1513,7 @@
 				B0957B5376D8D678243CE82D /* CacheHitTrendChart.swift in Sources */,
 				5CF306145CEF7AC56B0503F6 /* CacheMixRing.swift in Sources */,
 				8BC07508E00F6F6B58D1749E /* ChartStyle.swift in Sources */,
+				D55096782267601191225FCA /* CloudSyncDiagnosticsView.swift in Sources */,
 				D20910158E3549AD451A26CD /* CumulativeSpendChart.swift in Sources */,
 				7218C8F5A7F839C5866D25F6 /* DailyCostChart.swift in Sources */,
 				4BCEB412C95192EF0F577014 /* HeimdallBarScenes.swift in Sources */,

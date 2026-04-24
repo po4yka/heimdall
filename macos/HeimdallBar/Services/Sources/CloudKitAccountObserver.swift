@@ -1,5 +1,8 @@
 import CloudKit
 import Foundation
+import os
+
+private let cloudKitAccountObserverLogger = Logger(subsystem: "dev.heimdall.heimdallbar", category: "CloudKit")
 
 public final class CloudKitAccountObserver: @unchecked Sendable {
     private let notificationCenter: NotificationCenter
@@ -22,6 +25,7 @@ public final class CloudKitAccountObserver: @unchecked Sendable {
             object: nil,
             queue: nil
         ) { _ in
+            cloudKitAccountObserverLogger.info("CKAccountChanged fired")
             handler()
         }
     }

@@ -1,6 +1,9 @@
 import CloudKit
 import Foundation
 import HeimdallDomain
+import os
+
+private let snapshotCloudEngineLogger = Logger(subsystem: "dev.heimdall.heimdallbar", category: "CloudKit")
 
 public actor SnapshotCloudEngine: CloudSnapshotBackingStore, CKSyncEngineDelegate {
     public static let zoneName = "heimdall-sync-space"
@@ -34,6 +37,7 @@ public actor SnapshotCloudEngine: CloudSnapshotBackingStore, CKSyncEngineDelegat
         encoder.outputFormatting = [.sortedKeys]
         self.encoder = encoder
         self.decoder = JSONDecoder()
+        snapshotCloudEngineLogger.info("SnapshotCloudEngine created for container \(containerIdentifier, privacy: .public) zone \(Self.zoneName, privacy: .public)")
     }
 
     public func accountStatus() async throws -> CKAccountStatus {
@@ -104,14 +108,18 @@ public actor SnapshotCloudEngine: CloudSnapshotBackingStore, CKSyncEngineDelegat
            let zoneName = state.zoneName,
            let zoneOwnerName = state.zoneOwnerName {
             let sharedZoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: zoneOwnerName)
+            snapshotCloudEngineLogger.debug("fetch via shared database zone=\(zoneName, privacy: .public)")
             return try await self.fetchSharedZoneSnapshots(zoneID: sharedZoneID)
         }
         let engine = try await self.requireEngine()
+        snapshotCloudEngineLogger.debug("fetch via CKSyncEngine.fetchChanges")
         do {
             try await engine.fetchChanges()
         } catch {
+            Self.logCKError("fetchChanges failed", error)
             throw SnapshotSyncStoreError.transportFailed(error.localizedDescription)
         }
+        snapshotCloudEngineLogger.debug("fetch complete cached=\(self.cachedSnapshots.count)")
         return self.cachedSnapshots.values.sorted(by: { $0.publishedAt > $1.publishedAt })
     }
 
@@ -150,9 +158,11 @@ public actor SnapshotCloudEngine: CloudSnapshotBackingStore, CKSyncEngineDelegat
         let engine = try await self.requireEngine()
         let recordID = CKRecord.ID(recordName: snapshot.installationID, zoneID: self.zoneID)
         engine.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+        snapshotCloudEngineLogger.debug("queued save installation=\(snapshot.installationID, privacy: .public) pending=\(self.pendingRecords.count)")
         do {
             try await engine.sendChanges()
         } catch {
+            Self.logCKError("sendChanges failed for \(snapshot.installationID)", error)
             throw SnapshotSyncStoreError.transportFailed(error.localizedDescription)
         }
 
@@ -244,14 +254,19 @@ public actor SnapshotCloudEngine: CloudSnapshotBackingStore, CKSyncEngineDelegat
         _ = syncEngine
         switch event {
         case .stateUpdate(let update):
+            snapshotCloudEngineLogger.debug("event: stateUpdate")
             await self.persist(stateSerialization: update.stateSerialization)
         case .fetchedRecordZoneChanges(let fetched):
+            snapshotCloudEngineLogger.debug("event: fetchedRecordZoneChanges modifications=\(fetched.modifications.count) deletions=\(fetched.deletions.count)")
             self.applyFetched(fetched)
         case .sentRecordZoneChanges(let sent):
+            snapshotCloudEngineLogger.debug("event: sentRecordZoneChanges saved=\(sent.savedRecords.count) failedSaves=\(sent.failedRecordSaves.count)")
             self.applySent(sent)
         case .accountChange:
+            snapshotCloudEngineLogger.info("event: accountChange — clearing local sync state")
             await self.clearLocalState()
         case .fetchedDatabaseChanges(let fetched):
+            snapshotCloudEngineLogger.debug("event: fetchedDatabaseChanges deletions=\(fetched.deletions.count)")
             self.applyDatabaseChanges(fetched)
         case .sentDatabaseChanges,
              .willFetchChanges,
@@ -430,7 +445,15 @@ public actor SnapshotCloudEngine: CloudSnapshotBackingStore, CKSyncEngineDelegat
             self.pendingRecords.removeValue(forKey: name)
         }
         for failed in sent.failedRecordSaves {
-            _ = failed
+            snapshotCloudEngineLogger.error("save failed recordName=\(failed.record.recordID.recordName, privacy: .public) code=\(failed.error.code.rawValue, privacy: .public)")
+        }
+    }
+
+    static func logCKError(_ message: String, _ error: Error) {
+        if let ckError = error as? CKError {
+            snapshotCloudEngineLogger.error("\(message, privacy: .public) CKError code=\(ckError.code.rawValue, privacy: .public)")
+        } else {
+            snapshotCloudEngineLogger.error("\(message, privacy: .public) error=\(String(describing: error), privacy: .public)")
         }
     }
 

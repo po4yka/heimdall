@@ -55,6 +55,10 @@ struct SettingsView: View {
                 }
             }
 
+            #if DEBUG
+            CloudSyncDiagnosticsSection(diagnostics: self.model.cloudSyncDiagnostics)
+            #endif
+
             Section("Display") {
                 Toggle("Merge Icons", isOn: self.$model.draftConfig.mergeIcons)
                 Toggle("Show Used Values", isOn: self.$model.draftConfig.showUsedValues)
