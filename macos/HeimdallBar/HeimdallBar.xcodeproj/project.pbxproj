@@ -36,6 +36,7 @@
 		26DCEC4036CEB44A594CCC13 /* HeimdallCLI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B3E69C8ABD0E401A9CC79AAE /* HeimdallCLI.framework */; };
 		28372B1F4049585AFD711A43 /* VersionDistributionDonut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740486CF6AE09ED168C9B399 /* VersionDistributionDonut.swift */; };
 		29C19B7ED4DFED25A3BB3DCA /* MobileDashboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60B13957456DDC92CE830FB5 /* MobileDashboardModel.swift */; };
+		A1D70011A4B54F4A90010011 /* MobileDashboardCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D70021A4B54F4A90010021 /* MobileDashboardCoordinator.swift */; };
 		A1D60001A4B54F4A90010001 /* HeimdallBarAppCompositionRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D60031A4B54F4A90010031 /* HeimdallBarAppCompositionRoot.swift */; };
 		A1D60002A4B54F4A90010002 /* CloudKitRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EAAA417EA06A7440BD82B8C /* CloudKitRetryPolicy.swift */; };
 		A1D60003A4B54F4A90010003 /* CloudKitSnapshotSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E2F701A9CCF00C222BD2856 /* CloudKitSnapshotSyncStore.swift */; };
@@ -548,6 +549,7 @@
 		59C497E2262263D7B75075D6 /* ProviderCredentialInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderCredentialInspector.swift; sourceTree = "<group>"; };
 		5CD49122C12EE482D41E2AC8 /* ProviderDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDataSource.swift; sourceTree = "<group>"; };
 		60B13957456DDC92CE830FB5 /* MobileDashboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDashboardModel.swift; sourceTree = "<group>"; };
+		A1D70021A4B54F4A90010021 /* MobileDashboardCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDashboardCoordinator.swift; sourceTree = "<group>"; };
 		A1D50021A4B54F4A90010001 /* MobileDashboardProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDashboardProjection.swift; sourceTree = "<group>"; };
 		A1D50022A4B54F4A90010002 /* MobileDashboardPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileDashboardPreferences.swift; sourceTree = "<group>"; };
 		A1D50023A4B54F4A90010003 /* MobileSyncedAggregateCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileSyncedAggregateCache.swift; sourceTree = "<group>"; };
@@ -789,6 +791,7 @@
 			isa = PBXGroup;
 			children = (
 				54D114D8CAFBCB91DE3CDD1E /* HeimdallMobileApp.swift */,
+				A1D70021A4B54F4A90010021 /* MobileDashboardCoordinator.swift */,
 				4D740C5D01A8A4EC749DE80B /* HeimdallMobileCompositionRoot.swift */,
 				1C9691DC07EFA05CD441CE30 /* HeimdallMobileRootView.swift */,
 				60B13957456DDC92CE830FB5 /* MobileDashboardModel.swift */,
@@ -1619,6 +1622,7 @@
 				A1D60009A4B54F4A90010009 /* CloudKitSnapshotSyncStore.swift in Sources */,
 				A1D6000AA4B54F4A9001000A /* CloudKitSyncEngineStateStore.swift in Sources */,
 				90A90DB7C5A11836AFCE9A57 /* HeimdallMobileApp.swift in Sources */,
+				A1D70011A4B54F4A90010011 /* MobileDashboardCoordinator.swift in Sources */,
 				DEAE8CB14A8C318A9F2EEBEE /* HeimdallMobileCompositionRoot.swift in Sources */,
 				E216D075BA24468C1EA41E2F /* HeimdallMobileRootView.swift in Sources */,
 				29C19B7ED4DFED25A3BB3DCA /* MobileDashboardModel.swift in Sources */,

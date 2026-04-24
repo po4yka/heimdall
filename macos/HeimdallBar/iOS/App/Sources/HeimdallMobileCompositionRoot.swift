@@ -15,6 +15,11 @@ struct HeimdallMobileCompositionRoot {
             observesCloudKitAccount: true
         )
     }
+
+    @MainActor
+    func dashboardCoordinator() -> MobileDashboardCoordinator {
+        MobileDashboardCoordinator(dashboard: self.dashboardModel())
+    }
 }
 
 private struct MobileWidgetCenterReloader: WidgetReloading {

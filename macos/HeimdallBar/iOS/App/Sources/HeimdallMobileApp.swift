@@ -37,25 +37,18 @@ final class MobileAppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct HeimdallMobileApp: App {
     @UIApplicationDelegateAdaptor(MobileAppDelegate.self) private var appDelegate
-    @State private var model: MobileDashboardModel
+    @State private var coordinator: MobileDashboardCoordinator
 
     @MainActor
     init() {
-        self._model = State(initialValue: HeimdallMobileCompositionRoot().dashboardModel())
+        self._coordinator = State(initialValue: HeimdallMobileCompositionRoot().dashboardCoordinator())
     }
 
     var body: some Scene {
         WindowGroup {
-            HeimdallMobileRootView(model: self.model)
-                .onAppear {
-                    self.appDelegate.onAcceptedCloudShare = { url in
-                        Task { @MainActor in
-                            await self.model.acceptShareURL(url)
-                        }
-                    }
-                    self.appDelegate.onRemoteNotification = { [model = self.model] in
-                        await model.handleRemotePush()
-                    }
+            HeimdallMobileRootView(coordinator: self.coordinator)
+                .task {
+                    self.coordinator.configure(appDelegate: self.appDelegate)
                 }
         }
     }

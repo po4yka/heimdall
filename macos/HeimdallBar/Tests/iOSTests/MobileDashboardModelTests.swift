@@ -1,6 +1,7 @@
 import Foundation
 import HeimdallDomain
 import HeimdallServices
+import SwiftUI
 @testable import HeimdallMobileApp
 import Testing
 
@@ -113,6 +114,58 @@ struct MobileDashboardModelTests {
         #expect(model.cloudSyncState.status == .participantJoined)
         #expect(await store.acceptShareCount == 1)
         #expect(await store.liveAggregateLoadCount == 1)
+    }
+
+    @Test
+    func coordinatorStartsOnceAndRefreshesWhenSceneBecomesActive() async {
+        let clock = MutableNow(Date(timeIntervalSince1970: 1_000))
+        let aggregate = SyncedAggregateEnvelope.singleInstallation(
+            mobileSnapshot: .fixture(generatedAt: "2026-04-21T11:00:00Z"),
+            installationID: "fixture-installation"
+        )
+        let store = ControlledSnapshotStore(liveAggregate: aggregate)
+        let coordinator = MobileDashboardCoordinator(
+            dashboard: MobileDashboardModel(
+                store: store,
+                now: { clock.current },
+                foregroundRefreshThrottle: 60
+            )
+        )
+
+        await coordinator.start()
+        await coordinator.start()
+        #expect(await store.liveAggregateLoadCount == 1)
+
+        coordinator.handleScenePhaseChange(.background)
+        clock.current = clock.current.addingTimeInterval(61)
+        coordinator.handleScenePhaseChange(.active)
+
+        await waitUntil { await store.liveAggregateLoadCount == 2 }
+    }
+
+    @Test
+    func coordinatorRoutesOpenURLsThroughDashboardModel() async {
+        let aggregate = SyncedAggregateEnvelope.singleInstallation(
+            mobileSnapshot: .fixture(generatedAt: "2026-04-21T11:00:00Z"),
+            installationID: "fixture-installation"
+        )
+        let store = ControlledSnapshotStore(
+            liveAggregate: aggregate,
+            acceptShareState: CloudSyncSpaceState(
+                role: .participant,
+                status: .participantJoined,
+                lastAcceptedAt: "2026-04-21T11:05:00Z"
+            )
+        )
+        let model = MobileDashboardModel(store: store)
+        let coordinator = MobileDashboardCoordinator(dashboard: model)
+
+        coordinator.handleOpenURL(URL(string: "https://example.com/share")!)
+
+        await waitUntil { await store.acceptShareCount == 1 }
+
+        #expect(model.cloudSyncState.status == .participantJoined)
+        #expect(model.aggregate?.generatedAt == aggregate.generatedAt)
     }
 
     @Test

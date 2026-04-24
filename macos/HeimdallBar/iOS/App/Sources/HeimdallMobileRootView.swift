@@ -5,7 +5,11 @@ import SwiftUI
 
 struct HeimdallMobileRootView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @State var model: MobileDashboardModel
+    @State var coordinator: MobileDashboardCoordinator
+
+    private var model: MobileDashboardModel {
+        self.coordinator.dashboard
+    }
 
     var body: some View {
         NavigationStack {
@@ -52,28 +56,16 @@ struct HeimdallMobileRootView: View {
             }
         }
         .sheet(
-            isPresented: Binding(
-                get: { self.model.isAliasEditorPresented },
-                set: { isPresented in
-                    if isPresented {
-                        self.model.presentAliasEditor()
-                    } else {
-                        self.model.dismissAliasEditor()
-                    }
-                }
-            )
+            isPresented: self.coordinator.aliasEditorPresentation
         ) {
             AliasEditorSheet(model: self.model)
         }
         .task {
-            await self.model.refresh(reason: .startup)
+            await self.coordinator.start()
         }
-        .onOpenURL { url in
-            Task { await self.model.acceptShareURL(url) }
-        }
+        .onOpenURL(perform: self.coordinator.handleOpenURL)
         .onChange(of: self.scenePhase) { _, newPhase in
-            guard newPhase == .active else { return }
-            Task { await self.model.refresh(reason: .foreground) }
+            self.coordinator.handleScenePhaseChange(newPhase)
         }
     }
 }
