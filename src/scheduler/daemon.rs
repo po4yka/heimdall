@@ -145,11 +145,19 @@ pub fn generate_daemon_plist(bin_path: &Path, logs_dir: &Path) -> String {
     let log_out = logs_dir.join("daemon.log");
     let log_err = logs_dir.join("daemon.err");
 
+    // The `<!-- heimdall X.Y.Z -->` comment is the talk-normal-style
+    // grep-friendly version stamp (see CLAUDE.md § "Embedded version
+    // stamps on install surfaces"). Pure XML comment, ignored by
+    // launchctl. Ownership detection is the plist filename + Label
+    // (`dev.heimdall.daemon`), not the comment. Kept in sync with the
+    // matching stamp in `scheduler/launchd.rs`; both are checked by
+    // tests asserting `<!-- heimdall <pkg_version> -->`.
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!-- heimdall {pkg_version} -->
 <dict>
     <key>Label</key>
     <string>{label}</string>
@@ -181,6 +189,7 @@ pub fn generate_daemon_plist(bin_path: &Path, logs_dir: &Path) -> String {
 </dict>
 </plist>
 "#,
+        pkg_version = env!("CARGO_PKG_VERSION"),
         label = DAEMON_PLIST_LABEL,
         bin = bin_str,
         log_out = xml_escape(&log_out.to_string_lossy()),
@@ -296,6 +305,23 @@ mod tests {
     use tempfile::TempDir;
 
     // ── plist generation ──────────────────────────────────────────────────────
+
+    /// Daemon plist carries the talk-normal-style package-version comment so
+    /// users can `grep heimdall ~/Library/LaunchAgents/dev.heimdall.daemon.plist`
+    /// to debug version skew. Mirrors the matching stamp in
+    /// `scheduler/launchd.rs::plist_contains_pkg_version_stamp`.
+    #[test]
+    fn daemon_plist_contains_pkg_version_stamp() {
+        let xml = generate_daemon_plist(
+            Path::new("/usr/local/bin/claude-usage-tracker"),
+            Path::new("/tmp/logs/heimdall"),
+        );
+        let stamp = format!("<!-- heimdall {} -->", env!("CARGO_PKG_VERSION"));
+        assert!(
+            xml.contains(&stamp),
+            "daemon plist must contain pkg version stamp {stamp:?}: {xml}"
+        );
+    }
 
     #[test]
     fn generate_daemon_plist_contains_label() {
