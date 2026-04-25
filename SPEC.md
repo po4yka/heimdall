@@ -1,4 +1,4 @@
-# Claude Usage Tracker – Technical Specification
+# Heimdall – Coding Agent Usage Tracker – Technical Specification
 
 ## Overview
 

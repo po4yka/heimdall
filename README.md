@@ -2,7 +2,7 @@
   <img src="assets/icons/app-icon-256.png" width="128" alt="Heimdall icon" />
 </p>
 
-<h1 align="center">Heimdall — Claude Usage Tracker</h1>
+<h1 align="center">Heimdall — Coding Agent Usage Tracker</h1>
 
 <p align="center">
   Local analytics for Claude Code, Codex, Cursor, OpenCode, Pi, Copilot, Xcode CodingAssistant, Cowork, and Amp. Built in Rust.

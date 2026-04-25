@@ -2,7 +2,7 @@
 name = "claude-usage-tracker"
 version = "0.1.0"
 edition = "2024"
-description = "Local analytics dashboard for Claude Code usage and token consumption"
+description = "Heimdall: local analytics dashboard for coding agent usage and token consumption (Claude Code, Codex, Cursor, OpenCode, Pi, Copilot, Xcode, Cowork, Amp)"
 license = "BSD-3-Clause"
 
 [[bin]]
