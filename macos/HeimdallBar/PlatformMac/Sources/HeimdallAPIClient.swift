@@ -77,6 +77,14 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
         try await self.fetch(path: "/api/mobile-snapshot", as: MobileSnapshotEnvelope.self)
     }
 
+    /// Fetch the dashboard payload (`/api/data`) and return the slice the
+    /// macOS client decodes into `DashboardSnapshot`. Source for cross-cutting
+    /// surfaces — like the all-providers daily-by-model history — that aren't
+    /// scoped to a single provider.
+    public func fetchDashboardData() async throws -> DashboardSnapshot {
+        try await self.fetch(path: "/api/data", as: DashboardSnapshot.self)
+    }
+
     public func fetchLiveMonitor() async throws -> LiveMonitorEnvelope {
         var request = URLRequest(url: self.baseURL.appendingPathComponent("/api/live-monitor"))
         request.timeoutInterval = Self.liveMonitorRequestTimeout

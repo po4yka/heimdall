@@ -902,6 +902,92 @@ public struct ProviderModelRow: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
+/// Slice of the Rust `DashboardData` payload (`/api/data`) that the macOS
+/// client cares about. Includes only the fields the menubar can usefully
+/// render today; expand as new dashboard surfaces gain consumers.
+public struct DashboardSnapshot: Codable, Sendable {
+    public var generatedAt: String
+    public var dailyByModel: [DashboardDailyModelRow]
+
+    public init(
+        generatedAt: String = "",
+        dailyByModel: [DashboardDailyModelRow] = []
+    ) {
+        self.generatedAt = generatedAt
+        self.dailyByModel = dailyByModel
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt) ?? ""
+        self.dailyByModel = try container.decodeIfPresent([DashboardDailyModelRow].self, forKey: .dailyByModel) ?? []
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case generatedAt = "generated_at"
+        case dailyByModel = "daily_by_model"
+    }
+}
+
+/// All-providers per-day per-model bucket as served by `/api/data`.
+/// Differs from `ProviderDailyModelRow` in carrying an explicit `provider`
+/// field and the rate-limited `credits` value used by Amp.
+public struct DashboardDailyModelRow: Codable, Sendable, Hashable, Identifiable {
+    public let day: String
+    public let provider: String
+    public let model: String
+    public let input: Int
+    public let output: Int
+    public let cacheRead: Int
+    public let cacheCreation: Int
+    public let reasoningOutput: Int
+    public let turns: Int
+    public let costUSD: Double
+
+    public var id: String { "\(self.day)|\(self.provider)|\(self.model)" }
+
+    public var totalTokens: Int {
+        self.input + self.output + self.cacheRead + self.cacheCreation + self.reasoningOutput
+    }
+
+    public init(
+        day: String,
+        provider: String,
+        model: String,
+        input: Int,
+        output: Int,
+        cacheRead: Int,
+        cacheCreation: Int,
+        reasoningOutput: Int,
+        turns: Int,
+        costUSD: Double
+    ) {
+        self.day = day
+        self.provider = provider
+        self.model = model
+        self.input = input
+        self.output = output
+        self.cacheRead = cacheRead
+        self.cacheCreation = cacheCreation
+        self.reasoningOutput = reasoningOutput
+        self.turns = turns
+        self.costUSD = costUSD
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case day
+        case provider
+        case model
+        case input
+        case output
+        case cacheRead = "cache_read"
+        case cacheCreation = "cache_creation"
+        case reasoningOutput = "reasoning_output"
+        case turns
+        case costUSD = "cost"
+    }
+}
+
 /// Per-day per-model bucket within a provider's 30-day window. Mirrors Rust
 /// `ProviderDailyModelRow` (`src/models.rs`).
 public struct ProviderDailyModelRow: Codable, Sendable, Hashable, Identifiable {
