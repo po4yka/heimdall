@@ -10,7 +10,7 @@ struct ActivityHeatmap: View {
     nonisolated private static let dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     private static let hourTicks = [0, 6, 12, 18, 23]
     private static let dayLabelWidth: CGFloat = 24
-    private static let cellSize: CGFloat = 12
+    private static let dayLabelGap: CGFloat = 8
     private static let cellSpacing: CGFloat = 2
     private static let tooltipWidth: CGFloat = 150
     private static let tooltipHeight: CGFloat = 64
@@ -18,6 +18,7 @@ struct ActivityHeatmap: View {
 
     @State private var hoveredCell: HoveredCell?
     @State private var cellFrames: [CellKey: CGRect] = [:]
+    @State private var gridWidth: CGFloat = 0
 
     struct Summary: Equatable {
         let totalTurns: Int
@@ -58,6 +59,13 @@ struct ActivityHeatmap: View {
         static let defaultValue: [CellKey: CGRect] = [:]
         static func reduce(value: inout [CellKey: CGRect], nextValue: () -> [CellKey: CGRect]) {
             value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+        }
+    }
+
+    private struct GridWidthPreferenceKey: PreferenceKey {
+        static let defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = max(value, nextValue())
         }
     }
 
@@ -113,17 +121,25 @@ struct ActivityHeatmap: View {
             }
             self.legendRow(scale)
                 .padding(.bottom, 5)
-            HStack(alignment: .top, spacing: 0) {
-                self.gridStack(grid: grid, summary: summary, scale: scale)
-                Spacer(minLength: 0)
-            }
-            .coordinateSpace(name: "heatmap")
-            .overlay(alignment: .topLeading) {
-                self.tooltipOverlay(totalTurns: totalTurns, activeCells: activeCells, rank: rank)
-            }
-            .onPreferenceChange(CellFramePreferenceKey.self) { newValue in
-                self.cellFrames = newValue
-            }
+            self.gridStack(grid: grid, summary: summary, scale: scale)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: GridWidthPreferenceKey.self,
+                            value: geo.size.width
+                        )
+                    }
+                )
+                .coordinateSpace(name: "heatmap")
+                .overlay(alignment: .topLeading) {
+                    self.tooltipOverlay(totalTurns: totalTurns, activeCells: activeCells, rank: rank)
+                }
+                .onPreferenceChange(CellFramePreferenceKey.self) { newValue in
+                    self.cellFrames = newValue
+                }
+                .onPreferenceChange(GridWidthPreferenceKey.self) { newValue in
+                    self.gridWidth = newValue
+                }
         }
     }
 
@@ -131,7 +147,7 @@ struct ActivityHeatmap: View {
     private func gridStack(grid: [[Int]], summary: Summary?, scale: IntensityScale) -> some View {
         VStack(spacing: Self.cellSpacing) {
             ForEach(0..<7, id: \.self) { day in
-                HStack(alignment: .center, spacing: 8) {
+                HStack(alignment: .center, spacing: Self.dayLabelGap) {
                     Text(Self.dayLabels[day])
                         .font(
                             .system(
@@ -153,9 +169,10 @@ struct ActivityHeatmap: View {
                             )
                         }
                     }
+                    .frame(maxWidth: .infinity)
                 }
             }
-            HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .center, spacing: Self.dayLabelGap) {
                 Color.clear.frame(width: Self.dayLabelWidth, height: 8)
                 HStack(spacing: Self.cellSpacing) {
                     ForEach(0..<24, id: \.self) { hour in
@@ -168,9 +185,10 @@ struct ActivityHeatmap: View {
                                 .monospacedDigit()
                             )
                             .foregroundStyle(self.hoveredCell?.hour == hour ? Color.primary : Color.secondary)
-                            .frame(width: Self.cellSize, alignment: Self.tickAlignment(for: hour))
+                            .frame(maxWidth: .infinity, alignment: Self.tickAlignment(for: hour))
                     }
                 }
+                .frame(maxWidth: .infinity)
             }
             .padding(.top, 4)
         }
@@ -199,7 +217,8 @@ struct ActivityHeatmap: View {
                         .stroke(Color.accentColor.opacity(0.85), lineWidth: 1)
                 }
             }
-            .frame(width: Self.cellSize, height: Self.cellSize)
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: .infinity)
             .background(
                 GeometryReader { geometry in
                     Color.clear.preference(
@@ -235,11 +254,9 @@ struct ActivityHeatmap: View {
         if let hovered = self.hoveredCell,
            let frame = self.cellFrames[CellKey(day: hovered.day, hour: hovered.hour)] {
             let above = hovered.day >= 2
-            let gridWidth = Self.dayLabelWidth + 8
-                + 24 * Self.cellSize
-                + 23 * Self.cellSpacing
+            let layoutWidth = max(self.gridWidth, Self.tooltipWidth)
             let preferredX = frame.midX - Self.tooltipWidth / 2
-            let clampedX = max(0, min(gridWidth - Self.tooltipWidth, preferredX))
+            let clampedX = max(0, min(layoutWidth - Self.tooltipWidth, preferredX))
             let y = above
                 ? frame.minY - Self.tooltipHeight - 6
                 : frame.maxY + 6
