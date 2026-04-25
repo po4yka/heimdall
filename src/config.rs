@@ -492,7 +492,7 @@ pub struct AggregatorConfig {
     #[serde(default = "default_aggregator_provider")]
     pub provider: String,
     /// Environment variable that holds the API key (key never stored in TOML).
-    #[serde(default = "default_aggregator_key_env_var", alias = "api_key_env")]
+    #[serde(default = "default_aggregator_key_env_var")]
     pub key_env_var: String,
     /// Seconds between polls (default: 300 — respects StatusGator free-tier rate).
     #[serde(default = "default_aggregator_refresh_interval")]
@@ -1158,23 +1158,6 @@ spike_webhook = false
         assert_eq!(config.aggregator.refresh_interval, 600);
         assert_eq!(config.aggregator.claude_services, vec!["claude-ai"]);
         assert!(!config.aggregator.spike_webhook);
-    }
-
-    #[test]
-    fn test_aggregator_config_legacy_api_key_env_alias() {
-        let tmp = TempDir::new().unwrap();
-        let path = tmp.path().join("config.toml");
-        let mut f = std::fs::File::create(&path).unwrap();
-        let legacy_key = ["api", "key", "env"].join("_");
-        write!(
-            f,
-            "[status_aggregator]\nenabled = true\n{} = \"MY_SG_TOKEN_ENV\"\n",
-            legacy_key
-        )
-        .unwrap();
-        let config = load_config_from(&path);
-        assert!(config.aggregator.enabled);
-        assert_eq!(config.aggregator.key_env_var, "MY_SG_TOKEN_ENV");
     }
 
     #[test]

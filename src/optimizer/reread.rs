@@ -1,16 +1,10 @@
 //! Detector: repeated file reads.
 //!
-//! Queries `tool_events` for files that were the target of a `Read` (or any
-//! event with `kind = 'file'` whose `value` looks like an absolute path) three
+//! Queries `tool_events` for files that were the target of a `Read` three
 //! or more times within the same session.  Repeated reads of the same file
 //! are a signal that the model is re-loading context it already processed —
 //! a common waste pattern that can be addressed by keeping relevant file
 //! contents in the context window or by restructuring the task.
-//!
-//! # Path heuristic
-//! We filter `value LIKE '/%'` to exclude rows where `value` still contains
-//! a tool name (legacy rows from DBs scanned before tool-argument capture was
-//! added in Phase 6 completion).  Tool names never start with `/`.
 //!
 //! # Cost formula
 //! We do not have actual file sizes, so we use a conservative 500-token
@@ -83,11 +77,10 @@ impl Detector for RereadDetector {
 
     fn run(&self, conn: &Connection) -> Result<Vec<Finding>> {
         // Query for files read >= MIN_READS times in any single session.
-        // We filter value LIKE '/%' to exclude legacy rows where value = tool name.
         let mut stmt = conn.prepare(
             "SELECT session_id, value AS file_path, COUNT(*) AS reads
              FROM tool_events
-             WHERE kind = 'file' AND value LIKE '/%'
+             WHERE kind = 'file'
              GROUP BY session_id, value
              HAVING reads >= ?1
              ORDER BY reads DESC
@@ -207,17 +200,6 @@ mod tests {
             "2 reads should not trigger: {:?}",
             findings
         );
-    }
-
-    #[test]
-    fn tool_name_value_not_flagged() {
-        // Legacy rows have value = tool name (e.g. "Read"), not a path.
-        let (_dir, conn) = empty_db();
-        for i in 0..5 {
-            insert_file_event(&conn, &format!("k{i}"), "claude:s1", "Read");
-        }
-        let findings = det().run(&conn).unwrap();
-        assert!(findings.is_empty(), "tool names should not be flagged");
     }
 
     // -----------------------------------------------------------------------

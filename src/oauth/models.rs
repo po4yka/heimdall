@@ -163,15 +163,8 @@ impl UsageWindowsResponse {
 impl WindowInfo {
     pub fn from_usage_window(w: &UsageWindow) -> Self {
         // Anthropic's /api/oauth/usage returns `utilization` as a 0-100
-        // percentage, not a 0-1 fraction. Live API confirms values like 9.0
-        // and 86.0. If we see a value <= 1.0 treat it as a legacy fraction
-        // for safety so older API responses don't regress to 0.
-        let raw = w.utilization.unwrap_or(0.0);
-        let used_percent = if raw > 0.0 && raw <= 1.0 {
-            raw * 100.0
-        } else {
-            raw
-        };
+        // percentage. Live API confirms values like 9.0 and 86.0.
+        let used_percent = w.utilization.unwrap_or(0.0);
         let resets_in_minutes = w.resets_at.as_ref().and_then(|ts| {
             let reset = chrono::DateTime::parse_from_rfc3339(ts).ok()?;
             let now = chrono::Utc::now();
@@ -191,12 +184,7 @@ impl BudgetInfo {
         if !e.is_enabled.unwrap_or(false) {
             return None;
         }
-        let raw = e.utilization.unwrap_or(0.0);
-        let utilization = if raw > 0.0 && raw <= 1.0 {
-            raw * 100.0
-        } else {
-            raw
-        };
+        let utilization = e.utilization.unwrap_or(0.0);
         Some(Self {
             used: e.used_credits.unwrap_or(0.0),
             limit: e.monthly_limit.unwrap_or(0.0),
@@ -229,18 +217,6 @@ mod tests {
         };
         let info = WindowInfo::from_usage_window(&w);
         assert!((info.used_percent - 86.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_window_info_from_usage_window_legacy_fraction() {
-        // Legacy fixtures used 0-1 fractions; we still treat those as percent.
-        let w = UsageWindow {
-            utilization: Some(0.45),
-            resets_at: Some("2099-01-01T00:00:00Z".into()),
-        };
-        let info = WindowInfo::from_usage_window(&w);
-        assert!((info.used_percent - 45.0).abs() < 0.01);
-        assert!(info.resets_in_minutes.unwrap() > 0);
     }
 
     #[test]

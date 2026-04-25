@@ -78,7 +78,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS processed_files (
             path    TEXT PRIMARY KEY,
             mtime   REAL,
-            lines   INTEGER,
             progress_marker INTEGER
         );
 
@@ -269,15 +268,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     if !has_column(conn, "turns", "category") {
         conn.execute_batch("ALTER TABLE turns ADD COLUMN category TEXT NOT NULL DEFAULT '';")?;
     }
-    if !has_column(conn, "processed_files", "progress_marker") {
-        conn.execute_batch(
-            "ALTER TABLE processed_files ADD COLUMN progress_marker INTEGER;
-             UPDATE processed_files
-             SET progress_marker = lines
-             WHERE progress_marker IS NULL;",
-        )?;
-    }
-
     // Tool invocations table for multi-tool and MCP tracking
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS tool_invocations (
@@ -486,7 +476,7 @@ fn prefix_existing_session_ids(conn: &Connection) -> Result<()> {
 
 pub fn get_processed_file(conn: &Connection, path: &str) -> Result<Option<(f64, i64)>> {
     let mut stmt = conn.prepare(
-        "SELECT mtime, COALESCE(progress_marker, lines, 0)
+        "SELECT mtime, COALESCE(progress_marker, 0)
          FROM processed_files
          WHERE path = ?",
     )?;
@@ -507,9 +497,9 @@ pub fn upsert_processed_file(
     progress_marker: i64,
 ) -> Result<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO processed_files (path, mtime, lines, progress_marker)
-         VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![path, mtime, progress_marker, progress_marker],
+        "INSERT OR REPLACE INTO processed_files (path, mtime, progress_marker)
+         VALUES (?1, ?2, ?3)",
+        rusqlite::params![path, mtime, progress_marker],
     )?;
     Ok(())
 }
@@ -623,8 +613,8 @@ pub fn compute_tool_events_for_turn(turn: &Turn, project: &str) -> Vec<ToolEvent
         .map(|(i, (tool_use_id, tool_name))| {
             let (kind, default_value) = classify_tool_event(tool_name);
             // Use the extracted argument when available and non-empty.
-            // Fall back to the default (tool name) for legacy rows or providers that
-            // do not populate tool_inputs.
+            // Fall back to the default (tool name) for providers that do not
+            // populate tool_inputs.
             let value = match input_map.get(tool_use_id.as_str()) {
                 Some(&arg) if !arg.is_empty() => arg.to_string(),
                 _ => default_value,
@@ -3638,29 +3628,6 @@ mod tests {
     }
 
     #[test]
-    fn test_processed_file_progress_marker_migrates_from_legacy_lines() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE processed_files (
-                path TEXT PRIMARY KEY,
-                mtime REAL,
-                lines INTEGER
-            );
-            INSERT INTO processed_files (path, mtime, lines)
-            VALUES ('/tmp/legacy.jsonl', 42.0, 7);",
-        )
-        .unwrap();
-
-        init_db(&conn).unwrap();
-
-        let (mtime, progress_marker) = get_processed_file(&conn, "/tmp/legacy.jsonl")
-            .unwrap()
-            .unwrap();
-        assert!((mtime - 42.0).abs() < 0.01);
-        assert_eq!(progress_marker, 7);
-    }
-
-    #[test]
     fn test_compute_duration_min() {
         let d = compute_duration_min("2026-04-08T09:00:00Z", "2026-04-08T10:00:00Z");
         assert!((d - 60.0).abs() < 0.1);
@@ -4625,23 +4592,6 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].kind, "bash");
         assert_eq!(events[0].value, "cargo test --all");
-    }
-
-    #[test]
-    fn test_tool_events_legacy_row_falls_back_to_tool_name() {
-        // When tool_inputs is empty (legacy / other providers), value = tool name.
-        let turn = Turn {
-            session_id: "claude:s1".into(),
-            provider: "claude".into(),
-            estimated_cost_nanos: 200,
-            tool_use_ids: vec![("call-1".into(), "Edit".into())],
-            tool_inputs: vec![], // no inputs — legacy behaviour
-            ..Default::default()
-        };
-        let events = compute_tool_events_for_turn(&turn, "proj");
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].kind, "file");
-        assert_eq!(events[0].value, "Edit");
     }
 
     #[test]

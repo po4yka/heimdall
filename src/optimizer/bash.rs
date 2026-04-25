@@ -289,16 +289,6 @@ mod tests {
     }
 
     #[test]
-    fn legacy_bash_tool_name_not_flagged() {
-        // Legacy rows have value = "Bash" (the tool name, not a command).
-        let (_dir, conn) = empty_db();
-        for i in 0..10 {
-            insert_bash_event(&conn, &format!("k{i}"), "claude:s1", "Bash");
-        }
-        assert!(det().run(&conn).unwrap().is_empty());
-    }
-
-    #[test]
     fn non_trivial_command_not_flagged() {
         let (_dir, conn) = empty_db();
         for i in 0..10 {

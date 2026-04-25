@@ -16,10 +16,9 @@ pub struct HookInput {
     #[serde(default, deserialize_with = "deserialize_model_field")]
     pub model: Option<String>,
     /// Anthropic-reported session cost (USD). Present when Claude Code runs
-    /// against the Anthropic API directly.
-    /// Accepts both `{"total_cost_usd": 0.12}` (ccusage schema) and a bare
-    /// number `0.12` (legacy/simplified payloads) via a custom deserializer.
-    #[serde(default, deserialize_with = "deserialize_cost_field")]
+    /// against the Anthropic API directly. Shape:
+    /// `{"total_cost_usd": 0.12, ...}` (ccusage schema).
+    #[serde(default)]
     pub cost: Option<HookCost>,
     #[serde(default)]
     pub context_window: Option<ContextWindow>,
@@ -46,33 +45,6 @@ where
                 .map(str::to_owned);
             Ok(id)
         }
-        _ => Ok(None),
-    }
-}
-
-/// Deserialize the `cost` field: accepts either a plain number (bare f64) or
-/// an object `{"total_cost_usd": ..., ...}`.
-fn deserialize_cost_field<'de, D>(
-    deserializer: D,
-) -> std::result::Result<Option<HookCost>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::Deserialize;
-    let v = Option::<serde_json::Value>::deserialize(deserializer)?;
-    match v {
-        None => Ok(None),
-        Some(serde_json::Value::Number(n)) => {
-            let usd = n.as_f64().unwrap_or(0.0);
-            Ok(Some(HookCost {
-                total_cost_usd: usd,
-                total_duration_ms: None,
-                total_api_duration_ms: None,
-            }))
-        }
-        Some(obj @ serde_json::Value::Object(_)) => serde_json::from_value::<HookCost>(obj)
-            .map(Some)
-            .map_err(serde::de::Error::custom),
         _ => Ok(None),
     }
 }
@@ -150,30 +122,6 @@ mod tests {
         assert_eq!(input.model.as_deref(), Some("claude-sonnet-4-6"));
         assert!(input.cost.is_some());
         assert!((input.cost.unwrap().total_cost_usd - 0.12).abs() < 1e-10);
-        let cw = input.context_window.unwrap();
-        assert_eq!(cw.total_input_tokens, Some(45231));
-        assert_eq!(cw.context_window_size, Some(200000));
-    }
-
-    /// Smoke-test: bare number in `cost` (simplified payload) must parse and
-    /// yield the same cost value.
-    #[test]
-    fn bare_number_cost_deserializes() {
-        let json = r#"{
-            "session_id": "test",
-            "transcript_path": "/tmp/x",
-            "model": "claude-sonnet-4-6",
-            "cost": 0.12,
-            "context_window": {
-                "total_input_tokens": 45231,
-                "context_window_size": 200000
-            }
-        }"#;
-        let input: HookInput = serde_json::from_str(json).unwrap();
-        assert_eq!(input.session_id, "test");
-        let cost = input.cost.expect("cost should be Some");
-        assert!((cost.total_cost_usd - 0.12).abs() < 1e-10);
-        assert_eq!(input.model.as_deref(), Some("claude-sonnet-4-6"));
         let cw = input.context_window.unwrap();
         assert_eq!(cw.total_input_tokens, Some(45231));
         assert_eq!(cw.context_window_size, Some(200000));
