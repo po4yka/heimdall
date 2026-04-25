@@ -244,11 +244,14 @@ mod tests {
 
     #[test]
     fn test_budget_info_enabled() {
+        // ExtraUsage.utilization mirrors the /api/oauth/usage convention:
+        // a 0-100 percentage. BudgetInfo stores it as-is for the dashboard
+        // SegmentedProgressBar (max=100), so the fixture uses 45.5 directly.
         let e = ExtraUsage {
             is_enabled: Some(true),
             monthly_limit: Some(100.0),
             used_credits: Some(45.5),
-            utilization: Some(0.455),
+            utilization: Some(45.5),
             currency: Some("USD".into()),
         };
         let b = BudgetInfo::from_extra_usage(&e).unwrap();

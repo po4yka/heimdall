@@ -198,18 +198,21 @@ mod tests {
 
     #[test]
     fn test_build_response_full() {
+        // Anthropic's /api/oauth/usage returns `utilization` as a 0-100
+        // percentage; mirror that in fixtures so assertions exercise the
+        // production code path (no fraction→percent conversion).
         let data = OAuthUsageResponse {
             five_hour: Some(UsageWindow {
-                utilization: Some(0.45),
+                utilization: Some(45.0),
                 resets_at: Some("2099-01-01T00:00:00Z".into()),
             }),
             seven_day: Some(UsageWindow {
-                utilization: Some(0.6),
+                utilization: Some(60.0),
                 resets_at: Some("2099-01-08T00:00:00Z".into()),
             }),
             seven_day_oauth_apps: None,
             seven_day_opus: Some(UsageWindow {
-                utilization: Some(0.3),
+                utilization: Some(30.0),
                 resets_at: None,
             }),
             seven_day_sonnet: None,
@@ -218,7 +221,7 @@ mod tests {
                 is_enabled: Some(true),
                 monthly_limit: Some(100.0),
                 used_credits: Some(45.5),
-                utilization: Some(0.455),
+                utilization: Some(45.5),
                 currency: Some("USD".into()),
             }),
         };
@@ -253,13 +256,15 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn test_fetch_usage_success_sends_expected_headers() {
+        // Live Anthropic /oauth/usage returns utilization as 0-100 percent;
+        // mirror that here so the response builder receives realistic input.
         let body = r#"{
-            "five_hour": { "utilization": 0.25, "resets_at": "2099-01-01T00:00:00Z" },
+            "five_hour": { "utilization": 25.0, "resets_at": "2099-01-01T00:00:00Z" },
             "extra_usage": {
                 "is_enabled": true,
                 "monthly_limit": 40.0,
                 "used_credits": 10.0,
-                "utilization": 0.25,
+                "utilization": 25.0,
                 "currency": "USD"
             }
         }"#;
