@@ -261,6 +261,36 @@ struct CacheHitTrendChart: View {
     }()
 }
 
+private func cacheHitTrendPreviewPoint(
+    offset: Int,
+    base: Date,
+    calendar: Calendar,
+    formatter: DateFormatter
+) -> CostHistoryPoint {
+    let date: Date = calendar.date(byAdding: .day, value: -offset, to: base) ?? base
+    let progress: Double = Double(30 - offset) / 30.0
+    // Rising cache hit rate: starts ~20%, ends ~75%, with small noise
+    let cacheRead: Int = Int((progress * 0.75 + Double(offset % 3) * 0.02) * 10_000)
+    let input: Int = 5_000
+    let output: Int = 1_000
+    let cacheCreation: Int = 2_000
+    let extra: Int = 1_000
+    let breakdown = TokenBreakdown(
+        input: input,
+        output: output,
+        cacheRead: cacheRead,
+        cacheCreation: cacheCreation
+    )
+    let totalTokens: Int = input + cacheRead + cacheCreation + extra
+    let costUSD: Double = 1.5 + progress * 8.0
+    return CostHistoryPoint(
+        day: formatter.string(from: date),
+        totalTokens: totalTokens,
+        costUSD: costUSD,
+        breakdown: breakdown
+    )
+}
+
 #Preview("Cache hit rate — rising trend") {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd"
@@ -269,23 +299,11 @@ struct CacheHitTrendChart: View {
     let base = Date()
     let calendar = Calendar.current
     let points: [CostHistoryPoint] = (0..<30).reversed().map { offset in
-        let date = calendar.date(byAdding: .day, value: -offset, to: base) ?? base
-        let progress = Double(30 - offset) / 30.0
-        // Rising cache hit rate: starts ~20%, ends ~75%, with small noise
-        let cacheRead = Int((progress * 0.75 + Double(offset % 3) * 0.02) * 10_000)
-        let input = 5_000
-        let cacheCreation = 2_000
-        let breakdown = TokenBreakdown(
-            input: input,
-            output: 1_000,
-            cacheRead: cacheRead,
-            cacheCreation: cacheCreation
-        )
-        return CostHistoryPoint(
-            day: formatter.string(from: date),
-            totalTokens: input + cacheRead + cacheCreation + 1_000,
-            costUSD: 1.5 + progress * 8.0,
-            breakdown: breakdown
+        cacheHitTrendPreviewPoint(
+            offset: offset,
+            base: base,
+            calendar: calendar,
+            formatter: formatter
         )
     }
     return CacheHitTrendChart(daily: points)
