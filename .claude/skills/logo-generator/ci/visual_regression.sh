@@ -16,6 +16,7 @@
 #   MAX_DIFF_PIXELS_SMALL=4 bash ...ci/visual_regression.sh    # custom threshold
 
 set -euo pipefail
+shopt -s nullglob
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "${SKILL_DIR}/../../.." && pwd)"
@@ -31,12 +32,24 @@ echo "  variants    : ${VARIANTS_DIR}"
 echo "  thresholds  : 16px<=${MAX_DIFF_PIXELS_SMALL}, 128px<=${MAX_DIFF_PIXELS_LARGE}"
 echo ""
 
+# Variants are optional artifacts produced by the logo-generator skill; the
+# directory is absent on a fresh clone. Bail out cleanly so workflow runs
+# triggered by changes elsewhere in the skill (e.g. requirements bumps) are
+# not blocked.
+variants=("${VARIANTS_DIR}"/v*.svg)
+if [ ${#variants[@]} -eq 0 ]; then
+    echo "  no variant SVGs found — nothing to gate. Skipping."
+    echo ""
+    echo "[OK] logo CI gates passed (no variants present)"
+    exit 0
+fi
+
 # -----------------------------------------------------------------------------
 # Gate 1: grammar contract (Python validator — always runs)
 # -----------------------------------------------------------------------------
 
 echo "--- [1/3] grammar contract ---"
-if ! python3 "${SKILL_DIR}/scripts/validate_svg.py" --strict "${VARIANTS_DIR}"/v*.svg; then
+if ! python3 "${SKILL_DIR}/scripts/validate_svg.py" --strict "${variants[@]}"; then
     echo ""
     echo "FAIL: one or more variants violate the grammar contract."
     exit 1
@@ -52,7 +65,7 @@ if [ -d "${CI_DIR}/node_modules" ] && [ -x "${CI_DIR}/node_modules/.bin/svglint"
     (
         cd "${CI_DIR}"
         # --ci exits nonzero on any violation; --stdin false forces file mode
-        ./node_modules/.bin/svglint --ci "${VARIANTS_DIR}"/v*.svg
+        ./node_modules/.bin/svglint --ci "${variants[@]}"
     )
     echo ""
 else
@@ -82,7 +95,7 @@ trap 'rm -rf "${tmp}"' EXIT
 fails=0
 regenerated=0
 
-for svg in "${VARIANTS_DIR}"/v*.svg; do
+for svg in "${variants[@]}"; do
     base=$(basename "${svg}" .svg)
     for size in 16 128; do
         committed="${VARIANTS_DIR}/${base}-${size}.png"
