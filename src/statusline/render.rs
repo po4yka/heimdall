@@ -429,7 +429,10 @@ mod tests {
                 cost_nanos: 99_999_900_000, // $99.9999
                 block_end,
                 burn_rate: Some(BurnRate {
-                    tokens_per_min: 500.0, // > moderate_max=250 → High tier
+                    // RenderOpts::default() inherits BurnRateConfig::default()
+                    // (normal_max=4_000, moderate_max=10_000). 20_000 sits well
+                    // above moderate_max → High tier (🚨/[CRIT]).
+                    tokens_per_min: 20_000.0,
                     cost_per_hour_nanos: 9_999_900_000,
                 }),
             }),
