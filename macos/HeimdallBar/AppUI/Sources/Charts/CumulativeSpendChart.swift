@@ -224,7 +224,7 @@ struct CumulativeSpendChart: View {
         return "\(delta >= 0 ? "+" : "-")\(Self.currencyLabel(abs(delta))) \(suffix)"
     }
 
-    nonisolated(unsafe) private static let dayFormatter: DateFormatter = {
+    nonisolated private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
@@ -232,7 +232,7 @@ struct CumulativeSpendChart: View {
         return formatter
     }()
 
-    nonisolated(unsafe) private static let axisFormatter: DateFormatter = {
+    nonisolated private static let axisFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
         return formatter

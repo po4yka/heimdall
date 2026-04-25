@@ -246,7 +246,7 @@ struct CacheHitTrendChart: View {
         return String(format: "%@%.1f pt %@", points >= 0 ? "+" : "-", abs(points), suffix)
     }
 
-    nonisolated(unsafe) private static let dayFormatter: DateFormatter = {
+    nonisolated private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
@@ -254,7 +254,7 @@ struct CacheHitTrendChart: View {
         return formatter
     }()
 
-    nonisolated(unsafe) private static let axisFormatter: DateFormatter = {
+    nonisolated private static let axisFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
         return formatter
