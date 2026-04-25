@@ -40,6 +40,19 @@ Delete any section that is not relevant.
 - [ ] Manual UI verification in a browser (if dashboard-visible)
 - [ ] Migration tested on an existing `~/.claude/usage.db` (if `scanner/db.rs` changed)
 
+## Receipts (heuristic changes only)
+
+<!--
+Required if this PR touches src/optimizer/ (waste detector) or
+src/pricing.rs::PRICING_TABLE (pricing entry). Delete this section
+otherwise. See CONTRIBUTING.md#receipt-driven-contributions.
+-->
+
+- [ ] **Fixture or source link** — anonymised fixture under `tests/fixtures/regressions/<name>/`, or a sourced pricing-page link with retrieval date.
+- [ ] **Prevalence evidence** (new detectors only) — pattern observed in multiple users' or sessions' data, not just the contributor's.
+- [ ] **Regression-file row** — appended to or created in [`regressions/`](../regressions/).
+- [ ] **PRICING_VERSION decision** documented in the summary above (new pricing entries only): rate change → bump; new alias at existing rate → no bump.
+
 ## Screenshots / output
 
 <!-- Optional: dashboard screenshots, CLI output, before/after diffs. -->

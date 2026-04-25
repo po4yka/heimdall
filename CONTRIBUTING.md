@@ -106,6 +106,35 @@ See [AGENTS.md](AGENTS.md) for the full "Adding X" playbook — including new mo
 
 When you touch a heuristic — a waste detector under `src/optimizer/`, a pricing tier or fallback path in `src/pricing.rs`, or a regex-driven classifier — also append a row to (or create) the matching file in [`regressions/`](regressions/). That directory holds per-heuristic iteration logs with measured leak counts per release; see [`regressions/README.md`](regressions/README.md) for the file format and rationale.
 
+## Receipt-driven contributions
+
+Two kinds of change need explicit evidence on the PR before merge: new waste detectors and new pricing entries. Both surfaces ship heuristics that affect every user's bill display, so PRs without receipts will be asked for them. The pattern is borrowed from [talk-normal's contribution gate](https://github.com/hexiecs/talk-normal/blob/main/CONTRIBUTING.md): a heuristic landed on personal taste accumulates noise; a heuristic landed on a verbatim receipt accumulates signal.
+
+### New waste detector (under `src/optimizer/`)
+
+Required on the PR or in the linked issue:
+
+1. **Anonymised fixture** under `tests/fixtures/regressions/<detector>/` demonstrating the pattern — JSONL, SQLite snapshot, or a minimal programmatic builder. One fixture, one detector. Anonymise paths (`/Users/alice/...` → `/proj/...`), redact tokens.
+2. **Prevalence evidence.** Has the pattern shown up in more than one session and more than one user's data, or only on the contributor's machine? Heimdall does not ship single-machine heuristics; cite another user's session, an issue thread, or community samples.
+3. **Severity / monthly-waste formula rationale.** Document the thresholds and the cost formula inline at the top of the detector module. Why this token assumption? Why this severity boundary? "Round number" is not a rationale.
+4. **Regression-file row.** Add or extend a file under [`regressions/`](regressions/) with the v0.X.0 baseline measurement against the fixture: false positives, false negatives, and — if measurable — precision and recall. See [`regressions/README.md`](regressions/README.md) for the format.
+5. **No new false positives on existing fixtures.** If fixtures already exist under `tests/fixtures/regressions/`, run the full detector suite against each and confirm yours does not introduce findings on previously-clean fixtures. At time of writing no fixtures exist; the first contributor to add one is also responsible for the cross-detector test harness.
+
+### New pricing entry (in `src/pricing.rs::PRICING_TABLE`)
+
+Required on the PR:
+
+1. **Source receipt.** A direct link to the provider's pricing page (Anthropic, OpenAI, etc.) with the retrieval date, or an API-invoice excerpt with sensitive details redacted. Hardcoded prices without a sourced rate are rejected — they drift silently and there is no way to audit the original number months later.
+2. **Alias coverage.** List every alias the model is referred to in real session data: the full versioned alias (`claude-sonnet-4-7-20260101`), the stripped form (`claude-sonnet-4-7`), and any provider-specific variants. Confirm each alias resolves at the intended tier of the 5-tier fallback (tier 1–4 for Claude/GPT-5, never tier 5 / LiteLLM). Add a unit test in `src/pricing.rs` covering each new alias.
+3. **`PRICING_VERSION` decision documented.** Bump `PRICING_VERSION` *only* when an existing model's rate changes. Adding a new model alias at existing-tier rates does *not* require a version bump — the new alias inherits the existing version stamp. State which case applies in the PR description.
+4. **Regression-file row.** Append a row to [`regressions/pricing-fallback-claude.md`](regressions/pricing-fallback-claude.md) recording the new hardcoded count and any aliases observed falling through to tier 5 before this fix.
+
+PRs that change the *behaviour* of the 5-tier fallback chain itself — not just the data in the table — are heuristic changes, not data changes. Those follow the waste-detector gate above, plus a unit test that pins the new precedence.
+
+### Reviewer note
+
+Reviewers may close a PR with "needs receipts" without further engineering review if the gate above is unmet. This is not a judgement on the change; it is the same filter talk-normal applies to rule suggestions. Bring the receipts and reopen.
+
 ## Reporting security issues
 
 **Do not open a public GitHub issue.** Please follow [SECURITY.md](SECURITY.md) — private vulnerability reporting via GitHub Security Advisories or email to the maintainer.
