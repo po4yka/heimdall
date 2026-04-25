@@ -1,12 +1,23 @@
 {
   "hooks": {
-    "PostToolUse": [
+    "PreToolUse": [
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$TOOL_INPUT\" | grep -q '\\.rs'; then cargo clippy --quiet -- -D warnings 2>&1 | head -20; fi"
+            "command": "p=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); case \"$p\" in *src/ui/app.js|*src/ui/style.css) echo 'src/ui/app.js and src/ui/style.css are generated artifacts. Edit src/ui/*.tsx or src/ui/input.css and run npm run build:ui (or invoke the dashboard-rebuild skill).' >&2; exit 2;; esac"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "p=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); case \"$p\" in *.rs) cargo clippy --quiet -- -D warnings 2>&1 | head -40;; *.tsx|*.ts) ./node_modules/.bin/tsc --noEmit 2>&1 | head -40;; esac"
           }
         ]
       }
