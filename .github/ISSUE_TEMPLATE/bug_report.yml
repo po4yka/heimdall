@@ -1,0 +1,130 @@
+name: Bug report
+description: Report something broken or behaving unexpectedly in Heimdall
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in the fields below — the more detail you provide, the faster we can reproduce and fix it.
+
+        **For security issues, do not file a public bug.** See [SECURITY.md](https://github.com/po4yka/heimdall/blob/main/SECURITY.md).
+
+  - type: input
+    id: version
+    attributes:
+      label: Heimdall version
+      description: Output of `claude-usage-tracker --version` (or commit SHA if built from source).
+      placeholder: "0.1.0 / git rev-parse HEAD"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      description: Which Heimdall surface is affected?
+      multiple: true
+      options:
+        - CLI (claude-usage-tracker)
+        - heimdall-hook
+        - Web dashboard
+        - statusline
+        - MCP server
+        - HeimdallBar (macOS app)
+        - HeimdallBar widgets
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Affected provider(s)
+      description: If the bug is provider-specific, which one(s)?
+      multiple: true
+      options:
+        - Claude Code
+        - Codex
+        - Cursor
+        - OpenCode
+        - Pi
+        - GitHub Copilot
+        - Xcode CodingAssistant
+        - Cowork
+        - Amp
+        - Not provider-specific
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      multiple: true
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux x86_64
+        - Linux ARM64
+        - Windows x86_64
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "macOS 26.4.1, Ubuntu 24.04, …"
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear, concise description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps. Include any commands, sample data, or config snippets needed.
+      placeholder: |
+        1. Run `claude-usage-tracker dashboard --watch`
+        2. Open <http://127.0.0.1:8080>
+        3. Click X / observe Y
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Relevant log output. Run with `RUST_LOG=heimdall=debug,info` for the CLI when possible. Wrap long output in details/summary.
+      render: text
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Config (optional)
+      description: Anonymized contents of `~/.claude/usage-tracker.{toml,json}` or `$HEIMDALL_CONFIG`.
+      render: toml
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched [existing issues](https://github.com/po4yka/heimdall/issues?q=is%3Aissue) and didn't find a duplicate.
+          required: true
+        - label: I am running the latest tagged release or `main`.
+          required: true
+        - label: This is not a security issue (security issues go through [SECURITY.md](https://github.com/po4yka/heimdall/blob/main/SECURITY.md)).
+          required: true

@@ -178,4 +178,10 @@ Also inspired by [phuryn/claude-usage](https://github.com/phuryn/claude-usage) (
 
 ## License
 
-MIT
+BSD 3-Clause — see [LICENSE](LICENSE).
+
+## Community
+
+- [Contributing guide](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md)

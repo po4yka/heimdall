@@ -3,7 +3,7 @@ name = "claude-usage-tracker"
 version = "0.1.0"
 edition = "2024"
 description = "Local analytics dashboard for Claude Code usage and token consumption"
-license = "MIT"
+license = "BSD-3-Clause"
 
 [[bin]]
 name = "claude-usage-tracker"

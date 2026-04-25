@@ -1,0 +1,70 @@
+name: Feature request
+description: Propose a new feature, provider, or workflow improvement
+title: "[feat] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to propose a feature. Please describe the *problem* you're trying to solve before the *solution* — that helps us discuss alternatives without rabbit-holing on a specific implementation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem are you trying to solve? Who feels this pain? When does it bite?
+      placeholder: |
+        When I'm running Codex sessions, I want to see X, but Heimdall currently only shows Y.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like Heimdall to do? Sketch the user-visible behaviour — CLI flag, dashboard card, MCP tool, config option, etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      description: Which Heimdall surface(s) would this touch?
+      multiple: true
+      options:
+        - CLI (claude-usage-tracker)
+        - heimdall-hook
+        - Web dashboard
+        - statusline
+        - MCP server
+        - HeimdallBar (macOS app)
+        - HeimdallBar widgets
+        - Configuration / schema
+        - New scanner provider
+        - New analytics / detector
+        - Other / unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Are there other ways to solve this problem? Why is this proposal preferable?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, mock-ups, links to similar features in other tools, prior-art references.
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched [existing issues](https://github.com/po4yka/heimdall/issues?q=is%3Aissue) and [discussions](https://github.com/po4yka/heimdall/discussions) and didn't find a duplicate.
+          required: true
+        - label: I'm willing to discuss alternatives — this is a proposal, not a demand.
+          required: true

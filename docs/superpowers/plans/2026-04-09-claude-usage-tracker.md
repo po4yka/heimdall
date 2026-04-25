@@ -55,7 +55,7 @@ name = "claude-usage-tracker"
 version = "0.1.0"
 edition = "2021"
 description = "Local analytics dashboard for Claude Code usage and token consumption"
-license = "MIT"
+license = "BSD-3-Clause"
 
 [dependencies]
 anyhow = "1"
