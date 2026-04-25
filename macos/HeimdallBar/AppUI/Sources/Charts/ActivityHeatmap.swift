@@ -11,10 +11,17 @@ struct ActivityHeatmap: View {
     private static let hourTicks = [0, 6, 12, 18, 23]
     private static let dayLabelWidth: CGFloat = 24
     private static let dayLabelGap: CGFloat = 8
-    private static let cellSpacing: CGFloat = 2
+    private static let baseCellSpacing: CGFloat = 2
+    private static let maxCellSize: CGFloat = 18
+    private static let fallbackCellSize: CGFloat = 12
     private static let tooltipWidth: CGFloat = 150
     private static let tooltipHeight: CGFloat = 64
     nonisolated private static let dimMultiplier: Double = 0.55
+
+    private struct GridLayout: Equatable {
+        let cellSize: CGFloat
+        let spacing: CGFloat
+    }
 
     @State private var hoveredCell: HoveredCell?
     @State private var cellFrames: [CellKey: CGRect] = [:]
@@ -121,7 +128,9 @@ struct ActivityHeatmap: View {
             }
             self.legendRow(scale)
                 .padding(.bottom, 5)
-            self.gridStack(grid: grid, summary: summary, scale: scale)
+            let layout = Self.layout(forWidth: self.gridWidth)
+            self.gridStack(grid: grid, summary: summary, scale: scale, layout: layout)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     GeometryReader { geo in
                         Color.clear.preference(
@@ -143,9 +152,31 @@ struct ActivityHeatmap: View {
         }
     }
 
+    nonisolated private static func layout(forWidth width: CGFloat) -> GridLayout {
+        guard width > 0 else {
+            return GridLayout(cellSize: fallbackCellSize, spacing: baseCellSpacing)
+        }
+        let avail = width - dayLabelWidth - dayLabelGap
+        let cappedWidth = 24 * maxCellSize + 23 * baseCellSpacing
+        if avail >= cappedWidth {
+            let extra = avail - cappedWidth
+            return GridLayout(
+                cellSize: maxCellSize,
+                spacing: baseCellSpacing + extra / 23
+            )
+        }
+        let cellSize = max(8, (avail - 23 * baseCellSpacing) / 24)
+        return GridLayout(cellSize: cellSize, spacing: baseCellSpacing)
+    }
+
     @ViewBuilder
-    private func gridStack(grid: [[Int]], summary: Summary?, scale: IntensityScale) -> some View {
-        VStack(spacing: Self.cellSpacing) {
+    private func gridStack(
+        grid: [[Int]],
+        summary: Summary?,
+        scale: IntensityScale,
+        layout: GridLayout
+    ) -> some View {
+        VStack(spacing: layout.spacing) {
             ForEach(0..<7, id: \.self) { day in
                 HStack(alignment: .center, spacing: Self.dayLabelGap) {
                     Text(Self.dayLabels[day])
@@ -158,23 +189,23 @@ struct ActivityHeatmap: View {
                         )
                         .foregroundStyle(self.hoveredCell?.day == day ? Color.primary : Color.secondary)
                         .frame(width: Self.dayLabelWidth, alignment: .leading)
-                    HStack(spacing: Self.cellSpacing) {
+                    HStack(spacing: layout.spacing) {
                         ForEach(0..<24, id: \.self) { hour in
                             self.cellView(
                                 day: day,
                                 hour: hour,
                                 grid: grid,
                                 summary: summary,
-                                scale: scale
+                                scale: scale,
+                                cellSize: layout.cellSize
                             )
                         }
                     }
-                    .frame(maxWidth: .infinity)
                 }
             }
             HStack(alignment: .center, spacing: Self.dayLabelGap) {
                 Color.clear.frame(width: Self.dayLabelWidth, height: 8)
-                HStack(spacing: Self.cellSpacing) {
+                HStack(spacing: layout.spacing) {
                     ForEach(0..<24, id: \.self) { hour in
                         Text(Self.hourTicks.contains(hour) ? Self.hourLabel(hour) : "")
                             .font(
@@ -185,10 +216,9 @@ struct ActivityHeatmap: View {
                                 .monospacedDigit()
                             )
                             .foregroundStyle(self.hoveredCell?.hour == hour ? Color.primary : Color.secondary)
-                            .frame(maxWidth: .infinity, alignment: Self.tickAlignment(for: hour))
+                            .frame(width: layout.cellSize, alignment: Self.tickAlignment(for: hour))
                     }
                 }
-                .frame(maxWidth: .infinity)
             }
             .padding(.top, 4)
         }
@@ -200,7 +230,8 @@ struct ActivityHeatmap: View {
         hour: Int,
         grid: [[Int]],
         summary: Summary?,
-        scale: IntensityScale
+        scale: IntensityScale,
+        cellSize: CGFloat
     ) -> some View {
         let turns = grid[day][hour]
         let isPeak = summary?.peakDay == day && summary?.peakHour == hour
@@ -217,8 +248,7 @@ struct ActivityHeatmap: View {
                         .stroke(Color.accentColor.opacity(0.85), lineWidth: 1)
                 }
             }
-            .aspectRatio(1, contentMode: .fit)
-            .frame(maxWidth: .infinity)
+            .frame(width: cellSize, height: cellSize)
             .background(
                 GeometryReader { geometry in
                     Color.clear.preference(
