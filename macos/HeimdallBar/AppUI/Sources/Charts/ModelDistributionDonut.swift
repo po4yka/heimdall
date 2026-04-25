@@ -2,8 +2,9 @@ import Charts
 import HeimdallDomain
 import SwiftUI
 
-/// Model-mix donut chart: cost share by model family, 96pt diameter,
-/// monochrome/accent colour ladder, inline legend below.
+/// Model-mix donut chart: cost share by model family on the left, call-share
+/// donut on the right, shared legend in the middle. Both donuts share a single
+/// hover state so highlighting cascades across all three views.
 struct ModelDistributionDonut: View {
     let rows: [ProviderModelRow]
 
@@ -12,6 +13,25 @@ struct ModelDistributionDonut: View {
     private static let donutInnerRatio: CGFloat = 0.62
     private static let donutOuterRatio: CGFloat = 0.98
     private static let dimMultiplier: Double = 0.45
+
+    enum DonutMetric: String, Equatable {
+        case cost
+        case calls
+
+        var captionLabel: String {
+            switch self {
+            case .cost: return "Cost share"
+            case .calls: return "Call share"
+            }
+        }
+
+        var accessibilityLabel: String {
+            switch self {
+            case .cost: return "cost"
+            case .calls: return "calls"
+            }
+        }
+    }
 
     @State private var hoveredFamily: String?
 
@@ -22,7 +42,7 @@ struct ModelDistributionDonut: View {
         VStack(alignment: .leading, spacing: 6) {
             ChartHeader(
                 title: "Model mix · 30 days",
-                caption: "\(capped.count) model\(capped.count == 1 ? "" : "s") by cost."
+                caption: "\(capped.count) model\(capped.count == 1 ? "" : "s") · cost vs. calls."
             )
             if capped.isEmpty {
                 Text("No model data yet.")
@@ -31,8 +51,17 @@ struct ModelDistributionDonut: View {
                     .padding(.vertical, 8)
             } else {
                 HStack(alignment: .center, spacing: 12) {
-                    self.donut(families: families, colorMap: colorMap)
+                    self.captionedDonut(
+                        families: families,
+                        colorMap: colorMap,
+                        metric: .cost
+                    )
                     self.legend(families: families, colorMap: colorMap)
+                    self.captionedDonut(
+                        families: families,
+                        colorMap: colorMap,
+                        metric: .calls
+                    )
                     Spacer(minLength: 0)
                 }
             }
@@ -43,11 +72,30 @@ struct ModelDistributionDonut: View {
             cornerRadius: ChartStyle.cardCornerRadius
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Model mix donut, \(rows.count) models")
+        .accessibilityLabel("Model mix donut, \(rows.count) models, by cost and calls")
     }
 
     @ViewBuilder
-    private func donut(families: [FamilyEntry], colorMap: [String: Color]) -> some View {
+    private func captionedDonut(
+        families: [FamilyEntry],
+        colorMap: [String: Color],
+        metric: DonutMetric
+    ) -> some View {
+        VStack(spacing: 4) {
+            self.donut(families: families, colorMap: colorMap, metric: metric)
+            Text(metric.captionLabel)
+                .font(.system(size: 8, weight: .bold))
+                .tracking(0.5)
+                .foregroundStyle(Color.primary.opacity(0.48))
+        }
+    }
+
+    @ViewBuilder
+    private func donut(
+        families: [FamilyEntry],
+        colorMap: [String: Color],
+        metric: DonutMetric
+    ) -> some View {
         let displayRange: [Color] = families.map { family in
             let base = colorMap[family.label] ?? Color.primary.opacity(0.14)
             if let hovered = self.hoveredFamily, hovered != family.label {
@@ -58,7 +106,7 @@ struct ModelDistributionDonut: View {
         Chart {
             ForEach(families) { family in
                 SectorMark(
-                    angle: .value("Cost", family.costUSD),
+                    angle: .value(metric.accessibilityLabel, family.value(for: metric)),
                     innerRadius: .ratio(Self.donutInnerRatio),
                     outerRadius: .ratio(Self.donutOuterRatio)
                 )
@@ -82,7 +130,8 @@ struct ModelDistributionDonut: View {
                             let next = Self.familyAt(
                                 point: location,
                                 in: geo.size,
-                                families: families
+                                families: families,
+                                metric: metric
                             )
                             ChartStyle.updateHoverSelection(&self.hoveredFamily, to: next)
                         case .ended:
@@ -140,18 +189,30 @@ struct ModelDistributionDonut: View {
     struct FamilyEntry: Identifiable, Hashable {
         let label: String
         let costUSD: Double
+        let turns: Int
+
         var id: String { self.label }
+
+        func value(for metric: DonutMetric) -> Double {
+            switch metric {
+            case .cost: return self.costUSD
+            case .calls: return Double(self.turns)
+            }
+        }
     }
 
     /// Collapse individual models into family groups, sorted by cost descending.
     nonisolated static func families(from rows: [ProviderModelRow]) -> [FamilyEntry] {
-        var grouped: [String: Double] = [:]
+        var grouped: [String: (cost: Double, turns: Int)] = [:]
         for row in rows {
             let label = modelFamilyLabel(row.model)
-            grouped[label, default: 0] += row.costUSD
+            var entry = grouped[label] ?? (cost: 0, turns: 0)
+            entry.cost += row.costUSD
+            entry.turns += row.turns
+            grouped[label] = entry
         }
         return grouped
-            .map { FamilyEntry(label: $0.key, costUSD: $0.value) }
+            .map { FamilyEntry(label: $0.key, costUSD: $0.value.cost, turns: $0.value.turns) }
             .sorted { $0.costUSD > $1.costUSD }
     }
 
@@ -196,7 +257,8 @@ struct ModelDistributionDonut: View {
     nonisolated static func familyAt(
         point: CGPoint,
         in size: CGSize,
-        families: [FamilyEntry]
+        families: [FamilyEntry],
+        metric: DonutMetric
     ) -> String? {
         guard !families.isEmpty else { return nil }
         let cx = size.width / 2
@@ -213,13 +275,13 @@ struct ModelDistributionDonut: View {
         var angle = atan2(dx, -dy)
         if angle < 0 { angle += 2 * .pi }
 
-        let total = families.reduce(0) { $0 + $1.costUSD }
+        let total = families.reduce(0) { $0 + $1.value(for: metric) }
         guard total > 0 else { return nil }
 
         let normalized = angle / (2 * .pi)
         var cumulative = 0.0
         for family in families {
-            cumulative += family.costUSD / total
+            cumulative += family.value(for: metric) / total
             if normalized <= cumulative + 1e-9 {
                 return family.label
             }
@@ -240,5 +302,5 @@ struct ModelDistributionDonut: View {
     ]
     ModelDistributionDonut(rows: rows)
         .padding()
-        .frame(width: 336)
+        .frame(width: 480)
 }
