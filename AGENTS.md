@@ -82,7 +82,7 @@ cargo clippy -- -D warnings
 cargo fmt --check
 ```
 
-CI runs both gates on every PR. The release workflow (`.github/workflows/release.yml`) also cross-builds both binaries on 5 targets when a `v*.*.*` tag is pushed.
+CI runs both gates on every PR. The release workflow (`.github/workflows/release.yml`) also cross-builds both binaries on 4 targets when a `v*.*.*` tag is pushed.
 
 ## Architecture
 
@@ -162,7 +162,6 @@ src/
     mod.rs             -- Scheduler trait, Interval, InstallStatus, current() dispatch
     launchd.rs         -- macOS plist generation + launchctl
     cron.rs            -- Linux crontab text transformation (tagged via `# heimdall-scheduler:v1`)
-    schtasks.rs        -- Windows schtasks argv builder
     daemon.rs          -- LaunchdDaemonScheduler (macOS-only always-on dashboard)
 
   server/
@@ -239,7 +238,7 @@ src/
 - **Real-time hook**: `heimdall-hook` binary is fire-and-forget — always exits 0, always prints `{}`, ~50ms p99. It never blocks Claude Code. Bypass mode (ancestor process has `--dangerously-skip-permissions`) short-circuits the DB write.
 - **Client-sent timezone**: `TzParams` flows from browser fetch -> axum handler -> SQL `datetime(timestamp, '+N minutes')` shift. One source of truth, no server TZ config needed.
 - **Dual-config resolution**: `HEIMDALL_CONFIG` env -> `~/.config/heimdall/config.toml` -> `~/.claude/usage-tracker.toml` -> bundled defaults. Shared between both binaries.
-- **Embedded version stamps on install surfaces**: every persistent surface heimdall installs (hook entry and statusline entry in `~/.claude/settings.json` — both under the same root key name `_heimdall_version`, at different nesting levels — cron tag `# heimdall-scheduler:v1 (heimdall X.Y.Z)`, launchd `dev.heimdall.scan.plist` `<!-- heimdall X.Y.Z -->` comment, daemon `dev.heimdall.daemon.plist` matching comment) carries `env!("CARGO_PKG_VERSION")` so users can `grep heimdall <surface>` (or a single `grep _heimdall_version ~/.claude/settings.json`) to answer "what version is installed?" without running a status command. Pattern follows talk-normal's `<!-- talk-normal X.Y.Z -->` convention. Ownership detection uses version-independent markers (`HOOK_DESCRIPTION`, `STATUSLINE_VERSION_KEY` presence, `CRON_TAG` substring, plist filename + Label) so newer binaries cleanly uninstall entries written by older ones. Statusline tolerates the legacy `_heimdall_statusline_version` key name on `is_installed` and migrates it on next install; legacy `"v1"` values are tolerated by the same mechanism. New install surfaces (Windows schtasks) should follow this convention.
+- **Embedded version stamps on install surfaces**: every persistent surface heimdall installs (hook entry and statusline entry in `~/.claude/settings.json` — both under the same root key name `_heimdall_version`, at different nesting levels — cron tag `# heimdall-scheduler:v1 (heimdall X.Y.Z)`, launchd `dev.heimdall.scan.plist` `<!-- heimdall X.Y.Z -->` comment, daemon `dev.heimdall.daemon.plist` matching comment) carries `env!("CARGO_PKG_VERSION")` so users can `grep heimdall <surface>` (or a single `grep _heimdall_version ~/.claude/settings.json`) to answer "what version is installed?" without running a status command. Pattern follows talk-normal's `<!-- talk-normal X.Y.Z -->` convention. Ownership detection uses version-independent markers (`HOOK_DESCRIPTION`, `STATUSLINE_VERSION_KEY` presence, `CRON_TAG` substring, plist filename + Label) so newer binaries cleanly uninstall entries written by older ones.
 - **Replace-in-place install idempotency**: `hook install`, `statusline-hook install`, and `mcp install` are *idempotent in the talk-normal sense* — every re-run reaches the current state, refreshing the binary path, command, and version stamp from improvement (5). First run returns `Installed`; subsequent runs return `Updated` (no `AlreadyInstalled` no-op variant — distinguishing "already current" from "refreshed to current" is more machinery than the user-visible signal warrants). MCP additionally refuses to overwrite a user-customized `heimdall` entry (one without our sentinel) — that safety property is orthogonal to idempotency. Cron and launchd schedulers already self-update via their existing strip-then-append flow.
 
 ## Conventions
@@ -345,4 +344,4 @@ When editing dashboard files (`src/ui/`), follow the design skill at `.agents/sk
 
 ## Release
 
-See [.github/RELEASING.md](.github/RELEASING.md). Tags matching `v*.*.*` trigger a 5-target cross-build plus a `lipo`-merged universal macOS artifact. The Homebrew cask skeleton lives at `packaging/homebrew/heimdall.rb` and is copied into the separately-maintained tap repository at release time.
+See [.github/RELEASING.md](.github/RELEASING.md). Tags matching `v*.*.*` trigger a 4-target cross-build plus a `lipo`-merged universal macOS artifact. The Homebrew cask skeleton lives at `packaging/homebrew/heimdall.rb` and is copied into the separately-maintained tap repository at release time.

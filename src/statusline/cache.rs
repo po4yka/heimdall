@@ -207,11 +207,6 @@ fn pid_alive(pid: u32) -> bool {
             .map(|s| s.success())
             .unwrap_or(false)
     }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        true // conservative: assume alive on non-Unix targets
-    }
 }
 
 #[cfg(test)]

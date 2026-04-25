@@ -4,9 +4,9 @@
 //! job that runs `claude-usage-tracker scan` periodically.
 //!
 //! Platform dispatch:
-//!   - macOS  → launchd (`~/Library/LaunchAgents/dev.heimdall.scan.plist`)
-//!   - Linux  → crontab (user crontab, tagged with `# heimdall-scheduler:v1`)
-//!   - Windows → schtasks (`HeimdallScan` task)
+//!   - macOS → launchd (`~/Library/LaunchAgents/dev.heimdall.scan.plist`)
+//!   - Linux → crontab (user crontab, tagged with `# heimdall-scheduler:v1`)
+//!   - Other → `UnsupportedScheduler` stub
 //!
 //! The minute offset `:17` is used for all platforms to avoid pile-up at :00.
 //!
@@ -19,7 +19,6 @@
 pub mod cron;
 pub mod daemon;
 pub mod launchd;
-pub mod schtasks;
 
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -32,7 +31,6 @@ pub struct ScheduledJob {
     pub launchd_label: &'static str,
     pub launchd_filename: &'static str,
     pub cron_tag: &'static str,
-    pub windows_task_name: &'static str,
     pub command: &'static [&'static str],
 }
 
@@ -41,7 +39,6 @@ pub const SCAN_JOB: ScheduledJob = ScheduledJob {
     launchd_label: "dev.heimdall.scan",
     launchd_filename: "dev.heimdall.scan.plist",
     cron_tag: "# heimdall-scheduler:v1",
-    windows_task_name: "HeimdallScan",
     command: &["scan"],
 };
 
@@ -50,7 +47,6 @@ pub const USAGE_MONITOR_JOB: ScheduledJob = ScheduledJob {
     launchd_label: "dev.heimdall.usage-monitor",
     launchd_filename: "dev.heimdall.usage-monitor.plist",
     cron_tag: "# heimdall-usage-monitor:v1",
-    windows_task_name: "HeimdallUsageMonitor",
     command: &["usage-monitor", "capture"],
 };
 
@@ -59,7 +55,6 @@ pub const PRICING_SYNC_JOB: ScheduledJob = ScheduledJob {
     launchd_label: "dev.heimdall.pricing-sync",
     launchd_filename: "dev.heimdall.pricing-sync.plist",
     cron_tag: "# heimdall-pricing-sync:v1",
-    windows_task_name: "HeimdallPricingSync",
     command: &["pricing", "sync"],
 };
 
@@ -143,11 +138,7 @@ pub fn current_for(job: ScheduledJob) -> Box<dyn Scheduler> {
     {
         Box::new(cron::CronScheduler::for_job(None, None, job))
     }
-    #[cfg(target_os = "windows")]
-    {
-        Box::new(schtasks::SchtasksScheduler::for_job(job))
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Box::new(UnsupportedScheduler)
     }

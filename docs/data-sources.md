@@ -10,7 +10,7 @@ Heimdall auto-discovers sessions from nine local tools. Each provider is impleme
 | Xcode CodingAssistant (macOS) | `~/Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/projects/` |
 | Codex archived sessions | `~/.codex/archived_sessions/` |
 | Codex live sessions (JSONL) | `~/.codex/sessions/` |
-| Cursor | `~/Library/Application Support/Cursor/User/workspaceStorage/*/state.vscdb` (macOS), `~/.config/Cursor/...` (Linux), `%APPDATA%/Cursor/...` (Windows) |
+| Cursor | `~/Library/Application Support/Cursor/User/workspaceStorage/*/state.vscdb` (macOS), `~/.config/Cursor/...` (Linux) |
 | OpenCode | `~/Library/Application Support/opencode/*.db` (macOS) and platform equivalents |
 | Pi | `~/.pi/sessions/*.jsonl` |
 | GitHub Copilot | `~/Library/Application Support/Code/User/globalStorage/github.copilot-chat/` (VS Code), JetBrains paths (best-effort probe) |

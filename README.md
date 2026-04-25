@@ -22,7 +22,7 @@ Three surfaces ship together: `claude-usage-tracker` (CLI + dashboard), `heimdal
 - **Cost reconciliation** — hook-reported vs locally-calculated, divergence alerts at 10 %
 - **Waste detector** — A–F grade with five detectors (CLAUDE.md bloat, ghost agents, MCP rereads, …)
 - **Native macOS app** — `HeimdallBar.app` menu-bar widget + bundled CLI + browser-session import
-- **Zero runtime dependencies** — single binary, cross-platform (macOS / Linux / Windows)
+- **Zero runtime dependencies** — single binary, cross-platform (macOS / Linux)
 
 Full feature list: [docs/features.md](docs/features.md).
 
@@ -163,7 +163,7 @@ cargo fmt --check
 npm run build:ui                    # recompile dashboard bundle
 ```
 
-The release pipeline (`.github/workflows/release.yml`) builds all 5 targets on `v*.*.*` tag push and produces a consolidated `SHA256SUMS.txt`. The universal macOS artifact is produced by a post-matrix `lipo` job.
+The release pipeline (`.github/workflows/release.yml`) builds all 4 targets on `v*.*.*` tag push and produces a consolidated `SHA256SUMS.txt`. The universal macOS artifact is produced by a post-matrix `lipo` job.
 
 ## Prior art & acknowledgements
 

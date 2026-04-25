@@ -87,17 +87,6 @@ impl CopilotProvider {
                 .join("github.copilot-chat"),
         );
 
-        #[cfg(target_os = "windows")]
-        if let Some(appdata) = dirs::data_dir() {
-            result.push(
-                appdata
-                    .join("Code")
-                    .join("User")
-                    .join("globalStorage")
-                    .join("github.copilot-chat"),
-            );
-        }
-
         // JetBrains path (all platforms): ~/.local/share/JetBrains/*/github-copilot/
         // We record the parent and let discover_sessions() glob for the wildcard.
         if let Some(local_share) = dirs::data_local_dir() {

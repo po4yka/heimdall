@@ -110,14 +110,7 @@ impl CursorProvider {
             .join("User")
             .join("workspaceStorage");
 
-        #[cfg(target_os = "windows")]
-        let workspace_dir = dirs::data_dir()
-            .unwrap_or_else(|| home.join("AppData").join("Roaming"))
-            .join("Cursor")
-            .join("User")
-            .join("workspaceStorage");
-
-        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let workspace_dir = home.join(".cursor").join("workspaceStorage");
 
         Self {

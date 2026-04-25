@@ -91,14 +91,7 @@ pub fn resolve_client_path(client: &str) -> Result<PathBuf> {
                     .join("Claude")
                     .join("claude_desktop_config.json"))
             }
-            #[cfg(target_os = "windows")]
-            {
-                Ok(dirs::config_dir()
-                    .context("cannot determine AppData dir")?
-                    .join("Claude")
-                    .join("claude_desktop_config.json"))
-            }
-            #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             {
                 Ok(home
                     .join(".config")

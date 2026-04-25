@@ -65,7 +65,6 @@ body:
         - macOS (Intel)
         - Linux x86_64
         - Linux ARM64
-        - Windows x86_64
         - Other
     validations:
       required: true

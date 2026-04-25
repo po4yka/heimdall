@@ -11,7 +11,7 @@ Detailed feature catalogue. See the [README](../README.md) for a high-level over
 - **Cost estimation** — single source of truth in Rust, volume discounts, integer-nanos precision, 4-way `CostBreakdown` (input / output / cache-read / cache-write), 5-tier fallback with hardcoded Claude/GPT-5 priority + LiteLLM pass-through for long-tail models.
 - **Task categorization** — 13-category deterministic classifier (Coding, Debugging, FeatureDev, Testing, Git, Docs, Research, Refactor, DevOps, Config, Planning, Review, Other). Zero LLM calls.
 - **One-shot rate tracking** — detects Edit→Bash→Edit retry cycles as a proxy for first-try success rate.
-- **Cross-platform** — macOS, Linux, Windows.
+- **Cross-platform** — macOS, Linux.
 - **Zero runtime dependencies** — single binary, no Python/Node/npm required at runtime.
 
 ## Real-time

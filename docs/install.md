@@ -30,7 +30,6 @@ curl -fsSL "https://github.com/po4yka/heimdall/releases/download/${VERSION}/heim
 | macOS (Intel only) | `heimdall-<version>-x86_64-apple-darwin.tar.gz` |
 | Linux x86\_64 | `heimdall-<version>-x86_64-unknown-linux-gnu.tar.gz` |
 | Linux ARM64 | `heimdall-<version>-aarch64-unknown-linux-gnu.tar.gz` |
-| Windows x86\_64 | `heimdall-<version>-x86_64-pc-windows-msvc.zip` |
 
 Verify against published checksums:
 
@@ -73,9 +72,9 @@ claude-usage-tracker daemon status
 claude-usage-tracker daemon uninstall
 ```
 
-The daemon runs `claude-usage-tracker dashboard --host localhost --port 8080 --watch --no-open --background-poll` under a per-user LaunchAgent with `KeepAlive: true`. That means the service starts at login, does not open a browser window, and begins warming remote monitoring/data-fetch caches even before the dashboard is opened manually. Logs are written to `~/Library/Logs/heimdall/`. Linux systemd user services and Windows Task Scheduler logon-trigger support are deferred to a future release.
+The daemon runs `claude-usage-tracker dashboard --host localhost --port 8080 --watch --no-open --background-poll` under a per-user LaunchAgent with `KeepAlive: true`. That means the service starts at login, does not open a browser window, and begins warming remote monitoring/data-fetch caches even before the dashboard is opened manually. Logs are written to `~/Library/Logs/heimdall/`. Linux systemd user services with logon-trigger support are deferred to a future release.
 
-## Scheduler (cross-platform)
+## Scheduler
 
 For just periodic ingest (not a persistent dashboard), use the `scheduler` subcommand:
 
@@ -85,7 +84,7 @@ claude-usage-tracker scheduler status
 claude-usage-tracker scheduler uninstall
 ```
 
-It writes a native schedule entry: a launchd plist on macOS, a tagged `# heimdall-scheduler:v1` crontab line on Linux, or a `HeimdallScan` task on Windows. Runs at minute `:17` to avoid scheduler pile-up.
+It writes a native schedule entry: a launchd plist on macOS or a tagged `# heimdall-scheduler:v1` crontab line on Linux. Runs at minute `:17` to avoid scheduler pile-up.
 
 ## Real-time hook
 

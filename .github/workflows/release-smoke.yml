@@ -32,10 +32,6 @@ jobs:
             os: ubuntu-latest
             archive_ext: tar.gz
             use_cross: true
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            archive_ext: zip
-            use_cross: false
     steps:
       - uses: actions/checkout@v6
 
@@ -71,8 +67,7 @@ jobs:
         shell: bash
         run: echo "version=smoke-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
-      - name: Package archive (Unix)
-        if: matrix.archive_ext == 'tar.gz'
+      - name: Package archive
         shell: bash
         run: |
           VERSION=${{ steps.version.outputs.version }}
@@ -86,24 +81,6 @@ jobs:
 
           tar czf "${ARCHIVE_NAME}" "${STAGING_DIR}"
           sha256sum "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
-
-      - name: Package archive (Windows)
-        if: matrix.archive_ext == 'zip'
-        shell: pwsh
-        run: |
-          $VERSION = "${{ steps.version.outputs.version }}"
-          $TARGET = "${{ matrix.target }}"
-          $ARCHIVE_NAME = "heimdall-${VERSION}-${TARGET}.zip"
-          $STAGING_DIR = "heimdall-${VERSION}-${TARGET}"
-
-          New-Item -ItemType Directory -Force -Path $STAGING_DIR | Out-Null
-          Copy-Item "target\${TARGET}\release\claude-usage-tracker.exe" "$STAGING_DIR\"
-          Copy-Item "target\${TARGET}\release\heimdall-hook.exe" "$STAGING_DIR\"
-
-          Compress-Archive -Path $STAGING_DIR -DestinationPath $ARCHIVE_NAME
-
-          $hash = (Get-FileHash $ARCHIVE_NAME -Algorithm SHA256).Hash.ToLower()
-          "$hash  $ARCHIVE_NAME" | Out-File -FilePath "${ARCHIVE_NAME}.sha256" -Encoding ascii
 
       - name: Upload packaged archive
         uses: actions/upload-artifact@v7
