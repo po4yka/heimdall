@@ -662,43 +662,38 @@ private struct OverviewSummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Overview")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(self.projection.combinedCostLabel)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(self.projection.activitySummaryLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 8)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    if !self.projection.historyFractions.isEmpty {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Last 7 days")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                            HistoryBarChart(
-                                fractions: self.projection.historyFractions,
-                                showsHeader: false,
-                                inset: true
-                            )
-                        }
-                    }
-
-                    Text(self.metadataLine)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(minWidth: 92, alignment: .leading)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Overview")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(self.projection.combinedCostLabel)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(self.projection.activitySummaryLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !self.projection.historyFractions.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Last 7 days")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    HistoryBarChart(
+                        fractions: self.projection.historyFractions,
+                        showsHeader: false,
+                        inset: true
+                    )
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Text(self.metadataLine)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if let warningSummary = self.warningSummary {
                 Divider()
