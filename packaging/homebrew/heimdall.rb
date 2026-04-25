@@ -18,7 +18,7 @@ cask "heimdall" do
   # TODO: replace with actual GitHub org before publishing
   url "https://github.com/YOUR_ORG/heimdall/releases/download/v#{version}/heimdall-#{version}-universal-apple-darwin.tar.gz"
   name "Heimdall"
-  desc "Local analytics dashboard for coding agent usage (Claude Code, Codex, Cursor, OpenCode, Pi, Copilot, Xcode, Cowork, Amp)"
+  desc "Local analytics dashboard for coding agent usage (Claude Code, Codex)"
   homepage "https://github.com/YOUR_ORG/heimdall"
 
   binary "claude-usage-tracker"

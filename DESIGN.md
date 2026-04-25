@@ -1,6 +1,6 @@
 # DESIGN.md – Heimdall (Coding Agent Usage Tracker)
 
-A data-dense analytics dashboard for tracking usage across coding agents (Claude Code, Codex, Cursor, OpenCode, Pi, Copilot, Xcode CodingAssistant, Cowork, Amp). Apple-Swiss refined design: refined-dark + warm-off-white-light canvases, type-driven hierarchy via size/weight/space, semantic color with blue-gray interactive accent, red reserved for error/destructive. Calm enough for multi-hour sessions. The canonical source of truth is `.agents/skills/industrial-design/SKILL.md`; the legacy `.claude/skills/industrial-design/SKILL.md` copy remains for Claude compatibility.
+A data-dense analytics dashboard for tracking coding agent usage (currently Claude Code and Codex). Apple-Swiss refined design: refined-dark + warm-off-white-light canvases, type-driven hierarchy via size/weight/space, semantic color with blue-gray interactive accent, red reserved for error/destructive. Calm enough for multi-hour sessions. The canonical source of truth is `.agents/skills/industrial-design/SKILL.md`; the legacy `.claude/skills/industrial-design/SKILL.md` copy remains for Claude compatibility.
 
 ---
 
