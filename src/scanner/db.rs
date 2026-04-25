@@ -300,6 +300,14 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             "ALTER TABLE tool_invocations ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';",
         )?;
     }
+    // Covering index for the per-provider tool/mcp aggregations executed in
+    // `provider_cost_summary`. Without this, the JOIN to `turns` had to scan
+    // all 290k+ tool_invocations rows once per call, which dominated cold
+    // refresh latency (~22 s on real-world DBs).
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_ti_provider_session_message
+            ON tool_invocations(provider, session_id, message_id);",
+    )?;
 
     // Feature 1: Session titles
     if !has_column(conn, "sessions", "title") {
@@ -2830,7 +2838,7 @@ pub fn get_provider_project_rows(
                 COUNT(DISTINCT t.session_id) as sessions
          FROM turns t
          JOIN sessions s ON t.session_id = s.session_id
-         WHERE t.provider = ?1 AND substr(t.timestamp, 1, 10) >= ?2
+         WHERE t.provider = ?1 AND t.timestamp >= ?2
          GROUP BY s.project_name
          ORDER BY cost_nanos DESC
          LIMIT ?3",
@@ -2867,7 +2875,7 @@ pub fn get_provider_tool_rows(
                 COUNT(DISTINCT ti.session_id) as sessions_used
          FROM tool_invocations ti
          JOIN turns t ON ti.message_id = t.message_id AND ti.session_id = t.session_id
-         WHERE ti.provider = ?1 AND substr(t.timestamp, 1, 10) >= ?2
+         WHERE ti.provider = ?1 AND t.timestamp >= ?2
          GROUP BY ti.tool_name
          ORDER BY invocations DESC
          LIMIT ?3",
@@ -2902,7 +2910,7 @@ pub fn get_provider_mcp_rows(
                 COUNT(DISTINCT ti.session_id) as sessions_used
          FROM tool_invocations ti
          JOIN turns t ON ti.message_id = t.message_id AND ti.session_id = t.session_id
-         WHERE ti.provider = ?1 AND ti.mcp_server IS NOT NULL AND substr(t.timestamp, 1, 10) >= ?2
+         WHERE ti.provider = ?1 AND ti.mcp_server IS NOT NULL AND t.timestamp >= ?2
          GROUP BY ti.mcp_server
          ORDER BY invocations DESC",
     )?;
