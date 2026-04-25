@@ -9,8 +9,15 @@ struct ActivityHeatmap: View {
 
     nonisolated private static let dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     private static let hourTicks = [0, 6, 12, 18, 23]
-    private static let dayLabelWidth: CGFloat = 30
-    private static let cellSpacing: CGFloat = 3
+    private static let dayLabelWidth: CGFloat = 24
+    private static let cellSize: CGFloat = 12
+    private static let cellSpacing: CGFloat = 2
+    private static let tooltipWidth: CGFloat = 150
+    private static let tooltipHeight: CGFloat = 64
+    private static let dimMultiplier: Double = 0.55
+
+    @State private var hoveredCell: HoveredCell?
+    @State private var cellFrames: [CellKey: CGRect] = [:]
 
     struct Summary: Equatable {
         let totalTurns: Int
@@ -36,11 +43,30 @@ struct ActivityHeatmap: View {
         }
     }
 
+    fileprivate struct CellKey: Hashable {
+        let day: Int
+        let hour: Int
+    }
+
+    private struct HoveredCell: Equatable {
+        let day: Int
+        let hour: Int
+        let turns: Int
+    }
+
+    private struct CellFramePreferenceKey: PreferenceKey {
+        static let defaultValue: [CellKey: CGRect] = [:]
+        static func reduce(value: inout [CellKey: CGRect], nextValue: () -> [CellKey: CGRect]) {
+            value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+        }
+    }
+
     var body: some View {
         let grid = Self.lookup(self.cells)
         let maxTurns = grid.flatMap { $0 }.max() ?? 0
         let summary = Self.summary(from: grid)
         let scale = Self.intensityScale(for: grid)
+        let rank = Self.rankLookup(grid: grid)
         VStack(alignment: .leading, spacing: 6) {
             ChartHeader(
                 title: "Activity heatmap · 30 days",
@@ -59,7 +85,7 @@ struct ActivityHeatmap: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 12)
             } else {
-                self.heatmapGrid(grid: grid, summary: summary, scale: scale)
+                self.heatmapGrid(grid: grid, summary: summary, scale: scale, rank: rank)
             }
         }
         .padding(8)
@@ -73,7 +99,14 @@ struct ActivityHeatmap: View {
     }
 
     @ViewBuilder
-    private func heatmapGrid(grid: [[Int]], summary: Summary?, scale: IntensityScale) -> some View {
+    private func heatmapGrid(
+        grid: [[Int]],
+        summary: Summary?,
+        scale: IntensityScale,
+        rank: [CellKey: Int]
+    ) -> some View {
+        let activeCells = summary?.activeCells ?? 0
+        let totalTurns = summary?.totalTurns ?? 0
         VStack(alignment: .leading, spacing: 2) {
             if let summary {
                 self.summaryRow(summary)
@@ -81,55 +114,172 @@ struct ActivityHeatmap: View {
             }
             self.legendRow(scale)
                 .padding(.bottom, 5)
-            VStack(spacing: Self.cellSpacing) {
-                ForEach(0..<7, id: \.self) { day in
-                    HStack(alignment: .center, spacing: 8) {
-                        Text(Self.dayLabels[day])
-                            .font(.system(size: 8, weight: .medium).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(width: Self.dayLabelWidth, alignment: .leading)
-                        HStack(spacing: Self.cellSpacing) {
-                            ForEach(0..<24, id: \.self) { hour in
-                                let turns = grid[day][hour]
-                                let isPeak = summary?.peakDay == day && summary?.peakHour == hour
-                                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                    .fill(Self.fillColor(turns: turns, scale: scale))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                            .stroke(Color.primary.opacity(turns > 0 ? 0.1 : 0.04), lineWidth: 0.6)
-                                    }
-                                    .overlay {
-                                        if isPeak {
-                                            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                                                .stroke(Color.primary.opacity(0.9), lineWidth: 1)
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .aspectRatio(1, contentMode: .fit)
-                                    .accessibilityLabel("\(Self.dayLabels[day]) \(Self.hourLabel(hour))")
-                                    .accessibilityValue("\(turns) turns")
-                                    .help("\(Self.dayLabels[day]) \(Self.hourLabel(hour)): \(turns) turns")
-                            }
+            HStack(alignment: .top, spacing: 0) {
+                self.gridStack(grid: grid, summary: summary, scale: scale)
+                Spacer(minLength: 0)
+            }
+            .coordinateSpace(name: "heatmap")
+            .overlay(alignment: .topLeading) {
+                self.tooltipOverlay(totalTurns: totalTurns, activeCells: activeCells, rank: rank)
+            }
+            .onPreferenceChange(CellFramePreferenceKey.self) { newValue in
+                self.cellFrames = newValue
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func gridStack(grid: [[Int]], summary: Summary?, scale: IntensityScale) -> some View {
+        VStack(spacing: Self.cellSpacing) {
+            ForEach(0..<7, id: \.self) { day in
+                HStack(alignment: .center, spacing: 8) {
+                    Text(Self.dayLabels[day])
+                        .font(
+                            .system(
+                                size: 8,
+                                weight: self.hoveredCell?.day == day ? .semibold : .medium
+                            )
+                            .monospacedDigit()
+                        )
+                        .foregroundStyle(self.hoveredCell?.day == day ? Color.primary : Color.secondary)
+                        .frame(width: Self.dayLabelWidth, alignment: .leading)
+                    HStack(spacing: Self.cellSpacing) {
+                        ForEach(0..<24, id: \.self) { hour in
+                            self.cellView(
+                                day: day,
+                                hour: hour,
+                                grid: grid,
+                                summary: summary,
+                                scale: scale
+                            )
                         }
                     }
                 }
             }
             HStack(alignment: .center, spacing: 8) {
-                Text("Hour")
-                    .font(.system(size: 8, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Color.primary.opacity(0.55))
-                    .frame(width: Self.dayLabelWidth, alignment: .leading)
+                Color.clear.frame(width: Self.dayLabelWidth, height: 8)
                 HStack(spacing: Self.cellSpacing) {
                     ForEach(0..<24, id: \.self) { hour in
                         Text(Self.hourTicks.contains(hour) ? Self.hourLabel(hour) : "")
-                            .font(.system(size: 8).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: Self.tickAlignment(for: hour))
+                            .font(
+                                .system(
+                                    size: 8,
+                                    weight: self.hoveredCell?.hour == hour ? .semibold : .regular
+                                )
+                                .monospacedDigit()
+                            )
+                            .foregroundStyle(self.hoveredCell?.hour == hour ? Color.primary : Color.secondary)
+                            .frame(width: Self.cellSize, alignment: Self.tickAlignment(for: hour))
                     }
                 }
             }
             .padding(.top, 4)
         }
+    }
+
+    @ViewBuilder
+    private func cellView(
+        day: Int,
+        hour: Int,
+        grid: [[Int]],
+        summary: Summary?,
+        scale: IntensityScale
+    ) -> some View {
+        let turns = grid[day][hour]
+        let isPeak = summary?.peakDay == day && summary?.peakHour == hour
+        let hoverActive = self.hoveredCell != nil
+        let isThisHovered = self.hoveredCell?.day == day && self.hoveredCell?.hour == hour
+        let dim = hoverActive && !isThisHovered
+        let opacity = Self.cellOpacity(turns: turns, scale: scale, dim: dim)
+        let key = CellKey(day: day, hour: hour)
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(Color.primary.opacity(opacity))
+            .overlay {
+                if isPeak {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .stroke(Color.accentColor.opacity(0.85), lineWidth: 1)
+                }
+            }
+            .frame(width: Self.cellSize, height: Self.cellSize)
+            .background(
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: CellFramePreferenceKey.self,
+                        value: [key: geometry.frame(in: .named("heatmap"))]
+                    )
+                }
+            )
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                if hovering {
+                    let next = HoveredCell(day: day, hour: hour, turns: turns)
+                    withAnimation(ChartStyle.hoverAnimation) {
+                        self.hoveredCell = next
+                    }
+                } else if self.hoveredCell?.day == day && self.hoveredCell?.hour == hour {
+                    withAnimation(ChartStyle.hoverAnimation) {
+                        self.hoveredCell = nil
+                    }
+                }
+            }
+            .accessibilityLabel("\(Self.dayLabels[day]) \(Self.hourLabel(hour))")
+            .accessibilityValue("\(turns) turns")
+            .accessibilityAddTraits(.isButton)
+    }
+
+    @ViewBuilder
+    private func tooltipOverlay(
+        totalTurns: Int,
+        activeCells: Int,
+        rank: [CellKey: Int]
+    ) -> some View {
+        if let hovered = self.hoveredCell,
+           let frame = self.cellFrames[CellKey(day: hovered.day, hour: hovered.hour)] {
+            let above = hovered.day >= 2
+            let gridWidth = Self.dayLabelWidth + 8
+                + 24 * Self.cellSize
+                + 23 * Self.cellSpacing
+            let preferredX = frame.midX - Self.tooltipWidth / 2
+            let clampedX = max(0, min(gridWidth - Self.tooltipWidth, preferredX))
+            let y = above
+                ? frame.minY - Self.tooltipHeight - 6
+                : frame.maxY + 6
+            self.tooltipCard(
+                for: hovered,
+                totalTurns: totalTurns,
+                activeCells: activeCells,
+                rank: rank
+            )
+            .frame(width: Self.tooltipWidth, alignment: .leading)
+            .offset(x: clampedX, y: y)
+            .allowsHitTesting(false)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            .zIndex(1)
+        }
+    }
+
+    private func tooltipCard(
+        for hovered: HoveredCell,
+        totalTurns: Int,
+        activeCells: Int,
+        rank: [CellKey: Int]
+    ) -> some View {
+        let key = CellKey(day: hovered.day, hour: hovered.hour)
+        let percent = totalTurns > 0
+            ? Double(hovered.turns) / Double(totalTurns) * 100
+            : 0
+        var lines: [String] = []
+        if hovered.turns > 0 {
+            lines.append("\(hovered.turns) turns")
+            lines.append(String(format: "%.1f%% of total", percent))
+            if let rankIndex = rank[key], activeCells > 0 {
+                lines.append("Cell #\(rankIndex) of \(activeCells) active")
+            }
+        } else {
+            lines.append("No activity")
+        }
+        let title = "\(Self.dayLabels[hovered.day]) \(Self.hourLabel(hovered.hour)):00"
+        return ChartInspectorCard(title: title, lines: lines)
     }
 
     private func legendRow(_ scale: IntensityScale) -> some View {
@@ -142,7 +292,7 @@ struct ActivityHeatmap: View {
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(Color.primary.opacity(level.opacity))
-                        .frame(width: 10, height: 10)
+                        .frame(width: 8, height: 8)
                     Text("\(Self.turnLabel(level.threshold))+")
                         .font(.system(size: 8).monospacedDigit())
                         .foregroundStyle(.secondary)
@@ -191,11 +341,11 @@ struct ActivityHeatmap: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.primary.opacity(0.045))
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color.primary.opacity(0.04))
         )
     }
 
@@ -296,8 +446,31 @@ struct ActivityHeatmap: View {
         return IntensityScale(levels: levels)
     }
 
-    private static func fillColor(turns: Int, scale: IntensityScale) -> Color {
-        Color.primary.opacity(scale.opacity(for: turns))
+    nonisolated fileprivate static func rankLookup(grid: [[Int]]) -> [CellKey: Int] {
+        var entries: [(key: CellKey, turns: Int)] = []
+        for day in 0..<min(7, grid.count) {
+            for hour in 0..<min(24, grid[day].count) {
+                let turns = grid[day][hour]
+                if turns > 0 {
+                    entries.append((CellKey(day: day, hour: hour), turns))
+                }
+            }
+        }
+        entries.sort { lhs, rhs in
+            if lhs.turns != rhs.turns { return lhs.turns > rhs.turns }
+            if lhs.key.day != rhs.key.day { return lhs.key.day < rhs.key.day }
+            return lhs.key.hour < rhs.key.hour
+        }
+        var lookup: [CellKey: Int] = [:]
+        for (index, entry) in entries.enumerated() {
+            lookup[entry.key] = index + 1
+        }
+        return lookup
+    }
+
+    nonisolated private static func cellOpacity(turns: Int, scale: IntensityScale, dim: Bool) -> Double {
+        let base = scale.opacity(for: turns)
+        return dim ? base * Self.dimMultiplier : base
     }
 
     nonisolated private static func hourLabel(_ hour: Int) -> String {
