@@ -1380,8 +1380,10 @@ fn cmd_hook(action: HookAction) -> Result<()> {
                     println!("Installed: heimdall-hook entry added to ~/.claude/settings.json");
                     println!("  binary: {}", binary_path.display());
                 }
-                HookActionResult::AlreadyInstalled { binary_path } => {
-                    println!("Already installed (no change made)");
+                HookActionResult::Updated { binary_path } => {
+                    println!(
+                        "Updated: heimdall-hook entry refreshed in ~/.claude/settings.json"
+                    );
                     println!("  binary: {}", binary_path.display());
                 }
                 _ => {}
@@ -1422,8 +1424,9 @@ fn cmd_statusline_hook(action: StatuslineHookAction) -> Result<()> {
                 println!("Installed: statusLine entry added to ~/.claude/settings.json");
                 println!("  command: claude-usage-tracker statusline");
             }
-            StatuslineActionResult::AlreadyInstalled => {
-                println!("Already installed (no change made)");
+            StatuslineActionResult::Updated => {
+                println!("Updated: statusLine entry refreshed in ~/.claude/settings.json");
+                println!("  command: claude-usage-tracker statusline");
             }
             _ => {}
         },
@@ -1476,8 +1479,8 @@ fn cmd_mcp(action: McpAction, default_db: &dyn Fn(Option<PathBuf>) -> PathBuf) -
             McpInstallResult::Installed { path } => {
                 println!("Installed: heimdall MCP server added to {}", path.display());
             }
-            McpInstallResult::AlreadyInstalled { path } => {
-                println!("Already installed (no change): {}", path.display());
+            McpInstallResult::Updated { path } => {
+                println!("Updated: heimdall MCP server refreshed in {}", path.display());
             }
             _ => {}
         },

@@ -35,10 +35,23 @@ pub const HOOK_DESCRIPTION: &str = "heimdall real-time ingest";
 pub const HOOK_VERSION_KEY: &str = "_heimdall_version";
 
 /// Outcome returned by `install` and `uninstall`.
+///
+/// Install is *replace-in-place idempotent* in the talk-normal sense: every
+/// re-run reaches the current state, including the latest binary path and
+/// version stamp. First run returns `Installed`; subsequent runs return
+/// `Updated` even when nothing changed byte-for-byte. There is no
+/// `AlreadyInstalled` no-op variant — distinguishing "already current" from
+/// "refreshed to current" would require deserialising and comparing the
+/// existing entry, which is more machinery than the user-visible signal
+/// warrants.
 #[derive(Debug, PartialEq)]
 pub enum HookActionResult {
+    /// First-time install — entry was not previously present.
     Installed { binary_path: PathBuf },
-    AlreadyInstalled { binary_path: PathBuf },
+    /// Re-run install — existing entry was replaced with the current
+    /// binary path and version stamp. Reaches the same final state as
+    /// `Installed`.
+    Updated { binary_path: PathBuf },
     Uninstalled,
     NothingToUninstall,
 }
@@ -71,9 +84,13 @@ fn settings_json_path() -> PathBuf {
 /// Install the heimdall-hook entry into `~/.claude/settings.json`.
 ///
 /// - Creates the file if absent.
-/// - Appends to existing `PreToolUse` hooks; does not clobber.
+/// - Appends to existing `PreToolUse` hooks; does not clobber unrelated entries.
 /// - Writes a `.heimdall-bak` backup before every modification.
-/// - Is idempotent: returns `AlreadyInstalled` if our tag is already present.
+/// - **Replace-in-place idempotent**: if our tagged entry already exists, it
+///   is removed and re-inserted so the binary path and version stamp
+///   reflect the current binary. Pattern borrowed from talk-normal's
+///   `install.sh`: re-running always reaches the current state instead of
+///   no-opping.
 pub fn install(hook_binary: &std::path::Path) -> Result<HookActionResult> {
     install_into(&settings_json_path(), hook_binary)
 }
@@ -84,15 +101,20 @@ pub fn install_into(
 ) -> Result<HookActionResult> {
     let mut root = read_or_empty_object(settings_path)?;
 
-    // Check for duplicate.
-    if find_heimdall_entry(&root).is_some() {
-        return Ok(HookActionResult::AlreadyInstalled {
-            binary_path: hook_binary.to_path_buf(),
-        });
-    }
+    // Was our entry already present? Determines `Installed` vs `Updated`.
+    let was_installed = find_heimdall_entry(&root).is_some();
 
     // Backup before modification.
     write_object_backup(settings_path, &root)?;
+
+    // Strip any existing heimdall entries first. This is the talk-normal
+    // sed-delete-then-append pattern: re-running install always reaches
+    // current state, including refreshing the version stamp written by
+    // improvement (5). Without this strip, a second `install_into` would
+    // append a second heimdall entry to the PreToolUse array.
+    if was_installed {
+        remove_heimdall_entries(&mut root);
+    }
 
     // Build the new entry object. The "_heimdall_version" key is the
     // grep-friendly version stamp documented in the module docblock — keep
@@ -126,8 +148,14 @@ pub fn install_into(
 
     write_object(settings_path, &root)?;
 
-    Ok(HookActionResult::Installed {
-        binary_path: hook_binary.to_path_buf(),
+    Ok(if was_installed {
+        HookActionResult::Updated {
+            binary_path: hook_binary.to_path_buf(),
+        }
+    } else {
+        HookActionResult::Installed {
+            binary_path: hook_binary.to_path_buf(),
+        }
     })
 }
 
@@ -303,20 +331,68 @@ mod tests {
         );
     }
 
+    /// Re-running install replaces the existing entry in place (talk-normal
+    /// idempotency), reports `Updated` rather than no-op, and leaves
+    /// exactly one heimdall entry in the array — the strip-and-append
+    /// path must not produce duplicates.
     #[test]
-    fn install_is_idempotent() {
+    fn install_is_replace_in_place_idempotent() {
         let dir = TempDir::new().unwrap();
         let settings = tmp_settings(&dir);
         let bin = hook_bin(&dir);
 
-        install_into(&settings, &bin).unwrap();
-        let result2 = install_into(&settings, &bin).unwrap();
-        assert!(matches!(result2, HookActionResult::AlreadyInstalled { .. }));
+        let r1 = install_into(&settings, &bin).unwrap();
+        assert!(
+            matches!(r1, HookActionResult::Installed { .. }),
+            "first run must report Installed: {r1:?}"
+        );
+
+        let r2 = install_into(&settings, &bin).unwrap();
+        assert!(
+            matches!(r2, HookActionResult::Updated { .. }),
+            "second run must report Updated: {r2:?}"
+        );
 
         let content = std::fs::read_to_string(&settings).unwrap();
         let v: serde_json::Value = serde_json::from_str(&content).unwrap();
-        // Only one entry should exist.
-        assert_eq!(v["hooks"]["PreToolUse"].as_array().unwrap().len(), 1);
+        let arr = v["hooks"]["PreToolUse"].as_array().unwrap();
+        // Exactly one heimdall entry — strip-and-append must not duplicate.
+        let heimdall_count = arr
+            .iter()
+            .filter(|e| e["description"] == HOOK_DESCRIPTION)
+            .count();
+        assert_eq!(
+            heimdall_count, 1,
+            "must have exactly one heimdall entry after re-install: {arr:?}"
+        );
+    }
+
+    /// Re-running install with a *different* binary path picks up the new
+    /// path. Without replace-in-place, the old path would persist forever
+    /// and only `uninstall && install` could refresh it.
+    #[test]
+    fn install_replaces_binary_path_on_rerun() {
+        let dir = TempDir::new().unwrap();
+        let settings = tmp_settings(&dir);
+        let old_bin = dir.path().join("old-heimdall-hook");
+        let new_bin = dir.path().join("new-heimdall-hook");
+
+        install_into(&settings, &old_bin).unwrap();
+        let r2 = install_into(&settings, &new_bin).unwrap();
+        assert!(matches!(r2, HookActionResult::Updated { .. }));
+
+        let content = std::fs::read_to_string(&settings).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let arr = v["hooks"]["PreToolUse"].as_array().unwrap();
+        let our_entry = arr
+            .iter()
+            .find(|e| e["description"] == HOOK_DESCRIPTION)
+            .unwrap();
+        assert_eq!(
+            our_entry["command"].as_str().unwrap(),
+            new_bin.to_string_lossy().as_ref(),
+            "re-install must update the binary path"
+        );
     }
 
     #[test]

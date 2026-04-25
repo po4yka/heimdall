@@ -35,10 +35,20 @@ pub fn statusline_version_value() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+/// Outcome returned by `install` and `uninstall`.
+///
+/// Install is *replace-in-place idempotent* in the talk-normal sense: every
+/// re-run reaches the current state, including refreshing the version stamp
+/// written by improvement (5). First run returns `Installed`; subsequent
+/// runs return `Updated`. There is no `AlreadyInstalled` no-op variant —
+/// see `src/hook/install.rs::HookActionResult` for the symmetric rationale.
 #[derive(Debug, PartialEq)]
 pub enum StatuslineActionResult {
+    /// First-time install — entry was not previously present.
     Installed,
-    AlreadyInstalled,
+    /// Re-run install — existing entry was replaced with the current
+    /// command and version stamp.
+    Updated,
     Uninstalled,
     NothingToUninstall,
 }
@@ -64,16 +74,18 @@ pub fn install() -> Result<StatuslineActionResult> {
 pub fn install_into(settings_path: &Path) -> Result<StatuslineActionResult> {
     let mut root = read_or_empty_object(settings_path)?;
 
-    // Idempotent: already installed?
-    if is_installed(&root) {
-        return Ok(StatuslineActionResult::AlreadyInstalled);
-    }
+    // Was our entry already present? Determines `Installed` vs `Updated`.
+    // Replace-in-place idempotency: re-running always reaches the current
+    // state, including refreshing the version stamp from improvement (5).
+    let was_installed = is_installed(&root);
 
     write_object_backup(settings_path, &root)?;
 
     let obj = root
         .as_object_mut()
         .context("settings.json is not an object")?;
+    // `obj.insert` overwrites by default, so an existing entry is replaced
+    // with the current command + version stamp without an explicit strip.
     obj.insert(
         "statusLine".to_string(),
         serde_json::Value::String(STATUSLINE_COMMAND.to_string()),
@@ -84,7 +96,11 @@ pub fn install_into(settings_path: &Path) -> Result<StatuslineActionResult> {
     );
 
     write_object(settings_path, &root)?;
-    Ok(StatuslineActionResult::Installed)
+    Ok(if was_installed {
+        StatuslineActionResult::Updated
+    } else {
+        StatuslineActionResult::Installed
+    })
 }
 
 pub fn uninstall() -> Result<StatuslineActionResult> {
@@ -205,14 +221,28 @@ mod tests {
         assert!(v.get(STATUSLINE_VERSION_KEY).is_none());
     }
 
+    /// Re-running install reports `Updated` and reaches the current state.
+    /// The entry's value stays the canonical command (no drift if a stale
+    /// `statusLine` was previously written by an older heimdall) and the
+    /// version key reflects the running binary.
     #[test]
-    fn install_is_idempotent() {
+    fn install_is_replace_in_place_idempotent() {
         let dir = TempDir::new().unwrap();
         let settings = tmp_settings(&dir);
 
-        install_into(&settings).unwrap();
-        let result2 = install_into(&settings).unwrap();
-        assert_eq!(result2, StatuslineActionResult::AlreadyInstalled);
+        let r1 = install_into(&settings).unwrap();
+        assert_eq!(r1, StatuslineActionResult::Installed);
+
+        let r2 = install_into(&settings).unwrap();
+        assert_eq!(r2, StatuslineActionResult::Updated);
+
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        assert_eq!(v["statusLine"].as_str().unwrap(), STATUSLINE_COMMAND);
+        assert_eq!(
+            v[STATUSLINE_VERSION_KEY].as_str().unwrap(),
+            env!("CARGO_PKG_VERSION"),
+        );
     }
 
     #[test]

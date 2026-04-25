@@ -22,10 +22,20 @@ const SERVER_KEY: &str = "heimdall";
 
 // ── Public types ─────────────────────────────────────────────────────────────
 
+/// Outcome returned by `install` and `uninstall`.
+///
+/// Install is *replace-in-place idempotent* when our sentinel is present:
+/// re-running refreshes the entry to the current `make_entry()` output
+/// (talk-normal pattern). User-customized entries — a `heimdall` key without
+/// our sentinel — are still refused via `Err`; this safety property is
+/// orthogonal to the idempotency change.
 #[derive(Debug, PartialEq)]
 pub enum McpInstallResult {
+    /// First-time install — no `heimdall` entry was previously present.
     Installed { path: PathBuf },
-    AlreadyInstalled { path: PathBuf },
+    /// Re-run install — existing sentinel-tagged entry was replaced with
+    /// the current `make_entry()` output.
+    Updated { path: PathBuf },
     Uninstalled { path: PathBuf },
     NothingToUninstall,
 }
@@ -143,25 +153,24 @@ pub fn install_into(path: &std::path::Path) -> Result<McpInstallResult> {
         .and_then(|s| s.get(SERVER_KEY))
         .is_some();
 
-    if already_present {
-        if already_installed {
-            // Our sentinel is present — idempotent install.
-            return Ok(McpInstallResult::AlreadyInstalled {
-                path: path.to_path_buf(),
-            });
-        } else {
-            // User-customized entry without our sentinel: do NOT overwrite.
-            return Err(anyhow::anyhow!(
-                "refusing to overwrite user-customized 'heimdall' entry in {} \
-                (run `heimdall mcp status --client=<...>` to inspect; \
-                remove the entry manually before reinstalling)",
-                path.display()
-            ));
-        }
+    // Refuse to overwrite a user-customized `heimdall` entry (one that
+    // exists without our sentinel). This safety property is preserved
+    // unchanged from the pre-(6) behaviour — the talk-normal idempotency
+    // change only affects the case where our sentinel is present.
+    if already_present && !already_installed {
+        return Err(anyhow::anyhow!(
+            "refusing to overwrite user-customized 'heimdall' entry in {} \
+            (run `heimdall mcp status --client=<...>` to inspect; \
+            remove the entry manually before reinstalling)",
+            path.display()
+        ));
     }
 
     write_object_backup_if_present(path, &root)?;
 
+    // `obj.insert` overwrites by default, so when our sentinel is already
+    // present this refreshes the entry to the current `make_entry()`
+    // output — talk-normal replace-in-place idempotency.
     root.as_object_mut()
         .context("mcp.json root must be an object")?
         .get_mut("mcpServers")
@@ -170,8 +179,14 @@ pub fn install_into(path: &std::path::Path) -> Result<McpInstallResult> {
         .insert(SERVER_KEY.to_string(), make_entry());
 
     write_object(path, &root)?;
-    Ok(McpInstallResult::Installed {
-        path: path.to_path_buf(),
+    Ok(if already_installed {
+        McpInstallResult::Updated {
+            path: path.to_path_buf(),
+        }
+    } else {
+        McpInstallResult::Installed {
+            path: path.to_path_buf(),
+        }
     })
 }
 
@@ -275,16 +290,34 @@ mod tests {
         );
     }
 
+    /// Re-running install with our sentinel present reports `Updated` and
+    /// leaves exactly one entry under `mcpServers.heimdall`. Overwrites the
+    /// `command` / `args` so a future `make_entry()` change is picked up
+    /// without requiring `uninstall && install`.
     #[test]
-    fn install_is_idempotent() {
+    fn install_is_replace_in_place_idempotent() {
         let dir = TempDir::new().unwrap();
         let path = tmp_path(&dir, ".mcp.json");
-        install_into(&path).unwrap();
+
+        let r1 = install_into(&path).unwrap();
+        assert!(matches!(r1, McpInstallResult::Installed { .. }));
+
         let r2 = install_into(&path).unwrap();
-        assert!(matches!(r2, McpInstallResult::AlreadyInstalled { .. }));
+        assert!(
+            matches!(r2, McpInstallResult::Updated { .. }),
+            "second run must report Updated: {r2:?}"
+        );
+
         let v: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        // Only one mcpServer key — overwrite preserves the count.
         assert_eq!(v["mcpServers"].as_object().unwrap().len(), 1);
+        // Sentinel and command are still canonical.
+        assert_eq!(v["mcpServers"]["heimdall"]["_heimdall_mcp_version"], "v1");
+        assert_eq!(
+            v["mcpServers"]["heimdall"]["command"],
+            "claude-usage-tracker"
+        );
     }
 
     #[test]
