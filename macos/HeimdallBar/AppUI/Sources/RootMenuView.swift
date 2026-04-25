@@ -310,7 +310,10 @@ struct ProviderMenuCard: View {
                 CumulativeSpendChart(daily: projection.dailyCosts)
             }
             if !projection.byModel.isEmpty {
-                ModelDistributionDonut(rows: projection.byModel)
+                ModelDistributionDonut(
+                    rows: projection.byModel,
+                    dailyByModel: projection.dailyByModel
+                )
                 ModelCostTable(rows: projection.byModel)
             }
             if !projection.byProject.isEmpty {

@@ -7,9 +7,15 @@ import SwiftUI
 /// hover state so highlighting cascades across all three views.
 struct ModelDistributionDonut: View {
     let rows: [ProviderModelRow]
+    let dailyByModel: [ProviderDailyModelRow]
+
+    init(rows: [ProviderModelRow], dailyByModel: [ProviderDailyModelRow] = []) {
+        self.rows = rows
+        self.dailyByModel = dailyByModel
+    }
 
     private static let displayCap = 8
-    private static let donutSize: CGFloat = 96
+    private static let donutSize: CGFloat = 80
     private static let donutInnerRatio: CGFloat = 0.62
     private static let donutOuterRatio: CGFloat = 0.98
     private static let dimMultiplier: Double = 0.45
@@ -59,7 +65,6 @@ struct ModelDistributionDonut: View {
                         colorMap: colorMap,
                         metric: .cost
                     )
-                    self.legend(families: families, colorMap: colorMap)
                     self.captionedDonut(
                         families: families,
                         colorMap: colorMap,
@@ -70,7 +75,17 @@ struct ModelDistributionDonut: View {
                         colorMap: colorMap,
                         metric: .tokens
                     )
-                    Spacer(minLength: 0)
+                    Spacer(minLength: 12)
+                    self.legend(families: families, colorMap: colorMap)
+                }
+                if !self.dailyByModel.isEmpty {
+                    ModelFamilyHistoryChart(
+                        rows: self.dailyByModel,
+                        orderedFamilies: families.map(\.label),
+                        colorMap: colorMap,
+                        hoveredFamily: self.$hoveredFamily
+                    )
+                    .padding(.top, 4)
                 }
             }
         }
@@ -320,7 +335,19 @@ struct ModelDistributionDonut: View {
         ProviderModelRow(model: "gpt-5", costUSD: 1.55, input: 22_000, output: 4_000, cacheRead: 0, cacheCreation: 0, reasoningOutput: 3_000, turns: 55),
         ProviderModelRow(model: "o3-mini", costUSD: 0.44, input: 8_000, output: 1_500, cacheRead: 0, cacheCreation: 0, reasoningOutput: 6_000, turns: 18),
     ]
-    ModelDistributionDonut(rows: rows)
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd"
+    let dailyByModel: [ProviderDailyModelRow] = (0..<14).flatMap { offset -> [ProviderDailyModelRow] in
+        let date = Calendar.current.date(byAdding: .day, value: -(13 - offset), to: Date()) ?? Date()
+        let day = formatter.string(from: date)
+        return [
+            ProviderDailyModelRow(day: day, model: "claude-opus-4-5",   costUSD: Double.random(in: 25...60), input: 5_000, output: 1_000, cacheRead: 30_000, cacheCreation: 1_500, reasoningOutput: 800, turns: 12),
+            ProviderDailyModelRow(day: day, model: "claude-sonnet-4-5", costUSD: Double.random(in: 5...20),  input: 3_000, output: 600,   cacheRead: 12_000, cacheCreation: 600,   reasoningOutput: 0,   turns: 28),
+            ProviderDailyModelRow(day: day, model: "claude-haiku-3-5",  costUSD: Double.random(in: 0.5...4), input: 1_500, output: 300,   cacheRead: 4_000,  cacheCreation: 200,   reasoningOutput: 0,   turns: 60),
+            ProviderDailyModelRow(day: day, model: "gpt-5",             costUSD: Double.random(in: 0.5...3), input: 800,   output: 200,   cacheRead: 0,      cacheCreation: 0,     reasoningOutput: 600, turns: 6),
+        ]
+    }
+    return ModelDistributionDonut(rows: rows, dailyByModel: dailyByModel)
         .padding()
-        .frame(width: 600)
+        .frame(width: 480)
 }
