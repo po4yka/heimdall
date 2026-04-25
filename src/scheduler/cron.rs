@@ -5,10 +5,16 @@
 //!
 //! Modifies the user crontab by tagging our entries with a comment marker:
 //!
-//!   `# heimdall-scheduler:v1`
+//!   `# heimdall-scheduler:v1 (heimdall 0.1.0)`
 //!
-//! All crontab lines between this tag and the next blank line (or EOF) are
-//! owned by Heimdall.  Lines without the tag are never touched.
+//! The leading `# heimdall-scheduler:v1` substring is the version-independent
+//! ownership marker — all crontab lines between this tag and the next blank
+//! line (or EOF) are owned by Heimdall, and uninstall searches for the tag
+//! as a substring so newer binaries cleanly remove entries written by older
+//! ones. The trailing `(heimdall X.Y.Z)` carries the package version at
+//! install time so users can `crontab -l | grep heimdall` to debug version
+//! skew without running `claude-usage-tracker scheduler status`. Pattern
+//! borrowed from talk-normal's `<!-- talk-normal X.Y.Z -->` convention.
 //!
 //! Minute offset: `:17` -- never `:00` to avoid scheduler pile-up.
 //!
@@ -24,9 +30,24 @@ use anyhow::Result;
 use super::{InstallStatus, Interval, SCAN_JOB, ScheduledJob, Scheduler, shell_quote};
 
 /// Comment marker that identifies Heimdall-owned crontab lines.
+///
+/// Used as a *substring* for ownership detection so a newer binary can
+/// uninstall entries written by an older one. The literal line emitted at
+/// install time also carries the package version — see [`cron_tag_line`].
 pub const CRON_TAG: &str = "# heimdall-scheduler:v1";
 /// Minute offset used in cron expressions.
 const MINUTE_OFFSET: u8 = 17;
+
+/// Build the rich tag line emitted at install time.
+///
+/// Format: `<job.cron_tag> (heimdall <pkg_version>)`. The leading
+/// `job.cron_tag` substring is the ownership marker (asserted by every
+/// `.contains(CRON_TAG)` check in this module); the trailing parenthesised
+/// version is the talk-normal-style grep stamp that lets users debug
+/// version skew via `crontab -l | grep heimdall`.
+fn cron_tag_line(job: ScheduledJob) -> String {
+    format!("{} (heimdall {})", job.cron_tag, env!("CARGO_PKG_VERSION"))
+}
 
 // ── Public struct ─────────────────────────────────────────────────────────────
 
@@ -119,7 +140,7 @@ pub fn cron_expression(interval: Interval) -> String {
 ///
 /// Format:
 /// ```text
-/// # heimdall-scheduler:v1
+/// # heimdall-scheduler:v1 (heimdall 0.1.0)
 /// 17 * * * * /path/to/bin scan --db-path /path/to/db
 /// ```
 pub fn build_heimdall_block(bin_path: &Path, db_path: &Path, interval: Interval) -> String {
@@ -134,7 +155,7 @@ pub fn build_heimdall_block_for_job(
 ) -> String {
     format!(
         "{}\n{} {}\n",
-        job.cron_tag,
+        cron_tag_line(job),
         cron_expression(interval),
         job_command(bin_path, db_path, job),
     )
@@ -281,6 +302,30 @@ mod tests {
             Interval::Hourly,
         );
         assert!(block.contains(CRON_TAG));
+    }
+
+    /// The emitted block carries the package-version stamp documented in
+    /// the module docblock. Catches regressions where a refactor drops the
+    /// `cron_tag_line` rich emission and reverts to the bare `CRON_TAG`.
+    #[test]
+    fn block_contains_pkg_version_stamp() {
+        let block = build_heimdall_block(
+            Path::new("/bin/cut"),
+            Path::new("/tmp/u.db"),
+            Interval::Hourly,
+        );
+        let stamp = format!("(heimdall {})", env!("CARGO_PKG_VERSION"));
+        assert!(
+            block.contains(&stamp),
+            "block must contain pkg version stamp {stamp:?}: {block:?}"
+        );
+        // The bare CRON_TAG must remain a substring of the rich line so
+        // every existing ownership check (`.contains(CRON_TAG)`) keeps
+        // working.
+        assert!(
+            block.contains(CRON_TAG),
+            "block must still contain ownership marker {CRON_TAG:?}: {block:?}"
+        );
     }
 
     #[test]

@@ -110,11 +110,19 @@ pub fn generate_plist_for_job(
         ),
     };
 
+    // The `<!-- heimdall X.Y.Z -->` comment is the talk-normal-style
+    // grep-friendly version stamp documented in the module docblock —
+    // users can `grep heimdall ~/Library/LaunchAgents/dev.heimdall.scan.plist`
+    // to debug version skew without running `claude-usage-tracker scheduler
+    // status`. Pure XML comment, ignored by launchctl. The version string
+    // is informational; ownership detection is the plist filename + Label
+    // (`dev.heimdall.scan`), not the comment.
     format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
     "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!-- heimdall {pkg_version} -->
 <dict>
         <key>Label</key>
     <string>{label}</string>
@@ -143,6 +151,7 @@ pub fn generate_plist_for_job(
 </dict>
 </plist>
 "#,
+        pkg_version = env!("CARGO_PKG_VERSION"),
         label = job.launchd_label,
         bin = bin_str,
         command_entries = command_entries,
@@ -249,6 +258,24 @@ mod tests {
     use tempfile::TempDir;
 
     // ── plist generation tests ────────────────────────────────────────────────
+
+    /// The plist carries the talk-normal-style package-version comment so
+    /// users can `grep heimdall ~/Library/LaunchAgents/dev.heimdall.scan.plist`
+    /// to debug version skew. The comment is informational; ownership
+    /// detection is the plist filename + Label.
+    #[test]
+    fn plist_contains_pkg_version_stamp() {
+        let xml = generate_plist(
+            Path::new("/usr/local/bin/claude-usage-tracker"),
+            Path::new("/home/user/.claude/usage.db"),
+            Interval::Hourly,
+        );
+        let stamp = format!("<!-- heimdall {} -->", env!("CARGO_PKG_VERSION"));
+        assert!(
+            xml.contains(&stamp),
+            "plist must contain pkg version stamp {stamp:?}: {xml}"
+        );
+    }
 
     #[test]
     fn plist_hourly_contains_label() {

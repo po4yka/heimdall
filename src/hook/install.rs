@@ -1,11 +1,24 @@
-/// `hook install` / `hook uninstall` / `hook status` subcommand logic.
-///
-/// Manages the Claude Code `~/.claude/settings.json` hook entry that points
-/// at the `heimdall-hook` binary so every PreToolUse event is ingested in
-/// real-time.
-///
-/// Tag sentinel used to find/remove our entries:
-///   `"description": "heimdall real-time ingest"`
+//! `hook install` / `hook uninstall` / `hook status` subcommand logic.
+//!
+//! Manages the Claude Code `~/.claude/settings.json` hook entry that points
+//! at the `heimdall-hook` binary so every PreToolUse event is ingested in
+//! real-time.
+//!
+//! # Ownership marker vs version stamp
+//!
+//! Tag sentinel used to find/remove our entries:
+//!   `"description": "heimdall real-time ingest"` ([`HOOK_DESCRIPTION`]).
+//!
+//! Each installed entry also carries a [`HOOK_VERSION_KEY`] field whose value
+//! is `env!("CARGO_PKG_VERSION")` — the heimdall package version at the time
+//! `install` was run. The version stamp is **purely informational** so users
+//! can answer "what version is installed?" with
+//! `grep heimdall ~/.claude/settings.json` instead of running
+//! `claude-usage-tracker hook status`. Pattern borrowed from talk-normal's
+//! `<!-- talk-normal X.Y.Z -->` convention. Ownership detection uses
+//! `HOOK_DESCRIPTION` so older-version entries are uninstallable by
+//! newer-version binaries.
+
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -15,6 +28,11 @@ use crate::install_json::{
 };
 
 pub const HOOK_DESCRIPTION: &str = "heimdall real-time ingest";
+
+/// JSON key that carries the heimdall package version on each installed
+/// entry. Informational only — see module docblock § "Ownership marker vs
+/// version stamp".
+pub const HOOK_VERSION_KEY: &str = "_heimdall_version";
 
 /// Outcome returned by `install` and `uninstall`.
 #[derive(Debug, PartialEq)]
@@ -76,12 +94,16 @@ pub fn install_into(
     // Backup before modification.
     write_object_backup(settings_path, &root)?;
 
-    // Build the new entry object.
+    // Build the new entry object. The "_heimdall_version" key is the
+    // grep-friendly version stamp documented in the module docblock — keep
+    // its literal name in sync with HOOK_VERSION_KEY (asserted by
+    // `install_writes_pkg_version_key`).
     let entry = serde_json::json!({
         "type": "command",
         "command": hook_binary.to_string_lossy().as_ref(),
         "timeout": 5,
-        "description": HOOK_DESCRIPTION
+        "description": HOOK_DESCRIPTION,
+        "_heimdall_version": env!("CARGO_PKG_VERSION"),
     });
 
     // Ensure hooks.PreToolUse array exists and append.
@@ -229,6 +251,33 @@ mod tests {
 
     fn hook_bin(dir: &TempDir) -> PathBuf {
         dir.path().join("heimdall-hook")
+    }
+
+    /// The installed entry carries the package-version stamp documented in
+    /// the module docblock § "Ownership marker vs version stamp". Catches
+    /// drift between the literal `"_heimdall_version"` in `install_into`
+    /// and the `HOOK_VERSION_KEY` constant.
+    #[test]
+    fn install_writes_pkg_version_key() {
+        let dir = TempDir::new().unwrap();
+        let settings = tmp_settings(&dir);
+        let bin = hook_bin(&dir);
+
+        install_into(&settings, &bin).unwrap();
+
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
+        let entry = &v["hooks"]["PreToolUse"][0];
+
+        let stamped = entry
+            .get(HOOK_VERSION_KEY)
+            .and_then(|v| v.as_str())
+            .unwrap_or_else(|| panic!("missing {HOOK_VERSION_KEY}: {entry:?}"));
+        assert_eq!(
+            stamped,
+            env!("CARGO_PKG_VERSION"),
+            "version stamp must match Cargo.toml package version"
+        );
     }
 
     #[test]

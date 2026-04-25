@@ -239,6 +239,7 @@ src/
 - **Real-time hook**: `heimdall-hook` binary is fire-and-forget — always exits 0, always prints `{}`, ~50ms p99. It never blocks Claude Code. Bypass mode (ancestor process has `--dangerously-skip-permissions`) short-circuits the DB write.
 - **Client-sent timezone**: `TzParams` flows from browser fetch -> axum handler -> SQL `datetime(timestamp, '+N minutes')` shift. One source of truth, no server TZ config needed.
 - **Dual-config resolution**: `HEIMDALL_CONFIG` env -> `~/.config/heimdall/config.toml` -> `~/.claude/usage-tracker.toml` -> bundled defaults. Shared between both binaries.
+- **Embedded version stamps on install surfaces**: every persistent surface heimdall installs (hook entry in `~/.claude/settings.json` via `_heimdall_version` key, statusline entry via `_heimdall_statusline_version` key, cron tag `# heimdall-scheduler:v1 (heimdall X.Y.Z)`, launchd plist `<!-- heimdall X.Y.Z -->` comment) carries `env!("CARGO_PKG_VERSION")` so users can `grep heimdall <surface>` to answer "what version is installed?" without running a status command. Pattern follows talk-normal's `<!-- talk-normal X.Y.Z -->` convention. Ownership detection uses version-independent markers (`HOOK_DESCRIPTION`, `STATUSLINE_VERSION_KEY` presence, `CRON_TAG` substring, plist filename + Label) so newer binaries cleanly uninstall entries written by older ones. New install surfaces (Windows schtasks, macOS daemon) should follow this convention.
 
 ## Conventions
 
