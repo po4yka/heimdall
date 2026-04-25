@@ -241,7 +241,7 @@ struct DailyCostChart: View {
         return "\(delta >= 0 ? "+" : "-")\(Self.currencyLabel(abs(delta))) \(suffix)"
     }
 
-    private static let dayFormatter: DateFormatter = {
+    nonisolated(unsafe) private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
@@ -249,7 +249,7 @@ struct DailyCostChart: View {
         return formatter
     }()
 
-    private static let axisFormatter: DateFormatter = {
+    nonisolated(unsafe) private static let axisFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
         return formatter
