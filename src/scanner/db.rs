@@ -300,13 +300,27 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             "ALTER TABLE tool_invocations ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';",
         )?;
     }
-    // Covering index for the per-provider tool/mcp aggregations executed in
-    // `provider_cost_summary`. Without this, the JOIN to `turns` had to scan
-    // all 290k+ tool_invocations rows once per call, which dominated cold
-    // refresh latency (~22 s on real-world DBs).
+    // Denormalize `timestamp` from `turns` into `tool_invocations` so the
+    // per-provider tool/mcp aggregations in `provider_cost_summary` can read
+    // a single table with a covering `(provider, timestamp)` index. Backfill
+    // existing rows via the same join those aggregations used to compute on
+    // every refresh — paid once per DB on first-run after this migration.
+    if !has_column(conn, "tool_invocations", "timestamp") {
+        conn.execute_batch(
+            "ALTER TABLE tool_invocations ADD COLUMN timestamp TEXT NOT NULL DEFAULT '';",
+        )?;
+        conn.execute_batch(
+            "UPDATE tool_invocations SET timestamp = (
+                SELECT t.timestamp FROM turns t
+                WHERE t.session_id = tool_invocations.session_id
+                  AND t.message_id = tool_invocations.message_id
+                LIMIT 1
+            ) WHERE timestamp = '';",
+        )?;
+    }
     conn.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_ti_provider_session_message
-            ON tool_invocations(provider, session_id, message_id);",
+        "CREATE INDEX IF NOT EXISTS idx_ti_provider_timestamp
+            ON tool_invocations(provider, timestamp);",
     )?;
 
     // Feature 1: Session titles
@@ -979,8 +993,8 @@ pub fn insert_tool_invocations(
 ) -> Result<()> {
     let mut stmt = conn.prepare(
         "INSERT OR IGNORE INTO tool_invocations
-            (session_id, provider, message_id, tool_name, mcp_server, mcp_tool, tool_category, tool_use_id, is_error, source_path)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            (session_id, provider, message_id, tool_name, mcp_server, mcp_tool, tool_category, tool_use_id, is_error, source_path, timestamp)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
     )?;
     for t in turns {
         let msg_id: Option<&str> = if t.message_id.is_empty() {
@@ -1002,6 +1016,7 @@ pub fn insert_tool_invocations(
                 tool_use_id,
                 is_error as i32,
                 t.source_path,
+                t.timestamp,
             ])?;
         }
     }
@@ -2874,8 +2889,7 @@ pub fn get_provider_tool_rows(
                 COUNT(DISTINCT ti.message_id) as turns_used,
                 COUNT(DISTINCT ti.session_id) as sessions_used
          FROM tool_invocations ti
-         JOIN turns t ON ti.message_id = t.message_id AND ti.session_id = t.session_id
-         WHERE ti.provider = ?1 AND t.timestamp >= ?2
+         WHERE ti.provider = ?1 AND ti.timestamp >= ?2
          GROUP BY ti.tool_name
          ORDER BY invocations DESC
          LIMIT ?3",
@@ -2909,8 +2923,7 @@ pub fn get_provider_mcp_rows(
                 COUNT(DISTINCT ti.tool_name) as tools_used,
                 COUNT(DISTINCT ti.session_id) as sessions_used
          FROM tool_invocations ti
-         JOIN turns t ON ti.message_id = t.message_id AND ti.session_id = t.session_id
-         WHERE ti.provider = ?1 AND ti.mcp_server IS NOT NULL AND t.timestamp >= ?2
+         WHERE ti.provider = ?1 AND ti.mcp_server IS NOT NULL AND ti.timestamp >= ?2
          GROUP BY ti.mcp_server
          ORDER BY invocations DESC",
     )?;
