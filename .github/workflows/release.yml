@@ -106,7 +106,7 @@ jobs:
           "$hash  $ARCHIVE_NAME" | Out-File -FilePath "${ARCHIVE_NAME}.sha256" -Encoding ascii
 
       - name: Upload packaged archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.target }}
           path: |
@@ -250,7 +250,7 @@ jobs:
           shasum -a 256 "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
 
       - name: Upload HeimdallBar app artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-macos-app
           path: |
@@ -330,7 +330,7 @@ jobs:
           shasum -a 256 "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
 
       - name: Upload universal tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-macos-universal
           path: |
@@ -356,7 +356,7 @@ jobs:
           cat release-assets/SHA256SUMS.txt
 
       - name: Upload consolidated checksums
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-checksums
           path: release-assets/SHA256SUMS.txt
