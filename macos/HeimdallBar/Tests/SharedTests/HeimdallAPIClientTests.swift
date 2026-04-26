@@ -391,25 +391,65 @@ struct HeimdallAPIClientTests {
 }
 
 private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
-    // TODO(safety): mutable static; no lock guards `handler` — callers must synchronise externally.
-    nonisolated(unsafe) static var handler: (@Sendable (URLRequest, Int) throws -> (HTTPURLResponse, Data))?
+    typealias Handler = @Sendable (URLRequest, Int) throws -> (HTTPURLResponse, Data)
 
-    private static let lock = NSLock()
-    // TODO(safety): mutable static guarded by `lock`; Swift cannot verify lock discipline statically.
-    nonisolated(unsafe) private static var requests: [URLRequest] = []
+    /// Lock-guarded container for `handler` and `requests`. Encapsulating the
+    /// mutable state behind an `let`-bound object lets the public API stay
+    /// `static var handler` / `static var requestCount` while removing every
+    /// `nonisolated(unsafe) static var` from the test surface — Swift no
+    /// longer needs an escape hatch because there is no exposed mutable
+    /// static.
+    private final class State: @unchecked Sendable {
+        private let lock = NSLock()
+        private var handler: Handler?
+        private var requests: [URLRequest] = []
 
-    static var requestCount: Int {
-        self.lock.lock()
-        defer { self.lock.unlock() }
-        return self.requests.count
+        func getHandler() -> Handler? {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            return self.handler
+        }
+
+        func setHandler(_ value: Handler?) {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            self.handler = value
+        }
+
+        func requestCount() -> Int {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            return self.requests.count
+        }
+
+        func reset() {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            self.handler = nil
+            self.requests = []
+        }
+
+        /// Atomically append `request`, then return the new attempt count and
+        /// the current handler so `startLoading` reads both under one lock
+        /// acquisition.
+        func recordAndFetch(_ request: URLRequest) -> (Int, Handler?) {
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            self.requests.append(request)
+            return (self.requests.count, self.handler)
+        }
     }
 
-    static func reset() {
-        self.lock.lock()
-        defer { self.lock.unlock() }
-        self.handler = nil
-        self.requests = []
+    private static let state = State()
+
+    static var handler: Handler? {
+        get { self.state.getHandler() }
+        set { self.state.setHandler(newValue) }
     }
+
+    static var requestCount: Int { self.state.requestCount() }
+
+    static func reset() { self.state.reset() }
 
     override class func canInit(with request: URLRequest) -> Bool {
         true
@@ -420,11 +460,7 @@ private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func startLoading() {
-        Self.lock.lock()
-        Self.requests.append(self.request)
-        let attempt = Self.requests.count
-        let handler = Self.handler
-        Self.lock.unlock()
+        let (attempt, handler) = Self.state.recordAndFetch(self.request)
 
         guard let handler else {
             self.client?.urlProtocol(self, didFailWithError: URLError(.badURL))
