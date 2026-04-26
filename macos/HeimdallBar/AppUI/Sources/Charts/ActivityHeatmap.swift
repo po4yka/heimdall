@@ -9,11 +9,11 @@ struct ActivityHeatmap: View {
 
     nonisolated private static let dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
     private static let hourTicks = [0, 6, 12, 18, 23]
-    private static let dayLabelWidth: CGFloat = 24
-    private static let dayLabelGap: CGFloat = 8
-    private static let baseCellSpacing: CGFloat = 2
-    private static let maxCellSize: CGFloat = 18
-    private static let fallbackCellSize: CGFloat = 12
+    nonisolated private static let dayLabelWidth: CGFloat = 24
+    nonisolated private static let dayLabelGap: CGFloat = 8
+    nonisolated private static let baseCellSpacing: CGFloat = 2
+    nonisolated private static let maxCellSize: CGFloat = 18
+    nonisolated private static let fallbackCellSize: CGFloat = 12
     private static let tooltipWidth: CGFloat = 150
     private static let tooltipHeight: CGFloat = 64
     nonisolated private static let dimMultiplier: Double = 0.55
