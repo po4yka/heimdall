@@ -67,6 +67,7 @@ struct ProviderComparisonChart: View {
                     selectedTotal: selectedTotal,
                     selectedEntries: selectedEntries
                 )
+                .frame(maxWidth: .infinity)
 
                 self.chart(
                     entries: entries,
@@ -92,6 +93,7 @@ struct ProviderComparisonChart: View {
                     .padding(.vertical, 12)
             }
         }
+        .frame(maxWidth: .infinity)
         .padding(8)
         .menuCardBackground(
             opacity: ChartStyle.cardBackgroundOpacity,
@@ -406,6 +408,7 @@ private struct ProviderComparisonSummaryStrip: View {
                 )
             }
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
