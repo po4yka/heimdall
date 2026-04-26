@@ -247,6 +247,8 @@ export interface Totals {
   cache_creation: number;
   reasoning_output: number;
   cost: number;
+  /** Sum of Amp credits across the active filter; absent when no Amp data. */
+  credits?: number | null;
 }
 
 export interface StatCard {

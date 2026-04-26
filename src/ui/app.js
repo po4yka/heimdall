@@ -7674,7 +7674,10 @@ ${row.project}` : row.project;
       { label: "Cached Input", value: fmt(totals.cache_read), sub: "prompt cache" },
       { label: "Cache Creation", value: fmt(totals.cache_creation), sub: "cache writes" },
       { label: "Reasoning", value: fmt(totals.reasoning_output), sub: "subset of output" },
-      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing", isCost: true }
+      { label: "Est. Cost", value: fmtCostBig(totals.cost), sub: "API pricing", isCost: true },
+      // Amp credits: shown only when the current filter contains Amp rows
+      // (totals.credits is null when no session in the filter has credits).
+      ...totals.credits != null && totals.credits > 0 ? [{ label: "Total Credits", value: fmtCredits(totals.credits), sub: "Amp only (non-USD)" }] : []
     ];
     return /* @__PURE__ */ u4(S, { children: [
       stats.map((s4) => /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
@@ -8201,7 +8204,11 @@ ${row.project}` : row.project;
       cache_read: filteredSessions.reduce((sum2, session) => sum2 + session.cache_read, 0),
       cache_creation: filteredSessions.reduce((sum2, session) => sum2 + session.cache_creation, 0),
       reasoning_output: filteredSessions.reduce((sum2, session) => sum2 + session.reasoning_output, 0),
-      cost: filteredSessions.reduce((sum2, session) => sum2 + session.cost, 0)
+      cost: filteredSessions.reduce((sum2, session) => sum2 + session.cost, 0),
+      credits: filteredSessions.reduce((sum2, session) => {
+        if (session.credits == null) return sum2;
+        return (sum2 ?? 0) + session.credits;
+      }, null)
     };
     const confidenceBreakdown = Object.entries(
       filteredSessions.reduce((acc, session) => {

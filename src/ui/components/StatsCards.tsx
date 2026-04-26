@@ -1,4 +1,4 @@
-import { fmt, fmtCostBig } from '../lib/format';
+import { fmt, fmtCostBig, fmtCredits } from '../lib/format';
 import { Sparkline } from './charts/Sparkline';
 import { CacheEfficiencyCard } from './CacheEfficiencyCard';
 import { BillingBlocksCard } from './BillingBlocksCard';
@@ -53,6 +53,11 @@ export function StatsCards({
     { label: 'Cache Creation', value: fmt(totals.cache_creation),       sub: 'cache writes' },
     { label: 'Reasoning',      value: fmt(totals.reasoning_output),     sub: 'subset of output' },
     { label: 'Est. Cost',      value: fmtCostBig(totals.cost),          sub: 'API pricing', isCost: true },
+    // Amp credits: shown only when the current filter contains Amp rows
+    // (totals.credits is null when no session in the filter has credits).
+    ...(totals.credits != null && totals.credits > 0
+      ? [{ label: 'Total Credits', value: fmtCredits(totals.credits), sub: 'Amp only (non-USD)' }]
+      : []),
   ];
 
   return (

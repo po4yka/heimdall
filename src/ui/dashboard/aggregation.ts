@@ -216,6 +216,10 @@ export function buildAggregations(
     cache_creation: filteredSessions.reduce((sum, session) => sum + session.cache_creation, 0),
     reasoning_output: filteredSessions.reduce((sum, session) => sum + session.reasoning_output, 0),
     cost: filteredSessions.reduce((sum, session) => sum + session.cost, 0),
+    credits: filteredSessions.reduce<number | null>((sum, session) => {
+      if (session.credits == null) return sum;
+      return (sum ?? 0) + session.credits;
+    }, null),
   };
 
   const confidenceBreakdown = Object.entries(

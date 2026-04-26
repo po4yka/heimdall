@@ -47,7 +47,7 @@ The full OAuth handshake is documented in [auth.md](auth.md).
 - **Version distribution donut** — CC-version breakdown with URL-persistent cost / calls / tokens metric switcher.
 - **Tool-event cost attribution** — each call's cost is split evenly across its tool invocations; per-MCP and per-file cost queries become tractable.
 - **Codex local log support** — scans archived Codex session JSONL and estimates cost from OpenAI API pricing.
-- **Amp credit tracking** — new provider at `~/.local/share/amp/threads/*.json` populates `turns.credits` (nullable, non-USD); dashboard tables show a conditional CREDITS column only when the filtered view contains Amp rows.
+- **Amp credit tracking** — new provider at `~/.local/share/amp/threads/*.json` populates `turns.credits` (nullable, non-USD); dashboard tables show a conditional CREDITS column only when the filtered view contains Amp rows, and a `Total Credits` stat card appears alongside `Est. Cost` whenever the active filter has a non-zero credit total.
 - **Estimation confidence tiers** — distinguishes exact pricing matches from fallback/unknown model estimates.
 - **OpenAI org reconciliation** — optional Codex comparison against official OpenAI organization usage buckets.
 - **Subagent session linking** — tracks parent vs subagent token usage with breakdown panel.
