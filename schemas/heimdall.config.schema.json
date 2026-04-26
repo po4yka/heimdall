@@ -31,6 +31,25 @@
         "token_limit": null
       }
     },
+    "claude_admin": {
+      "description": "Anthropic Admin API fallback for Claude Code analytics.",
+      "$ref": "#/$defs/ClaudeAdminConfig",
+      "default": {
+        "admin_key_env": "ANTHROPIC_ADMIN_KEY",
+        "enabled": true,
+        "lookback_days": 30,
+        "refresh_interval": 300
+      }
+    },
+    "claude_usage_monitor": {
+      "description": "Scheduled Claude `/usage` capture settings.",
+      "$ref": "#/$defs/ClaudeUsageMonitorConfig",
+      "default": {
+        "claude_binary": null,
+        "default_interval": "daily",
+        "working_dir": null
+      }
+    },
     "commands": {
       "description": "Per-command config overrides.  Values here win over the flat top-level\nfields for the named subcommand.  Currently `blocks` and `statusline`\nare supported.",
       "anyOf": [
@@ -133,12 +152,12 @@
       "description": "Optional community-signal aggregator (opt-in, off by default).",
       "$ref": "#/$defs/AggregatorConfig",
       "default": {
-        "key_env_var": "STATUSGATOR_API_KEY",
         "claude_services": [
           "claude-ai",
           "claude"
         ],
         "enabled": false,
+        "key_env_var": "STATUSGATOR_API_KEY",
         "openai_services": [
           "openai",
           "chatgpt"
@@ -208,11 +227,6 @@
       "description": "Configuration for the optional community-signal aggregator (opt-in feature).\n\nTOML section: `[status_aggregator]`\nFeature is **off by default** (`enabled = false`).",
       "type": "object",
       "properties": {
-        "key_env_var": {
-          "description": "Environment variable that holds the API key (key never stored in TOML).",
-          "type": "string",
-          "default": "STATUSGATOR_API_KEY"
-        },
         "claude_services": {
           "description": "StatusGator service slugs for Claude.",
           "type": "array",
@@ -228,6 +242,11 @@
           "description": "Enable community signal polling (default: false — explicit opt-in required).",
           "type": "boolean",
           "default": false
+        },
+        "key_env_var": {
+          "description": "Environment variable that holds the API key (key never stored in TOML).",
+          "type": "string",
+          "default": "STATUSGATOR_API_KEY"
         },
         "openai_services": {
           "description": "StatusGator service slugs for OpenAI.",
@@ -297,6 +316,62 @@
             "null"
           ],
           "format": "int64",
+          "default": null
+        }
+      }
+    },
+    "ClaudeAdminConfig": {
+      "description": "Anthropic Admin API fallback configuration for Claude Code analytics.",
+      "type": "object",
+      "properties": {
+        "admin_key_env": {
+          "description": "Environment variable name that stores the Anthropic admin key.",
+          "type": "string",
+          "default": "ANTHROPIC_ADMIN_KEY"
+        },
+        "enabled": {
+          "description": "Enable Anthropic admin analytics fallback.",
+          "type": "boolean",
+          "default": true
+        },
+        "lookback_days": {
+          "description": "Number of trailing UTC days to aggregate from the Claude Code analytics API.",
+          "type": "integer",
+          "format": "int64",
+          "default": 30
+        },
+        "refresh_interval": {
+          "description": "Seconds between API refreshes.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 300,
+          "minimum": 0
+        }
+      }
+    },
+    "ClaudeUsageMonitorConfig": {
+      "description": "Claude `/usage` monitoring configuration.",
+      "type": "object",
+      "properties": {
+        "claude_binary": {
+          "description": "Optional explicit path to the Claude CLI binary. When absent, PATH is used.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "default_interval": {
+          "description": "Default install interval for `usage-monitor install` (daily|hourly).",
+          "type": "string",
+          "default": "daily"
+        },
+        "working_dir": {
+          "description": "Optional working directory used for headless `/usage` capture.",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         }
       }

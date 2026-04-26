@@ -1578,8 +1578,10 @@ fn cmd_daemon(action: DaemonAction) -> Result<()> {
     Ok(())
 }
 
-// TODO: CI script emits schemas/heimdall.config.schema.json from
-// `heimdall config schema` on each release to catch schema drift.
+// CI guarantees `schemas/heimdall.config.schema.json` matches the output of
+// `cargo run -- config schema`; see the rust-stable job in
+// .github/workflows/ci.yml.  Regenerate after editing config.rs and commit
+// the schema alongside the code change.
 
 fn cmd_config(action: ConfigAction) -> Result<()> {
     match action {

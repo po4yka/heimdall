@@ -65,6 +65,10 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy -- -D warnings
       - run: cargo test
+      - name: Verify committed config schema matches `cargo run -- config schema`
+        run: |
+          cargo run --quiet --bin claude-usage-tracker -- config schema > /tmp/heimdall.config.schema.json
+          diff -u schemas/heimdall.config.schema.json /tmp/heimdall.config.schema.json
 
   rust-msrv:
     name: rust-msrv
