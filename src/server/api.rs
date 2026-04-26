@@ -951,8 +951,7 @@ fn monitor_visual_state(
     // OPENAI_API_KEY in the env, or any "authenticated-incompatible-source"
     // diagnostic). The provider still produces usable usage signal — surface as
     // "degraded" so the dashboard warns without raising the global red banner.
-    let auth_misconfigured =
-        snapshot.auth.is_authenticated && !snapshot.auth.is_source_compatible;
+    let auth_misconfigured = snapshot.auth.is_authenticated && !snapshot.auth.is_source_compatible;
 
     if snapshot.error.is_some() || auth_broken {
         return "error";
