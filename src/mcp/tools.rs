@@ -11,6 +11,7 @@ use rmcp::{tool, tool_router};
 use serde::Deserialize;
 
 use crate::analytics::blocks::{calculate_burn_rate, identify_blocks, project_block_usage};
+use crate::analytics::burn_rate::BurnRateConfig;
 use crate::analytics::quota::compute_quota;
 use crate::optimizer;
 use crate::scanner::db as sdb;
@@ -21,6 +22,9 @@ pub struct HeimdallMcpServer {
     pub db_path: PathBuf,
     /// Resolved session length (hours) computed once at server startup.
     pub default_session_length_hours: f64,
+    /// Burn-rate thresholds resolved from `[statusline]` TOML so MCP tier
+    /// output matches the statusline and dashboard for the same data.
+    pub burn_rate_config: BurnRateConfig,
 }
 
 // ── Input types ───────────────────────────────────────────────────────────────
@@ -558,9 +562,8 @@ fn query_active_block(db_path: &Path, session_hours: f64) -> Result<serde_json::
 
             let burn = match rate {
                 Some(r) => {
-                    use crate::analytics::burn_rate::{self as br, BurnRateConfig};
-                    // TODO: thread config thresholds here so MCP tier matches statusline when user overrides [statusline.burn_rate_*] in TOML.
-                    let tier = br::tier(r.tokens_per_min, &BurnRateConfig::default());
+                    use crate::analytics::burn_rate as br;
+                    let tier = br::tier(r.tokens_per_min, &self.burn_rate_config);
                     serde_json::json!({
                         "tokens_per_min": r.tokens_per_min,
                         "cost_per_hour_nanos": r.cost_per_hour_nanos,

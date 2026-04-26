@@ -27,6 +27,17 @@ impl Default for BurnRateConfig {
     }
 }
 
+impl BurnRateConfig {
+    /// Build a config from raw statusline thresholds (`burn_rate_normal_max`
+    /// and `burn_rate_moderate_max` in `[statusline]` TOML).
+    pub fn from_thresholds(normal_max: f64, moderate_max: f64) -> Self {
+        Self {
+            normal_max,
+            moderate_max,
+        }
+    }
+}
+
 /// Classify a burn rate (tokens/min) into a tier.
 ///
 /// - NaN or non-finite → Normal

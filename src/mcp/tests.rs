@@ -148,6 +148,7 @@ mod mcp_tests {
         let server = HeimdallMcpServer {
             db_path,
             default_session_length_hours: 5.0,
+            burn_rate_config: crate::analytics::burn_rate::BurnRateConfig::default(),
         };
         // Spawn the server in the background; it runs until EOF on server_read.
         tokio::spawn(async move {

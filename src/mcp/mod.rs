@@ -52,10 +52,15 @@ pub async fn run_stdio(db_path: PathBuf) -> Result<()> {
     use rmcp::ServiceExt;
     use tokio::io::{stdin, stdout};
 
+    let cfg = crate::config::load_config_resolved();
+    let statusline = cfg.resolved_statusline();
     let server = HeimdallMcpServer {
         db_path,
-        default_session_length_hours: crate::config::load_config_resolved()
-            .resolved_session_length(None, None),
+        default_session_length_hours: cfg.resolved_session_length(None, None),
+        burn_rate_config: crate::analytics::burn_rate::BurnRateConfig::from_thresholds(
+            statusline.burn_rate_normal_max,
+            statusline.burn_rate_moderate_max,
+        ),
     };
     let svc = server.serve((stdin(), stdout())).await?;
     // Wait for client disconnect (EOF on stdin).
@@ -157,10 +162,15 @@ async fn mcp_http_handler(
     let (client_write, server_read) = tokio::io::duplex(64 * 1024);
     let (server_write, mut client_read) = tokio::io::duplex(64 * 1024);
 
+    let cfg = crate::config::load_config_resolved();
+    let statusline = cfg.resolved_statusline();
     let server = HeimdallMcpServer {
         db_path: (*db_path).clone(),
-        default_session_length_hours: crate::config::load_config_resolved()
-            .resolved_session_length(None, None),
+        default_session_length_hours: cfg.resolved_session_length(None, None),
+        burn_rate_config: crate::analytics::burn_rate::BurnRateConfig::from_thresholds(
+            statusline.burn_rate_normal_max,
+            statusline.burn_rate_moderate_max,
+        ),
     };
 
     use rmcp::ServiceExt;
