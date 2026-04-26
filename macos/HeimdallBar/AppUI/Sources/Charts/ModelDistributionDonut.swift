@@ -16,8 +16,8 @@ struct ModelDistributionDonut: View {
 
     private static let displayCap = 8
     private static let donutSize: CGFloat = 80
-    private static let donutInnerRatio: CGFloat = 0.62
-    private static let donutOuterRatio: CGFloat = 0.98
+    nonisolated private static let donutInnerRatio: CGFloat = 0.62
+    nonisolated private static let donutOuterRatio: CGFloat = 0.98
     private static let dimMultiplier: Double = 0.45
 
     enum DonutMetric: String, Equatable {
