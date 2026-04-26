@@ -168,18 +168,26 @@ struct ProviderMenuView: View {
 }
 
 private struct MenuScrollableContainer<Content: View>: View {
-    @State private var contentHeight: CGFloat = Self.minHeight
+    // Start at maxHeight so the first render is at maximum and snaps DOWN to
+    // actual content height — avoids the jarring upward jump from minHeight.
+    @State private var contentHeight: CGFloat = Self.maxHeight
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
 
+    private var frameHeight: CGFloat {
+        guard self.contentHeight > 0 else { return Self.maxHeight }
+        return min(max(self.contentHeight, Self.minHeight), Self.maxHeight)
+    }
+
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
             self.content
                 .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: Self.width, alignment: .leading)
+                .background(Color(NSColor.windowBackgroundColor))
                 .background(
                     GeometryReader { proxy in
                         Color.clear
@@ -187,7 +195,7 @@ private struct MenuScrollableContainer<Content: View>: View {
                     }
                 )
         }
-        .frame(width: Self.width, height: min(max(self.contentHeight, Self.minHeight), Self.maxHeight))
+        .frame(width: Self.width, height: self.frameHeight)
         .onPreferenceChange(MenuContentHeightPreferenceKey.self) { newHeight in
             self.contentHeight = newHeight
         }
