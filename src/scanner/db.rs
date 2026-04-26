@@ -25,6 +25,13 @@ pub fn open_db(path: &std::path::Path) -> Result<Connection> {
 }
 
 pub fn init_db(conn: &Connection) -> Result<()> {
+    create_schema(conn)?;
+    apply_migrations(conn)?;
+    Ok(())
+}
+
+/// Create all tables and indexes. Pure DDL — no migration probes.
+fn create_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS sessions (
             session_id          TEXT PRIMARY KEY,
@@ -204,6 +211,82 @@ pub fn init_db(conn: &Connection) -> Result<()> {
             ON official_metadata_records(record_type, record_key);",
     )?;
 
+    // Tool invocations table for multi-tool and MCP tracking
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS tool_invocations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'claude',
+            message_id TEXT,
+            tool_name TEXT NOT NULL,
+            mcp_server TEXT,
+            mcp_tool TEXT,
+            tool_category TEXT NOT NULL DEFAULT 'builtin',
+            source_path TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_ti_session ON tool_invocations(session_id);
+        CREATE INDEX IF NOT EXISTS idx_ti_tool ON tool_invocations(tool_name);
+        CREATE INDEX IF NOT EXISTS idx_ti_mcp ON tool_invocations(mcp_server);",
+    )?;
+
+    // Phase 12: Tool-event cost attribution table.
+    // Each row is one tool invocation with its share of the parent turn's cost_nanos.
+    // dedup_key = "{provider}:{tool_use_id}" ensures idempotent rescans.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS tool_events (
+            dedup_key     TEXT PRIMARY KEY,
+            ts_epoch      INTEGER NOT NULL,
+            session_id    TEXT NOT NULL,
+            provider      TEXT NOT NULL,
+            project       TEXT NOT NULL DEFAULT '',
+            kind          TEXT NOT NULL,
+            value         TEXT NOT NULL,
+            cost_nanos    INTEGER NOT NULL,
+            source_path   TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_tool_events_kind ON tool_events(kind, ts_epoch);
+        CREATE INDEX IF NOT EXISTS idx_tool_events_session ON tool_events(session_id);",
+    )?;
+
+    // Phase 19: Real-time PreToolUse hook ingest.
+    // The hook binary writes directly to this table; the scanner only reads it.
+    // dedup_key = "{session_id}:{tool_use_id}" (or "{session_id}:{received_at_ns}")
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS live_events (
+            dedup_key       TEXT PRIMARY KEY,
+            received_at     TEXT NOT NULL,
+            session_id      TEXT,
+            tool_name       TEXT,
+            cost_usd_nanos  INTEGER NOT NULL DEFAULT 0,
+            input_tokens    INTEGER NOT NULL DEFAULT 0,
+            output_tokens   INTEGER NOT NULL DEFAULT 0,
+            raw_json        TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_live_events_received ON live_events(received_at);
+        CREATE INDEX IF NOT EXISTS idx_live_events_session ON live_events(session_id);",
+    )?;
+
+    // Agent status history: one row per component per poll.
+    // PRIMARY KEY (ts_epoch, provider, component_id) ensures INSERT OR IGNORE is idempotent.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS agent_status_history (
+            ts_epoch       INTEGER NOT NULL,
+            provider       TEXT NOT NULL,
+            component_id   TEXT NOT NULL,
+            component_name TEXT NOT NULL,
+            status         TEXT NOT NULL,
+            PRIMARY KEY (ts_epoch, provider, component_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_ash_lookup
+            ON agent_status_history(provider, component_id, ts_epoch DESC);",
+    )?;
+
+    Ok(())
+}
+
+/// Apply all incremental `has_column` migration probes, in original order.
+/// No DDL for new tables here — that lives in `create_schema`.
+fn apply_migrations(conn: &Connection) -> Result<()> {
     // Migration: add subagent columns if upgrading from older schema
     if !has_column(conn, "sessions", "provider") {
         conn.execute_batch(
@@ -268,23 +351,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     if !has_column(conn, "turns", "category") {
         conn.execute_batch("ALTER TABLE turns ADD COLUMN category TEXT NOT NULL DEFAULT '';")?;
     }
-    // Tool invocations table for multi-tool and MCP tracking
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS tool_invocations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL,
-            provider TEXT NOT NULL DEFAULT 'claude',
-            message_id TEXT,
-            tool_name TEXT NOT NULL,
-            mcp_server TEXT,
-            mcp_tool TEXT,
-            tool_category TEXT NOT NULL DEFAULT 'builtin',
-            source_path TEXT NOT NULL DEFAULT ''
-        );
-        CREATE INDEX IF NOT EXISTS idx_ti_session ON tool_invocations(session_id);
-        CREATE INDEX IF NOT EXISTS idx_ti_tool ON tool_invocations(tool_name);
-        CREATE INDEX IF NOT EXISTS idx_ti_mcp ON tool_invocations(mcp_server);",
-    )?;
     if !has_column(conn, "tool_invocations", "provider") {
         conn.execute_batch(
             "ALTER TABLE tool_invocations ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';",
@@ -339,25 +405,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         conn.execute_batch("ALTER TABLE sessions ADD COLUMN one_shot INTEGER;")?;
     }
 
-    // Phase 12: Tool-event cost attribution table.
-    // Each row is one tool invocation with its share of the parent turn's cost_nanos.
-    // dedup_key = "{provider}:{tool_use_id}" ensures idempotent rescans.
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS tool_events (
-            dedup_key     TEXT PRIMARY KEY,
-            ts_epoch      INTEGER NOT NULL,
-            session_id    TEXT NOT NULL,
-            provider      TEXT NOT NULL,
-            project       TEXT NOT NULL DEFAULT '',
-            kind          TEXT NOT NULL,
-            value         TEXT NOT NULL,
-            cost_nanos    INTEGER NOT NULL,
-            source_path   TEXT NOT NULL DEFAULT ''
-        );
-        CREATE INDEX IF NOT EXISTS idx_tool_events_kind ON tool_events(kind, ts_epoch);
-        CREATE INDEX IF NOT EXISTS idx_tool_events_session ON tool_events(session_id);",
-    )?;
-
     // Dedup by tool_use_id so repeated use of the same tool in a single turn is preserved.
     conn.execute_batch(
         "DROP INDEX IF EXISTS idx_turns_message_id;
@@ -404,24 +451,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         )?;
     }
 
-    // Phase 19: Real-time PreToolUse hook ingest.
-    // The hook binary writes directly to this table; the scanner only reads it.
-    // dedup_key = "{session_id}:{tool_use_id}" (or "{session_id}:{received_at_ns}")
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS live_events (
-            dedup_key       TEXT PRIMARY KEY,
-            received_at     TEXT NOT NULL,
-            session_id      TEXT,
-            tool_name       TEXT,
-            cost_usd_nanos  INTEGER NOT NULL DEFAULT 0,
-            input_tokens    INTEGER NOT NULL DEFAULT 0,
-            output_tokens   INTEGER NOT NULL DEFAULT 0,
-            raw_json        TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_live_events_received ON live_events(received_at);
-        CREATE INDEX IF NOT EXISTS idx_live_events_session ON live_events(session_id);",
-    )?;
-
     // Phase 5: context-window columns on live_events (idempotent ALTER TABLE).
     if !has_column(conn, "live_events", "context_input_tokens") {
         conn.execute_batch("ALTER TABLE live_events ADD COLUMN context_input_tokens INTEGER;")?;
@@ -435,21 +464,6 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     if !has_column(conn, "live_events", "hook_reported_cost_nanos") {
         conn.execute_batch("ALTER TABLE live_events ADD COLUMN hook_reported_cost_nanos INTEGER;")?;
     }
-
-    // Agent status history: one row per component per poll.
-    // PRIMARY KEY (ts_epoch, provider, component_id) ensures INSERT OR IGNORE is idempotent.
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS agent_status_history (
-            ts_epoch       INTEGER NOT NULL,
-            provider       TEXT NOT NULL,
-            component_id   TEXT NOT NULL,
-            component_name TEXT NOT NULL,
-            status         TEXT NOT NULL,
-            PRIMARY KEY (ts_epoch, provider, component_id)
-        );
-        CREATE INDEX IF NOT EXISTS idx_ash_lookup
-            ON agent_status_history(provider, component_id, ts_epoch DESC);",
-    )?;
 
     Ok(())
 }
@@ -1176,38 +1190,52 @@ pub fn sum_by_week(conn: &Connection, tz: TzParams) -> Result<Vec<WeekRow>> {
     Ok(rows)
 }
 
-pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardData> {
+/// Absorb the repeated `filter_map(warn)` boilerplate on mapped query rows.
+///
+/// Each caller passes the `MappedRows` iterator and a short context string for
+/// the warning message.  Rows that fail to deserialize are logged and skipped.
+fn collect_warn<T>(
+    rows: rusqlite::MappedRows<'_, impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<T>>,
+    ctx: &str,
+) -> Vec<T> {
+    rows.filter_map(|r| match r {
+        Ok(val) => Some(val),
+        Err(e) => {
+            warn!("{}: {}", ctx, e);
+            None
+        }
+    })
+    .collect()
+}
+
+pub(crate) fn query_dashboard_models(conn: &Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "SELECT COALESCE(model, 'unknown') as model
          FROM turns GROUP BY model
          ORDER BY SUM(input_tokens + output_tokens) DESC",
     )?;
-    let all_models: Vec<String> = stmt
-        .query_map([], |row| row.get(0))?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read row: {}", e);
-                None
-            }
-        })
-        .collect();
+    Ok(collect_warn(
+        stmt.query_map([], |row| row.get(0))?,
+        "dashboard models",
+    ))
+}
 
-    let provider_breakdown: Vec<ProviderSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT provider,
-                    COUNT(DISTINCT session_id) as sessions,
-                    COUNT(*) as turns,
-                    COALESCE(SUM(input_tokens), 0) as input,
-                    COALESCE(SUM(output_tokens), 0) as output,
-                    COALESCE(SUM(cache_read_tokens), 0) as cache_read,
-                    COALESCE(SUM(cache_creation_tokens), 0) as cache_creation,
-                    COALESCE(SUM(reasoning_output_tokens), 0) as reasoning_output,
-                    COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
-             FROM turns
-             GROUP BY provider
-             ORDER BY turns DESC",
-        )?;
+pub(crate) fn query_dashboard_providers(conn: &Connection) -> Result<Vec<ProviderSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT provider,
+                COUNT(DISTINCT session_id) as sessions,
+                COUNT(*) as turns,
+                COALESCE(SUM(input_tokens), 0) as input,
+                COALESCE(SUM(output_tokens), 0) as output,
+                COALESCE(SUM(cache_read_tokens), 0) as cache_read,
+                COALESCE(SUM(cache_creation_tokens), 0) as cache_creation,
+                COALESCE(SUM(reasoning_output_tokens), 0) as reasoning_output,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
+         FROM turns
+         GROUP BY provider
+         ORDER BY turns DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             let provider: String = row.get(0)?;
             Ok(ProviderSummary {
@@ -1221,137 +1249,131 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 reasoning_output: row.get(7)?,
                 cost: row.get::<_, i64>(8)? as f64 / 1_000_000_000.0,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read provider summary row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard providers",
+    ))
+}
 
-    let confidence_breakdown: Vec<ConfidenceSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT COALESCE(cost_confidence, 'low') as cost_confidence,
-                    COUNT(*) as turns,
-                    COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
-             FROM turns
-             GROUP BY cost_confidence
-             ORDER BY turns DESC",
-        )?;
+pub(crate) fn query_dashboard_confidence(conn: &Connection) -> Result<Vec<ConfidenceSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(cost_confidence, 'low') as cost_confidence,
+                COUNT(*) as turns,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
+         FROM turns
+         GROUP BY cost_confidence
+         ORDER BY turns DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             Ok(ConfidenceSummary {
                 confidence: row.get(0)?,
                 turns: row.get(1)?,
                 cost: row.get::<_, i64>(2)? as f64 / 1_000_000_000.0,
             })
-        })?
-        .filter_map(|r| r.ok())
-        .collect()
-    };
+        })?,
+        "dashboard confidence",
+    ))
+}
 
-    let billing_mode_breakdown: Vec<BillingModeSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT COALESCE(billing_mode, 'estimated_local') as billing_mode,
-                    COUNT(*) as turns,
-                    COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
-             FROM turns
-             GROUP BY billing_mode
-             ORDER BY turns DESC",
-        )?;
+pub(crate) fn query_dashboard_billing_modes(conn: &Connection) -> Result<Vec<BillingModeSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(billing_mode, 'estimated_local') as billing_mode,
+                COUNT(*) as turns,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
+         FROM turns
+         GROUP BY billing_mode
+         ORDER BY turns DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             Ok(BillingModeSummary {
                 billing_mode: row.get(0)?,
                 turns: row.get(1)?,
                 cost: row.get::<_, i64>(2)? as f64 / 1_000_000_000.0,
             })
-        })?
-        .filter_map(|r| r.ok())
-        .collect()
-    };
+        })?,
+        "dashboard billing modes",
+    ))
+}
 
-    let daily_by_model: Vec<DailyModelRow> = {
-        let day_expr = tz.sql_day_expr("timestamp");
-        let sql = format!(
-            "SELECT {day_expr} as day, provider, COALESCE(model, 'unknown') as model,
-                    SUM(input_tokens) as input, SUM(output_tokens) as output,
-                    SUM(cache_read_tokens) as cache_read, SUM(cache_creation_tokens) as cache_creation,
-                    SUM(reasoning_output_tokens) as reasoning_output,
-                    COUNT(*) as turns,
-                    COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos,
-                    SUM(credits) as credits_sum
-             FROM turns
-             GROUP BY day, provider, model
-             ORDER BY day, provider, model"
+pub(crate) fn query_dashboard_daily_by_model(
+    conn: &Connection,
+    tz: &TzParams,
+) -> Result<Vec<DailyModelRow>> {
+    let day_expr = tz.sql_day_expr("timestamp");
+    let sql = format!(
+        "SELECT {day_expr} as day, provider, COALESCE(model, 'unknown') as model,
+                SUM(input_tokens) as input, SUM(output_tokens) as output,
+                SUM(cache_read_tokens) as cache_read, SUM(cache_creation_tokens) as cache_creation,
+                SUM(reasoning_output_tokens) as reasoning_output,
+                COUNT(*) as turns,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos,
+                SUM(credits) as credits_sum
+         FROM turns
+         GROUP BY day, provider, model
+         ORDER BY day, provider, model"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<DailyModelRow> {
+        let provider: String = row.get(1)?;
+        let model: String = row.get(2)?;
+        let input: i64 = row.get(3)?;
+        let output: i64 = row.get(4)?;
+        let cache_read: i64 = row.get(5)?;
+        let cache_creation: i64 = row.get(6)?;
+        let cost_nanos: i64 = row.get(9)?;
+        // Phase 21: compute per-type cost breakdown for this model/day slice.
+        let (bd, _, _, _) = crate::pricing::estimate_cost_breakdown(
+            &model,
+            input,
+            output,
+            cache_read,
+            cache_creation,
         );
-        let mut stmt = conn.prepare(&sql)?;
-        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<DailyModelRow> {
-            let provider: String = row.get(1)?;
-            let model: String = row.get(2)?;
-            let input: i64 = row.get(3)?;
-            let output: i64 = row.get(4)?;
-            let cache_read: i64 = row.get(5)?;
-            let cache_creation: i64 = row.get(6)?;
-            let cost_nanos: i64 = row.get(9)?;
-            // Phase 21: compute per-type cost breakdown for this model/day slice.
-            let (bd, _, _, _) = crate::pricing::estimate_cost_breakdown(
-                &model,
-                input,
-                output,
-                cache_read,
-                cache_creation,
-            );
-            Ok(DailyModelRow {
-                day: row.get(0)?,
-                provider,
-                model,
-                input,
-                output,
-                cache_read,
-                cache_creation,
-                reasoning_output: row.get(7)?,
-                turns: row.get(8)?,
-                cost: cost_nanos as f64 / 1_000_000_000.0,
-                input_cost: bd.input_cost_nanos as f64 / 1_000_000_000.0,
-                output_cost: bd.output_cost_nanos as f64 / 1_000_000_000.0,
-                cache_read_cost: bd.cache_read_cost_nanos as f64 / 1_000_000_000.0,
-                cache_write_cost: bd.cache_write_cost_nanos as f64 / 1_000_000_000.0,
-                credits: row.get::<_, Option<f64>>(10)?,
-            })
-        };
-        let collect_rows = |mapped: rusqlite::MappedRows<'_, _>| -> Vec<DailyModelRow> {
-            mapped
-                .filter_map(|r| match r {
-                    Ok(val) => Some(val),
-                    Err(e) => {
-                        warn!("Failed to read row: {}", e);
-                        None
-                    }
-                })
-                .collect()
-        };
-        let rows: Vec<DailyModelRow> = if let Some(offset_param) = tz.offset_sql_param() {
-            collect_rows(stmt.query_map([offset_param], map_row)?)
-        } else {
-            collect_rows(stmt.query_map([], map_row)?)
-        };
-        rows
+        Ok(DailyModelRow {
+            day: row.get(0)?,
+            provider,
+            model,
+            input,
+            output,
+            cache_read,
+            cache_creation,
+            reasoning_output: row.get(7)?,
+            turns: row.get(8)?,
+            cost: cost_nanos as f64 / 1_000_000_000.0,
+            input_cost: bd.input_cost_nanos as f64 / 1_000_000_000.0,
+            output_cost: bd.output_cost_nanos as f64 / 1_000_000_000.0,
+            cache_read_cost: bd.cache_read_cost_nanos as f64 / 1_000_000_000.0,
+            cache_write_cost: bd.cache_write_cost_nanos as f64 / 1_000_000_000.0,
+            credits: row.get::<_, Option<f64>>(10)?,
+        })
     };
+    if let Some(offset_param) = tz.offset_sql_param() {
+        Ok(collect_warn(
+            stmt.query_map([offset_param], map_row)?,
+            "dashboard daily_by_model",
+        ))
+    } else {
+        Ok(collect_warn(
+            stmt.query_map([], map_row)?,
+            "dashboard daily_by_model",
+        ))
+    }
+}
 
-    let sessions_all: Vec<SessionRow> = {
-        let mut stmt = conn.prepare(
-            "SELECT s.session_id, s.provider, s.project_name, s.first_timestamp, s.last_timestamp,
-                    s.total_input_tokens, s.total_output_tokens,
-                    s.total_cache_read, s.total_cache_creation, s.total_reasoning_output,
-                    s.total_estimated_cost_nanos, s.model, s.turn_count,
-                    s.pricing_version, s.billing_mode, s.cost_confidence,
-                    COALESCE((SELECT COUNT(DISTINCT t.agent_id) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_count,
-                    COALESCE((SELECT COUNT(*) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_turns,
-                    s.title, s.total_credits
-             FROM sessions s ORDER BY s.last_timestamp DESC",
-        )?;
+pub(crate) fn query_dashboard_sessions(conn: &Connection) -> Result<Vec<SessionRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT s.session_id, s.provider, s.project_name, s.first_timestamp, s.last_timestamp,
+                s.total_input_tokens, s.total_output_tokens,
+                s.total_cache_read, s.total_cache_creation, s.total_reasoning_output,
+                s.total_estimated_cost_nanos, s.model, s.turn_count,
+                s.pricing_version, s.billing_mode, s.cost_confidence,
+                COALESCE((SELECT COUNT(DISTINCT t.agent_id) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_count,
+                COALESCE((SELECT COUNT(*) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_turns,
+                s.title, s.total_credits
+         FROM sessions s ORDER BY s.last_timestamp DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             let first_ts: String = row.get::<_, Option<String>>(3)?.unwrap_or_default();
             let last_ts: String = row.get::<_, Option<String>>(4)?.unwrap_or_default();
@@ -1378,7 +1400,6 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
             } else {
                 0.0
             };
-
             Ok(SessionRow {
                 session_id: raw_session_id(&session_id).chars().take(8).collect(),
                 provider,
@@ -1419,58 +1440,54 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 tokens_per_min,
                 credits: row.get::<_, Option<f64>>(19)?,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard sessions",
+    ))
+}
 
-    let subagent_summary: crate::models::SubagentSummary = conn
-        .query_row(
-            "SELECT
-                COALESCE(SUM(CASE WHEN is_subagent = 0 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN is_subagent = 0 THEN input_tokens ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN is_subagent = 0 THEN output_tokens ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN is_subagent = 1 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN is_subagent = 1 THEN input_tokens ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN is_subagent = 1 THEN output_tokens ELSE 0 END), 0),
-                COALESCE(COUNT(DISTINCT CASE WHEN is_subagent = 1 THEN agent_id END), 0)
-             FROM turns",
-            [],
-            |row| {
-                Ok(crate::models::SubagentSummary {
-                    parent_turns: row.get(0)?,
-                    parent_input: row.get(1)?,
-                    parent_output: row.get(2)?,
-                    subagent_turns: row.get(3)?,
-                    subagent_input: row.get(4)?,
-                    subagent_output: row.get(5)?,
-                    unique_agents: row.get(6)?,
-                })
-            },
-        )
-        .unwrap_or_else(|e| {
-            warn!("Subagent summary query failed: {}", e);
-            Default::default()
-        });
+pub(crate) fn query_dashboard_subagents(conn: &Connection) -> crate::models::SubagentSummary {
+    conn.query_row(
+        "SELECT
+            COALESCE(SUM(CASE WHEN is_subagent = 0 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_subagent = 0 THEN input_tokens ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_subagent = 0 THEN output_tokens ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_subagent = 1 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_subagent = 1 THEN input_tokens ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN is_subagent = 1 THEN output_tokens ELSE 0 END), 0),
+            COALESCE(COUNT(DISTINCT CASE WHEN is_subagent = 1 THEN agent_id END), 0)
+         FROM turns",
+        [],
+        |row| {
+            Ok(crate::models::SubagentSummary {
+                parent_turns: row.get(0)?,
+                parent_input: row.get(1)?,
+                parent_output: row.get(2)?,
+                subagent_turns: row.get(3)?,
+                subagent_input: row.get(4)?,
+                subagent_output: row.get(5)?,
+                unique_agents: row.get(6)?,
+            })
+        },
+    )
+    .unwrap_or_else(|e| {
+        warn!("Subagent summary query failed: {}", e);
+        Default::default()
+    })
+}
 
-    let entrypoint_breakdown: Vec<EntrypointSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT s.provider, COALESCE(s.entrypoint, 'unknown') as ep,
-                    COUNT(DISTINCT s.session_id) as sessions,
-                    COUNT(t.id) as turns,
-                    COALESCE(SUM(t.input_tokens), 0) as input,
-                    COALESCE(SUM(t.output_tokens), 0) as output
-             FROM sessions s
-             LEFT JOIN turns t ON s.session_id = t.session_id
-             GROUP BY s.provider, ep
-             ORDER BY COALESCE(SUM(t.input_tokens + t.output_tokens), 0) DESC",
-        )?;
+pub(crate) fn query_dashboard_entrypoints(conn: &Connection) -> Result<Vec<EntrypointSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT s.provider, COALESCE(s.entrypoint, 'unknown') as ep,
+                COUNT(DISTINCT s.session_id) as sessions,
+                COUNT(t.id) as turns,
+                COALESCE(SUM(t.input_tokens), 0) as input,
+                COALESCE(SUM(t.output_tokens), 0) as output
+         FROM sessions s
+         LEFT JOIN turns t ON s.session_id = t.session_id
+         GROUP BY s.provider, ep
+         ORDER BY COALESCE(SUM(t.input_tokens + t.output_tokens), 0) DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             Ok(EntrypointSummary {
                 provider: row.get(0)?,
@@ -1480,27 +1497,22 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 input: row.get(4)?,
                 output: row.get(5)?,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard entrypoints",
+    ))
+}
 
-    let service_tiers: Vec<ServiceTierSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT provider, COALESCE(service_tier, 'unknown') as tier,
-                    COALESCE(inference_geo, 'unknown') as geo,
-                    COUNT(*) as cnt
-             FROM turns
-             WHERE service_tier IS NOT NULL AND service_tier != ''
-             GROUP BY provider, tier, geo
-             ORDER BY cnt DESC",
-        )?;
+pub(crate) fn query_dashboard_service_tiers(conn: &Connection) -> Result<Vec<ServiceTierSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT provider, COALESCE(service_tier, 'unknown') as tier,
+                COALESCE(inference_geo, 'unknown') as geo,
+                COUNT(*) as cnt
+         FROM turns
+         WHERE service_tier IS NOT NULL AND service_tier != ''
+         GROUP BY provider, tier, geo
+         ORDER BY cnt DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             Ok(ServiceTierSummary {
                 provider: row.get(0)?,
@@ -1508,28 +1520,23 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 inference_geo: row.get(2)?,
                 turns: row.get(3)?,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard service tiers",
+    ))
+}
 
-    let tool_summary: Vec<ToolSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT provider, tool_name, tool_category, mcp_server,
-                    COUNT(*) as invocations,
-                    COUNT(DISTINCT message_id) as turns_used,
-                    COUNT(DISTINCT session_id) as sessions_used,
-                    COALESCE(SUM(is_error), 0) as errors
-             FROM tool_invocations
-             GROUP BY provider, tool_name
-             ORDER BY invocations DESC",
-        )?;
+pub(crate) fn query_dashboard_tools(conn: &Connection) -> Result<Vec<ToolSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT provider, tool_name, tool_category, mcp_server,
+                COUNT(*) as invocations,
+                COUNT(DISTINCT message_id) as turns_used,
+                COUNT(DISTINCT session_id) as sessions_used,
+                COALESCE(SUM(is_error), 0) as errors
+         FROM tool_invocations
+         GROUP BY provider, tool_name
+         ORDER BY invocations DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             Ok(ToolSummary {
                 provider: row.get(0)?,
@@ -1541,28 +1548,23 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 sessions_used: row.get(6)?,
                 errors: row.get(7)?,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read tool summary row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard tools",
+    ))
+}
 
-    let mcp_summary: Vec<McpServerSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT provider, mcp_server,
-                    COUNT(DISTINCT tool_name) as tools_used,
-                    COUNT(*) as invocations,
-                    COUNT(DISTINCT session_id) as sessions_used
-             FROM tool_invocations
-             WHERE mcp_server IS NOT NULL
-             GROUP BY provider, mcp_server
-             ORDER BY invocations DESC",
-        )?;
+pub(crate) fn query_dashboard_mcp(conn: &Connection) -> Result<Vec<McpServerSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT provider, mcp_server,
+                COUNT(DISTINCT tool_name) as tools_used,
+                COUNT(*) as invocations,
+                COUNT(DISTINCT session_id) as sessions_used
+         FROM tool_invocations
+         WHERE mcp_server IS NOT NULL
+         GROUP BY provider, mcp_server
+         ORDER BY invocations DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             Ok(McpServerSummary {
                 provider: row.get(0)?,
@@ -1571,27 +1573,22 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 invocations: row.get(3)?,
                 sessions_used: row.get(4)?,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read MCP summary row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard mcp",
+    ))
+}
 
-    let hourly_distribution: Vec<HourlyRow> = {
-        let mut stmt = conn.prepare(
-            "SELECT provider, CAST(substr(timestamp, 12, 2) AS INTEGER) as hour,
-                    COUNT(*) as turns, SUM(input_tokens) as input, SUM(output_tokens) as output,
-                    SUM(reasoning_output_tokens) as reasoning_output
-             FROM turns
-             WHERE timestamp IS NOT NULL AND length(timestamp) >= 13
-             GROUP BY provider, hour
-             ORDER BY provider, hour",
-        )?;
+pub(crate) fn query_dashboard_hourly(conn: &Connection) -> Result<Vec<HourlyRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT provider, CAST(substr(timestamp, 12, 2) AS INTEGER) as hour,
+                COUNT(*) as turns, SUM(input_tokens) as input, SUM(output_tokens) as output,
+                SUM(reasoning_output_tokens) as reasoning_output
+         FROM turns
+         WHERE timestamp IS NOT NULL AND length(timestamp) >= 13
+         GROUP BY provider, hour
+         ORDER BY provider, hour",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             Ok(HourlyRow {
                 provider: row.get(0)?,
@@ -1601,31 +1598,26 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 output: row.get(4)?,
                 reasoning_output: row.get(5)?,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read hourly row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard hourly",
+    ))
+}
 
-    let git_branch_summary: Vec<BranchSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT s.provider, s.git_branch,
-                    COUNT(DISTINCT s.session_id) as sessions,
-                    COUNT(t.id) as turns,
-                    SUM(t.input_tokens) as input, SUM(t.output_tokens) as output,
-                    SUM(t.reasoning_output_tokens) as reasoning_output,
-                    COALESCE(SUM(t.estimated_cost_nanos), 0) as cost_nanos
-             FROM sessions s JOIN turns t ON s.session_id = t.session_id
-             WHERE s.git_branch IS NOT NULL AND s.git_branch != ''
-             GROUP BY s.provider, s.git_branch
-             ORDER BY SUM(t.input_tokens + t.output_tokens) DESC
-             LIMIT 50",
-        )?;
+pub(crate) fn query_dashboard_branches(conn: &Connection) -> Result<Vec<BranchSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT s.provider, s.git_branch,
+                COUNT(DISTINCT s.session_id) as sessions,
+                COUNT(t.id) as turns,
+                SUM(t.input_tokens) as input, SUM(t.output_tokens) as output,
+                SUM(t.reasoning_output_tokens) as reasoning_output,
+                COALESCE(SUM(t.estimated_cost_nanos), 0) as cost_nanos
+         FROM sessions s JOIN turns t ON s.session_id = t.session_id
+         WHERE s.git_branch IS NOT NULL AND s.git_branch != ''
+         GROUP BY s.provider, s.git_branch
+         ORDER BY SUM(t.input_tokens + t.output_tokens) DESC
+         LIMIT 50",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             let provider: String = row.get(0)?;
             let branch: String = row.get(1)?;
@@ -1639,28 +1631,23 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 reasoning_output: row.get(6)?,
                 cost: row.get::<_, i64>(7)? as f64 / 1_000_000_000.0,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read branch summary row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard branches",
+    ))
+}
 
-    let version_summary: Vec<VersionSummary> = {
-        let mut stmt = conn.prepare(
-            "SELECT provider, COALESCE(NULLIF(version, ''), 'unknown') as ver,
-                    COUNT(*) as turns,
-                    COUNT(DISTINCT session_id) as sessions,
-                    COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos,
-                    COALESCE(SUM(input_tokens + output_tokens), 0) as tokens
-             FROM turns
-             GROUP BY provider, ver
-             ORDER BY turns DESC",
-        )?;
+pub(crate) fn query_dashboard_versions(conn: &Connection) -> Result<Vec<VersionSummary>> {
+    let mut stmt = conn.prepare(
+        "SELECT provider, COALESCE(NULLIF(version, ''), 'unknown') as ver,
+                COUNT(*) as turns,
+                COUNT(DISTINCT session_id) as sessions,
+                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos,
+                COALESCE(SUM(input_tokens + output_tokens), 0) as tokens
+         FROM turns
+         GROUP BY provider, ver
+         ORDER BY turns DESC",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             Ok(VersionSummary {
                 provider: row.get(0)?,
@@ -1670,28 +1657,23 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 cost: row.get::<_, i64>(4)? as f64 / 1_000_000_000.0,
                 tokens: row.get(5)?,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read version summary row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard versions",
+    ))
+}
 
-    let daily_by_project: Vec<DailyProjectRow> = {
-        let mut stmt = conn.prepare(
-            "SELECT substr(t.timestamp, 1, 10) as day, s.provider, s.project_name,
-                    SUM(t.input_tokens) as input, SUM(t.output_tokens) as output,
-                    SUM(t.reasoning_output_tokens) as reasoning_output,
-                    COALESCE(SUM(t.estimated_cost_nanos), 0) as cost_nanos,
-                    SUM(t.credits) as credits_sum
-             FROM turns t JOIN sessions s ON t.session_id = s.session_id
-             GROUP BY day, s.provider, s.project_name
-             ORDER BY day, s.provider, s.project_name",
-        )?;
+pub(crate) fn query_dashboard_daily_by_project(conn: &Connection) -> Result<Vec<DailyProjectRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT substr(t.timestamp, 1, 10) as day, s.provider, s.project_name,
+                SUM(t.input_tokens) as input, SUM(t.output_tokens) as output,
+                SUM(t.reasoning_output_tokens) as reasoning_output,
+                COALESCE(SUM(t.estimated_cost_nanos), 0) as cost_nanos,
+                SUM(t.credits) as credits_sum
+         FROM turns t JOIN sessions s ON t.session_id = s.session_id
+         GROUP BY day, s.provider, s.project_name
+         ORDER BY day, s.provider, s.project_name",
+    )?;
+    Ok(collect_warn(
         stmt.query_map([], |row| {
             let day: String = row.get(0)?;
             let provider: String = row.get(1)?;
@@ -1708,205 +1690,215 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
                 cost: row.get::<_, i64>(6)? as f64 / 1_000_000_000.0,
                 credits: row.get::<_, Option<f64>>(7)?,
             })
-        })?
-        .filter_map(|r| match r {
-            Ok(val) => Some(val),
-            Err(e) => {
-                warn!("Failed to read daily project row: {}", e);
-                None
-            }
-        })
-        .collect()
-    };
+        })?,
+        "dashboard daily_by_project",
+    ))
+}
 
+pub(crate) fn query_dashboard_cache_efficiency(
+    conn: &Connection,
+) -> Result<crate::models::CacheEfficiency> {
     // Phase 21: Cache-efficiency aggregate.
     // Queries all turns for token totals, then uses estimate_cost_breakdown to
     // compute per-type cost nanos and derive the hit rate.
-    let cache_efficiency: crate::models::CacheEfficiency = {
-        let (total_input, total_output, total_cache_read, total_cache_write): (i64, i64, i64, i64) =
-            conn.query_row(
-                "SELECT
-                    COALESCE(SUM(input_tokens), 0),
-                    COALESCE(SUM(output_tokens), 0),
-                    COALESCE(SUM(cache_read_tokens), 0),
-                    COALESCE(SUM(cache_creation_tokens), 0)
-                 FROM turns",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )
-            .unwrap_or((0, 0, 0, 0));
+    let (total_input, total_output, total_cache_read, total_cache_write): (i64, i64, i64, i64) =
+        conn.query_row(
+            "SELECT
+                COALESCE(SUM(input_tokens), 0),
+                COALESCE(SUM(output_tokens), 0),
+                COALESCE(SUM(cache_read_tokens), 0),
+                COALESCE(SUM(cache_creation_tokens), 0)
+             FROM turns",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .unwrap_or((0, 0, 0, 0));
 
-        // Aggregate per-type cost across all distinct models.
-        // We iterate over each model's token totals and sum cost breakdowns so
-        // per-model pricing (including threshold discounts) is respected.
-        let model_totals: Vec<(String, i64, i64, i64, i64)> = {
-            let mut stmt = conn.prepare(
-                "SELECT COALESCE(model, ''),
-                        COALESCE(SUM(input_tokens), 0),
-                        COALESCE(SUM(output_tokens), 0),
-                        COALESCE(SUM(cache_read_tokens), 0),
-                        COALESCE(SUM(cache_creation_tokens), 0)
-                 FROM turns
-                 GROUP BY model",
-            )?;
-            stmt.query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?,
-                ))
-            })?
-            .filter_map(|r| r.ok())
-            .collect()
-        };
+    // Aggregate per-type cost across all distinct models.
+    // We iterate over each model's token totals and sum cost breakdowns so
+    // per-model pricing (including threshold discounts) is respected.
+    let mut stmt = conn.prepare(
+        "SELECT COALESCE(model, ''),
+                COALESCE(SUM(input_tokens), 0),
+                COALESCE(SUM(output_tokens), 0),
+                COALESCE(SUM(cache_read_tokens), 0),
+                COALESCE(SUM(cache_creation_tokens), 0)
+         FROM turns
+         GROUP BY model",
+    )?;
+    let model_totals: Vec<(String, i64, i64, i64, i64)> = collect_warn(
+        stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })?,
+        "dashboard cache_efficiency model totals",
+    );
 
-        let mut agg_input_cost: i64 = 0;
-        let mut agg_output_cost: i64 = 0;
-        let mut agg_cache_read_cost: i64 = 0;
-        let mut agg_cache_write_cost: i64 = 0;
+    let mut agg_input_cost: i64 = 0;
+    let mut agg_output_cost: i64 = 0;
+    let mut agg_cache_read_cost: i64 = 0;
+    let mut agg_cache_write_cost: i64 = 0;
 
-        for (model, inp, out, cr, cw) in model_totals {
-            let (bd, _, _, _) = crate::pricing::estimate_cost_breakdown(&model, inp, out, cr, cw);
-            agg_input_cost += bd.input_cost_nanos;
-            agg_output_cost += bd.output_cost_nanos;
-            agg_cache_read_cost += bd.cache_read_cost_nanos;
-            agg_cache_write_cost += bd.cache_write_cost_nanos;
-        }
+    for (model, inp, out, cr, cw) in model_totals {
+        let (bd, _, _, _) = crate::pricing::estimate_cost_breakdown(&model, inp, out, cr, cw);
+        agg_input_cost += bd.input_cost_nanos;
+        agg_output_cost += bd.output_cost_nanos;
+        agg_cache_read_cost += bd.cache_read_cost_nanos;
+        agg_cache_write_cost += bd.cache_write_cost_nanos;
+    }
 
-        // Cache hit rate = cache_read / (cache_read + cache_creation + input).
-        // Denominator rationale: Anthropic reports input_tokens as the
-        // uncached remainder only (~1% of the total input stream for heavy
-        // Claude Code users), so the narrow cr / (cr + in) ratio rounded to
-        // 100% for any continuous user. Including cache_creation in the
-        // denominator reflects the fraction of input-side tokens actually
-        // served from cache and reads meaningfully between 0% and 100%.
-        let denom = total_cache_read + total_cache_write + total_input;
-        let cache_hit_rate = if denom > 0 {
-            Some(total_cache_read as f64 / denom as f64)
-        } else {
-            None
-        };
-
-        crate::models::CacheEfficiency {
-            cache_read_tokens: total_cache_read,
-            cache_write_tokens: total_cache_write,
-            input_tokens: total_input,
-            output_tokens: total_output,
-            cache_read_cost_nanos: agg_cache_read_cost,
-            cache_write_cost_nanos: agg_cache_write_cost,
-            input_cost_nanos: agg_input_cost,
-            output_cost_nanos: agg_output_cost,
-            cache_hit_rate,
-        }
+    // Cache hit rate = cache_read / (cache_read + cache_creation + input).
+    // Denominator rationale: Anthropic reports input_tokens as the
+    // uncached remainder only (~1% of the total input stream for heavy
+    // Claude Code users), so the narrow cr / (cr + in) ratio rounded to
+    // 100% for any continuous user. Including cache_creation in the
+    // denominator reflects the fraction of input-side tokens actually
+    // served from cache and reads meaningfully between 0% and 100%.
+    let denom = total_cache_read + total_cache_write + total_input;
+    let cache_hit_rate = if denom > 0 {
+        Some(total_cache_read as f64 / denom as f64)
+    } else {
+        None
     };
 
-    let official_sync: OfficialSyncSummary = {
-        let total_runs: i64 =
-            conn.query_row("SELECT COUNT(*) FROM official_sync_runs", [], |row| {
-                row.get(0)
-            })?;
-        let total_records: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM official_metadata_records",
+    Ok(crate::models::CacheEfficiency {
+        cache_read_tokens: total_cache_read,
+        cache_write_tokens: total_cache_write,
+        input_tokens: total_input,
+        output_tokens: total_output,
+        cache_read_cost_nanos: agg_cache_read_cost,
+        cache_write_cost_nanos: agg_cache_write_cost,
+        input_cost_nanos: agg_input_cost,
+        output_cost_nanos: agg_output_cost,
+        cache_hit_rate,
+    })
+}
+
+pub(crate) fn query_dashboard_official_sync(conn: &Connection) -> Result<OfficialSyncSummary> {
+    let total_runs: i64 = conn.query_row("SELECT COUNT(*) FROM official_sync_runs", [], |row| {
+        row.get(0)
+    })?;
+    let total_records: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM official_metadata_records",
+        [],
+        |row| row.get(0),
+    )?;
+
+    let mut src_stmt = conn.prepare(
+        "SELECT r.source_slug,
+                r.source_kind,
+                r.provider,
+                r.status,
+                r.fetched_at,
+                COALESCE(COUNT(m.id), 0) AS record_count,
+                r.error_text
+         FROM official_sync_runs r
+         LEFT JOIN official_metadata_records m ON m.run_id = r.id
+         JOIN (
+             SELECT source_slug, MAX(id) AS max_id
+             FROM official_sync_runs
+             GROUP BY source_slug
+         ) latest
+           ON latest.source_slug = r.source_slug AND latest.max_id = r.id
+         GROUP BY r.id, r.source_slug, r.source_kind, r.provider, r.status, r.fetched_at, r.error_text
+         ORDER BY r.provider, r.source_kind, r.source_slug",
+    )?;
+    let sources: Vec<OfficialSyncSourceStatus> = collect_warn(
+        src_stmt.query_map([], |row| {
+            Ok(OfficialSyncSourceStatus {
+                source_slug: row.get(0)?,
+                source_kind: row.get(1)?,
+                provider: row.get(2)?,
+                status: row.get(3)?,
+                fetched_at: row.get(4)?,
+                record_count: row.get(5)?,
+                error_text: row.get(6)?,
+            })
+        })?,
+        "dashboard official sync sources",
+    );
+
+    let mut rc_stmt = conn.prepare(
+        "SELECT record_type, COUNT(*) as count
+         FROM official_metadata_records
+         GROUP BY record_type
+         ORDER BY count DESC, record_type ASC",
+    )?;
+    let record_counts: Vec<OfficialSyncRecordCount> = collect_warn(
+        rc_stmt.query_map([], |row| {
+            Ok(OfficialSyncRecordCount {
+                record_type: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })?,
+        "dashboard official sync record counts",
+    );
+
+    let last_sync_at: Option<String> = conn
+        .query_row(
+            "SELECT fetched_at FROM official_sync_runs ORDER BY id DESC LIMIT 1",
             [],
             |row| row.get(0),
-        )?;
+        )
+        .ok();
+    let latest_success_at: Option<String> = conn
+        .query_row(
+            "SELECT fetched_at
+             FROM official_sync_runs
+             WHERE status = 'success'
+             ORDER BY id DESC
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
 
-        let sources: Vec<OfficialSyncSourceStatus> = {
-            let mut stmt = conn.prepare(
-                "SELECT r.source_slug,
-                        r.source_kind,
-                        r.provider,
-                        r.status,
-                        r.fetched_at,
-                        COALESCE(COUNT(m.id), 0) AS record_count,
-                        r.error_text
-                 FROM official_sync_runs r
-                 LEFT JOIN official_metadata_records m ON m.run_id = r.id
-                 JOIN (
-                     SELECT source_slug, MAX(id) AS max_id
-                     FROM official_sync_runs
-                     GROUP BY source_slug
-                 ) latest
-                   ON latest.source_slug = r.source_slug AND latest.max_id = r.id
-                 GROUP BY r.id, r.source_slug, r.source_kind, r.provider, r.status, r.fetched_at, r.error_text
-                 ORDER BY r.provider, r.source_kind, r.source_slug",
-            )?;
-            stmt.query_map([], |row| {
-                Ok(OfficialSyncSourceStatus {
-                    source_slug: row.get(0)?,
-                    source_kind: row.get(1)?,
-                    provider: row.get(2)?,
-                    status: row.get(3)?,
-                    fetched_at: row.get(4)?,
-                    record_count: row.get(5)?,
-                    error_text: row.get(6)?,
-                })
-            })?
-            .filter_map(|row| row.ok())
-            .collect()
-        };
+    Ok(OfficialSyncSummary {
+        available: total_runs > 0,
+        last_sync_at,
+        latest_success_at,
+        total_runs,
+        total_records,
+        sources_success: sources
+            .iter()
+            .filter(|source| source.status == "success")
+            .count() as i64,
+        sources_error: sources
+            .iter()
+            .filter(|source| source.status == "fetch_error" || source.status == "parse_error")
+            .count() as i64,
+        sources_skipped: sources
+            .iter()
+            .filter(|source| source.status == "skipped")
+            .count() as i64,
+        sources,
+        record_counts,
+    })
+}
 
-        let record_counts: Vec<OfficialSyncRecordCount> = {
-            let mut stmt = conn.prepare(
-                "SELECT record_type, COUNT(*) as count
-                 FROM official_metadata_records
-                 GROUP BY record_type
-                 ORDER BY count DESC, record_type ASC",
-            )?;
-            stmt.query_map([], |row| {
-                Ok(OfficialSyncRecordCount {
-                    record_type: row.get(0)?,
-                    count: row.get(1)?,
-                })
-            })?
-            .filter_map(|row| row.ok())
-            .collect()
-        };
-
-        let last_sync_at: Option<String> = conn
-            .query_row(
-                "SELECT fetched_at FROM official_sync_runs ORDER BY id DESC LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
-            .ok();
-        let latest_success_at: Option<String> = conn
-            .query_row(
-                "SELECT fetched_at
-                 FROM official_sync_runs
-                 WHERE status = 'success'
-                 ORDER BY id DESC
-                 LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
-            .ok();
-
-        OfficialSyncSummary {
-            available: total_runs > 0,
-            last_sync_at,
-            latest_success_at,
-            total_runs,
-            total_records,
-            sources_success: sources
-                .iter()
-                .filter(|source| source.status == "success")
-                .count() as i64,
-            sources_error: sources
-                .iter()
-                .filter(|source| source.status == "fetch_error" || source.status == "parse_error")
-                .count() as i64,
-            sources_skipped: sources
-                .iter()
-                .filter(|source| source.status == "skipped")
-                .count() as i64,
-            sources,
-            record_counts,
-        }
-    };
-
+pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardData> {
+    let all_models = query_dashboard_models(conn)?;
+    let provider_breakdown = query_dashboard_providers(conn)?;
+    let confidence_breakdown = query_dashboard_confidence(conn)?;
+    let billing_mode_breakdown = query_dashboard_billing_modes(conn)?;
+    let daily_by_model = query_dashboard_daily_by_model(conn, &tz)?;
+    let sessions_all = query_dashboard_sessions(conn)?;
+    let subagent_summary = query_dashboard_subagents(conn);
+    let entrypoint_breakdown = query_dashboard_entrypoints(conn)?;
+    let service_tiers = query_dashboard_service_tiers(conn)?;
+    let tool_summary = query_dashboard_tools(conn)?;
+    let mcp_summary = query_dashboard_mcp(conn)?;
+    let hourly_distribution = query_dashboard_hourly(conn)?;
+    let git_branch_summary = query_dashboard_branches(conn)?;
+    let version_summary = query_dashboard_versions(conn)?;
+    let daily_by_project = query_dashboard_daily_by_project(conn)?;
+    let cache_efficiency = query_dashboard_cache_efficiency(conn)?;
+    let official_sync = query_dashboard_official_sync(conn)?;
     let generated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
