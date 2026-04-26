@@ -17,6 +17,17 @@
 //! to a fully structured parser. Until then it is "compile-safe, crash-safe,
 //! empty-when-unknown."
 //!
+//! # Test coverage
+//!
+//! Coverage today is **synthetic-fixture only** — the unit tests in this file
+//! exercise both Anthropic-style (`input_tokens`/`output_tokens`) and
+//! OpenAI-style (`prompt_tokens`/`completion_tokens`) usage shapes plus the
+//! flat `tokens` variant, but no test ingests an actual file produced by a
+//! Copilot client. If you have access to a real Copilot session file (any
+//! IDE), an anonymised redaction added as a fixture under the test module
+//! would meaningfully harden this provider — open a PR with the redacted
+//! payload pasted into a new `#[test]` and we will fold it into CI.
+//!
 //! # Probed locations
 //!
 //! - macOS:   `~/Library/Application Support/Code/User/globalStorage/github.copilot-chat/`
@@ -567,6 +578,86 @@ mod tests {
         assert_eq!(turns.len(), 1);
         assert_eq!(turns[0].input_tokens, 120);
         assert_eq!(turns[0].output_tokens, 45);
+    }
+
+    // -----------------------------------------------------------------------
+    // parse: OpenAI-style naming (prompt_tokens / completion_tokens)
+    // -----------------------------------------------------------------------
+
+    /// The probe explicitly accepts both Anthropic-style (`input_tokens` /
+    /// `output_tokens`) and OpenAI-style (`prompt_tokens` /
+    /// `completion_tokens`) usage shapes. The other tests only exercise the
+    /// Anthropic path; this locks down the OpenAI fallback so a future refactor
+    /// cannot silently drop it (Copilot's IDE integrations have historically
+    /// emitted both shapes).
+    #[test]
+    fn copilot_parse_openai_naming_prompt_completion_tokens() {
+        let dir = TempDir::new().unwrap();
+        let content = serde_json::json!({
+            "model": "gpt-4o",
+            "usage": {
+                "prompt_tokens": 250,
+                "completion_tokens": 75
+            }
+        })
+        .to_string();
+        let path = write_file(&dir, "openai-style.jsonl", &format!("{content}\n"));
+
+        let provider = CopilotProvider::new_with_dirs(vec![dir.path().to_path_buf()]);
+        let turns = provider.parse(&path).unwrap();
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].input_tokens, 250);
+        assert_eq!(turns[0].output_tokens, 75);
+        assert_eq!(turns[0].model, "gpt-4o");
+    }
+
+    // -----------------------------------------------------------------------
+    // parse: created_at fallback when `timestamp` is absent
+    // -----------------------------------------------------------------------
+
+    /// The extractor reads `timestamp` first, then falls back to `created_at`.
+    /// Without this test the fallback could be deleted unnoticed.
+    #[test]
+    fn copilot_parse_uses_created_at_when_timestamp_absent() {
+        let dir = TempDir::new().unwrap();
+        let content = serde_json::json!({
+            "model": "gpt-4o-mini",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "created_at": "2026-04-19T12:00:00Z"
+        })
+        .to_string();
+        let path = write_file(&dir, "created-at.jsonl", &format!("{content}\n"));
+
+        let provider = CopilotProvider::new_with_dirs(vec![dir.path().to_path_buf()]);
+        let turns = provider.parse(&path).unwrap();
+        assert_eq!(turns.len(), 1);
+        assert_eq!(turns[0].timestamp, "2026-04-19T12:00:00Z");
+    }
+
+    // -----------------------------------------------------------------------
+    // parse: zero-token records are dropped (avoid empty-cost noise)
+    // -----------------------------------------------------------------------
+
+    /// Records with usage objects but both token counts at zero are dropped
+    /// rather than producing zero-cost turns that pollute aggregations. This
+    /// is a deliberate semantic; the test prevents regression to "always
+    /// emit when usage is present".
+    #[test]
+    fn copilot_parse_zero_tokens_returns_no_turns() {
+        let dir = TempDir::new().unwrap();
+        let content = serde_json::json!({
+            "model": "gpt-4o",
+            "usage": {"input_tokens": 0, "output_tokens": 0}
+        })
+        .to_string();
+        let path = write_file(&dir, "zero.jsonl", &format!("{content}\n"));
+
+        let provider = CopilotProvider::new_with_dirs(vec![dir.path().to_path_buf()]);
+        let turns = provider.parse(&path).unwrap();
+        assert!(
+            turns.is_empty(),
+            "zero-token usage records must not produce Turn entries"
+        );
     }
 
     // -----------------------------------------------------------------------
