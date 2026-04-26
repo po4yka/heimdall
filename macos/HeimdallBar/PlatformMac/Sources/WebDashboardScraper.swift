@@ -127,6 +127,33 @@ public final class WebDashboardScraper {
         }
 
         if provider == .claude {
+            // Phase 13 decision: keep the Claude path as a documented stub.
+            //
+            // Roadmap line 47 ("Claude web fallback logic where parity needs
+            // it") was scoped to fields the OAuth + admin-API + local-DB
+            // pipeline cannot reach.  Candidate web-only fields surveyed
+            // during Phase 13 planning:
+            //
+            //   • Subscription billing (next renewal, card last4) on
+            //     claude.ai/settings/billing — narrowly useful, but not
+            //     covered by the menu/widget/CLI surfaces today.  Adding it
+            //     would require new presentation slots without an obvious
+            //     home.
+            //   • Pre-paid credit balance on console.anthropic.com — already
+            //     reachable via the admin API for users who provide an
+            //     ANTHROPIC_ADMIN_KEY.
+            //   • Per-day usage history with caching breakdown — the local
+            //     DB scanner already produces this; web scraping would
+            //     duplicate, not augment.
+            //   • Recent organization activity (team plans) — possibly
+            //     web-only, but plan-conditional and currently out of
+            //     scope for the menu-bar app.
+            //
+            // The accept-cost / reject-value calculus did not justify a
+            // full WKWebView path for any single candidate.  When a concrete
+            // user-visible field surfaces that OAuth + admin + local-DB
+            // genuinely cannot deliver, replace this branch with a real
+            // scrapeClaude(importedSession:) symmetric to scrapeCodex.
             return ScrapeResult(
                 statusText: "ready",
                 headline: "Claude web fallback is standing by",

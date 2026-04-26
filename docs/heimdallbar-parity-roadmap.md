@@ -43,10 +43,25 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 ### Not Started
 
-- [ ] Hidden `WKWebView` extraction of OpenAI dashboard extras.
-- [ ] Claude web fallback logic where parity needs it.
+- [x] Hidden `WKWebView` extraction of OpenAI dashboard extras. — Shipped via
+  Milestone 4; the line was stale until Phase 13 reconciled it.
+- [x] Claude web fallback logic where parity needs it. — Phase 13 reviewed
+  the candidate fields (`claude.ai/settings/billing`, `console.anthropic.com`
+  credit balance, per-day usage, team activity) and decided to keep the
+  documented stub: OAuth + admin API + local DB cover the parity-relevant
+  data; no web-only field justifies a WKWebView path today. Rationale block
+  lives in
+  [WebDashboardScraper.swift](/Users/po4yka/GitRep/heimdall/macos/HeimdallBar/PlatformMac/Sources/WebDashboardScraper.swift:129).
 - [x] Bundling `claude-usage-tracker` inside `HeimdallBar.app/Contents/Helpers`.
 - [ ] Release signing, entitlements hardening, notarization still need final release-run confirmation.
+  - Today `App/HeimdallBar.entitlements` declares only iCloud +
+    application-groups; it omits `com.apple.security.app-sandbox`, so the
+    app currently runs unsandboxed. Flipping sandbox on (Phase 14) will
+    require adding `com.apple.security.network.client` (WKWebView reaches
+    chatgpt.com) and either a file-access entitlement or a security-scoped
+    bookmark for browser-cookie reads under `~/Library/`. Phase 13 left the
+    file unchanged on purpose — modifying it now would alter release
+    artifacts ahead of the signing-pipeline work.
 
 ---
 
@@ -175,7 +190,10 @@ Reach practical feature parity with CodexBar for **Claude Code** and **Codex** i
 
 **Acceptance**
 
-- [ ] With imported browser session, web-only fields show up in menu/widget/CLI as configured.
+- [x] With imported browser session, web-only fields show up in menu/widget/CLI as configured.
+  - Verified by `WebExtrasFlowTests.swift` (Phase 13) which asserts the
+    Codex web-source path through `ProviderPresentationState`,
+    `MenuProjectionBuilder`, and `WidgetSnapshotBuilder` end to end.
 - [x] Without a session, app reports login-required cleanly and stays functional.
 
 ---
