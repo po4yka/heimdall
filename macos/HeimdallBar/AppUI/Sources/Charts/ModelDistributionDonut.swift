@@ -59,24 +59,19 @@ struct ModelDistributionDonut: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             } else {
-                HStack(alignment: .center, spacing: 12) {
-                    self.captionedDonut(
-                        families: families,
-                        colorMap: colorMap,
-                        metric: .cost
-                    )
-                    self.captionedDonut(
-                        families: families,
-                        colorMap: colorMap,
-                        metric: .calls
-                    )
-                    self.captionedDonut(
-                        families: families,
-                        colorMap: colorMap,
-                        metric: .tokens
-                    )
-                    Spacer(minLength: 12)
-                    self.legend(families: families, colorMap: colorMap)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 12) {
+                        self.donutRow(families: families, colorMap: colorMap)
+                        Spacer(minLength: 12)
+                        self.legend(families: families, colorMap: colorMap)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .center, spacing: 12) {
+                            self.donutRow(families: families, colorMap: colorMap)
+                            Spacer(minLength: 0)
+                        }
+                        self.legend(families: families, colorMap: colorMap)
+                    }
                 }
                 if !self.dailyByModel.isEmpty {
                     ModelFamilyHistoryChart(
@@ -96,6 +91,13 @@ struct ModelDistributionDonut: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Model mix donut, \(rows.count) models, by cost, calls, and tokens")
+    }
+
+    @ViewBuilder
+    private func donutRow(families: [FamilyEntry], colorMap: [String: Color]) -> some View {
+        self.captionedDonut(families: families, colorMap: colorMap, metric: .cost)
+        self.captionedDonut(families: families, colorMap: colorMap, metric: .calls)
+        self.captionedDonut(families: families, colorMap: colorMap, metric: .tokens)
     }
 
     @ViewBuilder
