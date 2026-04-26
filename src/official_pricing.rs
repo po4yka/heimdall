@@ -2820,7 +2820,7 @@ mod tests {
                 "Sonnet 4.5 Input $3 / MTok Output $15 / MTok Prompt caching Write $3.75 / MTok Read $0.30 / MTok"
                     .to_string(),
             ),
-            _ => unreachable!(),
+            other => panic!("test fixture missing handler for source slug: {other}"),
         })
         .unwrap();
 

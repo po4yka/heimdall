@@ -38,7 +38,7 @@ cargo run -- stats --json      # JSON output
 cargo run -- scan              # scan only
 cargo run -- export --format=csv --period=month --output=out.csv
 cargo run -- optimize --format=json
-cargo run -- scheduler install     # launchd / cron / schtasks
+cargo run -- scheduler install     # launchd (macOS) / cron (Linux); Windows unsupported
 cargo run -- daemon install        # macOS-only always-on dashboard
 cargo run -- hook install          # wire heimdall-hook into ~/.claude/settings.json
 cargo run -- db reset --yes        # destructive DB wipe (TTY-guarded)
