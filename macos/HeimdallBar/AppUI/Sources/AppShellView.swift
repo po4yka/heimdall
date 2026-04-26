@@ -747,26 +747,26 @@ private struct WindowLiveMonitorDetailSection: View {
     let hiddenPanels: Set<LiveMonitorPanelID>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: self.density == .compact ? 10 : 14) {
+        VStack(alignment: .leading, spacing: self.sectionSpacing) {
             WindowSectionHeader(
                 title: "\(self.provider.title) Details",
                 subtitle: self.provider.lastRefreshLabel
             )
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: self.density == .compact ? 12 : 16)], spacing: self.density == .compact ? 12 : 16) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: self.gridSpacing)], spacing: self.gridSpacing) {
                 if !self.hiddenPanels.contains(.activeBlock), let block = self.provider.activeBlock {
                     WindowLiveMonitorDetailCard(title: "Active Block", density: self.density) {
                         let totalTokens = block.tokens.total
                         Text(Self.compactNumber(totalTokens))
                             .font(.system(size: 28, weight: .semibold).monospacedDigit())
                         Text("\(block.entryCount) entries · ends \(Self.shortTime(block.end))")
-                            .font(self.density == .compact ? .caption2 : .caption)
+                            .font(self.captionFont)
                             .foregroundStyle(.secondary)
                         if let quota = block.quota {
                             ProgressView(value: min(quota.projectedPercent, 1.0), total: 1.0)
                                 .tint(Color.severity(code: quota.projectedSeverity))
                             Text("\(Int(quota.projectedPercent * 100))% projected · \(Self.compactNumber(quota.remainingTokens)) tokens left")
-                                .font(self.density == .compact ? .caption2 : .caption)
+                                .font(self.captionFont)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -797,7 +797,7 @@ private struct WindowLiveMonitorDetailSection: View {
                         Text(Self.compactNumber(context.totalInputTokens))
                             .font(.system(size: 28, weight: .semibold).monospacedDigit())
                         Text("of \(Self.compactNumber(context.contextWindowSize)) · \(Int(context.pct * 100))%")
-                            .font(self.density == .compact ? .caption2 : .caption)
+                            .font(self.captionFont)
                             .foregroundStyle(.secondary)
                         ProgressView(value: context.pct, total: 1.0)
                             .tint(Color.severity(code: context.severity))
@@ -809,11 +809,11 @@ private struct WindowLiveMonitorDetailSection: View {
                         Text(session.displayName)
                             .font(.headline)
                         Text("\(session.turns) turns · \(session.durationMinutes)m · \(Self.currency(session.costUSD))")
-                            .font(self.density == .compact ? .caption2 : .caption)
+                            .font(self.captionFont)
                             .foregroundStyle(.secondary)
                         if let model = session.model {
                             Text(model)
-                                .font(self.density == .compact ? .caption2 : .caption)
+                                .font(self.captionFont)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -830,6 +830,10 @@ private struct WindowLiveMonitorDetailSection: View {
             }
         }
     }
+
+    private var sectionSpacing: CGFloat { self.density == .compact ? 10 : 14 }
+    private var gridSpacing: CGFloat { self.density == .compact ? 12 : 16 }
+    private var captionFont: Font { self.density == .compact ? .caption2 : .caption }
 
     private static func shortTime(_ iso: String) -> String {
         liveMonitorShortTime(iso)

@@ -214,189 +214,101 @@ struct ProviderMenuCard: View {
     @Bindable var providerModel: ProviderFeatureModel
 
     var body: some View {
-        let projection = self.projection
+        let projection = self.providerModel.projection
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(self.projection.title)
-                    .font(.system(size: 13, weight: .semibold))
-                StateBadge(state: self.projection.visualState, label: self.projection.stateLabel)
-                if let plan = self.planBadgeLabel {
-                    Text(plan)
-                        .font(.caption2.weight(.semibold))
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.accentColor.opacity(0.18))
-                        )
-                        .foregroundStyle(.primary)
-                }
-                Spacer(minLength: 0)
-            }
-            TopMetricRow(
-                title: self.primaryMetricTitle,
-                value: self.primaryMetricText,
-                detail: self.secondaryMetricText,
-                showsTrailingMetric: self.projection.laneDetails.first?.remainingPercent != nil
-            )
-            AuthStatusSection(model: self.providerModel, projection: projection)
-            if let predictiveInsights = PredictiveInsightsSummaryModel.make(insights: projection.predictiveInsights) {
-                PredictiveInsightsMenuSection(model: predictiveInsights)
-            }
-            if projection.laneDetails.count > 1 {
-                Divider()
-                    .padding(.vertical, 1)
-            }
-            if let sourceExplanationLabel = projection.sourceExplanationLabel {
-                Text(sourceExplanationLabel)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(projection.warningLabels.prefix(2), id: \.self) { warning in
-                Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.warning)
-            }
-            // Only render identityLabel when it carries more than just the
-            // plan tier (which is already shown as a header badge). An
-            // identityLabel of 'email · plan' still renders so the user sees
-            // which account is active.
-            if let identityLabel = projection.identityLabel,
-               identityLabel.contains("·") || identityLabel.contains("@") {
-                Text(identityLabel)
-                    .font(.caption)
-            }
-            if projection.laneDetails.count > 1 && !projection.isShowingCachedData {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                    ForEach(projection.laneDetails.dropFirst()) { detail in
-                        LaneStatusCard(detail: detail)
-                    }
-                }
-            }
-            if let breakdown = projection.todayBreakdown, !breakdown.isEmpty {
-                TokenBreakdownRow(title: "Today", breakdown: breakdown)
-                TokenBreakdownDonut(title: "Today", breakdown: breakdown)
-            }
-            if let breakdown = projection.last30DaysBreakdown, !breakdown.isEmpty {
-                TokenBreakdownDonut(title: "30 days", breakdown: breakdown)
-            }
-            if !projection.historyFractions.isEmpty {
-                if Self.hasUsableBreakdowns(projection) {
-                    TokenStackChart(breakdowns: projection.historyBreakdowns)
-                } else {
-                    HistoryBarChart(fractions: projection.historyFractions)
-                }
-            }
-            if let hitRate = projection.cacheHitRateToday {
-                CacheEfficiencyCard(
-                    hitRateToday: hitRate,
-                    hitRate30d: projection.cacheHitRate30d,
-                    savings30dUSD: projection.cacheSavings30dUSD
-                )
-                CacheMixRing(
-                    hitRateToday: hitRate,
-                    hitRate30d: projection.cacheHitRate30d,
-                    savings30dUSD: projection.cacheSavings30dUSD
-                )
-            }
-            if !projection.dailyCosts.isEmpty {
-                DailyCostChart(daily: projection.dailyCosts)
-                CacheHitTrendChart(daily: projection.dailyCosts)
-                CumulativeSpendChart(daily: projection.dailyCosts)
-            }
-            if !projection.byModel.isEmpty {
-                ModelDistributionDonut(
-                    rows: projection.byModel,
-                    dailyByModel: projection.dailyByModel
-                )
-                ModelCostTable(rows: projection.byModel)
-            }
-            if !projection.byProject.isEmpty {
-                ProjectCostTable(rows: projection.byProject)
-            }
-            if !projection.byTool.isEmpty {
-                ToolUsageTable(rows: projection.byTool)
-            }
-            if !projection.byMcp.isEmpty {
-                McpSummaryTable(rows: projection.byMcp)
-            }
-            if !projection.hourlyActivity.isEmpty {
-                HourlyActivityChart(buckets: projection.hourlyActivity)
-            }
-            if !projection.activityHeatmap.isEmpty {
-                ActivityHeatmap(cells: projection.activityHeatmap)
-            }
-            if !projection.versionBreakdown.isEmpty {
-                VersionDistributionDonut(rows: projection.versionBreakdown)
-            }
-            if let subagents = projection.subagentBreakdown {
-                SubagentSummaryCard(breakdown: subagents)
-            }
-            if !projection.recentSessions.isEmpty {
-                SessionsTable(sessions: projection.recentSessions)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(projection.costLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if projection.historyFractions.count >= 2 {
-                    SpendSparkline(fractions: projection.historyFractions)
-                }
-                if let trend = projection.spendTrendDirection {
-                    Image(systemName: Self.trendIcon(trend))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Self.trendTint(trend))
-                        .help(Self.trendTooltip(trend))
-                }
-                Spacer(minLength: 0)
-            }
-            if let projected = projection.weeklyProjectedCostUSD, projected > 0 {
-                let weeklyLane = projection.laneDetails.dropFirst().first
-                let elapsed = weeklyLane.map { 1.0 - (Double($0.remainingPercent ?? 0) / 100.0) } ?? 0.0
-                WeeklyProjectionArc(projectedCostUSD: projected, elapsedFraction: elapsed)
-            }
-            if let creditsLabel = projection.creditsLabel {
-                Text(creditsLabel)
-                    .font(.caption)
-            }
-            if let statusLabel = projection.statusLabel {
-                Text(statusLabel)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-            }
-            if let incidentLabel = projection.incidentLabel {
-                Label(incidentLabel, systemImage: "exclamationmark.octagon.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.accentError)
-            }
-            if !projection.claudeFactors.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Usage Factors")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    ForEach(projection.claudeFactors) { factor in
-                        Text("\(factor.displayLabel): \(Int(factor.percent.rounded()))%")
-                            .font(.caption2)
-                    }
-                }
-            }
-            if let adjunct = projection.adjunct {
-                AdjunctSummaryCard(adjunct: adjunct)
-            }
-            if let error = projection.error {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            RateLanesSection(providerModel: self.providerModel, projection: projection)
+            BreakdownChartsSection(projection: projection)
+            ActivityChartsSection(projection: projection)
+            MetaFooterSection(projection: projection)
         }
         .padding(10)
         .menuCardBackground(opacity: self.cardBackgroundOpacity)
     }
 
-    private var projection: ProviderMenuProjection {
-        self.providerModel.projection
+    private var cardBackgroundOpacity: Double {
+        switch self.providerModel.projection.visualState {
+        case .healthy:
+            return 0.05
+        case .refreshing:
+            return 0.07
+        case .stale:
+            return 0.055
+        case .degraded:
+            return 0.11
+        case .incident:
+            return 0.14
+        case .error:
+            return 0.13
+        }
+    }
+}
+
+// MARK: - RateLanesSection
+
+private struct RateLanesSection: View {
+    @Bindable var providerModel: ProviderFeatureModel
+    let projection: ProviderMenuProjection
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(self.projection.title)
+                .font(.system(size: 13, weight: .semibold))
+            StateBadge(state: self.projection.visualState, label: self.projection.stateLabel)
+            if let plan = self.planBadgeLabel {
+                Text(plan)
+                    .font(.caption2.weight(.semibold))
+                    .textCase(.uppercase)
+                    .tracking(0.5)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.18))
+                    )
+                    .foregroundStyle(.primary)
+            }
+            Spacer(minLength: 0)
+        }
+        TopMetricRow(
+            title: self.primaryMetricTitle,
+            value: self.primaryMetricText,
+            detail: self.secondaryMetricText,
+            showsTrailingMetric: self.projection.laneDetails.first?.remainingPercent != nil
+        )
+        AuthStatusSection(model: self.providerModel, projection: self.projection)
+        if let predictiveInsights = PredictiveInsightsSummaryModel.make(insights: self.projection.predictiveInsights) {
+            PredictiveInsightsMenuSection(model: predictiveInsights)
+        }
+        if self.projection.laneDetails.count > 1 {
+            Divider()
+                .padding(.vertical, 1)
+        }
+        if let sourceExplanationLabel = self.projection.sourceExplanationLabel {
+            Text(sourceExplanationLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        ForEach(self.projection.warningLabels.prefix(2), id: \.self) { warning in
+            Label(warning, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.warning)
+        }
+        // Only render identityLabel when it carries more than just the
+        // plan tier (which is already shown as a header badge). An
+        // identityLabel of 'email · plan' still renders so the user sees
+        // which account is active.
+        if let identityLabel = self.projection.identityLabel,
+           identityLabel.contains("·") || identityLabel.contains("@") {
+            Text(identityLabel)
+                .font(.caption)
+        }
+        if self.projection.laneDetails.count > 1 && !self.projection.isShowingCachedData {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(self.projection.laneDetails.dropFirst()) { detail in
+                    LaneStatusCard(detail: detail)
+                }
+            }
+        }
     }
 
     /// Extract the plan tier out of the projection's identityLabel for the
@@ -437,23 +349,6 @@ struct ProviderMenuCard: View {
         return self.unavailableDetailLabel
     }
 
-    private var cardBackgroundOpacity: Double {
-        switch self.projection.visualState {
-        case .healthy:
-            return 0.05
-        case .refreshing:
-            return 0.07
-        case .stale:
-            return 0.055
-        case .degraded:
-            return 0.11
-        case .incident:
-            return 0.14
-        case .error:
-            return 0.13
-        }
-    }
-
     private var unavailableValueLabel: String {
         let sourceLabel = self.projection.sourceLabel.lowercased()
         if sourceLabel.contains("oauth") {
@@ -476,6 +371,153 @@ struct ProviderMenuCard: View {
             return credentialDetail
         }
         return "Live \(self.projection.title) session not available"
+    }
+}
+
+// MARK: - BreakdownChartsSection
+
+private struct BreakdownChartsSection: View {
+    let projection: ProviderMenuProjection
+
+    var body: some View {
+        if let breakdown = self.projection.todayBreakdown, !breakdown.isEmpty {
+            TokenBreakdownRow(title: "Today", breakdown: breakdown)
+            TokenBreakdownDonut(title: "Today", breakdown: breakdown)
+        }
+        if let breakdown = self.projection.last30DaysBreakdown, !breakdown.isEmpty {
+            TokenBreakdownDonut(title: "30 days", breakdown: breakdown)
+        }
+        if !self.projection.historyFractions.isEmpty {
+            if Self.hasUsableBreakdowns(self.projection) {
+                TokenStackChart(breakdowns: self.projection.historyBreakdowns)
+            } else {
+                HistoryBarChart(fractions: self.projection.historyFractions)
+            }
+        }
+        if let hitRate = self.projection.cacheHitRateToday {
+            CacheEfficiencyCard(
+                hitRateToday: hitRate,
+                hitRate30d: self.projection.cacheHitRate30d,
+                savings30dUSD: self.projection.cacheSavings30dUSD
+            )
+            CacheMixRing(
+                hitRateToday: hitRate,
+                hitRate30d: self.projection.cacheHitRate30d,
+                savings30dUSD: self.projection.cacheSavings30dUSD
+            )
+        }
+        if !self.projection.dailyCosts.isEmpty {
+            DailyCostChart(daily: self.projection.dailyCosts)
+            CacheHitTrendChart(daily: self.projection.dailyCosts)
+            CumulativeSpendChart(daily: self.projection.dailyCosts)
+        }
+        if !self.projection.byModel.isEmpty {
+            ModelDistributionDonut(
+                rows: self.projection.byModel,
+                dailyByModel: self.projection.dailyByModel
+            )
+            ModelCostTable(rows: self.projection.byModel)
+        }
+        if !self.projection.byProject.isEmpty {
+            ProjectCostTable(rows: self.projection.byProject)
+        }
+        if !self.projection.byTool.isEmpty {
+            ToolUsageTable(rows: self.projection.byTool)
+        }
+        if !self.projection.byMcp.isEmpty {
+            McpSummaryTable(rows: self.projection.byMcp)
+        }
+    }
+
+    fileprivate static func hasUsableBreakdowns(_ projection: ProviderMenuProjection) -> Bool {
+        projection.historyBreakdowns.count == projection.historyFractions.count
+            && projection.historyBreakdowns.contains(where: { !$0.isEmpty })
+    }
+}
+
+// MARK: - ActivityChartsSection
+
+private struct ActivityChartsSection: View {
+    let projection: ProviderMenuProjection
+
+    var body: some View {
+        if !self.projection.hourlyActivity.isEmpty {
+            HourlyActivityChart(buckets: self.projection.hourlyActivity)
+        }
+        if !self.projection.activityHeatmap.isEmpty {
+            ActivityHeatmap(cells: self.projection.activityHeatmap)
+        }
+        if !self.projection.versionBreakdown.isEmpty {
+            VersionDistributionDonut(rows: self.projection.versionBreakdown)
+        }
+        if let subagents = self.projection.subagentBreakdown {
+            SubagentSummaryCard(breakdown: subagents)
+        }
+        if !self.projection.recentSessions.isEmpty {
+            SessionsTable(sessions: self.projection.recentSessions)
+        }
+    }
+}
+
+// MARK: - MetaFooterSection
+
+private struct MetaFooterSection: View {
+    let projection: ProviderMenuProjection
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(self.projection.costLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if self.projection.historyFractions.count >= 2 {
+                SpendSparkline(fractions: self.projection.historyFractions)
+            }
+            if let trend = self.projection.spendTrendDirection {
+                Image(systemName: Self.trendIcon(trend))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Self.trendTint(trend))
+                    .help(Self.trendTooltip(trend))
+            }
+            Spacer(minLength: 0)
+        }
+        if let projected = self.projection.weeklyProjectedCostUSD, projected > 0 {
+            let weeklyLane = self.projection.laneDetails.dropFirst().first
+            let elapsed = weeklyLane.map { 1.0 - (Double($0.remainingPercent ?? 0) / 100.0) } ?? 0.0
+            WeeklyProjectionArc(projectedCostUSD: projected, elapsedFraction: elapsed)
+        }
+        if let creditsLabel = self.projection.creditsLabel {
+            Text(creditsLabel)
+                .font(.caption)
+        }
+        if let statusLabel = self.projection.statusLabel {
+            Text(statusLabel)
+                .font(.caption)
+                .foregroundStyle(.primary)
+        }
+        if let incidentLabel = self.projection.incidentLabel {
+            Label(incidentLabel, systemImage: "exclamationmark.octagon.fill")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.accentError)
+        }
+        if !self.projection.claudeFactors.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Usage Factors")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(self.projection.claudeFactors) { factor in
+                    Text("\(factor.displayLabel): \(Int(factor.percent.rounded()))%")
+                        .font(.caption2)
+                }
+            }
+        }
+        if let adjunct = self.projection.adjunct {
+            AdjunctSummaryCard(adjunct: adjunct)
+        }
+        if let error = self.projection.error {
+            Text(error)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private static func trendIcon(_ trend: TrendDirection) -> String {
@@ -507,12 +549,6 @@ struct ProviderMenuCard: View {
         if usd >= 10 { return String(format: "$%.1f", usd) }
         return String(format: "$%.2f", usd)
     }
-
-    fileprivate static func hasUsableBreakdowns(_ projection: ProviderMenuProjection) -> Bool {
-        projection.historyBreakdowns.count == projection.historyFractions.count
-            && projection.historyBreakdowns.contains(where: { !$0.isEmpty })
-    }
-
 }
 
 private struct PredictiveInsightsMenuSection: View {
