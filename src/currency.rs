@@ -266,7 +266,11 @@ fn apply_rate(
     }
 }
 
-/// Small hardcoded set used when no cache exists yet.
+/// Small hardcoded set used when no cache exists yet.  Currently consumed
+/// only by the test that locks in major-currency coverage; gated `#[cfg(test)]`
+/// to keep release builds free of dead-code warnings.  Restore as a public
+/// fallback when a non-test caller materialises.
+#[cfg(test)]
 fn hardcoded_currencies() -> Vec<String> {
     let mut v: Vec<String> = [
         "AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF", "IDR", "ILS",

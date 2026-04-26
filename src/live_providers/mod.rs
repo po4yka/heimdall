@@ -2053,10 +2053,7 @@ mod tests {
         assert!(resolution.available);
         assert_eq!(resolution.source_used, "cli-pty");
         assert!(resolution.resolved_via_fallback);
-        assert_eq!(
-            resolution.last_attempted_source.as_deref(),
-            Some("cli-pty")
-        );
+        assert_eq!(resolution.last_attempted_source.as_deref(), Some("cli-pty"));
         // All three rungs visible in attempts, in chain order.
         let chain: Vec<&str> = resolution
             .source_attempts
