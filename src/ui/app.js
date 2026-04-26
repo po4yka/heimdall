@@ -9309,6 +9309,9 @@ ${row.project}` : row.project;
   }
 
   // src/ui/monitor/view.tsx
+  function densityTokens(density) {
+    return density === "compact" ? { padding: "14px", fontSize: "11px", marginTop: "10px", sectionGap: "10px", headerGap: "10px", gridGap: "12px", listGap: "6px" } : { padding: "18px", fontSize: void 0, marginTop: "12px", sectionGap: "14px", headerGap: "12px", gridGap: "16px", listGap: "8px" };
+  }
   function providersForFocus(data, focus) {
     return focus === "all" ? data.providers : data.providers.filter((provider) => provider.provider === focus);
   }
@@ -9426,27 +9429,28 @@ ${row.project}` : row.project;
   }
   function BlockPanel({ block, density }) {
     const totalTokens2 = block.tokens.input + block.tokens.output + block.tokens.cache_read + block.tokens.cache_creation + block.tokens.reasoning_output;
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+    const d5 = densityTokens(density);
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Active Block" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", children: fmt(totalTokens2) }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
         block.entry_count,
         " entries \xB7 ends ",
         new Date(block.end).toLocaleTimeString()
       ] }),
-      block.burn_rate && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+      block.burn_rate && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
         fmt(totalTokens2),
         " tokens \xB7 ",
         fmtCostCompact(block.burn_rate.cost_per_hour_nanos / 1e9),
         "/hr"
       ] }),
-      block.projection && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+      block.projection && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
         "Projects ",
         fmt(block.projection.projected_tokens),
         " tokens \xB7 ",
         fmtCostCompact(block.projection.projected_cost_nanos / 1e9)
       ] }),
-      block.quota && /* @__PURE__ */ u4("div", { style: { marginTop: density === "compact" ? "10px" : "12px" }, children: [
+      block.quota && /* @__PURE__ */ u4("div", { style: { marginTop: d5.marginTop }, children: [
         /* @__PURE__ */ u4(
           SegmentedProgressBar,
           {
@@ -9456,7 +9460,7 @@ ${row.project}` : row.project;
             "aria-label": "Projected billing block quota"
           }
         ),
-        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "8px", fontSize: density === "compact" ? "11px" : void 0 }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "8px", fontSize: d5.fontSize }, children: [
           Math.min(block.quota.projected_pct * 100, 999).toFixed(0),
           "% projected \xB7 ",
           fmt(block.quota.remaining_tokens),
@@ -9466,17 +9470,18 @@ ${row.project}` : row.project;
     ] }) });
   }
   function ContextPanel({ data, density }) {
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+    const d5 = densityTokens(density);
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Context Window" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", children: fmt(data.total_input_tokens) }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
         "of ",
         fmt(data.context_window_size),
         " \xB7 ",
         (data.pct * 100).toFixed(1),
         "%"
       ] }),
-      /* @__PURE__ */ u4("div", { style: { marginTop: density === "compact" ? "10px" : "12px" }, children: /* @__PURE__ */ u4(
+      /* @__PURE__ */ u4("div", { style: { marginTop: d5.marginTop }, children: /* @__PURE__ */ u4(
         SegmentedProgressBar,
         {
           value: data.total_input_tokens,
@@ -9490,18 +9495,19 @@ ${row.project}` : row.project;
   function SessionPanel({ provider, density }) {
     if (!provider.recent_session) return null;
     const session = provider.recent_session;
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+    const d5 = densityTokens(density);
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Recent Session" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "22px" }, children: provider.title }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: session.display_name }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: session.display_name }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
         session.turns,
         " turns \xB7 ",
         session.duration_minutes,
         "m \xB7 ",
         fmtCostCompact(session.cost_usd)
       ] }),
-      session.model && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: session.model })
+      session.model && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: session.model })
     ] }) });
   }
   function QuotaSuggestionsPanel({
@@ -9512,18 +9518,19 @@ ${row.project}` : row.project;
     if (!suggestions || suggestions.levels.length === 0) {
       return null;
     }
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: density === "compact" ? "14px" : "18px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+    const d5 = densityTokens(density);
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Suggested Quotas" }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: suggestions.sample_label }),
-      /* @__PURE__ */ u4("div", { style: { display: "grid", gap: density === "compact" ? "6px" : "8px", marginTop: density === "compact" ? "10px" : "12px" }, children: suggestions.levels.map((level) => /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
-        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: suggestions.sample_label }),
+      /* @__PURE__ */ u4("div", { style: { display: "grid", gap: d5.listGap, marginTop: d5.marginTop }, children: suggestions.levels.map((level) => /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
           level.label,
           level.key === suggestions.recommended_key && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--success)" }, children: "[RECOMMENDED]" })
         ] }),
         /* @__PURE__ */ u4("span", { class: "stat-value", style: { fontSize: "18px" }, children: fmt(level.limit_tokens) })
       ] }, level.key)) }),
-      suggestions.note && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "10px", fontStyle: "italic", fontSize: density === "compact" ? "11px" : void 0 }, children: suggestions.note }),
-      suggestions.sample_count !== suggestions.population_count && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: [
+      suggestions.note && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "10px", fontStyle: "italic", fontSize: d5.fontSize }, children: suggestions.note }),
+      suggestions.sample_count !== suggestions.population_count && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
         "Drawn from ",
         suggestions.population_count,
         " completed blocks, weighted toward near-limit history."
@@ -9535,15 +9542,16 @@ ${row.project}` : row.project;
     density,
     hiddenPanels
   }) {
-    return /* @__PURE__ */ u4("section", { style: { display: "grid", gap: density === "compact" ? "10px" : "14px" }, children: [
-      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: density === "compact" ? "10px" : "12px", alignItems: "baseline", flexWrap: "wrap" }, children: [
+    const d5 = densityTokens(density);
+    return /* @__PURE__ */ u4("section", { style: { display: "grid", gap: d5.sectionGap }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: d5.headerGap, alignItems: "baseline", flexWrap: "wrap" }, children: [
         /* @__PURE__ */ u4("h2", { style: { margin: 0 }, children: [
           provider.title,
           " Details"
         ] }),
-        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: density === "compact" ? "11px" : void 0 }, children: provider.last_refresh_label })
+        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: provider.last_refresh_label })
       ] }),
-      /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: density === "compact" ? "12px" : "16px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: d5.gridGap }, children: [
         !hiddenPanels.has("active_block") && provider.active_block && /* @__PURE__ */ u4(BlockPanel, { block: provider.active_block, density }),
         !hiddenPanels.has("predictive_insights") && provider.predictive_insights && /* @__PURE__ */ u4(PredictiveInsightsCard, { insights: provider.predictive_insights }),
         !hiddenPanels.has("depletion_forecast") && provider.depletion_forecast && /* @__PURE__ */ u4(DepletionForecastCard, { forecast: provider.depletion_forecast }),

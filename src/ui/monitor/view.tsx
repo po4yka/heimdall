@@ -19,6 +19,22 @@ import {
   liveMonitorHiddenPanels,
 } from './store';
 
+interface DensityTokens {
+  padding: string;
+  fontSize: string | undefined;
+  marginTop: string;
+  sectionGap: string;
+  headerGap: string;
+  gridGap: string;
+  listGap: string;
+}
+
+function densityTokens(density: LiveMonitorDensity): DensityTokens {
+  return density === 'compact'
+    ? { padding: '14px', fontSize: '11px', marginTop: '10px', sectionGap: '10px', headerGap: '10px', gridGap: '12px', listGap: '6px' }
+    : { padding: '18px', fontSize: undefined, marginTop: '12px', sectionGap: '14px', headerGap: '12px', gridGap: '16px', listGap: '8px' };
+}
+
 function providersForFocus(data: LiveMonitorResponse, focus: LiveMonitorFocus): LiveMonitorProvider[] {
   return focus === 'all'
     ? data.providers
@@ -175,34 +191,35 @@ function BlockPanel({ block, density }: { block: LiveMonitorBlock; density: Live
     block.tokens.cache_read +
     block.tokens.cache_creation +
     block.tokens.reasoning_output;
+  const d = densityTokens(density);
 
   return (
-    <div class="card stat-card" style={{ padding: density === 'compact' ? '14px' : '18px' }}>
+    <div class="card stat-card" style={{ padding: d.padding }}>
       <div class="stat-content">
         <div class="stat-label">Active Block</div>
         <div class="stat-value">{fmt(totalTokens)}</div>
-        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+        <div class="stat-sub" style={{ fontSize: d.fontSize }}>
           {block.entry_count} entries · ends {new Date(block.end).toLocaleTimeString()}
         </div>
         {block.burn_rate && (
-          <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+          <div class="stat-sub" style={{ fontSize: d.fontSize }}>
             {fmt(totalTokens)} tokens · {fmtCostCompact(block.burn_rate.cost_per_hour_nanos / 1e9)}/hr
           </div>
         )}
         {block.projection && (
-          <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+          <div class="stat-sub" style={{ fontSize: d.fontSize }}>
             Projects {fmt(block.projection.projected_tokens)} tokens · {fmtCostCompact(block.projection.projected_cost_nanos / 1e9)}
           </div>
         )}
         {block.quota && (
-          <div style={{ marginTop: density === 'compact' ? '10px' : '12px' }}>
+          <div style={{ marginTop: d.marginTop }}>
             <SegmentedProgressBar
               value={block.quota.projected_pct * 100}
               max={100}
               status={block.quota.projected_severity === 'danger' ? 'accent' : block.quota.projected_severity === 'warn' ? 'warning' : 'success'}
               aria-label="Projected billing block quota"
             />
-            <div class="stat-sub" style={{ marginTop: '8px', fontSize: density === 'compact' ? '11px' : undefined }}>
+            <div class="stat-sub" style={{ marginTop: '8px', fontSize: d.fontSize }}>
               {Math.min(block.quota.projected_pct * 100, 999).toFixed(0)}% projected · {fmt(block.quota.remaining_tokens)} tokens left
             </div>
           </div>
@@ -213,15 +230,16 @@ function BlockPanel({ block, density }: { block: LiveMonitorBlock; density: Live
 }
 
 function ContextPanel({ data, density }: { data: LiveMonitorContextWindow; density: LiveMonitorDensity }) {
+  const d = densityTokens(density);
   return (
-    <div class="card stat-card" style={{ padding: density === 'compact' ? '14px' : '18px' }}>
+    <div class="card stat-card" style={{ padding: d.padding }}>
       <div class="stat-content">
         <div class="stat-label">Context Window</div>
         <div class="stat-value">{fmt(data.total_input_tokens)}</div>
-        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+        <div class="stat-sub" style={{ fontSize: d.fontSize }}>
           of {fmt(data.context_window_size)} · {(data.pct * 100).toFixed(1)}%
         </div>
-        <div style={{ marginTop: density === 'compact' ? '10px' : '12px' }}>
+        <div style={{ marginTop: d.marginTop }}>
           <SegmentedProgressBar
             value={data.total_input_tokens}
             max={data.context_window_size}
@@ -237,16 +255,17 @@ function ContextPanel({ data, density }: { data: LiveMonitorContextWindow; densi
 function SessionPanel({ provider, density }: { provider: LiveMonitorProvider; density: LiveMonitorDensity }) {
   if (!provider.recent_session) return null;
   const session = provider.recent_session;
+  const d = densityTokens(density);
   return (
-    <div class="card stat-card" style={{ padding: density === 'compact' ? '14px' : '18px' }}>
+    <div class="card stat-card" style={{ padding: d.padding }}>
       <div class="stat-content">
         <div class="stat-label">Recent Session</div>
         <div class="stat-value" style={{ fontSize: '22px' }}>{provider.title}</div>
-        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>{session.display_name}</div>
-        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+        <div class="stat-sub" style={{ fontSize: d.fontSize }}>{session.display_name}</div>
+        <div class="stat-sub" style={{ fontSize: d.fontSize }}>
           {session.turns} turns · {session.duration_minutes}m · {fmtCostCompact(session.cost_usd)}
         </div>
-        {session.model && <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>{session.model}</div>}
+        {session.model && <div class="stat-sub" style={{ fontSize: d.fontSize }}>{session.model}</div>}
       </div>
     </div>
   );
@@ -264,17 +283,18 @@ function QuotaSuggestionsPanel({
     return null;
   }
 
+  const d = densityTokens(density);
   return (
-    <div class="card stat-card" style={{ padding: density === 'compact' ? '14px' : '18px' }}>
+    <div class="card stat-card" style={{ padding: d.padding }}>
       <div class="stat-content">
         <div class="stat-label">Suggested Quotas</div>
-        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+        <div class="stat-sub" style={{ fontSize: d.fontSize }}>
           {suggestions.sample_label}
         </div>
-        <div style={{ display: 'grid', gap: density === 'compact' ? '6px' : '8px', marginTop: density === 'compact' ? '10px' : '12px' }}>
+        <div style={{ display: 'grid', gap: d.listGap, marginTop: d.marginTop }}>
           {suggestions.levels.map(level => (
             <div key={level.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline' }}>
-              <span class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+              <span class="stat-sub" style={{ fontSize: d.fontSize }}>
                 {level.label}
                 {level.key === suggestions.recommended_key && (
                   <span style={{ marginLeft: '6px', color: 'var(--success)' }}>[RECOMMENDED]</span>
@@ -285,12 +305,12 @@ function QuotaSuggestionsPanel({
         ))}
         </div>
         {suggestions.note && (
-          <div class="stat-sub" style={{ marginTop: '10px', fontStyle: 'italic', fontSize: density === 'compact' ? '11px' : undefined }}>
+          <div class="stat-sub" style={{ marginTop: '10px', fontStyle: 'italic', fontSize: d.fontSize }}>
             {suggestions.note}
           </div>
         )}
         {suggestions.sample_count !== suggestions.population_count && (
-          <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>
+          <div class="stat-sub" style={{ fontSize: d.fontSize }}>
             Drawn from {suggestions.population_count} completed blocks, weighted toward near-limit history.
           </div>
         )}
@@ -308,13 +328,14 @@ function ProviderDetails({
   density: LiveMonitorDensity;
   hiddenPanels: Set<LiveMonitorPanelId>;
 }) {
+  const d = densityTokens(density);
   return (
-    <section style={{ display: 'grid', gap: density === 'compact' ? '10px' : '14px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: density === 'compact' ? '10px' : '12px', alignItems: 'baseline', flexWrap: 'wrap' }}>
+    <section style={{ display: 'grid', gap: d.sectionGap }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: d.headerGap, alignItems: 'baseline', flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0 }}>{provider.title} Details</h2>
-        <div class="stat-sub" style={{ fontSize: density === 'compact' ? '11px' : undefined }}>{provider.last_refresh_label}</div>
+        <div class="stat-sub" style={{ fontSize: d.fontSize }}>{provider.last_refresh_label}</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: density === 'compact' ? '12px' : '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: d.gridGap }}>
         {!hiddenPanels.has('active_block') && provider.active_block && <BlockPanel block={provider.active_block} density={density} />}
         {!hiddenPanels.has('predictive_insights') && provider.predictive_insights && (
           <PredictiveInsightsCard insights={provider.predictive_insights} />
