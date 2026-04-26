@@ -1951,6 +1951,169 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn codex_rpc_fails_oauth_succeeds_skips_cli_pty() {
+        // RPC fails, auth IS present so OAuth runs and wins; cli-pty must
+        // never be invoked.  Closes the gap between the two existing tests
+        // (rpc-wins + auth-absent rpc-fails) which never exercise oauth.
+        let auth = codex::CodexAuth {
+            access_token: "token".into(),
+            refresh_token: None,
+            id_token: None,
+            account_id: None,
+            auth_mode: Some("chatgpt".into()),
+        };
+        let bootstrap = codex::CodexBootstrapAuth {
+            auth: Some(auth.clone()),
+            credential_store: codex::ResolvedCodexCredentialStore::AutoKeyring,
+            auth_file_path: std::path::PathBuf::from("/tmp/codex-auth.json"),
+            load_error: None,
+        };
+
+        let resolution = resolve_codex_live_data_with(
+            bootstrap,
+            |_| {
+                Box::pin(async move {
+                    Ok(codex::CodexUsageResponse {
+                        plan_type: Some("plus".into()),
+                        rate_limit: None,
+                        credits: None,
+                    })
+                })
+            },
+            |_| Err(anyhow!("rpc failed")),
+            |_| Err(anyhow!("cli-pty must not run when oauth wins")),
+        )
+        .await;
+
+        assert!(resolution.available);
+        assert_eq!(resolution.source_used, "oauth");
+        assert!(resolution.resolved_via_fallback);
+        assert_eq!(resolution.last_attempted_source.as_deref(), Some("oauth"));
+        assert!(
+            resolution
+                .source_attempts
+                .iter()
+                .any(|attempt| attempt.source == "cli-rpc" && attempt.outcome == "error")
+        );
+        assert!(
+            resolution
+                .source_attempts
+                .iter()
+                .any(|attempt| attempt.source == "oauth" && attempt.outcome == "success")
+        );
+        assert!(
+            resolution
+                .source_attempts
+                .iter()
+                .all(|attempt| attempt.source != "cli-pty"),
+            "cli-pty must not appear in attempts when oauth wins; found {:?}",
+            resolution.source_attempts
+        );
+    }
+
+    #[tokio::test]
+    async fn codex_full_waterfall_rpc_oauth_pty_lands_on_cli_pty() {
+        // RPC fails, OAuth fails, cli-pty wins — exercises every rung of the
+        // ladder in one test, with auth present so OAuth is actually attempted
+        // (the existing test sets `auth: None`, which short-circuits OAuth).
+        let auth = codex::CodexAuth {
+            access_token: "token".into(),
+            refresh_token: None,
+            id_token: None,
+            account_id: None,
+            auth_mode: Some("chatgpt".into()),
+        };
+        let bootstrap = codex::CodexBootstrapAuth {
+            auth: Some(auth),
+            credential_store: codex::ResolvedCodexCredentialStore::AutoKeyring,
+            auth_file_path: std::path::PathBuf::from("/tmp/codex-auth.json"),
+            load_error: None,
+        };
+
+        let resolution = resolve_codex_live_data_with(
+            bootstrap,
+            |_| Box::pin(async { Err(anyhow!("oauth 503")) }),
+            |_| Err(anyhow!("rpc failed")),
+            |_| {
+                Ok(codex::CliStatusSnapshot {
+                    credits: Some(7.5),
+                    primary: Some(crate::models::LiveRateWindow {
+                        used_percent: 33.0,
+                        resets_at: None,
+                        resets_in_minutes: None,
+                        window_minutes: None,
+                        reset_label: None,
+                    }),
+                    secondary: None,
+                })
+            },
+        )
+        .await;
+
+        assert!(resolution.available);
+        assert_eq!(resolution.source_used, "cli-pty");
+        assert!(resolution.resolved_via_fallback);
+        assert_eq!(
+            resolution.last_attempted_source.as_deref(),
+            Some("cli-pty")
+        );
+        // All three rungs visible in attempts, in chain order.
+        let chain: Vec<&str> = resolution
+            .source_attempts
+            .iter()
+            .map(|a| a.source.as_str())
+            .collect();
+        assert_eq!(chain, vec!["cli-rpc", "oauth", "cli-pty"]);
+        assert_eq!(resolution.source_attempts[0].outcome, "error");
+        assert_eq!(resolution.source_attempts[1].outcome, "error");
+        assert_eq!(resolution.source_attempts[2].outcome, "success");
+    }
+
+    #[tokio::test]
+    async fn codex_all_sources_fail_returns_unavailable() {
+        // Defensive: when every rung fails, snapshot stays unavailable, error
+        // surfaces, and the recorded attempt chain is intact for diagnostics.
+        let auth = codex::CodexAuth {
+            access_token: "token".into(),
+            refresh_token: None,
+            id_token: None,
+            account_id: None,
+            auth_mode: Some("chatgpt".into()),
+        };
+        let bootstrap = codex::CodexBootstrapAuth {
+            auth: Some(auth),
+            credential_store: codex::ResolvedCodexCredentialStore::AutoKeyring,
+            auth_file_path: std::path::PathBuf::from("/tmp/codex-auth.json"),
+            load_error: None,
+        };
+
+        let resolution = resolve_codex_live_data_with(
+            bootstrap,
+            |_| Box::pin(async { Err(anyhow!("oauth 401")) }),
+            |_| Err(anyhow!("rpc failed")),
+            |_| Err(anyhow!("cli-pty timeout")),
+        )
+        .await;
+
+        assert!(!resolution.available);
+        assert_eq!(resolution.source_used, "unavailable");
+        assert!(!resolution.resolved_via_fallback);
+        assert!(resolution.error.is_some());
+        let chain: Vec<&str> = resolution
+            .source_attempts
+            .iter()
+            .map(|a| a.source.as_str())
+            .collect();
+        assert_eq!(chain, vec!["cli-rpc", "oauth", "cli-pty"]);
+        assert!(
+            resolution
+                .source_attempts
+                .iter()
+                .all(|a| a.outcome == "error")
+        );
+    }
+
+    #[tokio::test]
     async fn stale_cache_returns_immediately_and_triggers_background_refresh() {
         use std::sync::atomic::{AtomicUsize, Ordering};
 

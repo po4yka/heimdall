@@ -583,11 +583,26 @@ pub struct LiveProviderAuth {
 pub struct LiveProviderSnapshot {
     pub provider: String,
     pub available: bool,
+    /// Provenance of the data that ended up in this snapshot.
+    ///
+    /// Codex values: `"cli-rpc"` | `"oauth"` | `"cli-pty"` | `"bootstrap"` |
+    /// `"unavailable"`.  Claude values: `"oauth"` | `"admin"` | `"local"` |
+    /// `"unavailable"`.  Web-scraped fallback (`"web"`) is reserved for the
+    /// HeimdallBar dashboard-extras path and is not yet emitted from Rust.
     pub source_used: String,
+    /// Last source the resolver attempted before producing the snapshot.
+    /// Useful for diagnosing which rung of the fallback chain stopped, even
+    /// when `source_used == "unavailable"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_attempted_source: Option<String>,
+    /// True when `source_used` is not the first rung of the provider's
+    /// preferred ladder (e.g. Codex `cli-rpc` is the primary; any other
+    /// successful source counts as a fallback).
     pub resolved_via_fallback: bool,
     pub refresh_duration_ms: u64,
+    /// Ordered chain of sources tried during this refresh, including
+    /// successes and errors.  Mirrors what a debug log would show; the Swift
+    /// client renders the same data for diagnostics.
     pub source_attempts: Vec<LiveProviderSourceAttempt>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity: Option<LiveProviderIdentity>,
