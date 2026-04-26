@@ -11,7 +11,7 @@ use crate::models::{
     OfficialSyncSourceStatus, OfficialSyncSummary, ProviderSummary, ServiceTierSummary, SessionRow,
     ToolEvent, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
-use crate::official_pricing::{
+use crate::pricing_defs::{
     OfficialExtractedRecord, OfficialModelPricing, OfficialSyncRunRecord, PricingSyncRun,
     StoredPricingModel,
 };
@@ -3577,10 +3577,10 @@ pub fn query_stats_oneshot_avg(conn: &Connection) -> rusqlite::Result<Option<f64
 mod tests {
     use super::*;
     use crate::models::Turn;
-    use crate::official_pricing::{
+    use crate::pricing;
+    use crate::pricing_defs::{
         OfficialExtractedRecord, OfficialModelPricing, OfficialSyncRunRecord, PricingSyncRun,
     };
-    use crate::pricing;
     use std::collections::HashMap;
 
     fn test_conn() -> Connection {

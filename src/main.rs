@@ -10,9 +10,10 @@ use claude_usage_tracker::locale;
 #[cfg(feature = "mcp")]
 use claude_usage_tracker::mcp;
 use claude_usage_tracker::menubar;
-use claude_usage_tracker::official_pricing;
 use claude_usage_tracker::optimizer;
 use claude_usage_tracker::pricing;
+use claude_usage_tracker::pricing_defs;
+use claude_usage_tracker::pricing_sync;
 use claude_usage_tracker::scanner;
 use claude_usage_tracker::scheduler;
 use claude_usage_tracker::server;
@@ -799,7 +800,7 @@ fn main() -> Result<()> {
             cmd_pricing(
                 action,
                 &default_db(None),
-                &official_pricing::OfficialSyncOptions {
+                &pricing_defs::OfficialSyncOptions {
                     openai_admin_key: if cfg_openai_enabled {
                         std::env::var(&cfg_openai_admin_key_env).ok()
                     } else {
@@ -1178,7 +1179,7 @@ fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Resul
 fn cmd_pricing(
     action: PricingAction,
     default_db: &std::path::Path,
-    sync_options: &official_pricing::OfficialSyncOptions,
+    sync_options: &pricing_defs::OfficialSyncOptions,
 ) -> Result<()> {
     use scheduler::{InstallStatus, Interval, PRICING_SYNC_JOB};
     use std::str::FromStr;
@@ -1199,7 +1200,7 @@ fn cmd_pricing(
             let db = db_path.unwrap_or_else(|| default_db.to_path_buf());
             let conn = scanner::db::open_db(&db)?;
             scanner::db::init_db(&conn)?;
-            let summary = official_pricing::sync_pricing(&conn, sync_options)?;
+            let summary = pricing_sync::sync_pricing(&conn, sync_options)?;
 
             println!(
                 "Pricing sync complete: {} / {} official sources parsed",
