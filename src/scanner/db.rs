@@ -975,7 +975,6 @@ pub fn insert_turns(conn: &Connection, turns: &[Turn]) -> Result<()> {
     Ok(())
 }
 
-#[allow(dead_code)]
 pub fn insert_tool_invocations(
     conn: &Connection,
     turns: &[Turn],

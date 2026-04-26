@@ -63,7 +63,6 @@ pub struct Turn {
     /// Empty string means unclassified or Default-constructed turn.
     pub category: String,
     /// All tool names from content blocks (transient, not persisted to turns table).
-    #[allow(dead_code)]
     pub all_tools: Vec<String>,
     /// Pairs of (tool_use_id, tool_name) from content blocks (transient, not persisted to turns table).
     pub tool_use_ids: Vec<(String, String)>,
@@ -72,7 +71,6 @@ pub struct Turn {
     /// For Bash: first 120 chars of the `command` argument (truncated with trailing `…`).
     /// For all other tools: empty string (use tool name from tool_use_ids instead).
     /// Transient — not persisted to the DB turns table.
-    #[allow(dead_code)]
     pub tool_inputs: Vec<(String, String)>,
     /// Abstract credits consumed by this turn (Amp provider only).
     /// `None` for all non-Amp providers.  Persisted to `turns.credits`.

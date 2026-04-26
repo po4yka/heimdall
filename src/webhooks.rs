@@ -4,7 +4,6 @@ use tracing::{debug, error, info};
 use crate::config::WebhookConfig;
 
 /// A webhook event payload sent to the configured URL.
-#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct WebhookEvent {
     pub event_type: String,
@@ -30,7 +29,6 @@ pub struct WebhookState {
 }
 
 /// POST a webhook event to the given URL. Fire-and-forget via `tokio::spawn`.
-#[allow(dead_code)]
 pub fn send_webhook(url: &str, event: &WebhookEvent) {
     let url = url.to_owned();
     let body = match serde_json::to_string(event) {
@@ -77,7 +75,6 @@ pub fn send_webhook(url: &str, event: &WebhookEvent) {
 }
 
 /// Check if webhooks are configured and the event type is enabled, then send.
-#[allow(dead_code)]
 pub fn notify_if_configured(config: &WebhookConfig, event: WebhookEvent) {
     let url = match &config.url {
         Some(u) => u,

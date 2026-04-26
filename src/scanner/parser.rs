@@ -69,7 +69,6 @@ pub struct ParseResult {
     pub session_metas: Vec<SessionMeta>,
     pub turns: Vec<Turn>,
     pub progress_marker: i64,
-    #[allow(dead_code)]
     pub session_titles: HashMap<String, String>,
     pub tool_results: HashMap<String, bool>,
 }
