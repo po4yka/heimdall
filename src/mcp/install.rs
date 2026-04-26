@@ -32,11 +32,17 @@ const SERVER_KEY: &str = "heimdall";
 #[derive(Debug, PartialEq)]
 pub enum McpInstallResult {
     /// First-time install — no `heimdall` entry was previously present.
-    Installed { path: PathBuf },
+    Installed {
+        path: PathBuf,
+    },
     /// Re-run install — existing sentinel-tagged entry was replaced with
     /// the current `make_entry()` output.
-    Updated { path: PathBuf },
-    Uninstalled { path: PathBuf },
+    Updated {
+        path: PathBuf,
+    },
+    Uninstalled {
+        path: PathBuf,
+    },
     NothingToUninstall,
 }
 

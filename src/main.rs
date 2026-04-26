@@ -1381,9 +1381,7 @@ fn cmd_hook(action: HookAction) -> Result<()> {
                     println!("  binary: {}", binary_path.display());
                 }
                 HookActionResult::Updated { binary_path } => {
-                    println!(
-                        "Updated: heimdall-hook entry refreshed in ~/.claude/settings.json"
-                    );
+                    println!("Updated: heimdall-hook entry refreshed in ~/.claude/settings.json");
                     println!("  binary: {}", binary_path.display());
                 }
                 _ => {}
@@ -1480,7 +1478,10 @@ fn cmd_mcp(action: McpAction, default_db: &dyn Fn(Option<PathBuf>) -> PathBuf) -
                 println!("Installed: heimdall MCP server added to {}", path.display());
             }
             McpInstallResult::Updated { path } => {
-                println!("Updated: heimdall MCP server refreshed in {}", path.display());
+                println!(
+                    "Updated: heimdall MCP server refreshed in {}",
+                    path.display()
+                );
             }
             _ => {}
         },

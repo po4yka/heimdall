@@ -47,11 +47,15 @@ pub const HOOK_VERSION_KEY: &str = "_heimdall_version";
 #[derive(Debug, PartialEq)]
 pub enum HookActionResult {
     /// First-time install — entry was not previously present.
-    Installed { binary_path: PathBuf },
+    Installed {
+        binary_path: PathBuf,
+    },
     /// Re-run install — existing entry was replaced with the current
     /// binary path and version stamp. Reaches the same final state as
     /// `Installed`.
-    Updated { binary_path: PathBuf },
+    Updated {
+        binary_path: PathBuf,
+    },
     Uninstalled,
     NothingToUninstall,
 }
