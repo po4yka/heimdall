@@ -45,13 +45,13 @@ export function WeeklyChart({ weekly }: { weekly: WeeklyAgg[] }) {
         const costUsd = w.cost_nanos / 1e9;
         const costStr = costUsd < 0.0001 ? '<$0.0001' : '$' + costUsd.toFixed(4);
         return (
-          '<div style="padding:8px 12px;font-family:var(--font-mono);font-size:12px;background:var(--color-bg-secondary);border:1px solid var(--color-border)">' +
+          '<div style="padding:8px 12px;font-family:var(--font-mono);font-size:12px;background:var(--surface);border:1px solid var(--border)">' +
           '<div style="margin-bottom:4px;font-weight:600">' + esc(w.week) + '</div>' +
           '<div>Input: ' + fmt(w.input) + '</div>' +
           '<div>Output: ' + fmt(w.output) + '</div>' +
           '<div>Cached Input: ' + fmt(w.cache_read) + '</div>' +
           '<div>Cache Creation: ' + fmt(w.cache_creation) + '</div>' +
-          '<div style="margin-top:4px;border-top:1px solid var(--color-border);padding-top:4px">Total: ' + fmt(total) + ' tokens</div>' +
+          '<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px">Total: ' + fmt(total) + ' tokens</div>' +
           '<div>Cost: ' + costStr + '</div>' +
           '</div>'
         );
