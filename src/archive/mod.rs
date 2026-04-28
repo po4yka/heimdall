@@ -1,10 +1,10 @@
 //! Local-archive subsystem (Phase 1 of the chat-backup design).
 
+pub mod companion_token;
 pub mod discovery;
 pub mod imports;
 pub mod index;
 pub mod manifest;
-pub mod companion_token;
 pub mod objects;
 pub mod web;
 

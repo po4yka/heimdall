@@ -2,8 +2,8 @@
 mod tests {
     use std::io::Write;
     use std::net::SocketAddr;
-    use std::sync::{Arc, Mutex};
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
     use tempfile::TempDir;
 
@@ -4056,8 +4056,7 @@ mod tests {
 
         // Seed the companion token into the tempdir.
         let token_path = tmp.path().join(".heimdall").join("companion-token");
-        let token =
-            crate::archive::companion_token::read_or_init(&token_path).unwrap();
+        let token = crate::archive::companion_token::read_or_init(&token_path).unwrap();
         let token_hex = token.as_hex().to_owned();
 
         let conv = crate::archive::web::WebConversation {
@@ -4101,7 +4100,10 @@ mod tests {
             .join("web")
             .join("claude.ai")
             .join("test-conv-1.json");
-        assert!(expected.is_file(), "saved file should exist at {expected:?}");
+        assert!(
+            expected.is_file(),
+            "saved file should exist at {expected:?}"
+        );
     }
 
     #[tokio::test]
@@ -4115,8 +4117,7 @@ mod tests {
 
         // Seed the companion token into the tempdir.
         let token_path = tmp.path().join(".heimdall").join("companion-token");
-        let token =
-            crate::archive::companion_token::read_or_init(&token_path).unwrap();
+        let token = crate::archive::companion_token::read_or_init(&token_path).unwrap();
         let token_hex = token.as_hex().to_owned();
 
         let conv = crate::archive::web::WebConversation {

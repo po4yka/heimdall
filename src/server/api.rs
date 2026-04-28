@@ -2276,8 +2276,8 @@ pub async fn api_archive_web_conversation(
     let body_bytes = axum::body::to_bytes(request.into_body(), 50 * 1024 * 1024)
         .await
         .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
-    let conv: crate::archive::web::WebConversation = serde_json::from_slice(&body_bytes)
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let conv: crate::archive::web::WebConversation =
+        serde_json::from_slice(&body_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let archive_root = crate::archive::default_root();
     let outcome = tokio::task::spawn_blocking(move || {
@@ -2288,10 +2288,8 @@ pub async fn api_archive_web_conversation(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let body = match outcome {
-        crate::archive::web::WriteOutcome::Saved { .. } =>
-            serde_json::json!({"saved": true}),
-        crate::archive::web::WriteOutcome::Unchanged =>
-            serde_json::json!({"unchanged": true}),
+        crate::archive::web::WriteOutcome::Saved { .. } => serde_json::json!({"saved": true}),
+        crate::archive::web::WriteOutcome::Unchanged => serde_json::json!({"unchanged": true}),
     };
     Ok(Json(body))
 }

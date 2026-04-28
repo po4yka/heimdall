@@ -1,6 +1,5 @@
 use claude_usage_tracker::analytics;
 use claude_usage_tracker::archive;
-use claude_usage_tracker::scrape;
 use claude_usage_tracker::config;
 use claude_usage_tracker::currency;
 use claude_usage_tracker::db as db_mod;
@@ -18,6 +17,7 @@ use claude_usage_tracker::pricing_defs;
 use claude_usage_tracker::pricing_sync;
 use claude_usage_tracker::scanner;
 use claude_usage_tracker::scheduler;
+use claude_usage_tracker::scrape;
 use claude_usage_tracker::server;
 use claude_usage_tracker::statusline;
 use claude_usage_tracker::usage_monitor;
@@ -1192,17 +1192,23 @@ fn main() -> Result<()> {
                     const DEFAULT_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
                     let session_key = session_key
                         .or_else(|| std::env::var("HEIMDALL_CLAUDE_SESSION_KEY").ok())
-                        .ok_or_else(|| anyhow::anyhow!(
-                            "--session-key (or HEIMDALL_CLAUDE_SESSION_KEY) required"
-                        ))?;
-                    let cf_clearance = cf_clearance
-                        .or_else(|| std::env::var("HEIMDALL_CLAUDE_CF_CLEARANCE").ok());
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "--session-key (or HEIMDALL_CLAUDE_SESSION_KEY) required"
+                            )
+                        })?;
+                    let cf_clearance =
+                        cf_clearance.or_else(|| std::env::var("HEIMDALL_CLAUDE_CF_CLEARANCE").ok());
                     let user_agent = user_agent
                         .or_else(|| std::env::var("HEIMDALL_USER_AGENT").ok())
                         .unwrap_or_else(|| DEFAULT_UA.to_string());
                     let root = archive_root.unwrap_or_else(archive::default_root);
-                    let report =
-                        rt.block_on(scrape_claude_run(&session_key, cf_clearance, &user_agent, &root))?;
+                    let report = rt.block_on(scrape_claude_run(
+                        &session_key,
+                        cf_clearance,
+                        &user_agent,
+                        &root,
+                    ))?;
                     print_scrape_report(&report, json)?;
                 }
                 ScrapeAction::Chatgpt {
@@ -1216,14 +1222,18 @@ fn main() -> Result<()> {
                     const DEFAULT_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
                     let session_token = session_token
                         .or_else(|| std::env::var("HEIMDALL_CHATGPT_SESSION_TOKEN").ok())
-                        .ok_or_else(|| anyhow::anyhow!(
-                            "--session-token (or HEIMDALL_CHATGPT_SESSION_TOKEN) required"
-                        ))?;
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "--session-token (or HEIMDALL_CHATGPT_SESSION_TOKEN) required"
+                            )
+                        })?;
                     let access_token = access_token
                         .or_else(|| std::env::var("HEIMDALL_CHATGPT_ACCESS_TOKEN").ok())
-                        .ok_or_else(|| anyhow::anyhow!(
-                            "--access-token (or HEIMDALL_CHATGPT_ACCESS_TOKEN) required"
-                        ))?;
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "--access-token (or HEIMDALL_CHATGPT_ACCESS_TOKEN) required"
+                            )
+                        })?;
                     let cf_clearance = cf_clearance
                         .or_else(|| std::env::var("HEIMDALL_CHATGPT_CF_CLEARANCE").ok());
                     let user_agent = user_agent

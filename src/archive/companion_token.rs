@@ -63,8 +63,7 @@ pub fn rotate(path: &Path) -> Result<CompanionToken> {
     rand::rng().fill_bytes(&mut bytes);
     let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
 
-    let mut f = fs::File::create(path)
-        .with_context(|| format!("creating {}", path.display()))?;
+    let mut f = fs::File::create(path).with_context(|| format!("creating {}", path.display()))?;
     f.write_all(hex.as_bytes())?;
     f.write_all(b"\n")?;
     f.sync_all()?;

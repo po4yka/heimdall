@@ -71,22 +71,17 @@ pub fn vendor_dir(archive_root: &Path, vendor: &str) -> PathBuf {
 /// - When the payload differs, renames the old file into `<conv_id>.history/<prior_captured_at>.json`
 ///   before writing the new one.
 /// - The write itself is atomic: `.tmp-<conv_id>.json` → rename.
-pub fn write_web_conversation(
-    archive_root: &Path,
-    conv: &WebConversation,
-) -> Result<WriteOutcome> {
+pub fn write_web_conversation(archive_root: &Path, conv: &WebConversation) -> Result<WriteOutcome> {
     let vendor_s = sanitize(&conv.vendor);
     let raw_id = sanitize(&conv.conversation_id);
     // Cap conversation_id at 120 chars after sanitization.
     let conv_id: String = raw_id.chars().take(120).collect();
 
     let dir = archive_root.join("web").join(&vendor_s);
-    fs::create_dir_all(&dir)
-        .with_context(|| format!("creating vendor dir {}", dir.display()))?;
+    fs::create_dir_all(&dir).with_context(|| format!("creating vendor dir {}", dir.display()))?;
 
     let current_path = dir.join(format!("{conv_id}.json"));
-    let new_bytes = serde_json::to_vec_pretty(conv)
-        .context("serializing WebConversation")?;
+    let new_bytes = serde_json::to_vec_pretty(conv).context("serializing WebConversation")?;
 
     // Check for byte-identical existing file.
     if current_path.is_file() {
@@ -125,11 +120,7 @@ fn read_captured_at(path: &Path, fallback: &str) -> String {
     })()
     .unwrap_or_else(|| {
         // Synthetic stub: use a derived timestamp so the history slot is unique.
-        Utc::now()
-            .format("%Y-%m-%dT%H%M%S%.6fZ")
-            .to_string()
-            + "__"
-            + fallback
+        Utc::now().format("%Y-%m-%dT%H%M%S%.6fZ").to_string() + "__" + fallback
     })
 }
 
@@ -198,9 +189,7 @@ pub fn list_web_conversations(archive_root: &Path) -> Result<Vec<WebConversation
                         rd.filter_map(|e| e.ok())
                             .filter(|e| {
                                 e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
-                                    && e.file_name()
-                                        .to_string_lossy()
-                                        .ends_with(".json")
+                                    && e.file_name().to_string_lossy().ends_with(".json")
                             })
                             .count()
                     })
@@ -307,11 +296,7 @@ mod tests {
     fn vendor_and_id_sanitization() {
         let dir = TempDir::new().unwrap();
         // Malicious vendor and id with path-traversal characters.
-        let conv = make_conv(
-            "claude.ai/../etc",
-            "../../escape",
-            json!({"safe": true}),
-        );
+        let conv = make_conv("claude.ai/../etc", "../../escape", json!({"safe": true}));
         write_web_conversation(dir.path(), &conv).unwrap();
 
         // "claude.ai/../etc"  → slashes stripped → "claude.ai..etc"
@@ -353,7 +338,8 @@ mod tests {
         }
 
         // Verify vendors present.
-        let vendors: std::collections::HashSet<_> = list.iter().map(|s| s.vendor.as_str()).collect();
+        let vendors: std::collections::HashSet<_> =
+            list.iter().map(|s| s.vendor.as_str()).collect();
         assert!(vendors.contains("vendor-a"));
         assert!(vendors.contains("vendor-b"));
     }

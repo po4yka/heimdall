@@ -13,7 +13,7 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
+use reqwest::header::{COOKIE, HeaderMap, HeaderValue, USER_AGENT};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -55,7 +55,10 @@ impl Client {
             .await
             .with_context(|| format!("GET {url}"))?;
         check_status(&resp)?;
-        let orgs: Vec<Organization> = resp.json().await.context("parsing organizations response")?;
+        let orgs: Vec<Organization> = resp
+            .json()
+            .await
+            .context("parsing organizations response")?;
         Ok(orgs)
     }
 
@@ -76,8 +79,7 @@ impl Client {
     }
 
     pub async fn fetch_conversation(&self, org_id: &str, conv_id: &str) -> Result<Value> {
-        let url =
-            format!("{BASE}/api/organizations/{org_id}/chat_conversations/{conv_id}");
+        let url = format!("{BASE}/api/organizations/{org_id}/chat_conversations/{conv_id}");
         let resp = self
             .http
             .get(&url)

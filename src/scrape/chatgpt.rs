@@ -12,15 +12,15 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, COOKIE, USER_AGENT};
+use reqwest::header::{AUTHORIZATION, COOKIE, HeaderMap, HeaderValue, USER_AGENT};
 use serde::Deserialize;
 use serde_json::Value;
 
 const BASE: &str = "https://chatgpt.com";
 
 pub struct Credentials {
-    pub session_token: String,   // __Secure-next-auth.session-token cookie value
-    pub access_token: String,    // Bearer ... from /api/auth/session
+    pub session_token: String, // __Secure-next-auth.session-token cookie value
+    pub access_token: String,  // Bearer ... from /api/auth/session
     pub cf_clearance: Option<String>,
     pub user_agent: String,
 }
@@ -64,7 +64,8 @@ impl Client {
                 .await
                 .with_context(|| format!("GET {url}"))?;
             check_status(&resp)?;
-            let page: ConversationsPage = resp.json().await.context("parsing conversations page")?;
+            let page: ConversationsPage =
+                resp.json().await.context("parsing conversations page")?;
             let got = page.items.len();
             all.extend(page.items);
             offset += got;
