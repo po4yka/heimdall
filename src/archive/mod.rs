@@ -4,6 +4,7 @@ pub mod discovery;
 pub mod imports;
 pub mod index;
 pub mod manifest;
+pub mod companion_token;
 pub mod objects;
 pub mod web;
 
