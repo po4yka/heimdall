@@ -4,8 +4,6 @@
 //! `summary.json` is a small derived rollup for fast dashboard listing.
 //! Both files live under `<archive_root>/snapshots/<snapshot_id>/`.
 
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,7 +17,9 @@ pub struct Manifest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderSection {
     pub name: String,
-    pub root: PathBuf,
+    /// Absolute provider root as a UTF-8 string with forward slashes, so
+    /// snapshots written on one OS round-trip cleanly on another.
+    pub root: String,
     pub files: Vec<FileEntry>,
 }
 
@@ -35,7 +35,7 @@ pub struct FileEntry {
     pub mtime_ms: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Summary {
     pub snapshot_id: String,
     pub created_at: String,
@@ -44,7 +44,7 @@ pub struct Summary {
     pub providers: Vec<SummaryProvider>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SummaryProvider {
     pub name: String,
     pub file_count: u64,
@@ -87,7 +87,7 @@ mod tests {
             heimdall_version: "1.0.0".into(),
             providers: vec![ProviderSection {
                 name: "claude".into(),
-                root: PathBuf::from("/home/u/.claude/projects"),
+                root: "/home/u/.claude/projects".into(),
                 files: vec![FileEntry {
                     logical_path: "proj-a/sess-1.jsonl".into(),
                     sha256: "abcd".repeat(16),
@@ -110,7 +110,7 @@ mod tests {
             providers: vec![
                 ProviderSection {
                     name: "claude".into(),
-                    root: PathBuf::from("/r1"),
+                    root: "/r1".into(),
                     files: vec![
                         FileEntry { logical_path: "a".into(), sha256: "0".into(), size: 100, mtime_ms: 0 },
                         FileEntry { logical_path: "b".into(), sha256: "0".into(), size: 50, mtime_ms: 0 },
@@ -118,7 +118,7 @@ mod tests {
                 },
                 ProviderSection {
                     name: "codex".into(),
-                    root: PathBuf::from("/r2"),
+                    root: "/r2".into(),
                     files: vec![
                         FileEntry { logical_path: "c".into(), sha256: "0".into(), size: 25, mtime_ms: 0 },
                     ],
