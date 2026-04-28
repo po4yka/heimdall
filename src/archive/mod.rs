@@ -4,6 +4,8 @@ pub mod companion_token;
 pub mod discovery;
 pub mod imports;
 pub mod index;
+#[cfg(target_os = "macos")]
+pub mod macos_cache;
 pub mod manifest;
 pub mod objects;
 pub mod web;

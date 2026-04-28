@@ -327,6 +327,12 @@ enum Commands {
         #[command(subcommand)]
         action: CompanionTokenAction,
     },
+    /// Read the local ChatGPT for macOS desktop cache (macOS only)
+    #[cfg(target_os = "macos")]
+    MacosCache {
+        #[command(subcommand)]
+        action: MacosCacheAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -442,6 +448,32 @@ enum CompanionTokenAction {
     Show,
     /// Generate a fresh bearer token (any prior pair-up must be repeated)
     Rotate,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Subcommand)]
+enum MacosCacheAction {
+    /// Scan ~/Library/Application Support/com.openai.chat/ and report what is on disk
+    Scan {
+        /// Override the cache root (default: ~/Library/Application Support/com.openai.chat)
+        #[arg(long)]
+        cache_root: Option<PathBuf>,
+        /// Emit JSON instead of a human-readable report
+        #[arg(long)]
+        json: bool,
+    },
+    /// Ingest plaintext (pre-July-2024) caches into <archive_root>/web/chatgpt.com/
+    Ingest {
+        /// Override the cache root
+        #[arg(long)]
+        cache_root: Option<PathBuf>,
+        /// Override the archive root (default: ~/.heimdall/archive)
+        #[arg(long)]
+        archive_root: Option<PathBuf>,
+        /// Emit JSON instead of a human-readable report
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// Parse the MCP transport string.
@@ -1264,6 +1296,73 @@ fn main() -> Result<()> {
                 }
             }
         }
+        #[cfg(target_os = "macos")]
+        Commands::MacosCache { action } => match action {
+            MacosCacheAction::Scan { cache_root, json } => {
+                let root = cache_root
+                    .or_else(archive::macos_cache::default_cache_root)
+                    .ok_or_else(|| anyhow::anyhow!("could not resolve home directory"))?;
+                let reports = archive::macos_cache::scan_caches(&root)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&reports)?);
+                } else if reports.is_empty() {
+                    println!(
+                        "no ChatGPT cache directories found under {}",
+                        root.display()
+                    );
+                } else {
+                    for r in &reports {
+                        let kind = match r.kind {
+                            archive::macos_cache::CacheKind::Plaintext => "plaintext",
+                            archive::macos_cache::CacheKind::Encrypted => "encrypted",
+                        };
+                        println!(
+                            "{}  {}  {} files  {} bytes",
+                            kind,
+                            r.path.display(),
+                            r.file_count,
+                            r.byte_count
+                        );
+                        if let Some(reason) = &r.unreadable_reason {
+                            println!("    note: {}", reason);
+                        }
+                    }
+                }
+            }
+            MacosCacheAction::Ingest {
+                cache_root,
+                archive_root,
+                json,
+            } => {
+                let cache = cache_root
+                    .or_else(archive::macos_cache::default_cache_root)
+                    .ok_or_else(|| anyhow::anyhow!("could not resolve home directory"))?;
+                let archive_root = archive_root.unwrap_or_else(archive::default_root);
+                let _archive = archive::Archive::at(archive_root.clone())?;
+                let report =
+                    archive::macos_cache::ingest_plaintext_into_archive(&cache, &archive_root)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                } else {
+                    println!(
+                        "macos cache ingest: {} parsed, {} written, {} unchanged, {} errors",
+                        report.parsed,
+                        report.written,
+                        report.unchanged,
+                        report.errors.len()
+                    );
+                    if report.encrypted_dirs > 0 {
+                        println!(
+                            "  {} encrypted dir(s) skipped ({} files); v2 format reverse-engineering required",
+                            report.encrypted_dirs, report.encrypted_files
+                        );
+                    }
+                    for e in &report.errors {
+                        eprintln!("  {e}");
+                    }
+                }
+            }
+        },
     }
     Ok(())
 }
