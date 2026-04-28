@@ -533,4 +533,33 @@ mod tests {
             "stdout: {stdout}"
         );
     }
+
+    #[test]
+    fn companion_token_show_prints_64_hex_chars() {
+        let tmp = TempDir::new().unwrap();
+        let test_exe = std::env::current_exe().unwrap();
+        let target_dir = test_exe.parent().unwrap().parent().unwrap();
+        let exe = target_dir.join("claude-usage-tracker");
+        if !exe.exists() {
+            let s = std::process::Command::new(env!("CARGO"))
+                .args(["build", "--bin", "claude-usage-tracker"])
+                .status()
+                .unwrap();
+            assert!(s.success());
+        }
+        let out = std::process::Command::new(&exe)
+            .args(["companion-token", "show"])
+            .env("HOME", tmp.path())
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "companion-token show failed: {:?}",
+            out
+        );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let line = stdout.lines().next().unwrap_or("").trim();
+        assert_eq!(line.len(), 64, "expected 64-hex token, got: {line:?}");
+        assert!(line.chars().all(|c| c.is_ascii_hexdigit()));
+    }
 }

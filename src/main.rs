@@ -1,5 +1,6 @@
 use claude_usage_tracker::analytics;
 use claude_usage_tracker::archive;
+use claude_usage_tracker::scrape;
 use claude_usage_tracker::config;
 use claude_usage_tracker::currency;
 use claude_usage_tracker::db as db_mod;
@@ -316,6 +317,16 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Scrape claude.ai or chatgpt.com private APIs using copy-pasted cookies
+    Scrape {
+        #[command(subcommand)]
+        action: ScrapeAction,
+    },
+    /// Manage the companion bearer token used by the browser extension and the scrape CLI
+    CompanionToken {
+        #[command(subcommand)]
+        action: CompanionTokenAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -378,6 +389,59 @@ enum ArchiveAction {
         #[arg(long)]
         archive_root: Option<PathBuf>,
     },
+}
+
+#[derive(Subcommand)]
+enum ScrapeAction {
+    /// Scrape claude.ai
+    Claude {
+        /// sessionKey cookie value (`sk-ant-sid01-...`).
+        /// Falls back to env `HEIMDALL_CLAUDE_SESSION_KEY`.
+        #[arg(long)]
+        session_key: Option<String>,
+        /// cf_clearance cookie value (optional but usually required).
+        /// Falls back to env `HEIMDALL_CLAUDE_CF_CLEARANCE`.
+        #[arg(long)]
+        cf_clearance: Option<String>,
+        /// User-Agent matching the browser that issued the cookies.
+        /// Falls back to env `HEIMDALL_USER_AGENT`.
+        #[arg(long)]
+        user_agent: Option<String>,
+        /// Override archive root
+        #[arg(long)]
+        archive_root: Option<PathBuf>,
+        /// JSON output
+        #[arg(long)]
+        json: bool,
+    },
+    /// Scrape chatgpt.com
+    Chatgpt {
+        /// Falls back to env `HEIMDALL_CHATGPT_SESSION_TOKEN`.
+        #[arg(long)]
+        session_token: Option<String>,
+        /// Falls back to env `HEIMDALL_CHATGPT_ACCESS_TOKEN`.
+        #[arg(long)]
+        access_token: Option<String>,
+        /// Falls back to env `HEIMDALL_CHATGPT_CF_CLEARANCE`.
+        #[arg(long)]
+        cf_clearance: Option<String>,
+        /// User-Agent matching the browser that issued the cookies.
+        /// Falls back to env `HEIMDALL_USER_AGENT`.
+        #[arg(long)]
+        user_agent: Option<String>,
+        #[arg(long)]
+        archive_root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum CompanionTokenAction {
+    /// Print the current bearer token (creates one if missing)
+    Show,
+    /// Generate a fresh bearer token (any prior pair-up must be repeated)
+    Rotate,
 }
 
 /// Parse the MCP transport string.
@@ -1114,6 +1178,81 @@ fn main() -> Result<()> {
         }
         Commands::Config { action } => {
             cmd_config(action)?;
+        }
+        Commands::Scrape { action } => {
+            let rt = tokio::runtime::Runtime::new()?;
+            match action {
+                ScrapeAction::Claude {
+                    session_key,
+                    cf_clearance,
+                    user_agent,
+                    archive_root,
+                    json,
+                } => {
+                    const DEFAULT_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+                    let session_key = session_key
+                        .or_else(|| std::env::var("HEIMDALL_CLAUDE_SESSION_KEY").ok())
+                        .ok_or_else(|| anyhow::anyhow!(
+                            "--session-key (or HEIMDALL_CLAUDE_SESSION_KEY) required"
+                        ))?;
+                    let cf_clearance = cf_clearance
+                        .or_else(|| std::env::var("HEIMDALL_CLAUDE_CF_CLEARANCE").ok());
+                    let user_agent = user_agent
+                        .or_else(|| std::env::var("HEIMDALL_USER_AGENT").ok())
+                        .unwrap_or_else(|| DEFAULT_UA.to_string());
+                    let root = archive_root.unwrap_or_else(archive::default_root);
+                    let report =
+                        rt.block_on(scrape_claude_run(&session_key, cf_clearance, &user_agent, &root))?;
+                    print_scrape_report(&report, json)?;
+                }
+                ScrapeAction::Chatgpt {
+                    session_token,
+                    access_token,
+                    cf_clearance,
+                    user_agent,
+                    archive_root,
+                    json,
+                } => {
+                    const DEFAULT_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+                    let session_token = session_token
+                        .or_else(|| std::env::var("HEIMDALL_CHATGPT_SESSION_TOKEN").ok())
+                        .ok_or_else(|| anyhow::anyhow!(
+                            "--session-token (or HEIMDALL_CHATGPT_SESSION_TOKEN) required"
+                        ))?;
+                    let access_token = access_token
+                        .or_else(|| std::env::var("HEIMDALL_CHATGPT_ACCESS_TOKEN").ok())
+                        .ok_or_else(|| anyhow::anyhow!(
+                            "--access-token (or HEIMDALL_CHATGPT_ACCESS_TOKEN) required"
+                        ))?;
+                    let cf_clearance = cf_clearance
+                        .or_else(|| std::env::var("HEIMDALL_CHATGPT_CF_CLEARANCE").ok());
+                    let user_agent = user_agent
+                        .or_else(|| std::env::var("HEIMDALL_USER_AGENT").ok())
+                        .unwrap_or_else(|| DEFAULT_UA.to_string());
+                    let root = archive_root.unwrap_or_else(archive::default_root);
+                    let report = rt.block_on(scrape_chatgpt_run(
+                        &session_token,
+                        &access_token,
+                        cf_clearance,
+                        &user_agent,
+                        &root,
+                    ))?;
+                    print_scrape_report(&report, json)?;
+                }
+            }
+        }
+        Commands::CompanionToken { action } => {
+            let path = archive::companion_token::default_path();
+            match action {
+                CompanionTokenAction::Show => {
+                    let t = archive::companion_token::read_or_init(&path)?;
+                    println!("{}", t.as_hex());
+                }
+                CompanionTokenAction::Rotate => {
+                    let t = archive::companion_token::rotate(&path)?;
+                    println!("{}", t.as_hex());
+                }
+            }
         }
     }
     Ok(())
@@ -3096,6 +3235,131 @@ fn cmd_blocks(
 
     println!("{}", "-".repeat(120));
     println!();
+    Ok(())
+}
+
+// ── scrape helpers ────────────────────────────────────────────────────────────
+
+async fn scrape_claude_run(
+    session_key: &str,
+    cf_clearance: Option<String>,
+    user_agent: &str,
+    archive_root: &std::path::Path,
+) -> anyhow::Result<scrape::ScrapeReport> {
+    let creds = scrape::claude::Credentials {
+        session_key: session_key.to_string(),
+        cf_clearance,
+        user_agent: user_agent.to_string(),
+    };
+    let client = scrape::claude::Client::new(&creds)?;
+    let mut report = scrape::ScrapeReport {
+        vendor: "claude.ai",
+        listed: 0,
+        written: 0,
+        unchanged: 0,
+        errors: Vec::new(),
+    };
+    let orgs = client.list_organizations().await?;
+    for org in &orgs {
+        let convs = client.list_conversations(&org.uuid).await?;
+        for summary in &convs {
+            report.listed += 1;
+            match client.fetch_conversation(&org.uuid, &summary.uuid).await {
+                Ok(payload) => {
+                    let conv = archive::web::WebConversation {
+                        vendor: "claude.ai".into(),
+                        conversation_id: summary.uuid.clone(),
+                        captured_at: chrono::Utc::now()
+                            .format("%Y-%m-%dT%H%M%S%.6fZ")
+                            .to_string(),
+                        schema_fingerprint: "claude.ai/v1".into(),
+                        payload,
+                    };
+                    match archive::web::write_web_conversation(archive_root, &conv) {
+                        Ok(archive::web::WriteOutcome::Saved { .. }) => report.written += 1,
+                        Ok(archive::web::WriteOutcome::Unchanged) => report.unchanged += 1,
+                        Err(e) => report.errors.push(format!("{}: {e}", summary.uuid)),
+                    }
+                }
+                Err(e) => report.errors.push(format!("{}: {e}", summary.uuid)),
+            }
+        }
+    }
+    Ok(report)
+}
+
+async fn scrape_chatgpt_run(
+    session_token: &str,
+    access_token: &str,
+    cf_clearance: Option<String>,
+    user_agent: &str,
+    archive_root: &std::path::Path,
+) -> anyhow::Result<scrape::ScrapeReport> {
+    let creds = scrape::chatgpt::Credentials {
+        session_token: session_token.to_string(),
+        access_token: access_token.to_string(),
+        cf_clearance,
+        user_agent: user_agent.to_string(),
+    };
+    let client = scrape::chatgpt::Client::new(&creds)?;
+    let mut report = scrape::ScrapeReport {
+        vendor: "chatgpt.com",
+        listed: 0,
+        written: 0,
+        unchanged: 0,
+        errors: Vec::new(),
+    };
+    let convs = client.list_conversations(28).await?;
+    for summary in &convs {
+        report.listed += 1;
+        match client.fetch_conversation(&summary.id).await {
+            Ok(payload) => {
+                let conv = archive::web::WebConversation {
+                    vendor: "chatgpt.com".into(),
+                    conversation_id: summary.id.clone(),
+                    captured_at: chrono::Utc::now()
+                        .format("%Y-%m-%dT%H%M%S%.6fZ")
+                        .to_string(),
+                    schema_fingerprint: "chatgpt.com/v1".into(),
+                    payload,
+                };
+                match archive::web::write_web_conversation(archive_root, &conv) {
+                    Ok(archive::web::WriteOutcome::Saved { .. }) => report.written += 1,
+                    Ok(archive::web::WriteOutcome::Unchanged) => report.unchanged += 1,
+                    Err(e) => report.errors.push(format!("{}: {e}", summary.id)),
+                }
+            }
+            Err(e) => report.errors.push(format!("{}: {e}", summary.id)),
+        }
+    }
+    Ok(report)
+}
+
+fn print_scrape_report(r: &scrape::ScrapeReport, json: bool) -> anyhow::Result<()> {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "vendor": r.vendor,
+                "listed": r.listed,
+                "written": r.written,
+                "unchanged": r.unchanged,
+                "errors": r.errors,
+            }))?
+        );
+    } else {
+        println!(
+            "{}: listed {}, wrote {} new, {} unchanged, {} errors",
+            r.vendor,
+            r.listed,
+            r.written,
+            r.unchanged,
+            r.errors.len()
+        );
+        for e in &r.errors {
+            eprintln!("  {e}");
+        }
+    }
     Ok(())
 }
 
