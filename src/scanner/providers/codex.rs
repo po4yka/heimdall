@@ -68,7 +68,7 @@ impl Provider for CodexProvider {
         Ok(parse_codex_jsonl_file(path, 0).turns)
     }
 
-    fn archive_paths(&self) -> Vec<std::path::PathBuf> {
+    fn archive_paths(&self) -> Vec<PathBuf> {
         self.dirs.clone()
     }
 }
