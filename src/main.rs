@@ -186,6 +186,20 @@ enum Commands {
         #[command(subcommand)]
         action: ArchiveAction,
     },
+    /// Import an Anthropic or OpenAI account-export ZIP into the archive
+    ImportExport {
+        /// Path to the ZIP. Required unless --watch is set.
+        zip: Option<PathBuf>,
+        /// Watch this directory and import any new ZIPs as they land
+        #[arg(long)]
+        watch: Option<PathBuf>,
+        /// Override the archive root
+        #[arg(long)]
+        archive_root: Option<PathBuf>,
+        /// JSON output
+        #[arg(long)]
+        json: bool,
+    },
     /// Manage the heimdall-hook real-time PreToolUse ingest hook
     Hook {
         #[command(subcommand)]
@@ -941,6 +955,36 @@ fn main() -> Result<()> {
                     if !report.corrupt_objects.is_empty() {
                         std::process::exit(2);
                     }
+                }
+            }
+        }
+        Commands::ImportExport { zip, watch, archive_root, json } => {
+            let root = archive_root.unwrap_or_else(archive::default_root);
+            if let Some(watch_dir) = watch {
+                archive::imports::watch::run_watch(&root, &watch_dir)?;
+                return Ok(());
+            }
+            let zip = zip.ok_or_else(|| anyhow::anyhow!(
+                "either <zip> argument or --watch <dir> is required"
+            ))?;
+            let report = archive::imports::import_zip(&root, &zip)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                    "import_id": report.import_id,
+                    "vendor": report.vendor.slug(),
+                    "conversation_count": report.conversation_count,
+                    "parse_warnings": report.parse_warnings,
+                    "root": report.root.display().to_string(),
+                }))?);
+            } else {
+                println!(
+                    "imported {} {} conversations into {}",
+                    report.conversation_count,
+                    report.vendor.slug(),
+                    report.root.display()
+                );
+                if !report.parse_warnings.is_empty() {
+                    eprintln!("  {} warnings written to parse-errors.json", report.parse_warnings.len());
                 }
             }
         }

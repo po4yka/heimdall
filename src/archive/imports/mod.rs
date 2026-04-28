@@ -4,6 +4,7 @@ pub mod anthropic;
 pub mod detect;
 pub mod openai;
 pub mod storage;
+pub mod watch;
 
 use std::fs::File;
 use std::io::BufReader;
