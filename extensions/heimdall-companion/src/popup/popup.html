@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Heimdall</title>
+<style>
+  body { font: 13px system-ui, sans-serif; min-width: 240px; margin: 12px; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; }
+  .ok { color: #059669; }
+  .warn { color: #b91c1c; }
+  button { width: 100%; padding: 6px 12px; margin-top: 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <h1>Heimdall Companion</h1>
+  <div class="row"><span>Paired</span><span id="paired"></span></div>
+  <div class="row"><span>Last sync</span><span id="lastSync"></span></div>
+  <div class="row"><span>Captures</span><span id="captures"></span></div>
+  <button id="syncNow">Sync now</button>
+  <button id="options">Options...</button>
+  <script type="module" src="popup.js"></script>
+</body></html>
