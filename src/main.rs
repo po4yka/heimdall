@@ -583,6 +583,9 @@ enum SchedulerAction {
         /// Override the database path used by the scheduled job
         #[arg(long)]
         db_path: Option<PathBuf>,
+        /// Also install the daily archive snapshot job
+        #[arg(long)]
+        include_archive: bool,
     },
     /// Remove the scheduled scan job
     Uninstall,
@@ -1229,7 +1232,11 @@ fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Resul
     let sched = scheduler::current();
 
     match action {
-        SchedulerAction::Install { interval, db_path } => {
+        SchedulerAction::Install {
+            interval,
+            db_path,
+            include_archive,
+        } => {
             let interval = Interval::from_str(&interval)?;
             let bin_path = scheduler::resolve_bin_path()?;
             let db = db_path.unwrap_or_else(|| default_db.to_path_buf());
@@ -1254,10 +1261,17 @@ fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Resul
                     std::process::exit(1);
                 }
             }
+            if include_archive {
+                let archive_sched = scheduler::current_for(scheduler::ARCHIVE_JOB);
+                archive_sched.install(scheduler::Interval::Daily, &bin_path, &db)?;
+                println!("scheduler: archive job installed (daily)");
+            }
         }
         SchedulerAction::Uninstall => {
             sched.uninstall()?;
             println!("Uninstalled: scheduled scan job removed");
+            let archive_sched = scheduler::current_for(scheduler::ARCHIVE_JOB);
+            archive_sched.uninstall()?;
         }
         SchedulerAction::Status => match sched.status()? {
             InstallStatus::Installed {

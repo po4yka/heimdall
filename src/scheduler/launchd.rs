@@ -371,6 +371,20 @@ mod tests {
     }
 
     #[test]
+    fn plist_for_archive_uses_distinct_label_and_subcommand() {
+        use crate::scheduler::ARCHIVE_JOB;
+        let xml = generate_plist_for_job(
+            ARCHIVE_JOB,
+            Path::new("/bin/claude-usage-tracker"),
+            Path::new("/tmp/usage.db"),
+            Interval::Daily,
+        );
+        assert!(xml.contains(ARCHIVE_JOB.launchd_label));
+        assert!(xml.contains("<string>archive</string>"));
+        assert!(xml.contains("<string>snapshot</string>"));
+    }
+
+    #[test]
     fn plist_escapes_xml_reserved_chars_in_paths() {
         let xml = generate_plist(
             Path::new("/tmp/ACME & Co/<tool>"),

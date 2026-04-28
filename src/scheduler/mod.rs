@@ -58,6 +58,14 @@ pub const PRICING_SYNC_JOB: ScheduledJob = ScheduledJob {
     command: &["pricing", "sync"],
 };
 
+pub const ARCHIVE_JOB: ScheduledJob = ScheduledJob {
+    slug: "archive",
+    launchd_label: "dev.heimdall.archive",
+    launchd_filename: "dev.heimdall.archive.plist",
+    cron_tag: "# heimdall-archive:v1",
+    command: &["archive", "snapshot"],
+};
+
 // ── Common types ──────────────────────────────────────────────────────────────
 
 /// How often the scan job should run.
@@ -240,5 +248,12 @@ mod tests {
     #[test]
     fn shell_quote_wraps_and_escapes_single_quotes() {
         assert_eq!(shell_quote("/tmp/it's here"), "'/tmp/it'\\''s here'");
+    }
+
+    #[test]
+    fn archive_job_constant_uses_distinct_label() {
+        assert_eq!(ARCHIVE_JOB.slug, "archive");
+        assert_ne!(ARCHIVE_JOB.launchd_label, SCAN_JOB.launchd_label);
+        assert_ne!(ARCHIVE_JOB.cron_tag, SCAN_JOB.cron_tag);
     }
 }
