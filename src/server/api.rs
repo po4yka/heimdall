@@ -2170,6 +2170,65 @@ async fn maybe_send_community_spike_webhooks(state: &Arc<AppState>, signal: &Com
     }
 }
 
+/// `GET /api/archive` — list all snapshots, newest first.
+pub async fn api_archive_list(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<Value>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _ = state;
+    let archive_root = crate::archive::default_root();
+    let metas = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let archive = crate::archive::Archive::at(archive_root)?;
+        archive.list()
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let value = serde_json::to_value(metas).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
+}
+
+/// `GET /api/archive/{snapshot_id}` — return a snapshot's full manifest.
+pub async fn api_archive_show(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(snapshot_id): axum::extract::Path<String>,
+    request: Request,
+) -> Result<Json<Value>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _ = state;
+    let archive_root = crate::archive::default_root();
+    let manifest = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let archive = crate::archive::Archive::at(archive_root)?;
+        archive.show(&snapshot_id)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::NOT_FOUND)?;
+    let value = serde_json::to_value(manifest).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(value))
+}
+
+/// `POST /api/archive/snapshot` — take a new content-addressed snapshot.
+pub async fn api_archive_snapshot(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<Value>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _ = state;
+    let archive_root = crate::archive::default_root();
+    let id = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let _lock = crate::archive::ArchiveLock::acquire(&archive_root)?;
+        let archive = crate::archive::Archive::at(archive_root.clone())?;
+        let providers = crate::scanner::providers::all();
+        archive.snapshot(&providers)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::CONFLICT)?;
+    Ok(Json(serde_json::json!({ "snapshot_id": id })))
+}
+
 #[cfg(test)]
 mod monitor_global_issue_tests {
     use super::*;

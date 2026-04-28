@@ -3941,4 +3941,38 @@ mod tests {
             serde_json::json!(0.25)
         );
     }
+
+    #[tokio::test]
+    async fn api_archive_list_returns_empty_array_when_no_snapshots() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+
+        // Point HOME at the tempdir so default_root() resolves to a fresh
+        // directory with no snapshots. The archive list() call returns [] when
+        // the snapshots sub-directory does not exist.
+        let prev_home = std::env::var_os("HOME");
+        // SAFETY: single-threaded test runtime; no other thread reads HOME.
+        unsafe { std::env::set_var("HOME", tmp.path()) };
+
+        let app = test_app(db_path, projects);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/archive")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Restore HOME before any assertion that could panic.
+        match prev_home {
+            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
+            None => unsafe { std::env::remove_var("HOME") },
+        }
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&*bytes, b"[]");
+    }
 }
