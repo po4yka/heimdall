@@ -382,7 +382,13 @@ mod tests {
     #[test]
     fn record_heartbeat_creates_file() {
         let tmp = TempDir::new().unwrap();
-        record_heartbeat(tmp.path(), Some("0.1.0".into()), Some("UA".into()), "claude.ai").unwrap();
+        record_heartbeat(
+            tmp.path(),
+            Some("0.1.0".into()),
+            Some("UA".into()),
+            "claude.ai",
+        )
+        .unwrap();
         let h = read_heartbeat(tmp.path()).unwrap().expect("present");
         assert!(!h.last_seen_at.is_empty());
         assert_eq!(h.extension_version.as_deref(), Some("0.1.0"));
