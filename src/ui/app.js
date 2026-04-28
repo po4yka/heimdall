@@ -1014,6 +1014,8 @@
   var costReconciliationData = y3(null);
   var backupSnapshots = y3([]);
   var backupLoadState = y3("idle");
+  var webConversations = y3([]);
+  var companionHeartbeat = y3(null);
   var archiveImports = y3([]);
   var SESSIONS_PAGE_PARAM = "sessions_page";
   var SESSIONS_HIDDEN_COLUMNS_PARAM = "sessions_hidden";
@@ -1383,6 +1385,68 @@
           /* @__PURE__ */ u4("td", { children: m4.conversation_count }),
           /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("code", { children: esc((m4.schema_fingerprint || "\u2014").slice(0, 12)) }) })
         ] }, m4.import_id)) })
+      ] })
+    ] });
+  }
+
+  // src/ui/components/WebCapturesPanel.tsx
+  function vendorCounts(rows) {
+    const out = {};
+    for (const r4 of rows) out[r4.vendor] = (out[r4.vendor] ?? 0) + 1;
+    return out;
+  }
+  function relativeMinutes(iso) {
+    const ts = Date.parse(iso);
+    if (Number.isNaN(ts)) return iso;
+    const mins = Math.max(0, Math.round((Date.now() - ts) / 6e4));
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 48) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  }
+  function WebCapturesPanel({ onReload }) {
+    const rows = webConversations.value;
+    const heartbeat = companionHeartbeat.value;
+    const counts = vendorCounts(rows);
+    return /* @__PURE__ */ u4("section", { class: "web-captures-panel", children: [
+      /* @__PURE__ */ u4("header", { class: "web-captures-panel-header", children: [
+        /* @__PURE__ */ u4("h2", { children: "Web captures" }),
+        /* @__PURE__ */ u4("button", { type: "button", onClick: () => void onReload(), children: "Refresh" })
+      ] }),
+      heartbeat && /* @__PURE__ */ u4("p", { class: "web-captures-panel-heartbeat", children: [
+        "Companion: connected",
+        heartbeat.vendors_seen.length > 0 && /* @__PURE__ */ u4(S, { children: [
+          " (",
+          esc(heartbeat.vendors_seen.join(" + ")),
+          ")"
+        ] }),
+        " \xB7 last seen ",
+        esc(relativeMinutes(heartbeat.last_seen_at))
+      ] }),
+      !heartbeat && rows.length === 0 && /* @__PURE__ */ u4("p", { class: "web-captures-panel-empty", children: [
+        "No web captures yet. Install the Heimdall companion browser extension at ",
+        /* @__PURE__ */ u4("code", { children: "extensions/heimdall-companion/" }),
+        ", pair it with the token from ",
+        /* @__PURE__ */ u4("code", { children: "heimdall companion-token show" }),
+        ", and your claude.ai + chatgpt.com chats will appear here on the next sync."
+      ] }),
+      rows.length > 0 && /* @__PURE__ */ u4(S, { children: [
+        /* @__PURE__ */ u4("p", { class: "web-captures-panel-counts", children: Object.entries(counts).map(([vendor, n3]) => `${vendor}: ${n3}`).join(" \xB7 ") }),
+        /* @__PURE__ */ u4("table", { class: "data-table", children: [
+          /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
+            /* @__PURE__ */ u4("th", { children: "VENDOR" }),
+            /* @__PURE__ */ u4("th", { children: "CONVERSATION" }),
+            /* @__PURE__ */ u4("th", { children: "CAPTURED" }),
+            /* @__PURE__ */ u4("th", { children: "HISTORY" })
+          ] }) }),
+          /* @__PURE__ */ u4("tbody", { children: rows.map((r4) => /* @__PURE__ */ u4("tr", { children: [
+            /* @__PURE__ */ u4("td", { children: esc(r4.vendor) }),
+            /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("code", { children: esc(r4.conversation_id) }) }),
+            /* @__PURE__ */ u4("td", { children: esc(relativeMinutes(r4.captured_at)) }),
+            /* @__PURE__ */ u4("td", { children: r4.history_count })
+          ] }, `${r4.vendor}/${r4.conversation_id}`)) })
+        ] })
       ] })
     ] });
   }
@@ -10049,6 +10113,22 @@ ${row.project}` : row.project;
   if (importsPanelMount && dashboardRuntime) {
     R(/* @__PURE__ */ u4(ImportsPanel, { onReload: loadArchiveImports }), importsPanelMount);
     void loadArchiveImports();
+  }
+  async function loadWebConversations() {
+    try {
+      const r4 = await fetch("/api/archive/web-conversations");
+      if (!r4.ok) throw new Error(`HTTP ${r4.status}`);
+      const body = await r4.json();
+      webConversations.value = body.conversations;
+      companionHeartbeat.value = body.heartbeat;
+    } catch (err) {
+      console.error("failed to load web captures:", err);
+    }
+  }
+  var webCapturesPanelMount = document.getElementById("web-captures-panel");
+  if (webCapturesPanelMount && dashboardRuntime) {
+    R(/* @__PURE__ */ u4(WebCapturesPanel, { onReload: loadWebConversations }), webCapturesPanelMount);
+    void loadWebConversations();
   }
   if (dashboardRuntime) {
     dashboardRuntime.start();

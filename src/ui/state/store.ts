@@ -19,6 +19,24 @@ export interface SnapshotMeta {
 export const backupSnapshots = signal<SnapshotMeta[]>([]);
 export const backupLoadState = signal<'idle' | 'loading' | 'error'>('idle');
 
+// ── Web captures (companion extension) ───────────────────────────────
+export interface WebConversationSummary {
+  vendor: string;
+  conversation_id: string;
+  captured_at: string;
+  history_count: number;
+}
+
+export interface CompanionHeartbeat {
+  last_seen_at: string;
+  extension_version: string | null;
+  user_agent: string | null;
+  vendors_seen: string[];
+}
+
+export const webConversations = signal<WebConversationSummary[]>([]);
+export const companionHeartbeat = signal<CompanionHeartbeat | null>(null);
+
 // ── Imports (chat-export ingests) ─────────────────────────────────────
 export interface ImportMeta {
   import_id: string;

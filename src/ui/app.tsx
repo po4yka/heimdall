@@ -1,6 +1,7 @@
 import { render } from 'preact';
 import { BackupPanel } from './components/BackupPanel';
 import { ImportsPanel } from './components/ImportsPanel';
+import { WebCapturesPanel } from './components/WebCapturesPanel';
 import { DashboardTabs } from './components/DashboardTabs';
 import { FilterBar } from './components/FilterBar';
 import { Footer } from './components/Footer';
@@ -11,7 +12,7 @@ import { MonitorHeader } from './monitor/MonitorHeader';
 import { createLiveMonitorRuntime } from './monitor/runtime';
 import { hydrateLiveMonitorPreferences } from './monitor/store';
 import { applyTheme, getTheme } from './lib/theme';
-import { backupSnapshots, backupLoadState, archiveImports, rawData, syncDashboardUrl } from './state/store';
+import { backupSnapshots, backupLoadState, archiveImports, webConversations, companionHeartbeat, rawData, syncDashboardUrl, type WebConversationSummary, type CompanionHeartbeat } from './state/store';
 
 async function loadBackupSnapshots(): Promise<void> {
   backupLoadState.value = 'loading';
@@ -112,6 +113,24 @@ const importsPanelMount = document.getElementById('imports-panel');
 if (importsPanelMount && dashboardRuntime) {
   render(<ImportsPanel onReload={loadArchiveImports} />, importsPanelMount);
   void loadArchiveImports();
+}
+
+async function loadWebConversations(): Promise<void> {
+  try {
+    const r = await fetch('/api/archive/web-conversations');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const body = await r.json() as { conversations: WebConversationSummary[]; heartbeat: CompanionHeartbeat | null };
+    webConversations.value = body.conversations;
+    companionHeartbeat.value = body.heartbeat;
+  } catch (err) {
+    console.error('failed to load web captures:', err);
+  }
+}
+
+const webCapturesPanelMount = document.getElementById('web-captures-panel');
+if (webCapturesPanelMount && dashboardRuntime) {
+  render(<WebCapturesPanel onReload={loadWebConversations} />, webCapturesPanelMount);
+  void loadWebConversations();
 }
 
 if (dashboardRuntime) {
