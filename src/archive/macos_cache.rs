@@ -10,11 +10,15 @@
 //!    machines that never upgraded or where the upgrade was rolled back.
 //!
 //! 2. **Post-July 2024 (`conversations-v2-{uuid}/`)** — encrypted `.data`
-//!    files (per-file random nonce in the first 16 bytes; the body looks
-//!    like an AES-GCM ciphertext). The wrapping key lives in macOS
-//!    Keychain at service `com.openai.chat.conversations_v2_cache` with
-//!    an ACL bound to ChatGPT.app's code signature, requiring an
-//!    interactive grant prompt that ChatGPT itself drives.
+//!    files. Each file is an OSCrypt v10 blob: 3-byte ASCII prefix `v10`,
+//!    followed by AES-128-CBC ciphertext (constant 16-space IV, PKCS#7
+//!    padding). The AES key is derived via PBKDF2-HMAC-SHA1 (salt
+//!    `"saltysalt"`, 1003 iterations, 16-byte output) from a passphrase
+//!    stored in macOS Keychain at service
+//!    `com.openai.chat.conversations_v2_cache` with an ACL bound to
+//!    ChatGPT.app's code signature. A standard user-mediated grant prompt
+//!    (`SecItemCopyMatching`) is the access boundary; Heimdall does not
+//!    bypass it.
 //!
 //! ## What this module does
 //!
@@ -28,24 +32,33 @@
 //!   existing `archive::web::write_web_conversation` storage primitive,
 //!   under vendor `chatgpt.com`. Idempotent + history-rotated for free.
 //!
-//! - **Encrypted reporting**: counts files / bytes for v2 caches and
-//!   surfaces them as `unreadable_reason: "v2 encrypted; format
-//!   reverse-engineering required, not implemented"` so the user knows
-//!   the data is on disk but not yet importable.
+//! - **v2 decryption** (`ingest_into_archive` with `IngestOptions { decrypt_v2: true }`):
+//!   fetches the AES passphrase from macOS Keychain (one-time user-grant
+//!   prompt), derives the key via PBKDF2-HMAC-SHA1, decrypts each `.data`
+//!   file, and JSON-sniffs the plaintext via the existing OpenAI export
+//!   parser. Successful conversations are written to the web tree under
+//!   vendor `chatgpt.com` with schema fingerprint
+//!   `"chatgpt.com/macos-v2-decrypted"`. Blobs that decrypt but fail the
+//!   JSON sniff are saved raw to `<archive>/web/chatgpt.com/.failed-decrypts/`
+//!   for inspection; nothing is silently discarded.
 //!
 //! ## What this module does NOT do
 //!
-//! - Decrypt v2 `.data` files. The cipher, key derivation, and per-file
-//!   layout are not publicly documented as of 2026-04. Implementing this
-//!   would require reverse-engineering the binary format from the
-//!   ChatGPT app and is out of scope; the browser-extension companion
-//!   (Phase 3b) and the ZIP-import path (Phase 2) cover ChatGPT cleanly
-//!   without it.
+//! - Bypass the macOS Keychain ACL. The wrapping key is ACL-bound to
+//!   ChatGPT.app's code signature; Heimdall requests it through the standard
+//!   `SecItemCopyMatching` path. The user sees the system grant dialog on
+//!   the first call and can allow or deny.
 //!
-//! - Bypass the macOS Keychain ACL. The wrapping key is held under an
-//!   access-controlled item that requires the user (or ChatGPT.app) to
-//!   approve each retrieval. Heimdall does not attempt to silently
-//!   coerce that access.
+//! - Ingest garbage. Every decrypted blob is validated via `parse_conversations`
+//!   before being written. If the JSON sniff fails (e.g., because a future
+//!   ChatGPT release changes the inner format), the raw bytes land in
+//!   `.failed-decrypts/` and a warning is appended to the ingest report.
+//!
+//! - Make assumptions beyond the cipher. The cipher (Chromium OSCrypt /
+//!   Electron `safeStorage`, AES-128-CBC) is well-confirmed. The inner
+//!   schema is assumed to match the publicly-observed OpenAI mapping/messages
+//!   tree. If ChatGPT.app changes either, decryption or parsing fails cleanly
+//!   and is surfaced in the report.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -113,7 +126,8 @@ pub fn scan_caches(cache_root: &Path) -> Result<Vec<CacheReport>> {
         let unreadable_reason = match kind {
             CacheKind::Plaintext => None,
             CacheKind::Encrypted => Some(
-                "v2 encrypted; format reverse-engineering required, not implemented".to_string(),
+                "v2 encrypted; run `heimdall macos-cache ingest --decrypt-v2` to decrypt"
+                    .to_string(),
             ),
         };
         out.push(CacheReport {
@@ -171,6 +185,15 @@ pub struct IngestReport {
     pub encrypted_dirs: usize,
     /// File count across encrypted caches.
     pub encrypted_files: usize,
+    /// Number of v2 *.data files we tried to decrypt.
+    pub v2_attempted: usize,
+    /// Number that decrypted AND parsed as JSON conversations.
+    pub v2_decrypted: usize,
+    /// Number that decrypted but didn't parse as conversations
+    /// (raw bytes saved to .failed-decrypts/).
+    pub v2_failed_parse: usize,
+    /// Number where decryption itself failed (cipher mismatch?).
+    pub v2_failed_decrypt: usize,
 }
 
 /// Walk every plaintext cache under `cache_root` and ingest each
@@ -278,6 +301,280 @@ fn ingest_one_plaintext_dir(
     Ok(())
 }
 
+// ── v2 reader ────────────────────────────────────────────────────────────────
+
+/// Result of decrypting one *.data file.
+#[derive(Debug)]
+pub struct DecryptedFile {
+    pub source_path: PathBuf,
+    pub plaintext: Vec<u8>,
+}
+
+/// Walk a `conversations-v2-*` directory, decrypt each `.data` file with
+/// the supplied AES key, and return decrypted blobs. Per-file failures
+/// are returned as `Err` items in the result vec; one bad file does not
+/// abort the directory.
+pub fn decrypt_v2_dir(dir: &Path, key: &[u8; 16]) -> Vec<Result<DecryptedFile>> {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            return vec![Err(
+                anyhow::anyhow!(e).context(format!("reading dir {}", dir.display()))
+            )];
+        }
+    };
+    let mut out = Vec::new();
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                out.push(Err(anyhow::anyhow!(e).context("reading dir entry")));
+                continue;
+            }
+        };
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("data") {
+            continue;
+        }
+        let bytes = match fs::read(&path) {
+            Ok(b) => b,
+            Err(e) => {
+                out.push(Err(
+                    anyhow::anyhow!(e).context(format!("reading {}", path.display()))
+                ));
+                continue;
+            }
+        };
+        match oscrypt::decrypt_v10_blob(&bytes, key) {
+            Ok(plaintext) => out.push(Ok(DecryptedFile {
+                source_path: path,
+                plaintext,
+            })),
+            Err(e) => out.push(Err(e.context(format!("decrypting {}", path.display())))),
+        }
+    }
+    out
+}
+
+// ── ingest options + top-level umbrella ──────────────────────────────────────
+
+/// Options for `ingest_into_archive`.
+#[derive(Debug, Clone, Default)]
+pub struct IngestOptions {
+    /// If true, attempt to decrypt v2 directories (will trigger the
+    /// macOS Keychain prompt on first call).
+    pub decrypt_v2: bool,
+}
+
+/// Top-level ingest umbrella. Always runs the plaintext path; runs the
+/// v2 path only when `opts.decrypt_v2` is true (macOS only).
+pub fn ingest_into_archive(
+    cache_root: &Path,
+    archive_root: &Path,
+    opts: IngestOptions,
+) -> Result<IngestReport> {
+    let mut report = ingest_plaintext_into_archive(cache_root, archive_root)?;
+    #[cfg(target_os = "macos")]
+    if opts.decrypt_v2 {
+        ingest_v2_into_archive(cache_root, archive_root, &mut report)?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = opts; // suppress unused warning on non-macOS
+    Ok(report)
+}
+
+/// Real-world v2 ingest: fetches the key from the macOS Keychain and ingests.
+#[cfg(target_os = "macos")]
+pub fn ingest_v2_into_archive(
+    cache_root: &Path,
+    archive_root: &Path,
+    report: &mut IngestReport,
+) -> Result<()> {
+    let provider = keychain::KeychainKeyProvider;
+    ingest_v2_into_archive_with_provider(cache_root, archive_root, report, &provider)
+}
+
+/// Provider-injectable variant — used by integration tests on Linux.
+pub fn ingest_v2_into_archive_with_provider<P: keychain::KeyProvider>(
+    cache_root: &Path,
+    archive_root: &Path,
+    report: &mut IngestReport,
+    provider: &P,
+) -> Result<()> {
+    // Step 1: fetch passphrase.
+    let passphrase = match provider.fetch_v2_passphrase() {
+        Ok(p) => p,
+        Err(keychain::KeychainError::AccessDenied) => {
+            warn!(
+                target: "archive::macos_cache",
+                "Keychain access denied — user clicked Deny. Re-run and click Allow."
+            );
+            report
+                .errors
+                .push("v2 key: Keychain access denied — click Allow when prompted".into());
+            return Ok(());
+        }
+        Err(keychain::KeychainError::ItemNotFound { .. }) => {
+            info!(
+                target: "archive::macos_cache",
+                "v2 Keychain item not found — has ChatGPT.app been signed in?"
+            );
+            report
+                .errors
+                .push("v2 key not found — has ChatGPT.app been signed in?".into());
+            return Ok(());
+        }
+        Err(keychain::KeychainError::WouldPrompt) => {
+            warn!(
+                target: "archive::macos_cache",
+                "v2 Keychain item would require a prompt in this context"
+            );
+            report.errors.push("v2 key: Keychain prompt suppressed".into());
+            return Ok(());
+        }
+        Err(keychain::KeychainError::Other(e)) => return Err(e),
+    };
+
+    // Step 2: derive AES key.
+    let key = oscrypt::derive_key(&passphrase);
+
+    // Step 3: walk encrypted caches.
+    let caches = scan_caches(cache_root)?;
+    let failed_decrypts_dir = archive_root
+        .join("web")
+        .join("chatgpt.com")
+        .join(".failed-decrypts");
+
+    for cache in caches.iter().filter(|c| c.kind == CacheKind::Encrypted) {
+        let results = decrypt_v2_dir(&cache.path, &key);
+        for result in results {
+            report.v2_attempted += 1;
+            match result {
+                Err(e) => {
+                    report.v2_failed_decrypt += 1;
+                    report
+                        .errors
+                        .push(format!("decrypt error in {}: {e}", cache.path.display()));
+                }
+                Ok(decrypted) => {
+                    // JSON-sniff via the existing OpenAI export parser.
+                    let parsed: Vec<openai::Conversation> =
+                        match openai::parse_conversations(&decrypted.plaintext) {
+                            Ok(arr) if !arr.is_empty() => arr,
+                            Ok(_) => {
+                                // Empty array — treat as no conversations.
+                                match serde_json::from_slice::<openai::Conversation>(
+                                    &decrypted.plaintext,
+                                ) {
+                                    Ok(single) => vec![single],
+                                    Err(_) => {
+                                        // Not a conversation array or object — dump it.
+                                        dump_failed_decrypt(
+                                            &failed_decrypts_dir,
+                                            &decrypted,
+                                            report,
+                                        )?;
+                                        continue;
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                // Try single-object shape before giving up.
+                                match serde_json::from_slice::<openai::Conversation>(
+                                    &decrypted.plaintext,
+                                ) {
+                                    Ok(single) => vec![single],
+                                    Err(_) => {
+                                        dump_failed_decrypt(
+                                            &failed_decrypts_dir,
+                                            &decrypted,
+                                            report,
+                                        )?;
+                                        continue;
+                                    }
+                                }
+                            }
+                        };
+
+                    report.v2_decrypted += 1;
+                    for conv in parsed {
+                        report.parsed += 1;
+                        let key_id =
+                            openai::conversation_key(&conv).unwrap_or_else(|| {
+                                decrypted
+                                    .source_path
+                                    .file_stem()
+                                    .and_then(|s| s.to_str())
+                                    .unwrap_or("unknown")
+                                    .to_string()
+                            });
+                        let payload = match serde_json::to_value(&conv) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                report.errors.push(format!("{key_id}: serialize: {e}"));
+                                continue;
+                            }
+                        };
+                        let web = WebConversation {
+                            vendor: "chatgpt.com".into(),
+                            conversation_id: key_id.clone(),
+                            captured_at: Utc::now()
+                                .format("%Y-%m-%dT%H%M%S%.6fZ")
+                                .to_string(),
+                            schema_fingerprint: "chatgpt.com/macos-v2-decrypted".into(),
+                            payload,
+                        };
+                        match write_web_conversation(archive_root, &web) {
+                            Ok(WriteOutcome::Saved { .. }) => report.written += 1,
+                            Ok(WriteOutcome::Unchanged) => report.unchanged += 1,
+                            Err(e) => report.errors.push(format!("{key_id}: write: {e}")),
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Step 4: probe keychain metadata (informational — best effort).
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(Some(meta)) = keychain::probe_v2_key_metadata() {
+            debug!(
+                target: "archive::macos_cache",
+                "v2 keychain item: service={} account={:?} grant_required={}",
+                meta.service, meta.account, meta.grant_required
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Write a failed-decrypt blob to the sidecar directory.
+fn dump_failed_decrypt(
+    sidecar_dir: &Path,
+    decrypted: &DecryptedFile,
+    report: &mut IngestReport,
+) -> Result<()> {
+    fs::create_dir_all(sidecar_dir)
+        .with_context(|| format!("creating {}", sidecar_dir.display()))?;
+    let stem = decrypted
+        .source_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown");
+    let out_path = sidecar_dir.join(format!("{stem}.bin"));
+    fs::write(&out_path, &decrypted.plaintext)
+        .with_context(|| format!("writing failed-decrypt to {}", out_path.display()))?;
+    report.v2_failed_parse += 1;
+    report.errors.push(format!(
+        "{}: decrypted but not parseable as JSON conversations; raw bytes saved to {}",
+        decrypted.source_path.display(),
+        out_path.display()
+    ));
+    Ok(())
+}
+
 /// Keychain access layer for the ChatGPT v2 cache decryptor.
 ///
 /// Provides the `KeyProvider` trait (injectable in tests / Linux CI), a real
@@ -285,8 +582,7 @@ fn ingest_one_plaintext_dir(
 /// `probe_v2_key_metadata` that tells callers whether the item exists before
 /// they attempt a full (possibly dialog-triggering) fetch.
 #[cfg(target_os = "macos")]
-#[allow(dead_code)] // wired in Phase 3
-pub(super) mod keychain {
+pub mod keychain {
     use anyhow::anyhow;
     use security_framework::item::{ItemClass, ItemSearchOptions, Limit};
     use security_framework::passwords::get_generic_password;
@@ -501,11 +797,8 @@ pub(super) mod keychain {
 /// passphrase stored in macOS Keychain; the ciphertext has a 3-byte `v10`
 /// prefix followed by 16-byte constant-IV AES-128-CBC data.
 ///
-/// All functions here are `pub(super)` so Phase 2/3 sibling submods can
-/// reach them without leaking the crypto surface into the public API.
-/// The module itself is not yet wired into the rest of `macos_cache`; the
-/// dead-code allow is intentional until Phase 2 integration lands.
-#[allow(dead_code)]
+/// All functions here are `pub(super)` so sibling submods can reach them
+/// without leaking the crypto surface into the public API.
 mod oscrypt {
     use aes::Aes128;
     use anyhow::{Context, Result, bail};
@@ -655,6 +948,14 @@ mod tests {
                 .unwrap_or("")
                 .contains("v2 encrypted"),
             "expected v2 encrypted reason, got {:?}",
+            enc.unreadable_reason
+        );
+        assert!(
+            enc.unreadable_reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("--decrypt-v2"),
+            "expected --decrypt-v2 hint in reason, got {:?}",
             enc.unreadable_reason
         );
     }
@@ -854,6 +1155,164 @@ mod tests {
         assert!(
             format!("{e}").contains("Allow"),
             "AccessDenied message should mention Allow, got: {e}"
+        );
+    }
+
+    // ── v2 reader + ingest tests ─────────────────────────────────────────────
+
+    /// Stub KeyProvider that always returns a fixed passphrase.
+    struct StubKeyProvider(Vec<u8>);
+    impl keychain::KeyProvider for StubKeyProvider {
+        fn fetch_v2_passphrase(&self) -> Result<Vec<u8>, keychain::KeychainError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    #[test]
+    fn decrypt_v2_dir_round_trips_synthetic_payloads() {
+        let passphrase = b"test-passphrase";
+        let key = oscrypt::derive_key(passphrase);
+
+        let tmp = TempDir::new().unwrap();
+        let v2_dir = tmp.path().join("conversations-v2-test");
+        fs::create_dir_all(&v2_dir).unwrap();
+
+        // Write 2 encrypted .data files.
+        let payload1 = b"hello from file one";
+        let payload2 = b"hello from file two with more content here!";
+        fs::write(
+            v2_dir.join("file1.data"),
+            oscrypt::encrypt_v10_blob(payload1, &key),
+        )
+        .unwrap();
+        fs::write(
+            v2_dir.join("file2.data"),
+            oscrypt::encrypt_v10_blob(payload2, &key),
+        )
+        .unwrap();
+        // Non-.data file — should be ignored.
+        fs::write(v2_dir.join("readme.txt"), b"ignore me").unwrap();
+
+        let results = decrypt_v2_dir(&v2_dir, &key);
+        assert_eq!(results.len(), 2, "expected 2 .data files decrypted");
+
+        let mut plaintexts: Vec<Vec<u8>> = results
+            .into_iter()
+            .map(|r| r.expect("decryption should succeed").plaintext)
+            .collect();
+        plaintexts.sort();
+
+        let mut expected = vec![payload1.to_vec(), payload2.to_vec()];
+        expected.sort();
+        assert_eq!(plaintexts, expected);
+    }
+
+    #[test]
+    fn ingest_v2_into_archive_writes_chatgpt_conversations() {
+        let passphrase = b"ingest-test-key";
+        let key = oscrypt::derive_key(passphrase);
+
+        let tmp = TempDir::new().unwrap();
+        let cache = tmp.path().join("cache");
+        let archive = tmp.path().join("archive");
+        let v2_dir = cache.join("conversations-v2-abc");
+        fs::create_dir_all(&v2_dir).unwrap();
+
+        // Build two valid OpenAI conversation JSONs and encrypt them.
+        let conv1 = serde_json::json!([{
+            "id": "conv-v2-alpha",
+            "title": "Alpha",
+            "create_time": 1.0,
+            "mapping": {}
+        }]);
+        let conv2 = serde_json::json!([{
+            "id": "conv-v2-beta",
+            "title": "Beta",
+            "create_time": 2.0,
+            "mapping": {}
+        }]);
+        fs::write(
+            v2_dir.join("alpha.data"),
+            oscrypt::encrypt_v10_blob(conv1.to_string().as_bytes(), &key),
+        )
+        .unwrap();
+        fs::write(
+            v2_dir.join("beta.data"),
+            oscrypt::encrypt_v10_blob(conv2.to_string().as_bytes(), &key),
+        )
+        .unwrap();
+
+        let provider = StubKeyProvider(passphrase.to_vec());
+        let mut report = IngestReport::default();
+        ingest_v2_into_archive_with_provider(&cache, &archive, &mut report, &provider).unwrap();
+
+        assert_eq!(report.v2_attempted, 2, "should attempt both .data files");
+        assert_eq!(report.v2_decrypted, 2, "both should decrypt+parse");
+        assert_eq!(report.v2_failed_decrypt, 0);
+        assert_eq!(report.v2_failed_parse, 0);
+        assert_eq!(report.written, 2, "two conversations written");
+
+        let web_dir = archive.join("web").join("chatgpt.com");
+        assert!(
+            web_dir.join("conv-v2-alpha.json").is_file(),
+            "conv-v2-alpha.json missing"
+        );
+        assert!(
+            web_dir.join("conv-v2-beta.json").is_file(),
+            "conv-v2-beta.json missing"
+        );
+    }
+
+    #[test]
+    fn ingest_v2_into_archive_dumps_unparseable_plaintexts() {
+        let passphrase = b"dump-test-key-xx";
+        let key = oscrypt::derive_key(passphrase);
+
+        let tmp = TempDir::new().unwrap();
+        let cache = tmp.path().join("cache");
+        let archive = tmp.path().join("archive");
+        let v2_dir = cache.join("conversations-v2-xyz");
+        fs::create_dir_all(&v2_dir).unwrap();
+
+        // File 1: valid conversation.
+        let good = serde_json::json!([{
+            "id": "conv-good",
+            "title": "Good",
+            "create_time": 1.0,
+            "mapping": {}
+        }]);
+        fs::write(
+            v2_dir.join("good.data"),
+            oscrypt::encrypt_v10_blob(good.to_string().as_bytes(), &key),
+        )
+        .unwrap();
+
+        // File 2: random bytes that decrypt cleanly but are not valid JSON conversations.
+        let garbage = b"this is not json at all %%%%";
+        fs::write(
+            v2_dir.join("garbage.data"),
+            oscrypt::encrypt_v10_blob(garbage, &key),
+        )
+        .unwrap();
+
+        let provider = StubKeyProvider(passphrase.to_vec());
+        let mut report = IngestReport::default();
+        ingest_v2_into_archive_with_provider(&cache, &archive, &mut report, &provider).unwrap();
+
+        assert_eq!(report.v2_attempted, 2);
+        assert_eq!(report.v2_decrypted, 1, "only the good file should parse");
+        assert_eq!(report.v2_failed_parse, 1, "garbage should land in failed-decrypts");
+        assert_eq!(report.v2_failed_decrypt, 0);
+        assert_eq!(report.written, 1);
+
+        let web_dir = archive.join("web").join("chatgpt.com");
+        assert!(web_dir.join("conv-good.json").is_file(), "good conversation missing");
+
+        let failed_dir = web_dir.join(".failed-decrypts");
+        assert!(failed_dir.is_dir(), ".failed-decrypts dir missing");
+        assert!(
+            failed_dir.join("garbage.bin").is_file(),
+            "garbage.bin missing in .failed-decrypts"
         );
     }
 }

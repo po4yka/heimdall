@@ -462,7 +462,7 @@ enum MacosCacheAction {
         #[arg(long)]
         json: bool,
     },
-    /// Ingest plaintext (pre-July-2024) caches into <archive_root>/web/chatgpt.com/
+    /// Ingest plaintext (pre-July-2024) and optionally encrypted v2 caches into <archive_root>/web/chatgpt.com/
     Ingest {
         /// Override the cache root
         #[arg(long)]
@@ -470,6 +470,10 @@ enum MacosCacheAction {
         /// Override the archive root (default: ~/.heimdall/archive)
         #[arg(long)]
         archive_root: Option<PathBuf>,
+        /// Decrypt and ingest the post-July-2024 encrypted v2 cache. First
+        /// run triggers a macOS Keychain prompt; click Allow once.
+        #[arg(long)]
+        decrypt_v2: bool,
         /// Emit JSON instead of a human-readable report
         #[arg(long)]
         json: bool,
@@ -1303,6 +1307,9 @@ fn main() -> Result<()> {
                     .or_else(archive::macos_cache::default_cache_root)
                     .ok_or_else(|| anyhow::anyhow!("could not resolve home directory"))?;
                 let reports = archive::macos_cache::scan_caches(&root)?;
+                // Probe keychain metadata once (non-prompting) for the ACL hint.
+                let keychain_meta = archive::macos_cache::keychain::probe_v2_key_metadata()
+                    .unwrap_or(None);
                 if json {
                     println!("{}", serde_json::to_string_pretty(&reports)?);
                 } else if reports.is_empty() {
@@ -1326,12 +1333,23 @@ fn main() -> Result<()> {
                         if let Some(reason) = &r.unreadable_reason {
                             println!("    note: {}", reason);
                         }
+                        if r.kind == archive::macos_cache::CacheKind::Encrypted {
+                            let acl_line = match &keychain_meta {
+                                Some(meta) if !meta.grant_required => {
+                                    "keychain: item present (granted)"
+                                }
+                                Some(_) => "keychain: item present (grant required)",
+                                None => "keychain: item not found — sign in to ChatGPT.app at least once",
+                            };
+                            println!("    {}", acl_line);
+                        }
                     }
                 }
             }
             MacosCacheAction::Ingest {
                 cache_root,
                 archive_root,
+                decrypt_v2,
                 json,
             } => {
                 let cache = cache_root
@@ -1339,8 +1357,9 @@ fn main() -> Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("could not resolve home directory"))?;
                 let archive_root = archive_root.unwrap_or_else(archive::default_root);
                 let _archive = archive::Archive::at(archive_root.clone())?;
+                let opts = archive::macos_cache::IngestOptions { decrypt_v2 };
                 let report =
-                    archive::macos_cache::ingest_plaintext_into_archive(&cache, &archive_root)?;
+                    archive::macos_cache::ingest_into_archive(&cache, &archive_root, opts)?;
                 if json {
                     println!("{}", serde_json::to_string_pretty(&report)?);
                 } else {
@@ -1353,9 +1372,24 @@ fn main() -> Result<()> {
                     );
                     if report.encrypted_dirs > 0 {
                         println!(
-                            "  {} encrypted dir(s) skipped ({} files); v2 format reverse-engineering required",
+                            "  {} encrypted dir(s) detected ({} files)",
                             report.encrypted_dirs, report.encrypted_files
                         );
+                    }
+                    if report.v2_attempted > 0 || decrypt_v2 {
+                        println!(
+                            "  v2: {} attempted, {} decrypted, {} failed-parse, {} failed-decrypt",
+                            report.v2_attempted,
+                            report.v2_decrypted,
+                            report.v2_failed_parse,
+                            report.v2_failed_decrypt,
+                        );
+                        if report.v2_failed_parse + report.v2_failed_decrypt > 0 {
+                            println!(
+                                "  (raw decrypted bytes for failed cases saved to {}/web/chatgpt.com/.failed-decrypts/)",
+                                archive_root.display()
+                            );
+                        }
                     }
                     for e in &report.errors {
                         eprintln!("  {e}");
