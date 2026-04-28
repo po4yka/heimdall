@@ -53,7 +53,9 @@ impl Archive {
     /// (objects already exist in the store and are not re-written).
     pub fn snapshot(&self, providers: &[Arc<dyn Provider>]) -> Result<String> {
         let store = self.objects()?;
-        let snapshot_id = Utc::now().format("%Y-%m-%dT%H%M%SZ").to_string();
+        // Microsecond precision so back-to-back snapshots produce distinct ids
+        // (relevant for tests and the CLI smoke flow).
+        let snapshot_id = Utc::now().format("%Y-%m-%dT%H%M%S%.6fZ").to_string();
         let staging = self.snapshots_dir().join(&snapshot_id).join(".partial");
         fs::create_dir_all(&staging)?;
 
