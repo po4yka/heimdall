@@ -3,8 +3,8 @@ use std::path::Path;
 
 use claude_usage_tracker::archive::imports;
 use tempfile::TempDir;
-use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
+use zip::write::SimpleFileOptions;
 
 fn build_openai_zip(path: &Path) {
     let convs = serde_json::json!([
@@ -15,8 +15,10 @@ fn build_openai_zip(path: &Path) {
     ]);
     let f = std::fs::File::create(path).unwrap();
     let mut w = ZipWriter::new(f);
-    w.start_file("conversations.json", SimpleFileOptions::default()).unwrap();
-    w.write_all(serde_json::to_string(&convs).unwrap().as_bytes()).unwrap();
+    w.start_file("conversations.json", SimpleFileOptions::default())
+        .unwrap();
+    w.write_all(serde_json::to_string(&convs).unwrap().as_bytes())
+        .unwrap();
     w.finish().unwrap();
 }
 
@@ -29,8 +31,10 @@ fn build_anthropic_zip(path: &Path) {
     });
     let f = std::fs::File::create(path).unwrap();
     let mut w = ZipWriter::new(f);
-    w.start_file("conversations_data.json", SimpleFileOptions::default()).unwrap();
-    w.write_all(serde_json::to_string(&payload).unwrap().as_bytes()).unwrap();
+    w.start_file("conversations_data.json", SimpleFileOptions::default())
+        .unwrap();
+    w.write_all(serde_json::to_string(&payload).unwrap().as_bytes())
+        .unwrap();
     w.finish().unwrap();
 }
 
@@ -74,11 +78,17 @@ fn unknown_zip_fails_clearly() {
     let zip_path = tmp.path().join("noise.zip");
     let f = std::fs::File::create(&zip_path).unwrap();
     let mut w = ZipWriter::new(f);
-    w.start_file("README.txt", SimpleFileOptions::default()).unwrap();
+    w.start_file("README.txt", SimpleFileOptions::default())
+        .unwrap();
     w.write_all(b"hi").unwrap();
     w.finish().unwrap();
 
     let result = imports::import_zip(&archive_root, &zip_path);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("not a recognised export"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("not a recognised export")
+    );
 }

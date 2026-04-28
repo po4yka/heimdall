@@ -958,24 +958,32 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Commands::ImportExport { zip, watch, archive_root, json } => {
+        Commands::ImportExport {
+            zip,
+            watch,
+            archive_root,
+            json,
+        } => {
             let root = archive_root.unwrap_or_else(archive::default_root);
             if let Some(watch_dir) = watch {
                 archive::imports::watch::run_watch(&root, &watch_dir)?;
                 return Ok(());
             }
-            let zip = zip.ok_or_else(|| anyhow::anyhow!(
-                "either <zip> argument or --watch <dir> is required"
-            ))?;
+            let zip = zip.ok_or_else(|| {
+                anyhow::anyhow!("either <zip> argument or --watch <dir> is required")
+            })?;
             let report = archive::imports::import_zip(&root, &zip)?;
             if json {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                    "import_id": report.import_id,
-                    "vendor": report.vendor.slug(),
-                    "conversation_count": report.conversation_count,
-                    "parse_warnings": report.parse_warnings,
-                    "root": report.root.display().to_string(),
-                }))?);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "import_id": report.import_id,
+                        "vendor": report.vendor.slug(),
+                        "conversation_count": report.conversation_count,
+                        "parse_warnings": report.parse_warnings,
+                        "root": report.root.display().to_string(),
+                    }))?
+                );
             } else {
                 println!(
                     "imported {} {} conversations into {}",
@@ -984,7 +992,10 @@ fn main() -> Result<()> {
                     report.root.display()
                 );
                 if !report.parse_warnings.is_empty() {
-                    eprintln!("  {} warnings written to parse-errors.json", report.parse_warnings.len());
+                    eprintln!(
+                        "  {} warnings written to parse-errors.json",
+                        report.parse_warnings.len()
+                    );
                 }
             }
         }

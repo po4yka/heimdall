@@ -97,8 +97,8 @@ pub fn read_json_entries_from_zip<R: Read + std::io::Seek>(
         let name = entry.name().to_string();
         let mut buf = Vec::with_capacity(entry.size() as usize);
         entry.read_to_end(&mut buf)?;
-        let value: Value = serde_json::from_slice(&buf)
-            .with_context(|| format!("parsing {} as JSON", name))?;
+        let value: Value =
+            serde_json::from_slice(&buf).with_context(|| format!("parsing {} as JSON", name))?;
         out.push((name, value));
     }
     Ok(out)

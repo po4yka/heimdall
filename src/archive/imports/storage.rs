@@ -35,12 +35,13 @@ pub struct ImportDir {
 impl ImportDir {
     pub fn create(archive_root: &Path, vendor: &str) -> Result<Self> {
         let import_id = Utc::now().format("%Y-%m-%dT%H%M%S%.6fZ").to_string();
-        let root = archive_root
-            .join("exports")
-            .join(vendor)
-            .join(&import_id);
+        let root = archive_root.join("exports").join(vendor).join(&import_id);
         fs::create_dir_all(root.join("conversations"))?;
-        Ok(Self { root, import_id, vendor: vendor.to_string() })
+        Ok(Self {
+            root,
+            import_id,
+            vendor: vendor.to_string(),
+        })
     }
 
     pub fn copy_original(&self, src: &Path) -> Result<()> {
@@ -78,7 +79,13 @@ impl ImportDir {
 /// Replace any path-unsafe character in a vendor-supplied conversation id.
 fn sanitize_conv_id(id: &str) -> String {
     id.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect::<String>()
         .chars()
         .take(80)
@@ -95,7 +102,10 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let dir = ImportDir::create(tmp.path(), "openai").unwrap();
         assert!(dir.root.join("conversations").is_dir());
-        assert!(dir.root.starts_with(tmp.path().join("exports").join("openai")));
+        assert!(
+            dir.root
+                .starts_with(tmp.path().join("exports").join("openai"))
+        );
     }
 
     #[test]

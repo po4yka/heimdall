@@ -36,18 +36,29 @@ pub fn detect_zip(path: &Path) -> Result<Vendor> {
     detect_archive(&mut zip)
 }
 
-pub(crate) fn detect_archive<R: Read + Seek>(
-    zip: &mut zip::ZipArchive<R>,
-) -> Result<Vendor> {
+pub(crate) fn detect_archive<R: Read + Seek>(zip: &mut zip::ZipArchive<R>) -> Result<Vendor> {
     let mut names: Vec<String> = (0..zip.len())
         .filter_map(|i| zip.by_index(i).ok().map(|e| e.name().to_string()))
         .collect();
     names.sort();
-    if names.iter().any(|n| n == "conversations.json" || n.ends_with("/conversations.json")) {
+    if names
+        .iter()
+        .any(|n| n == "conversations.json" || n.ends_with("/conversations.json"))
+    {
         return Ok(Vendor::OpenAI);
     }
-    let openai_known = ["conversations.json", "chat.html", "message_feedback.json", "model_comparisons.json", "shared_conversations.json", "user.json"];
-    if names.iter().any(|n| n.ends_with(".json") && !openai_known.iter().any(|k| n.ends_with(k))) {
+    let openai_known = [
+        "conversations.json",
+        "chat.html",
+        "message_feedback.json",
+        "model_comparisons.json",
+        "shared_conversations.json",
+        "user.json",
+    ];
+    if names
+        .iter()
+        .any(|n| n.ends_with(".json") && !openai_known.iter().any(|k| n.ends_with(k)))
+    {
         return Ok(Vendor::Anthropic);
     }
     Ok(Vendor::Unknown)
@@ -57,14 +68,16 @@ pub(crate) fn detect_archive<R: Read + Seek>(
 mod tests {
     use super::*;
     use std::io::{Cursor, Write};
-    use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
+    use zip::write::SimpleFileOptions;
 
     fn build_zip(entries: &[(&str, &[u8])]) -> Cursor<Vec<u8>> {
         let buf = Vec::new();
         let mut writer = ZipWriter::new(Cursor::new(buf));
         for (name, content) in entries {
-            writer.start_file(*name, SimpleFileOptions::default()).unwrap();
+            writer
+                .start_file(*name, SimpleFileOptions::default())
+                .unwrap();
             writer.write_all(content).unwrap();
         }
         writer.finish().unwrap()

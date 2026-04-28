@@ -35,8 +35,7 @@ pub fn import_zip(archive_root: &Path, zip_path: &Path) -> Result<ImportReport> 
     // Ensure archive root exists; reuses Archive::at semantics.
     let _archive = Archive::at(archive_root.to_path_buf())?;
 
-    let f = File::open(zip_path)
-        .with_context(|| format!("opening {}", zip_path.display()))?;
+    let f = File::open(zip_path).with_context(|| format!("opening {}", zip_path.display()))?;
     let mut zip = zip::ZipArchive::new(BufReader::new(f))
         .with_context(|| format!("reading zip {}", zip_path.display()))?;
 

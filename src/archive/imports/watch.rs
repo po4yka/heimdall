@@ -23,8 +23,8 @@ pub fn run_watch(archive_root: &Path, watch_dir: &Path) -> Result<()> {
     }
 
     let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
-    let mut watcher: RecommendedWatcher = notify::recommended_watcher(tx)
-        .context("starting fs watcher")?;
+    let mut watcher: RecommendedWatcher =
+        notify::recommended_watcher(tx).context("starting fs watcher")?;
     watcher
         .watch(watch_dir, RecursiveMode::NonRecursive)
         .with_context(|| format!("watching {}", watch_dir.display()))?;

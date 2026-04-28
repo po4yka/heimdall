@@ -486,8 +486,8 @@ mod tests {
         use std::fs;
         use std::io::Write;
         use tempfile::TempDir;
-        use zip::write::SimpleFileOptions;
         use zip::ZipWriter;
+        use zip::write::SimpleFileOptions;
         let tmp = TempDir::new().unwrap();
         let archive_root = tmp.path().join("archive");
         let zip_path = tmp.path().join("export.zip");
@@ -496,8 +496,10 @@ mod tests {
         ]);
         let f = fs::File::create(&zip_path).unwrap();
         let mut w = ZipWriter::new(f);
-        w.start_file("conversations.json", SimpleFileOptions::default()).unwrap();
-        w.write_all(serde_json::to_string(&convs).unwrap().as_bytes()).unwrap();
+        w.start_file("conversations.json", SimpleFileOptions::default())
+            .unwrap();
+        w.write_all(serde_json::to_string(&convs).unwrap().as_bytes())
+            .unwrap();
         w.finish().unwrap();
 
         let test_exe = std::env::current_exe().unwrap();
@@ -505,21 +507,30 @@ mod tests {
         let exe = target_dir.join("claude-usage-tracker");
         if !exe.exists() {
             let s = std::process::Command::new(env!("CARGO"))
-                .args(["build","--bin","claude-usage-tracker"]).status().unwrap();
+                .args(["build", "--bin", "claude-usage-tracker"])
+                .status()
+                .unwrap();
             assert!(s.success());
         }
         let out = std::process::Command::new(&exe)
             .args([
                 "import-export",
                 zip_path.to_str().unwrap(),
-                "--archive-root", archive_root.to_str().unwrap(),
+                "--archive-root",
+                archive_root.to_str().unwrap(),
                 "--json",
             ])
             .output()
             .unwrap();
         assert!(out.status.success(), "import-export failed: {:?}", out);
         let stdout = String::from_utf8_lossy(&out.stdout);
-        assert!(stdout.contains("\"vendor\": \"openai\""), "stdout: {stdout}");
-        assert!(stdout.contains("\"conversation_count\": 1"), "stdout: {stdout}");
+        assert!(
+            stdout.contains("\"vendor\": \"openai\""),
+            "stdout: {stdout}"
+        );
+        assert!(
+            stdout.contains("\"conversation_count\": 1"),
+            "stdout: {stdout}"
+        );
     }
 }
