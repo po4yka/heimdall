@@ -11,5 +11,7 @@ scorecard.png
 .claude/scheduled_tasks.lock
 macos/Heimdall/.derived/
 macos/Heimdall/build/
+macos/Heimdall/Heimdall.xcodeproj/project.xcworkspace/xcuserdata/
+macos/Heimdall/Heimdall.xcodeproj/xcuserdata/
 extensions/heimdall-companion/node_modules/
 extensions/heimdall-companion/dist/

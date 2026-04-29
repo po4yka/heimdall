@@ -130,15 +130,9 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CKSharingSupported: true
-    entitlements:
-      path: App/Heimdall.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.dev.po4yka.heimdall
-        com.apple.developer.icloud-container-identifiers:
-          - iCloud.dev.po4yka.heimdall
-        com.apple.developer.icloud-services:
-          - CloudKit
+    # NOTE: iCloud + app-groups entitlements removed for Personal Team / "Sign
+    # to Run Locally" signing. Restore once an Apple Developer Program team
+    # is in place (paid tier required for these capabilities).
     sources:
       - path: App/Sources
       - path: CloudSync/Sources
@@ -178,11 +172,8 @@ targets:
       properties:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-    entitlements:
-      path: Widget/HeimdallWidget.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.dev.po4yka.heimdall
+    # NOTE: app-groups entitlement removed for Personal Team signing. Restore
+    # once on an Apple Developer Program team.
     sources:
       - path: Widget/Sources
     dependencies:
@@ -245,15 +236,8 @@ targets:
         CKSharingSupported: true
         UIBackgroundModes:
           - remote-notification
-    entitlements:
-      path: iOS/App/HeimdallMobile.entitlements
-      properties:
-        com.apple.developer.icloud-container-identifiers:
-          - iCloud.dev.po4yka.heimdall
-        com.apple.developer.icloud-services:
-          - CloudKit
-        com.apple.security.application-groups:
-          - group.dev.po4yka.heimdall
+    # NOTE: iCloud + app-groups entitlements removed for Personal Team signing.
+    # Restore once on an Apple Developer Program team.
     sources:
       - path: iOS/App/Sources
       - path: CloudSync/Sources
