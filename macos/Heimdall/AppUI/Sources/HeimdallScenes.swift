@@ -71,9 +71,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 public struct HeimdallScenes: Scene {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model: AppModel
+    @State private var mergedMenuBarInserted: Bool
+    @State private var claudeMenuBarInserted: Bool
+    @State private var codexMenuBarInserted: Bool
 
     public init(model: AppModel) {
         self._model = State(initialValue: model)
+        self._mergedMenuBarInserted = State(initialValue: model.config.mergeIcons)
+        self._claudeMenuBarInserted = State(
+            initialValue: !model.config.mergeIcons && model.config.claude.enabled
+        )
+        self._codexMenuBarInserted = State(
+            initialValue: !model.config.mergeIcons && model.config.codex.enabled
+        )
     }
 
     public var body: some Scene {
@@ -89,12 +99,22 @@ public struct HeimdallScenes: Scene {
                 .background(MainWindowIdentityTagger(sceneID: HeimdallSceneID.mainWindow))
                 .tint(Color.accentInteractive)
                 .onAppear { self.appDelegate.attach(model: self.model) }
+                .onAppear { self.syncMenuBarInsertionState() }
+                .onChange(of: self.model.sessionStore.config.mergeIcons) { _, _ in
+                    self.syncMenuBarInsertionState()
+                }
+                .onChange(of: self.model.sessionStore.config.claude.enabled) { _, _ in
+                    self.syncMenuBarInsertionState()
+                }
+                .onChange(of: self.model.sessionStore.config.codex.enabled) { _, _ in
+                    self.syncMenuBarInsertionState()
+                }
                 .onOpenURL { url in
                     Task { await self.model.handleIncomingCloudShare(url: url) }
                 }
         }
 
-        MenuBarExtra(isInserted: self.mergedMenuBarBinding) {
+        MenuBarExtra(isInserted: self.$mergedMenuBarInserted) {
             RootMenuView(
                 shell: self.model.shell,
                 overview: self.model.overview,
@@ -114,7 +134,7 @@ public struct HeimdallScenes: Scene {
         }
         .menuBarExtraStyle(.window)
 
-        MenuBarExtra(isInserted: self.claudeMenuBarBinding) {
+        MenuBarExtra(isInserted: self.$claudeMenuBarInserted) {
             ProviderMenuView(
                 model: self.model.providerModel(for: .claude),
                 helperPort: self.model.config.helperPort,
@@ -132,7 +152,7 @@ public struct HeimdallScenes: Scene {
         }
         .menuBarExtraStyle(.window)
 
-        MenuBarExtra(isInserted: self.codexMenuBarBinding) {
+        MenuBarExtra(isInserted: self.$codexMenuBarInserted) {
             ProviderMenuView(
                 model: self.model.providerModel(for: .codex),
                 helperPort: self.model.config.helperPort,
@@ -158,29 +178,19 @@ public struct HeimdallScenes: Scene {
                 .frame(minWidth: 640, idealWidth: 640, minHeight: 520, idealHeight: 600)
                 .tint(Color.accentInteractive)
                 .onAppear { self.appDelegate.attach(model: self.model) }
+                .onAppear { self.syncMenuBarInsertionState() }
+                .onChange(of: self.model.sessionStore.config.mergeIcons) { _, _ in
+                    self.syncMenuBarInsertionState()
+                }
+                .onChange(of: self.model.sessionStore.config.claude.enabled) { _, _ in
+                    self.syncMenuBarInsertionState()
+                }
+                .onChange(of: self.model.sessionStore.config.codex.enabled) { _, _ in
+                    self.syncMenuBarInsertionState()
+                }
                 .onOpenURL { url in
                     Task { await self.model.handleIncomingCloudShare(url: url) }
                 }
-        }
-    }
-
-    private var mergedMenuBarBinding: Binding<Bool> {
-        Self.readOnlyBinding {
-            self.model.sessionStore.config.mergeIcons
-        }
-    }
-
-    private var claudeMenuBarBinding: Binding<Bool> {
-        Self.readOnlyBinding {
-            let config = self.model.sessionStore.config
-            return !config.mergeIcons && config.claude.enabled
-        }
-    }
-
-    private var codexMenuBarBinding: Binding<Bool> {
-        Self.readOnlyBinding {
-            let config = self.model.sessionStore.config
-            return !config.mergeIcons && config.codex.enabled
         }
     }
 
@@ -190,13 +200,11 @@ public struct HeimdallScenes: Scene {
         }
     }
 
-    private static func readOnlyBinding(
-        _ get: @escaping @MainActor () -> Bool
-    ) -> Binding<Bool> {
-        Binding(
-            get: { get() },
-            set: { _ in }
-        )
+    private func syncMenuBarInsertionState() {
+        let config = self.model.sessionStore.config
+        self.mergedMenuBarInserted = config.mergeIcons
+        self.claudeMenuBarInserted = !config.mergeIcons && config.claude.enabled
+        self.codexMenuBarInserted = !config.mergeIcons && config.codex.enabled
     }
 }
 

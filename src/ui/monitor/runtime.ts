@@ -23,7 +23,8 @@ export function createLiveMonitorRuntime(): LiveMonitorRuntime {
   async function loadData(): Promise<void> {
     liveMonitorRefreshing.value = true;
     try {
-      const response = await fetch('/api/live-monitor');
+      const tzOffset = new Date().getTimezoneOffset() * -1;
+      const response = await fetch(`/api/live-monitor?tz_offset_min=${tzOffset}`);
       if (!response.ok) {
         throw new Error(`Monitor request failed (${response.status})`);
       }

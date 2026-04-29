@@ -3,8 +3,8 @@ use std::sync::OnceLock;
 
 use crate::litellm::LiteLlmSnapshot;
 
-pub const PRICING_VERSION: &str = "2026-04-10";
-pub const PRICING_VALID_FROM: &str = "2026-04-10T00:00:00Z";
+pub const PRICING_VERSION: &str = "2026-04-29";
+pub const PRICING_VALID_FROM: &str = "2026-04-29T00:00:00Z";
 pub const COST_CONFIDENCE_HIGH: &str = "high";
 pub const COST_CONFIDENCE_MEDIUM: &str = "medium";
 pub const COST_CONFIDENCE_LOW: &str = "low";
@@ -91,6 +91,18 @@ fn get_litellm(model: &str) -> Option<&'static ModelPricing> {
 }
 
 const PRICING_TABLE: &[(&str, ModelPricing)] = &[
+    (
+        "gpt-5.5",
+        ModelPricing {
+            input: 5.00,
+            output: 30.0,
+            cache_write: 5.00,
+            cache_read: 0.50,
+            threshold_tokens: None,
+            input_above_threshold: None,
+            output_above_threshold: None,
+        },
+    ),
     (
         "gpt-5.4",
         ModelPricing {
@@ -299,6 +311,13 @@ fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
     }
+    if lower.contains("gpt-5.5") {
+        return get_builtin("gpt-5.5").map(|pricing| PricingLookup::Borrowed {
+            pricing,
+            pricing_model: "gpt-5.5".to_string(),
+            cost_confidence: COST_CONFIDENCE_MEDIUM,
+        });
+    }
     if lower.contains("gpt-5.4-mini") {
         return get_builtin("gpt-5.4-mini").map(|pricing| PricingLookup::Borrowed {
             pricing,
@@ -393,6 +412,10 @@ fn lookup_catalog_pricing<'a>(
         .iter()
         .find(|key| catalog.contains_key(**key))
         .map(|key| (*key).to_string())
+    } else if lower.contains("gpt-5.5") {
+        catalog
+            .contains_key("gpt-5.5")
+            .then(|| "gpt-5.5".to_string())
     } else if lower.contains("gpt-5.4-mini") {
         catalog
             .contains_key("gpt-5.4-mini")
@@ -779,6 +802,14 @@ mod tests {
     }
 
     #[test]
+    fn test_prefix_match_gpt55_plain() {
+        let p = get_pricing("gpt-5.5-2026-04-24").unwrap();
+        assert_eq!(p.input, 5.00);
+        assert_eq!(p.cache_read, 0.50);
+        assert_eq!(p.output, 30.0);
+    }
+
+    #[test]
     fn test_substring_opus() {
         let p = get_pricing("new-opus-5-model").unwrap();
         assert_eq!(p.input, 15.0);
@@ -1116,6 +1147,22 @@ mod tests {
         let est = estimate_cost("gpt-5.4", 1_000_000, 0, 0, 0);
         // $2.50 = 2_500_000_000 nanos
         assert_eq!(est.estimated_cost_nanos, 2_500_000_000);
+        assert_eq!(est.cost_confidence, COST_CONFIDENCE_HIGH);
+    }
+
+    #[test]
+    fn test_gpt5_5_returns_hardcoded_input_price() {
+        let est = estimate_cost("gpt-5.5", 1_000_000, 0, 0, 0);
+        assert_eq!(est.estimated_cost_nanos, 5_000_000_000);
+        assert_eq!(est.pricing_model, "gpt-5.5");
+        assert_eq!(est.cost_confidence, COST_CONFIDENCE_HIGH);
+    }
+
+    #[test]
+    fn test_gpt55_family_prefix_returns_hardcoded_not_litellm() {
+        let est = estimate_cost("gpt-5.5-something-new", 1_000_000, 0, 0, 0);
+        assert_eq!(est.estimated_cost_nanos, 5_000_000_000);
+        assert_eq!(est.pricing_model, "gpt-5.5");
         assert_eq!(est.cost_confidence, COST_CONFIDENCE_HIGH);
     }
 

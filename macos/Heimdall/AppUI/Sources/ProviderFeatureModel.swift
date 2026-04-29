@@ -2,7 +2,6 @@ import Foundation
 import HeimdallDomain
 import HeimdallServices
 import Observation
-import os.log
 
 @MainActor
 @Observable
@@ -51,12 +50,9 @@ public final class ProviderFeatureModel {
         self.repository.browserImportCandidates[self.provider] ?? []
     }
 
-    private static let logger = Logger(subsystem: "dev.po4yka.heimdall", category: "ProviderFeatureModel")
-
     public var issue: AppIssue? {
         let candidate = self.repository.issue(for: self.provider) ?? self.repository.issue(for: nil)
         if let candidate, candidate.kind == .widgetPersistence || candidate.kind == .localNotifications {
-            Self.logger.debug("Suppressing \(candidate.kind.rawValue) issue from UI: \(candidate.message)")
             return nil
         }
         return candidate

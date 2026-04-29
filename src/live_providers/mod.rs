@@ -230,6 +230,24 @@ pub async fn load_provider_cost_summary(
     .map_err(anyhow::Error::from)?
 }
 
+pub async fn load_provider_cost_summary_tz(
+    state: &Arc<AppState>,
+    provider: &str,
+    tz: crate::tz::TzParams,
+) -> Result<ProviderCostSummary> {
+    let provider = normalize_provider(Some(provider))?
+        .ok_or_else(|| anyhow!("missing provider"))?
+        .to_string();
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        provider_cost_summary_tz(&conn, &provider, tz)
+    })
+    .await
+    .map_err(anyhow::Error::from)?
+}
+
 pub async fn load_provider_history(
     state: &Arc<AppState>,
     provider: &str,
@@ -704,6 +722,73 @@ pub(crate) fn provider_cost_summary(
     let (last_30_cost_nanos, last_30_tokens, last_30_days_breakdown) =
         db::get_provider_cost_summary_since(conn, provider, &start_date)?;
     let daily = db::get_provider_daily_cost_history_since(conn, provider, &start_date)?;
+    let cache_hit_rate_today = today_breakdown.cache_hit_rate();
+    let cache_hit_rate_30d = last_30_days_breakdown.cache_hit_rate();
+    let cache_savings_30d_nanos =
+        db::get_provider_cache_savings_nanos_since(conn, provider, &start_date)?;
+    let cache_savings_30d_usd = if cache_savings_30d_nanos > 0 {
+        Some(cache_savings_30d_nanos as f64 / 1_000_000_000.0)
+    } else {
+        None
+    };
+
+    let by_model = db::get_provider_model_rows(conn, provider, &start_date, 10).unwrap_or_default();
+    let daily_by_model =
+        db::get_provider_daily_by_model(conn, provider, &start_date).unwrap_or_default();
+    let by_project =
+        db::get_provider_project_rows(conn, provider, &start_date, 10).unwrap_or_default();
+    let by_tool = db::get_provider_tool_rows(conn, provider, &start_date, 15).unwrap_or_default();
+    let by_mcp = db::get_provider_mcp_rows(conn, provider, &start_date).unwrap_or_default();
+
+    let hourly_activity =
+        db::get_provider_hourly_activity(conn, provider, &start_date).unwrap_or_default();
+    let activity_heatmap =
+        db::get_provider_activity_heatmap(conn, provider, &start_date).unwrap_or_default();
+    let recent_sessions = db::get_provider_recent_sessions(conn, provider, 20).unwrap_or_default();
+    let subagent_breakdown = db::get_provider_subagent_breakdown(conn, provider, &start_date)
+        .ok()
+        .flatten();
+    let version_breakdown =
+        db::get_provider_version_rows(conn, provider, &start_date, 10).unwrap_or_default();
+
+    Ok(ProviderCostSummary {
+        today_tokens,
+        today_cost_usd: today_cost_nanos as f64 / 1_000_000_000.0,
+        last_30_days_tokens: last_30_tokens,
+        last_30_days_cost_usd: last_30_cost_nanos as f64 / 1_000_000_000.0,
+        daily,
+        today_breakdown,
+        last_30_days_breakdown,
+        cache_hit_rate_today,
+        cache_hit_rate_30d,
+        cache_savings_30d_usd,
+        by_model,
+        by_project,
+        by_tool,
+        by_mcp,
+        hourly_activity,
+        activity_heatmap,
+        recent_sessions,
+        subagent_breakdown,
+        version_breakdown,
+        daily_by_model,
+    })
+}
+
+pub(crate) fn provider_cost_summary_tz(
+    conn: &rusqlite::Connection,
+    provider: &str,
+    tz: crate::tz::TzParams,
+) -> Result<ProviderCostSummary> {
+    let offset = chrono::Duration::minutes(tz.normalized_offset_min() as i64);
+    let local_today = (chrono::Utc::now() + offset).date_naive();
+    let today = local_today.to_string();
+    let start_date = (local_today - chrono::Duration::days(29)).to_string();
+    let (today_cost_nanos, today_tokens, today_breakdown) =
+        db::get_provider_cost_summary_since_tz(conn, provider, &today, tz)?;
+    let (last_30_cost_nanos, last_30_tokens, last_30_days_breakdown) =
+        db::get_provider_cost_summary_since_tz(conn, provider, &start_date, tz)?;
+    let daily = db::get_provider_daily_cost_history_since_tz(conn, provider, &start_date, tz)?;
     let cache_hit_rate_today = today_breakdown.cache_hit_rate();
     let cache_hit_rate_30d = last_30_days_breakdown.cache_hit_rate();
     let cache_savings_30d_nanos =

@@ -2,7 +2,6 @@ import Foundation
 import HeimdallDomain
 import HeimdallServices
 import Observation
-import os.log
 
 @MainActor
 @Observable
@@ -10,8 +9,6 @@ public final class OverviewFeatureModel {
     private let sessionStore: AppSessionStore
     private let repository: ProviderRepository
     private let refreshCoordinator: RefreshCoordinator
-
-    private static let logger = Logger(subsystem: "dev.po4yka.heimdall", category: "OverviewFeatureModel")
 
     public init(
         sessionStore: AppSessionStore,
@@ -57,7 +54,6 @@ public final class OverviewFeatureModel {
     private func presentableGlobalIssue() -> String? {
         guard let candidate = self.repository.issue(for: nil) else { return nil }
         if candidate.kind == .widgetPersistence || candidate.kind == .localNotifications {
-            Self.logger.debug("Suppressing \(candidate.kind.rawValue) issue from Overview UI: \(candidate.message)")
             return nil
         }
         return candidate.message

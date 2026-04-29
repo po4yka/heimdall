@@ -120,6 +120,7 @@ struct HeimdallAPIClientTests {
         StubURLProtocol.reset()
         StubURLProtocol.handler = { request, _ in
             #expect(request.url?.path == "/api/live-monitor")
+            #expect(request.url?.query?.contains("tz_offset_min=") == true)
             #expect(request.timeoutInterval == 30)
             return Self.jsonResponse(
                 url: try #require(request.url),

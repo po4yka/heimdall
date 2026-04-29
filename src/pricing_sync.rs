@@ -1678,6 +1678,9 @@ fn parse_source(source: &PricingSourceDef, raw_body: &str) -> Vec<OfficialModelP
 fn parse_openai_docs(text: &str, source: &PricingSourceDef) -> Vec<OfficialModelPricing> {
     let mut rows = Vec::new();
 
+    if let Some(row) = capture_openai_short_context(text, "gpt-5.5", source) {
+        rows.push(row);
+    }
     if let Some(row) = capture_openai_long_context(
         text,
         "gpt-5.4",
@@ -1905,11 +1908,16 @@ mod tests {
 
     #[test]
     fn parse_openai_docs_extracts_standard_rows() {
-        let text = "Flagship models Standard Short context Long context Model Input Cached input Output Input Cached input Output gpt-5.4 $2.50 $0.25 $15.00 $5.00 $0.50 $22.50 gpt-5.4-mini $0.75 $0.075 $4.50 - - - gpt-5.4-nano $0.20 $0.02 $1.25 - - - Specialized models Prices per 1M tokens. Standard Batch Priority Standard Category Model Input Cached input Output ChatGPT gpt-5.3-chat-latest $1.75 $0.175 $14.00 Codex gpt-5.3-codex $1.75 $0.175 $14.00";
+        let text = "Flagship models Standard Short context Long context Model Input Cached input Output Input Cached input Output gpt-5.5 $5.00 $0.50 $30.00 - - - gpt-5.4 $2.50 $0.25 $15.00 $5.00 $0.50 $22.50 gpt-5.4-mini $0.75 $0.075 $4.50 - - - gpt-5.4-nano $0.20 $0.02 $1.25 - - - Specialized models Prices per 1M tokens. Standard Batch Priority Standard Category Model Input Cached input Output ChatGPT gpt-5.3-chat-latest $1.75 $0.175 $14.00 Codex gpt-5.3-codex $1.75 $0.175 $14.00";
         let rows = parse_openai_docs(text, &OPENAI_DEVELOPER_PRICING);
+        assert!(rows.iter().any(|row| row.model_id == "gpt-5.5"));
         assert!(rows.iter().any(|row| row.model_id == "gpt-5.4"));
         assert!(rows.iter().any(|row| row.model_id == "gpt-5.4-mini"));
         assert!(rows.iter().any(|row| row.model_id == "gpt-5.3-codex"));
+        let gpt55 = rows.iter().find(|row| row.model_id == "gpt-5.5").unwrap();
+        assert_eq!(gpt55.input_usd_per_mtok, 5.0);
+        assert_eq!(gpt55.cache_read_usd_per_mtok, 0.50);
+        assert_eq!(gpt55.output_usd_per_mtok, 30.0);
         let gpt54 = rows.iter().find(|row| row.model_id == "gpt-5.4").unwrap();
         assert_eq!(gpt54.threshold_tokens, Some(270_000));
         assert_eq!(gpt54.input_above_threshold, Some(5.0));

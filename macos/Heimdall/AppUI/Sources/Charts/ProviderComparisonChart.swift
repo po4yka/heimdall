@@ -113,7 +113,7 @@ struct ProviderComparisonChart: View {
         return Chart {
             ForEach(entries) { entry in
                 BarMark(
-                    x: .value("Day", entry.day),
+                    x: .value("Day", entry.day, unit: .day),
                     y: .value("Cost", entry.costUSD),
                     stacking: .standard
                 )

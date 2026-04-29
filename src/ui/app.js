@@ -9956,7 +9956,8 @@ ${row.project}` : row.project;
     async function loadData() {
       liveMonitorRefreshing.value = true;
       try {
-        const response = await fetch("/api/live-monitor");
+        const tzOffset = (/* @__PURE__ */ new Date()).getTimezoneOffset() * -1;
+        const response = await fetch(`/api/live-monitor?tz_offset_min=${tzOffset}`);
         if (!response.ok) {
           throw new Error(`Monitor request failed (${response.status})`);
         }

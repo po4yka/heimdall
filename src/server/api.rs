@@ -891,6 +891,7 @@ pub async fn api_mobile_snapshot(
 
 pub async fn api_live_monitor(
     State(state): State<Arc<AppState>>,
+    Query(tz): Query<TzParams>,
     request: Request,
 ) -> Result<Json<LiveMonitorResponse>, StatusCode> {
     enforce_loopback_request(&request)?;
@@ -907,10 +908,11 @@ pub async fn api_live_monitor(
     );
     // Snapshots are the load-bearing payload. If they fail, the whole
     // response is meaningless, so propagate as 500.
-    let snapshots = snapshots_result.map_err(|e| {
+    let mut snapshots = snapshots_result.map_err(|e| {
         tracing::error!(error = ?e, "api_live_monitor load_snapshots failed");
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
+    localize_live_monitor_cost_summaries(&state, &mut snapshots, tz).await?;
     // Auxiliary data: a transient failure here used to take down the whole
     // /api/live-monitor response and surface to the user as "Refresh issue".
     // Now we log the failure for diagnosis and fall back to empty defaults so
@@ -938,6 +940,27 @@ pub async fn api_live_monitor(
         billing_blocks,
         context_window,
     )))
+}
+
+async fn localize_live_monitor_cost_summaries(
+    state: &Arc<AppState>,
+    snapshots: &mut LiveProvidersResponse,
+    tz: TzParams,
+) -> Result<(), StatusCode> {
+    for provider in &mut snapshots.providers {
+        let summary = live_providers::load_provider_cost_summary_tz(state, &provider.provider, tz)
+            .await
+            .map_err(|e| {
+                tracing::error!(
+                    error = ?e,
+                    provider = %provider.provider,
+                    "api_live_monitor localized cost summary failed"
+                );
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        provider.cost_summary = summary;
+    }
+    Ok(())
 }
 
 fn build_live_monitor_response(

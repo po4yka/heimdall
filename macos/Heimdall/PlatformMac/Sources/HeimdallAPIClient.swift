@@ -9,6 +9,7 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
     private static let defaultRequestTimeout: TimeInterval = 3
     private static let startupRequestTimeout: TimeInterval = 1.5
     private static let liveMonitorRequestTimeout: TimeInterval = 30
+    private static let eventStreamRequestTimeout: TimeInterval = 86_400
     private static let forcedRefreshTimeout: TimeInterval = 45
 
     struct RetryPolicy: Sendable, Equatable {
@@ -86,7 +87,17 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
     }
 
     public func fetchLiveMonitor() async throws -> LiveMonitorEnvelope {
-        var request = URLRequest(url: self.baseURL.appendingPathComponent("/api/live-monitor"))
+        var components = URLComponents(
+            url: self.baseURL.appendingPathComponent("/api/live-monitor"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(
+                name: "tz_offset_min",
+                value: String(TimeZone.current.secondsFromGMT() / 60)
+            )
+        ]
+        var request = URLRequest(url: components.url!)
         request.timeoutInterval = Self.liveMonitorRequestTimeout
         let (data, response) = try await self.data(for: request)
         guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
@@ -101,7 +112,9 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
             let url = self.baseURL.appendingPathComponent("/api/stream")
             let task = Task {
                 do {
-                    let (bytes, response) = try await session.bytes(from: url)
+                    var request = URLRequest(url: url)
+                    request.timeoutInterval = Self.eventStreamRequestTimeout
+                    let (bytes, response) = try await session.bytes(for: request)
                     guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
                         throw URLError(.badServerResponse)
                     }

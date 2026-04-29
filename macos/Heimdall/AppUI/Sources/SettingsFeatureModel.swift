@@ -3,7 +3,6 @@ import HeimdallDomain
 import HeimdallServices
 import Observation
 import AppKit
-import os.log
 
 public enum SettingsSaveStatus: Equatable, Sendable {
     case idle
@@ -28,8 +27,6 @@ public final class SettingsFeatureModel {
     private let localNotificationCoordinator: any LocalNotificationCoordinating
     private let cloudSyncController: (any CloudSyncControlling)?
     private let cloudSyncDiagnosticsContext: CloudSyncDiagnosticsContext?
-
-    private static let logger = Logger(subsystem: "dev.po4yka.heimdall", category: "SettingsFeatureModel")
 
     public init(
         sessionStore: AppSessionStore,
@@ -58,7 +55,6 @@ public final class SettingsFeatureModel {
     public var issue: AppIssue? {
         let candidate = self.repository.issue(for: nil)
         if let candidate, candidate.kind == .widgetPersistence {
-            Self.logger.debug("Suppressing widgetPersistence issue from Settings UI: \(candidate.message)")
             return nil
         }
         return candidate

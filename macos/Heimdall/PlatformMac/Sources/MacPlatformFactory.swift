@@ -1,6 +1,5 @@
 import Foundation
 import HeimdallServices
-import os.log
 
 public struct MacPlatformCompositionRoot: Sendable {
     private let settingsStore: any SettingsStore
@@ -60,9 +59,6 @@ public struct MacPlatformCompositionRoot: Sendable {
                 stateStore: UserDefaultsLocalNotificationStateStore()
             )
         } else {
-            Self.userNotificationsLogger.info(
-                "User notifications disabled: bundle lacks the entitlements that usernotificationsd requires. Coordinator wired as no-op."
-            )
             localNotificationCoordinator = NoopLocalNotificationCoordinator()
         }
         let liveProviderClient = HeimdallAPIClient(port: sessionStore.config.helperPort)
@@ -136,11 +132,6 @@ public struct MacPlatformCompositionRoot: Sendable {
         #endif
         return true
     }
-
-    private static let userNotificationsLogger = Logger(
-        subsystem: "dev.po4yka.heimdall",
-        category: "UserNotifications"
-    )
 
     public func cliDependencies() -> HeimdallCLIDependencies {
         HeimdallCLIDependencies(

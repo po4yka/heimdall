@@ -167,10 +167,20 @@ struct ActivityHeatmap: View {
                     self.tooltipOverlay(totalTurns: totalTurns, activeCells: activeCells, rank: rank)
                 }
                 .onPreferenceChange(CellFramePreferenceKey.self) { newValue in
-                    self.cellFrames = newValue
+                    guard self.cellFrames != newValue else { return }
+                    DispatchQueue.main.async {
+                        if self.cellFrames != newValue {
+                            self.cellFrames = newValue
+                        }
+                    }
                 }
                 .onPreferenceChange(GridWidthPreferenceKey.self) { newValue in
-                    self.gridWidth = newValue
+                    guard self.gridWidth != newValue else { return }
+                    DispatchQueue.main.async {
+                        if self.gridWidth != newValue {
+                            self.gridWidth = newValue
+                        }
+                    }
                 }
         }
     }

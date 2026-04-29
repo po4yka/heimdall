@@ -2976,6 +2976,51 @@ pub fn get_provider_cost_summary_since(
     ))
 }
 
+pub fn get_provider_cost_summary_since_tz(
+    conn: &Connection,
+    provider: &str,
+    start_date: &str,
+    tz: crate::tz::TzParams,
+) -> Result<(i64, i64, crate::models::TokenBreakdown)> {
+    let day_expr = tz.sql_day_expr("timestamp");
+    let sql = format!(
+        "SELECT
+            COALESCE(SUM(estimated_cost_nanos), 0),
+            COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens + reasoning_output_tokens), 0),
+            COALESCE(SUM(input_tokens), 0),
+            COALESCE(SUM(output_tokens), 0),
+            COALESCE(SUM(cache_read_tokens), 0),
+            COALESCE(SUM(cache_creation_tokens), 0),
+            COALESCE(SUM(reasoning_output_tokens), 0)
+         FROM turns
+         WHERE provider = ? AND {day_expr} >= ?"
+    );
+    let map_row = |row: &rusqlite::Row<'_>| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, i64>(1)?,
+            crate::models::TokenBreakdown {
+                input: row.get(2)?,
+                output: row.get(3)?,
+                cache_read: row.get(4)?,
+                cache_creation: row.get(5)?,
+                reasoning_output: row.get(6)?,
+            },
+        ))
+    };
+    if let Some(offset_param) = tz.offset_sql_param() {
+        conn.query_row(
+            &sql,
+            rusqlite::params![provider, offset_param, start_date],
+            map_row,
+        )
+        .map_err(Into::into)
+    } else {
+        conn.query_row(&sql, rusqlite::params![provider, start_date], map_row)
+            .map_err(Into::into)
+    }
+}
+
 /// Estimate total cache-read savings since `start_date` for the given
 /// provider. Uses per-model cache-read sums joined with the pricing table so
 /// Sonnet vs Opus vs Haiku rate differences are honored.
@@ -3046,6 +3091,60 @@ pub fn get_provider_daily_cost_history_since(
 
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(Into::into)
+}
+
+pub fn get_provider_daily_cost_history_since_tz(
+    conn: &Connection,
+    provider: &str,
+    start_date: &str,
+    tz: crate::tz::TzParams,
+) -> Result<Vec<crate::models::ProviderCostHistoryPoint>> {
+    let day_expr = tz.sql_day_expr("timestamp");
+    let sql = format!(
+        "SELECT
+            {day_expr} AS day,
+            COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens + reasoning_output_tokens), 0) AS total_tokens,
+            COALESCE(SUM(estimated_cost_nanos), 0) AS cost_nanos,
+            COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+            COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
+            COALESCE(SUM(reasoning_output_tokens), 0) AS reasoning_output_tokens
+         FROM turns
+         WHERE provider = ? AND {day_expr} >= ?
+         GROUP BY day
+         ORDER BY day ASC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let map_row = |row: &rusqlite::Row<'_>| {
+        let cost_nanos: i64 = row.get(2)?;
+        Ok(crate::models::ProviderCostHistoryPoint {
+            day: row.get(0)?,
+            total_tokens: row.get(1)?,
+            cost_usd: cost_nanos as f64 / 1_000_000_000.0,
+            breakdown: crate::models::TokenBreakdown {
+                input: row.get(3)?,
+                output: row.get(4)?,
+                cache_read: row.get(5)?,
+                cache_creation: row.get(6)?,
+                reasoning_output: row.get(7)?,
+            },
+        })
+    };
+    if let Some(offset_param) = tz.offset_sql_param() {
+        Ok(collect_warn(
+            stmt.query_map(
+                rusqlite::params![provider, offset_param.clone(), offset_param, start_date],
+                map_row,
+            )?,
+            "provider daily cost history",
+        ))
+    } else {
+        Ok(collect_warn(
+            stmt.query_map(rusqlite::params![provider, start_date], map_row)?,
+            "provider daily cost history",
+        ))
+    }
 }
 
 pub fn get_provider_daily_by_model(

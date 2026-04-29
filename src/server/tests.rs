@@ -991,7 +991,12 @@ mod tests {
         )
         .await;
         let mobile_snapshot = api_mobile_snapshot(State(state.clone()), mobile_snapshot_req).await;
-        let live_monitor = api_live_monitor(State(state.clone()), live_monitor_req).await;
+        let live_monitor = api_live_monitor(
+            State(state.clone()),
+            axum::extract::Query(TzParams::default()),
+            live_monitor_req,
+        )
+        .await;
         let heatmap = api_heatmap(
             State(state.clone()),
             axum::extract::Query(HeatmapParams::default()),
@@ -1480,6 +1485,64 @@ mod tests {
         assert!(codex.get("quota_suggestions").is_none());
         assert!(codex.get("depletion_forecast").is_some());
         assert!(codex.get("predictive_insights").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_api_live_monitor_uses_client_timezone_for_codex_today_cost() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = tmp.path().join("usage.db");
+        let projects = tmp.path().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+        let state = Arc::new(base_state(db_path.clone(), projects));
+
+        {
+            let mut cache = state.live_provider_cache.write().await;
+            *cache = Some((
+                std::time::Instant::now(),
+                cached_live_provider_response(false),
+            ));
+        }
+
+        {
+            let conn = crate::scanner::db::open_db(&db_path).unwrap();
+            crate::scanner::db::init_db(&conn).unwrap();
+            let local_today = (chrono::Utc::now() + chrono::Duration::minutes(120)).date_naive();
+            let local_time = chrono::NaiveTime::from_hms_opt(0, 30, 0).unwrap();
+            let utc_time = local_today.and_time(local_time) - chrono::Duration::minutes(120);
+            let timestamp = format!("{}Z", utc_time.format("%Y-%m-%dT%H:%M:%S"));
+            conn.execute(
+                "INSERT INTO turns
+                    (session_id, provider, timestamp, model, input_tokens, output_tokens,
+                     estimated_cost_nanos, source_path, pricing_version, pricing_model,
+                     billing_mode, cost_confidence, category)
+                 VALUES (?1, 'codex', ?2, 'gpt-5.4', 100, 50, ?3, '', 'builtin',
+                         'gpt-5.4', 'estimated_local', 'high', '')",
+                rusqlite::params!["codex:tz-session", timestamp, 1_250_000_000_i64],
+            )
+            .unwrap();
+        }
+
+        let app = crate::server::build_router(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/live-monitor?tz_offset_min=120")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let codex = data["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|provider| provider["provider"] == "codex")
+            .unwrap();
+        assert_eq!(codex["today_cost_usd"].as_f64().unwrap(), 1.25);
     }
 
     #[tokio::test]
