@@ -263,14 +263,18 @@ fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
         }
     }
 
-    for (name, pricing) in PRICING_TABLE {
-        if model.starts_with(name) {
-            return Some(PricingLookup::Borrowed {
-                pricing,
-                pricing_model: (*name).to_string(),
-                cost_confidence: COST_CONFIDENCE_HIGH,
-            });
-        }
+    // Prefix tier: longest matching key wins so that e.g. "gpt-5.4-mini-2026-01"
+    // resolves to "gpt-5.4-mini" and not the shorter "gpt-5.4" entry.
+    let prefix_match = PRICING_TABLE
+        .iter()
+        .filter(|(name, _)| model.starts_with(name))
+        .max_by_key(|(name, _)| name.len());
+    if let Some((name, pricing)) = prefix_match {
+        return Some(PricingLookup::Borrowed {
+            pricing,
+            pricing_model: (*name).to_string(),
+            cost_confidence: COST_CONFIDENCE_HIGH,
+        });
     }
 
     let lower = model.to_lowercase();
@@ -756,6 +760,22 @@ mod tests {
     fn test_prefix_match() {
         let p = get_pricing("claude-sonnet-4-6-20260401").unwrap();
         assert_eq!(p.input, 3.0);
+    }
+
+    #[test]
+    fn test_prefix_match_longest_wins_mini() {
+        // "gpt-5.4-mini-2026-01" must resolve to gpt-5.4-mini (input=0.75),
+        // not the shorter gpt-5.4 entry (input=2.50).
+        let p = get_pricing("gpt-5.4-mini-2026-01").unwrap();
+        assert_eq!(p.input, 0.75);
+    }
+
+    #[test]
+    fn test_prefix_match_gpt54_plain() {
+        // A versioned gpt-5.4 name (no -mini/-nano suffix) still resolves
+        // to gpt-5.4, not to any longer entry that contains it.
+        let p = get_pricing("gpt-5.4-2026-01").unwrap();
+        assert_eq!(p.input, 2.50);
     }
 
     #[test]
