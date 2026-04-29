@@ -130,7 +130,7 @@ src/
     parser.rs          -- JSONL parsing, streaming dedup by message.id, tool_inputs capture
     db.rs              -- SQLite schema, queries, migrations; all SQL lives here.
                           init_db() delegates to create_schema() (DDL) and apply_migrations()
-                          (the has_column probe array). collect_warn<T>() helper absorbs the
+                          (PRAGMA table_info column-cache; results cached per-table per call). collect_warn<T>() helper absorbs the
                           per-row filter_map+warn boilerplate. Dashboard payload assembled by
                           query_dashboard_* per-section helpers
     tests.rs           -- Integration tests for scan pipeline
@@ -154,7 +154,7 @@ src/
 
   hook/
     main.rs            -- heimdall-hook binary entry (thin wrapper)
-    mod.rs             -- main_impl(): bypass -> stdin -> parse -> SQLite INSERT OR IGNORE
+    mod.rs             -- main_impl(): bypass -> stdin -> parse -> insert_live_event()
     bypass.rs          -- Ancestor process walk for `--dangerously-skip-permissions`
     ingest.rs          -- Parse Claude Code hook JSON payload into live_events
     install.rs         -- hook install/uninstall/status against ~/.claude/settings.json
@@ -232,10 +232,10 @@ src/
 
 ## Key Design Decisions
 
-- **Two binaries, one crate**: `claude-usage-tracker` (CLI + dashboard) and `heimdall-hook` (real-time ingest) share `lib.rs`. The hook binary is fire-and-forget: always exits 0, always prints `{}`, ~50ms p99.
+- **Two binaries, one crate**: `claude-usage-tracker` (CLI + dashboard) and `heimdall-hook` (real-time ingest) share `lib.rs`. The hook binary is fire-and-forget: always exits 0, always prints `{}`, ~50ms p99. The exit-0 contract is enforced via `std::panic::catch_unwind` in `hook/main.rs` so panics from upstream dependencies (rusqlite, serde, etc.) cannot escape the process.
 - **Single pricing source**: `pricing.rs` is the only place model prices are defined. The dashboard receives pre-computed costs from the API. No pricing logic in JS.
 - **Integer nanos**: `calc_cost_nanos()` computes cost in billionths of a dollar (i64) to avoid f64 drift. `calc_cost()` is a thin wrapper. `CostBreakdown::total_nanos()` sums exactly.
-- **5-tier pricing fallback**: exact hardcoded -> prefix hardcoded -> keyword hardcoded -> LiteLLM cache -> unknown. Claude and GPT-5 families NEVER fall through to LiteLLM even if the cache has a conflicting entry.
+- **5-tier pricing fallback**: exact hardcoded -> prefix hardcoded -> keyword hardcoded -> LiteLLM cache -> unknown. Claude and GPT-5 families NEVER fall through to LiteLLM even if the cache has a conflicting entry. Within the prefix tier, the longest matching prefix wins (single-pass `max_by_key(len)`) so a versioned name like `gpt-5.4-mini-2026-01` resolves to `gpt-5.4-mini` rather than the shorter `gpt-5.4` entry.
 - **Volume discounts**: `ModelPricing` has optional `threshold_tokens` + above-threshold rates. Sonnet 4.5 has a 200K threshold.
 - **Pricing overrides**: Config file can override any model's rates. Applied via `OnceLock<HashMap>` at startup.
 - **Embedded assets**: HTML/CSS/JS embedded via `include_str!` at compile time.
@@ -255,7 +255,7 @@ src/
 
 - Use `thiserror` for error types, `anyhow` in main/CLI.
 - Prefer `&str` over `String` in function signatures where possible.
-- All SQL queries in `scanner/db.rs`, nowhere else.
+- All SQL queries in `scanner/db.rs`, nowhere else. Optimizer detector queries are an explicit exception — each detector keeps its leaf-level query in its own file since they are not reused elsewhere.
 - Tests use the `tempfile` crate for temp dirs and DB files; never touch the user's real `~/.claude/` in tests.
 - No `.unwrap()` in library code (scanner, server, pricing). OK in tests and main.
 - Log with `tracing`: `debug!` for per-file progress, `info!` for scan summaries, `warn!` for recoverable errors.

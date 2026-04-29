@@ -48,7 +48,7 @@ cargo run -- db reset --yes     # destructive DB wipe (TTY-guarded)
 cargo run -- menubar            # SwiftBar-formatted snapshot
 cargo run -- pricing refresh    # pull LiteLLM catalogue into the cache
 
-# Hook binary — reads stdin, exits ~50ms, always prints "{}"
+# Hook binary — reads stdin, exits ~50ms, always prints "{}" (exit-0 enforced by catch_unwind)
 cargo run --bin heimdall-hook
 ```
 
@@ -141,7 +141,7 @@ src/
     parser.rs          -- JSONL parsing, streaming dedup by message.id, tool_inputs capture
     db.rs              -- SQLite schema, queries, migrations; all SQL lives here.
                           init_db() delegates to create_schema() (pure DDL) and apply_migrations()
-                          (has_column probe array, ordered). collect_warn<T>() helper absorbs the
+                          (PRAGMA table_info column-cache; results cached per-table per call, ordered). collect_warn<T>() helper absorbs the
                           per-row filter_map+warn boilerplate. Dashboard payload built by
                           query_dashboard_* per-section helpers; provider-scoped row queries follow
                           a documented (conn, provider, start_date, limit) signature using
@@ -167,7 +167,7 @@ src/
 
   hook/
     main.rs            -- heimdall-hook binary entry (thin wrapper)
-    mod.rs             -- main_impl(): bypass check -> stdin -> parse -> SQLite INSERT OR IGNORE
+    mod.rs             -- main_impl(): bypass check -> stdin -> parse -> insert_live_event()
     bypass.rs          -- Ancestor process walk for `--dangerously-skip-permissions`
     ingest.rs          -- Parse Claude Code hook JSON payload into live_events
     install.rs         -- hook install/uninstall/status against ~/.claude/settings.json
@@ -258,7 +258,7 @@ src/
 - **Subagent tracking**: `isSidechain` + `agentId` from JSONL stored as `is_subagent` + `agent_id` in turns table.
 - **Provider pattern**: Every data source implements `Provider`. Registered in `providers::all()`. JSONL providers flow through `parser::parse_jsonl_file` dispatcher; SQLite/mixed-format providers bypass the dispatcher and parse directly via `Provider::parse()`.
 - **Tool-event cost attribution**: Each turn's cost is split evenly across its tool invocations (remainder goes to the first event) so per-MCP / per-file cost queries are tractable. Integer-nanos math preserves the sum exactly.
-- **Real-time hook**: `heimdall-hook` binary is fire-and-forget — always exits 0, always prints `{}`, ~50ms p99. It never blocks Claude Code. Bypass mode (ancestor process has `--dangerously-skip-permissions`) short-circuits the DB write.
+- **Real-time hook**: `heimdall-hook` binary is fire-and-forget — always exits 0, always prints `{}`, ~50ms p99. It never blocks Claude Code. The exit-0 contract is enforced via `std::panic::catch_unwind` in `hook/main.rs`; panics from upstream dependencies log to stderr and still emit `{}`. Bypass mode (ancestor process has `--dangerously-skip-permissions`) short-circuits the DB write.
 - **Client-sent timezone**: `TzParams` flows from browser fetch -> axum handler -> SQL `datetime(timestamp, '+N minutes')` shift. One source of truth, no server TZ config needed.
 - **Dual-config resolution**: `HEIMDALL_CONFIG` env -> `~/.config/heimdall/config.toml` -> `~/.claude/usage-tracker.toml` -> bundled defaults. Shared between both binaries.
 - **Embedded version stamps on install surfaces**: every persistent surface heimdall installs (hook entry and statusline entry in `~/.claude/settings.json` — both under the same root key name `_heimdall_version`, at different nesting levels — cron tag `# heimdall-scheduler:v1 (heimdall X.Y.Z)`, launchd `dev.heimdall.scan.plist` `<!-- heimdall X.Y.Z -->` comment, daemon `dev.heimdall.daemon.plist` matching comment) carries `env!("CARGO_PKG_VERSION")` so users can `grep heimdall <surface>` (or a single `grep _heimdall_version ~/.claude/settings.json`) to answer "what version is installed?" without running a status command. Pattern follows talk-normal's `<!-- talk-normal X.Y.Z -->` convention. Ownership detection uses version-independent markers (`HOOK_DESCRIPTION`, `STATUSLINE_VERSION_KEY` presence, `CRON_TAG` substring, plist filename + Label) so newer binaries cleanly uninstall entries written by older ones.
@@ -268,7 +268,7 @@ src/
 
 - Use `thiserror` for error types, `anyhow` in main/CLI.
 - Prefer `&str` over `String` in function signatures where possible.
-- All SQL queries in `scanner/db.rs`, nowhere else. The top-level `src/db.rs` only owns the destructive `db reset` TTY guard.
+- All SQL queries in `scanner/db.rs`, nowhere else. The top-level `src/db.rs` only owns the destructive `db reset` TTY guard. Optimizer detector queries are an explicit exception — each detector keeps its leaf-level query in its own file since they are not reused elsewhere.
 - Tests use the `tempfile` crate for temp dirs and DB files; never touch the user's real `~/.claude/` in tests.
 - No `.unwrap()` in library code (scanner, server, pricing). OK in tests and main.
 - Log with `tracing`: `debug!` for per-file progress, `info!` for scan summaries, `warn!` for recoverable errors.
@@ -342,11 +342,11 @@ Register in `optimizer/mod.rs::run_optimize_with_overrides`. Severity thresholds
 
 ### Changing the database schema
 
-Two stable seams: `create_schema(conn)` for fresh-DB DDL (CREATE TABLE / CREATE INDEX), `apply_migrations(conn)` for the ordered `has_column` probe array. New columns go in `apply_migrations` only — `create_schema` mirrors the *current* shape so a fresh install bypasses the probe array entirely.
+Two stable seams: `create_schema(conn)` for fresh-DB DDL (CREATE TABLE / CREATE INDEX), `apply_migrations(conn)` for the ordered migration probes. New columns go in `apply_migrations` only — `create_schema` mirrors the *current* shape so a fresh install bypasses the probe array entirely.
 
 Always use additive migrations (ALTER TABLE ADD COLUMN). Check for column existence with `has_column` before adding. Never drop columns or tables in migrations – only in full rescan. If you introduce a new default for existing rows, add an idempotent `UPDATE ... WHERE column IS NULL OR column = ''` after the ADD COLUMN. Covers both freshly-created DBs and mid-upgrade ones.
 
-The `has_column` probe approach is intentionally robust (self-healing — every check runs against current schema state). Replacing it with `PRAGMA user_version` is on the future-work list but blocked on having a fixture-based test harness for historical DB versions; bare-replacement risks `ALTER TABLE … ADD COLUMN` duplicate-column errors at startup for existing users.
+Internally, `apply_migrations` uses `PRAGMA table_info` (schema metadata, no data rows) to check column presence, with results cached per-table for the duration of the call so 32 probes across 5 tables issue at most 5 PRAgMAs. Table names are validated against an identifier allowlist before interpolation. The `has_column` function is retained as a test-only wrapper. Replacing the migration tracking with `PRAGMA user_version` is still future work, blocked on a fixture-based test harness for historical DB versions.
 
 ### Config file changes
 
