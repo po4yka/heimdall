@@ -2,7 +2,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension};
 use tracing::warn;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::models::{
     BillingModeSummary, BranchSummary, ClaudeUsageFactor, ClaudeUsageResponse, ClaudeUsageRunMeta,
@@ -284,87 +284,138 @@ fn create_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Apply all incremental `has_column` migration probes, in original order.
+/// Return a cached column-set for `table`, populating the cache on first access.
+/// Uses `PRAGMA table_info` so no data rows are scanned.
+fn cached_columns<'a>(
+    cache: &'a mut HashMap<&'static str, HashSet<String>>,
+    conn: &Connection,
+    table: &'static str,
+) -> &'a HashSet<String> {
+    cache
+        .entry(table)
+        .or_insert_with(|| table_columns(conn, table))
+}
+
+/// Apply all incremental column-presence migration probes, in original order.
 /// No DDL for new tables here — that lives in `create_schema`.
 fn apply_migrations(conn: &Connection) -> Result<()> {
+    // Per-table column-set cache: each PRAGMA table_info is issued at most once
+    // per table per apply_migrations call, regardless of how many probes touch
+    // the same table.  After an ALTER TABLE the entry is removed so the next
+    // probe for that table re-reads the updated schema.
+    let mut col_cache: HashMap<&'static str, HashSet<String>> = HashMap::new();
+
+    macro_rules! col {
+        ($table:literal, $column:expr) => {
+            cached_columns(&mut col_cache, conn, $table).contains($column)
+        };
+    }
+    macro_rules! alter {
+        ($table:literal, $sql:expr) => {{
+            conn.execute_batch($sql)?;
+            col_cache.remove($table);
+        }};
+    }
+
     // Migration: add subagent columns if upgrading from older schema
-    if !has_column(conn, "sessions", "provider") {
-        conn.execute_batch(
-            "ALTER TABLE sessions ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';",
-        )?;
+    if !col!("sessions", "provider") {
+        alter!(
+            "sessions",
+            "ALTER TABLE sessions ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';"
+        );
     }
-    if !has_column(conn, "sessions", "total_reasoning_output") {
-        conn.execute_batch(
-            "ALTER TABLE sessions ADD COLUMN total_reasoning_output INTEGER DEFAULT 0;",
-        )?;
+    if !col!("sessions", "total_reasoning_output") {
+        alter!(
+            "sessions",
+            "ALTER TABLE sessions ADD COLUMN total_reasoning_output INTEGER DEFAULT 0;"
+        );
     }
-    if !has_column(conn, "sessions", "total_estimated_cost_nanos") {
-        conn.execute_batch(
-            "ALTER TABLE sessions ADD COLUMN total_estimated_cost_nanos INTEGER DEFAULT 0;",
-        )?;
+    if !col!("sessions", "total_estimated_cost_nanos") {
+        alter!(
+            "sessions",
+            "ALTER TABLE sessions ADD COLUMN total_estimated_cost_nanos INTEGER DEFAULT 0;"
+        );
     }
-    if !has_column(conn, "sessions", "pricing_version") {
-        conn.execute_batch(
-            "ALTER TABLE sessions ADD COLUMN pricing_version TEXT NOT NULL DEFAULT '';",
-        )?;
+    if !col!("sessions", "pricing_version") {
+        alter!(
+            "sessions",
+            "ALTER TABLE sessions ADD COLUMN pricing_version TEXT NOT NULL DEFAULT '';"
+        );
     }
-    if !has_column(conn, "sessions", "billing_mode") {
-        conn.execute_batch(
-            "ALTER TABLE sessions ADD COLUMN billing_mode TEXT NOT NULL DEFAULT 'estimated_local';",
-        )?;
+    if !col!("sessions", "billing_mode") {
+        alter!(
+            "sessions",
+            "ALTER TABLE sessions ADD COLUMN billing_mode TEXT NOT NULL DEFAULT 'estimated_local';"
+        );
     }
-    if !has_column(conn, "sessions", "cost_confidence") {
-        conn.execute_batch(
-            "ALTER TABLE sessions ADD COLUMN cost_confidence TEXT NOT NULL DEFAULT 'low';",
-        )?;
+    if !col!("sessions", "cost_confidence") {
+        alter!(
+            "sessions",
+            "ALTER TABLE sessions ADD COLUMN cost_confidence TEXT NOT NULL DEFAULT 'low';"
+        );
     }
-    if !has_column(conn, "turns", "provider") {
-        conn.execute_batch(
-            "ALTER TABLE turns ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';",
-        )?;
+    if !col!("turns", "provider") {
+        alter!(
+            "turns",
+            "ALTER TABLE turns ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';"
+        );
     }
-    if !has_column(conn, "turns", "reasoning_output_tokens") {
-        conn.execute_batch(
-            "ALTER TABLE turns ADD COLUMN reasoning_output_tokens INTEGER DEFAULT 0;",
-        )?;
+    if !col!("turns", "reasoning_output_tokens") {
+        alter!(
+            "turns",
+            "ALTER TABLE turns ADD COLUMN reasoning_output_tokens INTEGER DEFAULT 0;"
+        );
     }
-    if !has_column(conn, "turns", "estimated_cost_nanos") {
-        conn.execute_batch("ALTER TABLE turns ADD COLUMN estimated_cost_nanos INTEGER DEFAULT 0;")?;
+    if !col!("turns", "estimated_cost_nanos") {
+        alter!(
+            "turns",
+            "ALTER TABLE turns ADD COLUMN estimated_cost_nanos INTEGER DEFAULT 0;"
+        );
     }
-    if !has_column(conn, "turns", "agent_id") {
-        conn.execute_batch(
+    if !col!("turns", "agent_id") {
+        alter!(
+            "turns",
             "ALTER TABLE turns ADD COLUMN is_subagent INTEGER DEFAULT 0;
-             ALTER TABLE turns ADD COLUMN agent_id TEXT;",
-        )?;
+             ALTER TABLE turns ADD COLUMN agent_id TEXT;"
+        );
     }
-    if !has_column(conn, "turns", "source_path") {
-        conn.execute_batch("ALTER TABLE turns ADD COLUMN source_path TEXT NOT NULL DEFAULT '';")?;
+    if !col!("turns", "source_path") {
+        alter!(
+            "turns",
+            "ALTER TABLE turns ADD COLUMN source_path TEXT NOT NULL DEFAULT '';"
+        );
     }
-    if !has_column(conn, "turns", "pricing_version") {
-        conn.execute_batch(
+    if !col!("turns", "pricing_version") {
+        alter!(
+            "turns",
             "ALTER TABLE turns ADD COLUMN pricing_version TEXT NOT NULL DEFAULT '';
              ALTER TABLE turns ADD COLUMN pricing_model TEXT NOT NULL DEFAULT '';
              ALTER TABLE turns ADD COLUMN billing_mode TEXT NOT NULL DEFAULT 'estimated_local';
-             ALTER TABLE turns ADD COLUMN cost_confidence TEXT NOT NULL DEFAULT 'low';",
-        )?;
+             ALTER TABLE turns ADD COLUMN cost_confidence TEXT NOT NULL DEFAULT 'low';"
+        );
     }
-    if !has_column(conn, "turns", "category") {
-        conn.execute_batch("ALTER TABLE turns ADD COLUMN category TEXT NOT NULL DEFAULT '';")?;
+    if !col!("turns", "category") {
+        alter!(
+            "turns",
+            "ALTER TABLE turns ADD COLUMN category TEXT NOT NULL DEFAULT '';"
+        );
     }
-    if !has_column(conn, "tool_invocations", "provider") {
-        conn.execute_batch(
-            "ALTER TABLE tool_invocations ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';",
-        )?;
+    if !col!("tool_invocations", "provider") {
+        alter!(
+            "tool_invocations",
+            "ALTER TABLE tool_invocations ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';"
+        );
     }
     // Denormalize `timestamp` from `turns` into `tool_invocations` so the
     // per-provider tool/mcp aggregations in `provider_cost_summary` can read
     // a single table with a covering `(provider, timestamp)` index. Backfill
     // existing rows via the same join those aggregations used to compute on
     // every refresh — paid once per DB on first-run after this migration.
-    if !has_column(conn, "tool_invocations", "timestamp") {
-        conn.execute_batch(
-            "ALTER TABLE tool_invocations ADD COLUMN timestamp TEXT NOT NULL DEFAULT '';",
-        )?;
+    if !col!("tool_invocations", "timestamp") {
+        alter!(
+            "tool_invocations",
+            "ALTER TABLE tool_invocations ADD COLUMN timestamp TEXT NOT NULL DEFAULT '';"
+        );
         conn.execute_batch(
             "UPDATE tool_invocations SET timestamp = (
                 SELECT t.timestamp FROM turns t
@@ -380,29 +431,34 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
     )?;
 
     // Feature 1: Session titles
-    if !has_column(conn, "sessions", "title") {
-        conn.execute_batch("ALTER TABLE sessions ADD COLUMN title TEXT;")?;
+    if !col!("sessions", "title") {
+        alter!("sessions", "ALTER TABLE sessions ADD COLUMN title TEXT;");
     }
     // Feature 2: Version tracking
-    if !has_column(conn, "turns", "version") {
-        conn.execute_batch("ALTER TABLE turns ADD COLUMN version TEXT;")?;
+    if !col!("turns", "version") {
+        alter!("turns", "ALTER TABLE turns ADD COLUMN version TEXT;");
     }
     // Feature 3: Tool error tracking
-    if !has_column(conn, "tool_invocations", "tool_use_id") {
-        conn.execute_batch(
+    if !col!("tool_invocations", "tool_use_id") {
+        alter!(
+            "tool_invocations",
             "ALTER TABLE tool_invocations ADD COLUMN tool_use_id TEXT;
-             ALTER TABLE tool_invocations ADD COLUMN is_error INTEGER DEFAULT 0;",
-        )?;
+             ALTER TABLE tool_invocations ADD COLUMN is_error INTEGER DEFAULT 0;"
+        );
     }
-    if !has_column(conn, "tool_invocations", "source_path") {
-        conn.execute_batch(
-            "ALTER TABLE tool_invocations ADD COLUMN source_path TEXT NOT NULL DEFAULT '';",
-        )?;
+    if !col!("tool_invocations", "source_path") {
+        alter!(
+            "tool_invocations",
+            "ALTER TABLE tool_invocations ADD COLUMN source_path TEXT NOT NULL DEFAULT '';"
+        );
     }
     // Phase 3: One-shot rate tracking (nullable; 0=not-oneshot, 1=oneshot,
     // NULL=session has no edit activity and is unclassifiable)
-    if !has_column(conn, "sessions", "one_shot") {
-        conn.execute_batch("ALTER TABLE sessions ADD COLUMN one_shot INTEGER;")?;
+    if !col!("sessions", "one_shot") {
+        alter!(
+            "sessions",
+            "ALTER TABLE sessions ADD COLUMN one_shot INTEGER;"
+        );
     }
 
     // Dedup by tool_use_id so repeated use of the same tool in a single turn is preserved.
@@ -426,11 +482,14 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
     // Phase 12 (Amp): credits column on turns and sessions.
     // Must be added BEFORE recompute_session_totals which references turns.credits.
     // NULL for all non-Amp providers; f64 (REAL) for Amp turns.
-    if !has_column(conn, "turns", "credits") {
-        conn.execute_batch("ALTER TABLE turns ADD COLUMN credits REAL;")?;
+    if !col!("turns", "credits") {
+        alter!("turns", "ALTER TABLE turns ADD COLUMN credits REAL;");
     }
-    if !has_column(conn, "sessions", "total_credits") {
-        conn.execute_batch("ALTER TABLE sessions ADD COLUMN total_credits REAL;")?;
+    if !col!("sessions", "total_credits") {
+        alter!(
+            "sessions",
+            "ALTER TABLE sessions ADD COLUMN total_credits REAL;"
+        );
     }
 
     prefix_existing_session_ids(conn)?;
@@ -440,37 +499,50 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
     // Phase 20: Usage-limits file parser.
     // Add source_kind ('oauth' | 'file') and source_path to rate_window_history
     // so file-derived rows can be distinguished from OAuth-derived ones.
-    if !has_column(conn, "rate_window_history", "source_kind") {
-        conn.execute_batch(
-            "ALTER TABLE rate_window_history ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'oauth';",
-        )?;
+    if !col!("rate_window_history", "source_kind") {
+        alter!(
+            "rate_window_history",
+            "ALTER TABLE rate_window_history ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'oauth';"
+        );
     }
-    if !has_column(conn, "rate_window_history", "source_path") {
-        conn.execute_batch(
-            "ALTER TABLE rate_window_history ADD COLUMN source_path TEXT NOT NULL DEFAULT '';",
-        )?;
+    if !col!("rate_window_history", "source_path") {
+        alter!(
+            "rate_window_history",
+            "ALTER TABLE rate_window_history ADD COLUMN source_path TEXT NOT NULL DEFAULT '';"
+        );
     }
 
     // Phase 22: Subscription-quota widget. Capture per-provider/per-window
     // snapshots so we can chart estimated cap evolution over time.
-    if !has_column(conn, "rate_window_history", "provider") {
-        conn.execute_batch(
-            "ALTER TABLE rate_window_history ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';",
-        )?;
+    if !col!("rate_window_history", "provider") {
+        alter!(
+            "rate_window_history",
+            "ALTER TABLE rate_window_history ADD COLUMN provider TEXT NOT NULL DEFAULT 'claude';"
+        );
     }
-    if !has_column(conn, "rate_window_history", "plan") {
-        conn.execute_batch("ALTER TABLE rate_window_history ADD COLUMN plan TEXT;")?;
+    if !col!("rate_window_history", "plan") {
+        alter!(
+            "rate_window_history",
+            "ALTER TABLE rate_window_history ADD COLUMN plan TEXT;"
+        );
     }
-    if !has_column(conn, "rate_window_history", "observed_tokens") {
-        conn.execute_batch("ALTER TABLE rate_window_history ADD COLUMN observed_tokens INTEGER;")?;
+    if !col!("rate_window_history", "observed_tokens") {
+        alter!(
+            "rate_window_history",
+            "ALTER TABLE rate_window_history ADD COLUMN observed_tokens INTEGER;"
+        );
     }
-    if !has_column(conn, "rate_window_history", "estimated_cap_tokens") {
-        conn.execute_batch(
-            "ALTER TABLE rate_window_history ADD COLUMN estimated_cap_tokens INTEGER;",
-        )?;
+    if !col!("rate_window_history", "estimated_cap_tokens") {
+        alter!(
+            "rate_window_history",
+            "ALTER TABLE rate_window_history ADD COLUMN estimated_cap_tokens INTEGER;"
+        );
     }
-    if !has_column(conn, "rate_window_history", "confidence") {
-        conn.execute_batch("ALTER TABLE rate_window_history ADD COLUMN confidence REAL;")?;
+    if !col!("rate_window_history", "confidence") {
+        alter!(
+            "rate_window_history",
+            "ALTER TABLE rate_window_history ADD COLUMN confidence REAL;"
+        );
     }
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_rwh_provider_window
@@ -478,25 +550,66 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
     )?;
 
     // Phase 5: context-window columns on live_events (idempotent ALTER TABLE).
-    if !has_column(conn, "live_events", "context_input_tokens") {
-        conn.execute_batch("ALTER TABLE live_events ADD COLUMN context_input_tokens INTEGER;")?;
+    if !col!("live_events", "context_input_tokens") {
+        alter!(
+            "live_events",
+            "ALTER TABLE live_events ADD COLUMN context_input_tokens INTEGER;"
+        );
     }
-    if !has_column(conn, "live_events", "context_window_size") {
-        conn.execute_batch("ALTER TABLE live_events ADD COLUMN context_window_size INTEGER;")?;
+    if !col!("live_events", "context_window_size") {
+        alter!(
+            "live_events",
+            "ALTER TABLE live_events ADD COLUMN context_window_size INTEGER;"
+        );
     }
 
     // Phase 8: hook-reported cost alongside Heimdall's local estimate.
     // NULL = hook did not report a cost for this event.
-    if !has_column(conn, "live_events", "hook_reported_cost_nanos") {
-        conn.execute_batch("ALTER TABLE live_events ADD COLUMN hook_reported_cost_nanos INTEGER;")?;
+    if !col!("live_events", "hook_reported_cost_nanos") {
+        alter!(
+            "live_events",
+            "ALTER TABLE live_events ADD COLUMN hook_reported_cost_nanos INTEGER;"
+        );
     }
 
     Ok(())
 }
 
+/// Validate that `name` is a bare SQL identifier (letters, digits, underscores,
+/// starting with a letter or underscore). Returns false for anything that could
+/// be used for SQL injection; the caller should treat false as "column absent".
+fn is_valid_identifier(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic() || c == '_')
+            .unwrap_or(false)
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Return the set of column names present in `table` by querying
+/// `PRAGMA table_info`. Returns an empty set when the table does not exist.
+/// Only the column-name comparison is done in Rust; the table name is validated
+/// against an identifier allowlist before being interpolated into the PRAGMA.
+fn table_columns(conn: &Connection, table: &str) -> HashSet<String> {
+    if !is_valid_identifier(table) {
+        return HashSet::new();
+    }
+    let sql = format!("PRAGMA table_info({table})");
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(_) => return HashSet::new(),
+    };
+    // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+    stmt.query_map([], |row| row.get::<_, String>(1))
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
 fn has_column(conn: &Connection, table: &str, column: &str) -> bool {
-    conn.prepare(&format!("SELECT {column} FROM {table} LIMIT 1"))
-        .is_ok()
+    table_columns(conn, table).contains(column)
 }
 
 fn prefix_existing_session_ids(conn: &Connection) -> Result<()> {
@@ -3820,6 +3933,69 @@ mod tests {
         assert!(tables.contains(&"sessions".into()));
         assert!(tables.contains(&"turns".into()));
         assert!(tables.contains(&"processed_files".into()));
+    }
+
+    // --- has_column / PRAGMA table_info tests ---
+
+    #[test]
+    fn test_has_column_existing_column() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE t (a INTEGER, b TEXT);")
+            .unwrap();
+        assert!(has_column(&conn, "t", "a"), "column 'a' must be found");
+        assert!(has_column(&conn, "t", "b"), "column 'b' must be found");
+    }
+
+    #[test]
+    fn test_has_column_missing_column() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE t (a INTEGER);").unwrap();
+        assert!(
+            !has_column(&conn, "t", "missing"),
+            "non-existent column must return false"
+        );
+    }
+
+    #[test]
+    fn test_has_column_missing_table() {
+        let conn = Connection::open_in_memory().unwrap();
+        // PRAGMA table_info on a missing table returns zero rows → false
+        assert!(
+            !has_column(&conn, "no_such_table", "a"),
+            "missing table must return false"
+        );
+    }
+
+    #[test]
+    fn test_is_valid_identifier_rejects_injection() {
+        assert!(
+            !is_valid_identifier("foo; DROP TABLE bar"),
+            "injection string must be rejected"
+        );
+        assert!(!is_valid_identifier(""), "empty string must be rejected");
+        assert!(
+            !is_valid_identifier("1bad"),
+            "leading digit must be rejected"
+        );
+        assert!(
+            is_valid_identifier("valid_table_name"),
+            "valid identifier must be accepted"
+        );
+        assert!(
+            is_valid_identifier("_private"),
+            "leading underscore must be accepted"
+        );
+    }
+
+    #[test]
+    fn test_has_column_invalid_table_name_returns_false() {
+        let conn = Connection::open_in_memory().unwrap();
+        // An invalid table name (contains spaces/semicolons) must not be
+        // interpolated into SQL — is_valid_identifier guards it and returns false.
+        assert!(
+            !has_column(&conn, "foo; DROP TABLE bar", "col"),
+            "invalid table name must return false without executing SQL"
+        );
     }
 
     #[test]
