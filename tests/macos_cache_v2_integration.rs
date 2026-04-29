@@ -2,7 +2,10 @@
 //!
 //! Mirrors the shape of `imports_integration.rs`. Uses the provider-injectable
 //! variant of the ingest pipeline so no real macOS Keychain access is needed.
-//! The test therefore compiles and passes on any platform (macOS, Linux, CI).
+//! The `archive::macos_cache` module is `cfg`-gated to macOS, so this test
+//! file is gated as well — on Linux/Windows CI it compiles to an empty crate.
+
+#![cfg(target_os = "macos")]
 
 use claude_usage_tracker::archive::macos_cache::{
     IngestOptions, IngestReport, ingest_into_archive, ingest_v2_into_archive_with_provider,

@@ -1451,6 +1451,7 @@ fn main() -> Result<()> {
 /// Accepts 32 or 64 hex characters (16 or 32 bytes). Strips a leading `0x`
 /// prefix if present. Returns an error with a human-readable explanation for
 /// any invalid input.
+#[cfg(target_os = "macos")]
 fn hex_decode_v3_key(hex: &str) -> anyhow::Result<Vec<u8>> {
     let stripped = hex.trim().trim_start_matches("0x");
     if stripped.len() != 32 && stripped.len() != 64 {
