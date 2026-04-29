@@ -21,6 +21,13 @@ public enum FormatHelpers {
     ///
     /// Examples: 1.5 → "$1.50", 0.0034 → "$0.0034"
     public static func formatUSD(_ value: Double) -> String {
-        value.formatted(.currency(code: "USD").precision(.fractionLength(value >= 1 ? 2 : 4)))
+        // Pin to en_US so users in non-US locales still see "$1.50" rather than
+        // "1,50 US$" or similar. The contract everywhere downstream (menu
+        // strings, widget snapshots, tests) is "$X.XX".
+        value.formatted(
+            .currency(code: "USD")
+                .locale(Locale(identifier: "en_US"))
+                .precision(.fractionLength(value >= 1 ? 2 : 4))
+        )
     }
 }
