@@ -47,7 +47,7 @@ schemars = "1"
 jaq-core = "3.0.0"
 jaq-std = "3.0.0"
 jaq-json = { version = "2.0.0", features = ["std"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 aes = "0.8"
 aes-gcm = "0.10"
 cbc = { version = "0.1", features = ["alloc"] }
