@@ -205,9 +205,19 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
         }
     }
 
+    // Source of truth for this constant: src/models.rs LIVE_PROVIDERS_CONTRACT_VERSION.
+    // This value must match the Rust constant for the version of the helper this app was built against.
+    // Do NOT read the Rust constant at build time — independent constants are intentional so drift is detectable.
+    static let liveProvidersContractVersion = LiveProviderContract.version
+
     private func validate(_ envelope: ProviderSnapshotEnvelope) throws -> ProviderSnapshotEnvelope {
-        guard envelope.contractVersion == LiveProviderContract.version else {
-            throw URLError(.cannotDecodeContentData)
+        // Accept downgrade silently: an older helper cannot have future fields.
+        // Reject upgrade loudly: a newer helper may have removed or renamed fields this app depends on.
+        if envelope.contractVersion > Self.liveProvidersContractVersion {
+            throw ContractVersionError.tooNew(
+                wire: envelope.contractVersion,
+                compiled: Self.liveProvidersContractVersion
+            )
         }
         return envelope
     }
@@ -217,5 +227,19 @@ public struct HeimdallAPIClient: LiveProviderClient, LiveMonitorClient, MobileSn
             throw URLError(.cannotDecodeContentData)
         }
         return envelope
+    }
+}
+
+// MARK: - Contract version error
+
+public enum ContractVersionError: Error, CustomStringConvertible {
+    /// The bundled helper speaks a newer contract version than this app was built against.
+    case tooNew(wire: Int, compiled: Int)
+
+    public var description: String {
+        switch self {
+        case let .tooNew(wire, compiled):
+            return "The bundled helper speaks contract version \(wire), but this app was built against version \(compiled). Please update Heimdall.app to match the helper."
+        }
     }
 }

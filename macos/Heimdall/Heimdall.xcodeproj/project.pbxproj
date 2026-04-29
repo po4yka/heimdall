@@ -186,6 +186,7 @@
 		D0158AB60A4F343FF2B4ED19 /* HeimdallServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42E0B20B3C4E946F5615DF15 /* HeimdallServices.framework */; };
 		D0A2D5B8AE3561341CE223AB /* TokenBreakdownDonut.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F549F9E14A33C7C4C36F46A /* TokenBreakdownDonut.swift */; };
 		D21F79A8EAECB447AD228297 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 47B3519C7E0C0C5FE57E7763 /* Assets.xcassets */; };
+		D774C73A6745C028485E9285 /* HeimdallAPIClientContractVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAD70857478C17CFBBD84C83 /* HeimdallAPIClientContractVersionTests.swift */; };
 		D7F16C7665C8034DCA2CD70D /* HeimdallCLI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F3E5345CE6B0370A17C849CB /* HeimdallCLI.framework */; };
 		D867D541AD2C8FA59F10D771 /* CumulativeSpendChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD411586AC09DE856748933E /* CumulativeSpendChart.swift */; };
 		D88D94AADD38B60BA9F7D3F6 /* ChartStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEECCF835DD1E2D2E1AC8CB /* ChartStyle.swift */; };
@@ -529,7 +530,7 @@
 		08DC7C68DA667057356F1DF0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		0F74308411EC6164742B7FA8 /* DashboardAdjunctController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardAdjunctController.swift; sourceTree = "<group>"; };
 		10FAFE6026FE6D6116066AEF /* ProviderVisualState+Rank.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ProviderVisualState+Rank.swift"; sourceTree = "<group>"; };
-		1299AC1A64FBBDACC2DF2419 /* HeimdallMobileApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HeimdallMobileApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1299AC1A64FBBDACC2DF2419 /* HeimdallMobileApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HeimdallMobileApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		145C8997FFEA689D3E6C9693 /* CacheHitTrendChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheHitTrendChart.swift; sourceTree = "<group>"; };
 		156085A4611B3040D8A4CFBC /* HeimdallAPIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeimdallAPIClientTests.swift; sourceTree = "<group>"; };
 		192919572CC8C844C5277D95 /* CloudKitAccountObserverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitAccountObserverTests.swift; sourceTree = "<group>"; };
@@ -590,10 +591,10 @@
 		820444B47D1FFE0BB8F440E4 /* LocalProviderDataSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalProviderDataSource.swift; sourceTree = "<group>"; };
 		82DDD23323FC0A6CA070BD23 /* ProviderCostSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderCostSummary.swift; sourceTree = "<group>"; };
 		84A37003A878A2473C662ECD /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		88B3EEEC74012F10BBBDEF02 /* heimdall */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = heimdall; sourceTree = BUILT_PRODUCTS_DIR; };
+		88B3EEEC74012F10BBBDEF02 /* HeimdallTool */ = {isa = PBXFileReference; includeInIndex = 0; path = HeimdallTool; sourceTree = BUILT_PRODUCTS_DIR; };
 		89FCFC5A10E117974EA7DCDB /* InstallationIDStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationIDStoreTests.swift; sourceTree = "<group>"; };
 		8BC377795B018241788AF38F /* FixtureLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FixtureLoader.swift; sourceTree = "<group>"; };
-		8D3DEC24D0A05BF684D95A2F /* Heimdall.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Heimdall.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8D3DEC24D0A05BF684D95A2F /* HeimdallApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HeimdallApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8D902736EB3077BF6056C099 /* TerminalAuthCommandRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalAuthCommandRunnerTests.swift; sourceTree = "<group>"; };
 		8EF8B66DB4466FA0E56A6BC1 /* ProjectCostTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCostTable.swift; sourceTree = "<group>"; };
 		8F7016843FA80F2E65EF3855 /* HourlyActivityChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HourlyActivityChart.swift; sourceTree = "<group>"; };
@@ -613,7 +614,7 @@
 		A5E29CC0EA23FC301099615E /* CloudKitSnapshotSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudKitSnapshotSyncStore.swift; sourceTree = "<group>"; };
 		A740508074D7E86FE75485FB /* ChartsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChartsTests.swift; sourceTree = "<group>"; };
 		A7C08FE6521316E41EC48430 /* SourceResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceResolverTests.swift; sourceTree = "<group>"; };
-		A8929DF98DFAA8AAB079A57D /* HeimdallMobileTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HeimdallMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A8929DF98DFAA8AAB079A57D /* HeimdallMobileTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HeimdallMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A8E0B4ABF86B5945DCCB2D8E /* AuthCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthCoordinator.swift; sourceTree = "<group>"; };
 		ACFCB093CB35AF61EC492D11 /* WebExtrasFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebExtrasFlowTests.swift; sourceTree = "<group>"; };
 		AD411586AC09DE856748933E /* CumulativeSpendChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CumulativeSpendChart.swift; sourceTree = "<group>"; };
@@ -670,6 +671,7 @@
 		F7609829C29171759DC09559 /* HeimdallAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeimdallAPIClient.swift; sourceTree = "<group>"; };
 		F7FB72CB982B1605610B3DE6 /* AppShellModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellModelTests.swift; sourceTree = "<group>"; };
 		F878880B7BB09FDCB32435D6 /* WidgetSnapshotCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotCoordinator.swift; sourceTree = "<group>"; };
+		FAD70857478C17CFBBD84C83 /* HeimdallAPIClientContractVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeimdallAPIClientContractVersionTests.swift; sourceTree = "<group>"; };
 		FB86F9ACB74CD8B48F2A5A9A /* ModelFamilyHistoryChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelFamilyHistoryChart.swift; sourceTree = "<group>"; };
 		FDD421D7EDED7C49A0F38AF4 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -910,7 +912,7 @@
 		6A370BA4365ECE96CB82B5B5 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				8D3DEC24D0A05BF684D95A2F /* Heimdall.app */,
+				8D3DEC24D0A05BF684D95A2F /* HeimdallApp.app */,
 				70090E0E254BD8157B0C1585 /* HeimdallAppUI.framework */,
 				F3E5345CE6B0370A17C849CB /* HeimdallCLI.framework */,
 				6DD3582B86CA2DDB6BDD805A /* HeimdallDomain.framework */,
@@ -919,7 +921,7 @@
 				62A2AB3DA27317891358F8D2 /* HeimdallModuleTests.xctest */,
 				6CBBB18908B45BB3D4866B9E /* HeimdallPlatformMac.framework */,
 				42E0B20B3C4E946F5615DF15 /* HeimdallServices.framework */,
-				88B3EEEC74012F10BBBDEF02 /* heimdall */,
+				88B3EEEC74012F10BBBDEF02 /* HeimdallTool */,
 				5CDCCD0AFB7CEB07B95954C7 /* HeimdallWidget.appex */,
 				35BFF4D6FF9429B8ED927DC9 /* HeimdallWidgets.framework */,
 			);
@@ -971,6 +973,7 @@
 				39EE70F6F8642941D57B0958 /* CloudKitRetryPolicyTests.swift */,
 				1D22DF05F8CE9A0D9E8E9D47 /* CloudKitSyncEngineStateStoreTests.swift */,
 				8BC377795B018241788AF38F /* FixtureLoader.swift */,
+				FAD70857478C17CFBBD84C83 /* HeimdallAPIClientContractVersionTests.swift */,
 				156085A4611B3040D8A4CFBC /* HeimdallAPIClientTests.swift */,
 				1E0809BAE9A8141B899471E4 /* HeimdallHelperControllerTests.swift */,
 				89FCFC5A10E117974EA7DCDB /* InstallationIDStoreTests.swift */,
@@ -1155,7 +1158,7 @@
 			packageProductDependencies = (
 			);
 			productName = HeimdallTool;
-			productReference = 88B3EEEC74012F10BBBDEF02 /* heimdall */;
+			productReference = 88B3EEEC74012F10BBBDEF02 /* HeimdallTool */;
 			productType = "com.apple.product-type.tool";
 		};
 		40704800EB79330E943FA184 /* HeimdallWidgets */ = {
@@ -1249,7 +1252,7 @@
 			packageProductDependencies = (
 			);
 			productName = HeimdallApp;
-			productReference = 8D3DEC24D0A05BF684D95A2F /* Heimdall.app */;
+			productReference = 8D3DEC24D0A05BF684D95A2F /* HeimdallApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 		87F13C55B799D3E8DE986803 /* HeimdallMobileApp */ = {
@@ -1359,7 +1362,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2640;
+				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					125885206E182A0F784A16E6 = {
 						DevelopmentTeam = "";
@@ -1733,6 +1736,7 @@
 				B3C5FFBD0BEB50F0E47D4246 /* CloudKitSyncEngineStateStore.swift in Sources */,
 				A77D6B0836E693FD5677E943 /* CloudKitSyncEngineStateStoreTests.swift in Sources */,
 				29F74E343DD404EAF3A340DE /* FixtureLoader.swift in Sources */,
+				D774C73A6745C028485E9285 /* HeimdallAPIClientContractVersionTests.swift in Sources */,
 				C759872B5B786E00912BE88D /* HeimdallAPIClientTests.swift in Sources */,
 				CEBCDF1F68B6C750C6433109 /* HeimdallHelperControllerTests.swift in Sources */,
 				225B55180D2A9C6B25A345EC /* InstallationIDStoreTests.swift in Sources */,
@@ -1930,7 +1934,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -1950,19 +1953,16 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallAppUI;
 				PRODUCT_NAME = HeimdallAppUI;
 				SDKROOT = macosx;
@@ -1976,7 +1976,6 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1995,19 +1994,16 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallAppUI;
 				PRODUCT_NAME = HeimdallAppUI;
 				SDKROOT = macosx;
@@ -2038,7 +2034,6 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = Widget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2057,19 +2052,16 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallWidgets;
 				PRODUCT_NAME = HeimdallWidgets;
 				SDKROOT = macosx;
@@ -2133,7 +2125,6 @@
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -2160,7 +2151,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
@@ -2172,7 +2162,6 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2191,19 +2180,16 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallPlatformMac;
 				PRODUCT_NAME = HeimdallPlatformMac;
 				SDKROOT = macosx;
@@ -2218,19 +2204,16 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallCLI;
 				PRODUCT_NAME = HeimdallCLI;
 				SDKROOT = macosx;
@@ -2243,13 +2226,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path",
-					"@loader_path",
-					"@loader_path/../Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path @loader_path @loader_path/../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.cli;
 				PRODUCT_NAME = heimdall;
 				SDKROOT = macosx;
@@ -2293,7 +2270,6 @@
 				CODE_SIGN_STYLE = Manual;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -2313,7 +2289,6 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
@@ -2325,7 +2300,6 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Widget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -2361,7 +2335,6 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = App/Info.plist;
@@ -2382,19 +2355,16 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallPlatformMac;
 				PRODUCT_NAME = HeimdallPlatformMac;
 				SDKROOT = macosx;
@@ -2408,12 +2378,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -2421,7 +2389,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallServices;
 				PRODUCT_NAME = HeimdallServices;
 				SDKROOT = auto;
@@ -2440,12 +2407,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -2453,7 +2418,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallServices;
 				PRODUCT_NAME = HeimdallServices;
 				SDKROOT = auto;
@@ -2472,12 +2436,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -2485,7 +2447,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallDomain;
 				PRODUCT_NAME = HeimdallDomain;
 				SDKROOT = auto;
@@ -2523,19 +2484,16 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallWidgets;
 				PRODUCT_NAME = HeimdallWidgets;
 				SDKROOT = macosx;
@@ -2548,14 +2506,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
-				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path",
-					"@loader_path",
-					"@loader_path/../Frameworks",
-				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path @loader_path @loader_path/../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.cli;
 				PRODUCT_NAME = heimdall;
 				SDKROOT = macosx;
@@ -2567,12 +2519,10 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -2580,7 +2530,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallDomain;
 				PRODUCT_NAME = HeimdallDomain;
 				SDKROOT = auto;
@@ -2600,19 +2549,16 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.po4yka.heimdall.HeimdallCLI;
 				PRODUCT_NAME = HeimdallCLI;
 				SDKROOT = macosx;

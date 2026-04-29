@@ -390,7 +390,7 @@ struct HeimdallAPIClientTests {
     }
 }
 
-private final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     typealias Handler = @Sendable (URLRequest, Int) throws -> (HTTPURLResponse, Data)
 
     /// Lock-guarded container for `handler` and `requests`. Encapsulating the
