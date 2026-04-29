@@ -61,6 +61,7 @@ fn configured_agents(dir: &Path) -> HashSet<String> {
 /// Query the DB for the set of agent IDs that appear in any turn.
 fn observed_agents(conn: &Connection) -> Result<HashSet<String>> {
     let mut agents = HashSet::new();
+    // SQL kept here for detector-local cohesion; see scanner/db.rs for shared queries.
     let result = conn.prepare(
         "SELECT DISTINCT agent_id FROM turns WHERE agent_id IS NOT NULL AND agent_id != ''",
     );

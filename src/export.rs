@@ -250,6 +250,10 @@ fn query_rows(
         "GROUP BY date, t.provider, project, t.model ORDER BY date, t.provider, project, t.model",
     );
 
+    // TODO(sql-centralization): move to scanner/db.rs once we have a typed query
+    // builder for the bounds/provider/project filter combinations.  The dynamic
+    // string composition is bounded to a fixed allow-list of optional clauses,
+    // so it is safe in place.
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
         .query_map(rusqlite::params_from_iter(params.iter()), |row| {

@@ -137,6 +137,7 @@ impl Detector for BashNoiseDetector {
         // Fetch all bash events. We cannot do the trivial-prefix filter in SQL
         // in a portable way without LOWER() on a substring, so we fetch all
         // bash values and filter in Rust.
+        // SQL kept here for detector-local cohesion; see scanner/db.rs for shared queries.
         let mut stmt = conn.prepare(
             "SELECT session_id, value, COUNT(*) AS cnt
              FROM tool_events

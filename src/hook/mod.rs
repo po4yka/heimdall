@@ -16,7 +16,7 @@ use chrono::Utc;
 use tracing::warn;
 
 use crate::config::load_config_resolved;
-use crate::scanner::db::{init_db, open_db};
+use crate::scanner::db::{LiveEventRow, init_db, insert_live_event, open_db};
 
 /// Entry point for the `heimdall-hook` binary, extracted for testability.
 ///
@@ -77,26 +77,21 @@ fn ingest_event(json: &str) -> Result<()> {
     let conn = open_db(&db_path)?;
     init_db(&conn)?;
 
-    conn.execute(
-        "INSERT OR IGNORE INTO live_events
-            (dedup_key, received_at, session_id, tool_name,
-             cost_usd_nanos, input_tokens, output_tokens, raw_json,
-             context_input_tokens, context_window_size,
-             hook_reported_cost_nanos)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-        rusqlite::params![
-            event.dedup_key,
-            event.received_at,
-            event.session_id,
-            event.tool_name,
-            event.cost_usd_nanos,
-            event.input_tokens,
-            event.output_tokens,
-            event.raw_json,
-            event.context_input_tokens,
-            event.context_window_size,
-            event.hook_reported_cost_nanos,
-        ],
+    insert_live_event(
+        &conn,
+        &LiveEventRow {
+            dedup_key: event.dedup_key,
+            received_at: event.received_at,
+            session_id: event.session_id,
+            tool_name: event.tool_name,
+            cost_usd_nanos: event.cost_usd_nanos,
+            input_tokens: event.input_tokens,
+            output_tokens: event.output_tokens,
+            raw_json: event.raw_json,
+            context_input_tokens: event.context_input_tokens,
+            context_window_size: event.context_window_size,
+            hook_reported_cost_nanos: event.hook_reported_cost_nanos,
+        },
     )?;
 
     Ok(())

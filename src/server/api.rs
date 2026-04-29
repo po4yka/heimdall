@@ -1919,7 +1919,6 @@ pub(crate) async fn load_context_window_response(
     state: &Arc<AppState>,
 ) -> Result<ContextWindowApiResponse, StatusCode> {
     use crate::analytics::quota::severity_for_pct;
-    use rusqlite::OptionalExtension;
 
     let db_path = state.db_path.clone();
 
@@ -1927,31 +1926,7 @@ pub(crate) async fn load_context_window_response(
         let conn = db::open_db(&db_path)?;
         db::init_db(&conn)?;
 
-        struct Row {
-            context_input_tokens: i64,
-            context_window_size: i64,
-            session_id: Option<String>,
-            captured_at: String,
-        }
-
-        let result: Option<Row> = {
-            let mut stmt = conn.prepare(
-                "SELECT context_input_tokens, context_window_size, session_id, received_at
-                 FROM live_events
-                 WHERE context_input_tokens IS NOT NULL AND context_window_size > 0
-                 ORDER BY received_at DESC LIMIT 1",
-            )?;
-            stmt.query_row([], |r| {
-                Ok(Row {
-                    context_input_tokens: r.get(0)?,
-                    context_window_size: r.get(1)?,
-                    session_id: r.get(2)?,
-                    captured_at: r.get(3)?,
-                })
-            })
-            .optional()
-            .map_err(anyhow::Error::from)?
-        };
+        let result = db::query_latest_context_window(&conn)?;
 
         Ok(match result {
             None => ContextWindowApiResponse {
@@ -1974,7 +1949,7 @@ pub(crate) async fn load_context_window_response(
                         .into(),
                     ),
                     session_id: row.session_id,
-                    captured_at: Some(row.captured_at),
+                    captured_at: Some(row.received_at),
                 }
             }
         })
@@ -2019,13 +1994,7 @@ pub async fn api_cost_reconciliation(
         db::init_db(&conn)?;
 
         // Check if any hook costs exist at all.
-        let hook_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM live_events WHERE hook_reported_cost_nanos IS NOT NULL",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap_or(0);
+        let hook_count = db::count_hook_reported_cost_events(&conn).unwrap_or(0);
 
         if hook_count == 0 {
             return Ok(serde_json::json!({ "enabled": false }));
@@ -2041,48 +2010,8 @@ pub async fn api_cost_reconciliation(
         let now = chrono::Utc::now();
         let cutoff = (now - chrono::Duration::days(days_back)).to_rfc3339();
 
-        // Sum hook_reported_cost_nanos by date from live_events.
-        let mut hook_by_day: std::collections::HashMap<String, i64> =
-            std::collections::HashMap::new();
-        {
-            let mut stmt = conn.prepare(
-                "SELECT date(received_at) AS day,
-                        COALESCE(SUM(hook_reported_cost_nanos), 0) AS nanos
-                 FROM live_events
-                 WHERE hook_reported_cost_nanos IS NOT NULL
-                   AND received_at >= ?1
-                 GROUP BY day
-                 ORDER BY day",
-            )?;
-            let rows = stmt.query_map(rusqlite::params![cutoff], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })?;
-            for row in rows {
-                let (day, nanos) = row?;
-                hook_by_day.insert(day, nanos);
-            }
-        }
-
-        // Sum estimated_cost_nanos by date from turns.
-        let mut local_by_day: std::collections::HashMap<String, i64> =
-            std::collections::HashMap::new();
-        {
-            let mut stmt = conn.prepare(
-                "SELECT date(timestamp) AS day,
-                        COALESCE(SUM(estimated_cost_nanos), 0) AS nanos
-                 FROM turns
-                 WHERE timestamp >= ?1
-                 GROUP BY day
-                 ORDER BY day",
-            )?;
-            let rows = stmt.query_map(rusqlite::params![cutoff], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-            })?;
-            for row in rows {
-                let (day, nanos) = row?;
-                local_by_day.insert(day, nanos);
-            }
-        }
+        let hook_by_day = db::query_hook_cost_by_day(&conn, &cutoff)?;
+        let local_by_day = db::query_local_cost_by_day(&conn, &cutoff)?;
 
         // Build unified day list (union of both maps).
         let mut all_days: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -2189,67 +2118,7 @@ fn preserve_runtime_history(
     let conn = db::open_db(temp_path)?;
     db::init_db(&conn)?;
 
-    conn.execute(
-        "ATTACH DATABASE ?1 AS live_db",
-        [db_path.to_string_lossy().as_ref()],
-    )?;
-
-    conn.execute_batch(
-        "INSERT OR IGNORE INTO live_events
-             (dedup_key, received_at, session_id, tool_name, cost_usd_nanos,
-              input_tokens, output_tokens, raw_json, context_input_tokens,
-              context_window_size, hook_reported_cost_nanos)
-         SELECT dedup_key, received_at, session_id, tool_name, cost_usd_nanos,
-                input_tokens, output_tokens, raw_json, context_input_tokens,
-                context_window_size, hook_reported_cost_nanos
-         FROM live_db.live_events;
-
-         INSERT OR IGNORE INTO agent_status_history
-             (ts_epoch, provider, component_id, component_name, status)
-         SELECT ts_epoch, provider, component_id, component_name, status
-         FROM live_db.agent_status_history;",
-    )?;
-
-    conn.execute_batch(
-        "INSERT OR IGNORE INTO claude_usage_runs
-             (id, captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary)
-         SELECT id, captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary
-         FROM live_db.claude_usage_runs;
-
-         INSERT OR IGNORE INTO claude_usage_factors
-             (id, run_id, factor_key, display_label, percent, description, advice_text, display_order)
-         SELECT id, run_id, factor_key, display_label, percent, description, advice_text, display_order
-         FROM live_db.claude_usage_factors;",
-    )?;
-
-    conn.execute(
-        "INSERT INTO rate_window_history
-             (timestamp, window_type, used_percent, resets_at, source_kind, source_path)
-         SELECT lr.timestamp,
-                lr.window_type,
-                lr.used_percent,
-                lr.resets_at,
-                COALESCE(lr.source_kind, 'oauth'),
-                COALESCE(lr.source_path, '')
-         FROM live_db.rate_window_history lr
-         WHERE COALESCE(lr.source_kind, 'oauth') = 'oauth'
-           AND NOT EXISTS (
-               SELECT 1
-               FROM rate_window_history cur
-               WHERE cur.timestamp = lr.timestamp
-                 AND cur.window_type = lr.window_type
-                 AND ABS(cur.used_percent - lr.used_percent) < 0.000001
-                 AND (
-                     (cur.resets_at IS NULL AND lr.resets_at IS NULL)
-                     OR cur.resets_at = lr.resets_at
-                 )
-                 AND cur.source_kind = COALESCE(lr.source_kind, 'oauth')
-                 AND cur.source_path = COALESCE(lr.source_path, '')
-           )",
-        [],
-    )?;
-
-    conn.execute_batch("DETACH DATABASE live_db;")?;
+    db::merge_live_db(&conn, db_path)?;
     Ok(())
 }
 

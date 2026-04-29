@@ -77,6 +77,7 @@ impl Detector for RereadDetector {
 
     fn run(&self, conn: &Connection) -> Result<Vec<Finding>> {
         // Query for files read >= MIN_READS times in any single session.
+        // SQL kept here for detector-local cohesion; see scanner/db.rs for shared queries.
         let mut stmt = conn.prepare(
             "SELECT session_id, value AS file_path, COUNT(*) AS reads
              FROM tool_events

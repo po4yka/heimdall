@@ -85,6 +85,7 @@ fn invoked_servers(conn: &Connection) -> Result<HashSet<String>> {
 
     // Source 1: tool_invocations.mcp_server (most reliable).
     // Table may not exist in very old DBs; silently skip if absent.
+    // SQL kept here for detector-local cohesion; see scanner/db.rs for shared queries.
     let ti_result = conn.prepare(
         "SELECT DISTINCT mcp_server FROM tool_invocations \
          WHERE mcp_server IS NOT NULL AND mcp_server != ''",

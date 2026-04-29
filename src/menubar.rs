@@ -168,26 +168,13 @@ pub fn run_menubar(db_path: &Path) -> Result<String> {
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
     // Today's cost and session count.
-    let (today_cost_nanos, today_sessions): (i64, i64) = conn
-        .query_row(
-            "SELECT COALESCE(SUM(estimated_cost_nanos), 0), COUNT(DISTINCT session_id)
-             FROM turns
-             WHERE substr(timestamp, 1, 10) = ?1",
-            [&today],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .unwrap_or((0, 0));
+    let (today_cost_nanos, today_sessions) =
+        crate::scanner::db::query_day_cost_and_session_count(&conn, &today).unwrap_or((0, 0));
 
     let today_cost_usd = today_cost_nanos as f64 / 1_000_000_000.0;
 
     // One-shot rate across all sessions (not just today — same as stats command).
-    let one_shot_rate: Option<f64> = conn
-        .query_row(
-            "SELECT AVG(CAST(one_shot AS REAL)) FROM sessions WHERE one_shot IS NOT NULL",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(None);
+    let one_shot_rate: Option<f64> = crate::scanner::db::query_oneshot_rate(&conn).unwrap_or(None);
 
     let archive_root = crate::archive::default_root();
     let archive_metas = crate::archive::Archive::at(archive_root)

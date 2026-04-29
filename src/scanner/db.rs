@@ -3904,6 +3904,314 @@ pub fn query_stats_oneshot_avg(conn: &Connection) -> rusqlite::Result<Option<f64
     )
 }
 
+// ── Hook live_events ingest ─────────────────────────────────────────────────
+
+/// One row destined for the `live_events` table.
+///
+/// Centralises the column-order knowledge so the `heimdall-hook` binary (and
+/// any other writer) does not have to maintain a positional bind-list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LiveEventRow {
+    pub dedup_key: String,
+    pub received_at: String,
+    pub session_id: Option<String>,
+    pub tool_name: Option<String>,
+    pub cost_usd_nanos: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub raw_json: String,
+    pub context_input_tokens: Option<i64>,
+    pub context_window_size: Option<i64>,
+    pub hook_reported_cost_nanos: Option<i64>,
+}
+
+/// Insert one `live_events` row using `INSERT OR IGNORE` for dedup safety.
+pub fn insert_live_event(conn: &Connection, event: &LiveEventRow) -> Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO live_events
+            (dedup_key, received_at, session_id, tool_name,
+             cost_usd_nanos, input_tokens, output_tokens, raw_json,
+             context_input_tokens, context_window_size,
+             hook_reported_cost_nanos)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        rusqlite::params![
+            event.dedup_key,
+            event.received_at,
+            event.session_id,
+            event.tool_name,
+            event.cost_usd_nanos,
+            event.input_tokens,
+            event.output_tokens,
+            event.raw_json,
+            event.context_input_tokens,
+            event.context_window_size,
+            event.hook_reported_cost_nanos,
+        ],
+    )?;
+    Ok(())
+}
+
+// ── Server live_events / context-window queries ─────────────────────────────
+
+/// Most recent non-null context-window snapshot from `live_events`.
+pub struct LatestContextWindow {
+    pub context_input_tokens: i64,
+    pub context_window_size: i64,
+    pub session_id: Option<String>,
+    pub received_at: String,
+}
+
+/// Latest non-null context-window snapshot from `live_events`.
+///
+/// Returns `Ok(None)` when no row has both `context_input_tokens IS NOT NULL`
+/// and `context_window_size > 0`.
+pub fn query_latest_context_window(conn: &Connection) -> Result<Option<LatestContextWindow>> {
+    let mut stmt = conn.prepare(
+        "SELECT context_input_tokens, context_window_size, session_id, received_at
+         FROM live_events
+         WHERE context_input_tokens IS NOT NULL AND context_window_size > 0
+         ORDER BY received_at DESC LIMIT 1",
+    )?;
+    let result = stmt
+        .query_row([], |r| {
+            Ok(LatestContextWindow {
+                context_input_tokens: r.get(0)?,
+                context_window_size: r.get(1)?,
+                session_id: r.get(2)?,
+                received_at: r.get(3)?,
+            })
+        })
+        .optional()?;
+    Ok(result)
+}
+
+/// Count of `live_events` rows that carry a non-null `hook_reported_cost_nanos`.
+///
+/// Used by `/api/cost-reconciliation` to short-circuit when the hook has never
+/// reported a cost.
+pub fn count_hook_reported_cost_events(conn: &Connection) -> Result<i64> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM live_events WHERE hook_reported_cost_nanos IS NOT NULL",
+        [],
+        |r| r.get(0),
+    )?;
+    Ok(count)
+}
+
+/// Sum hook-reported cost (nanos) by `date(received_at)` since `cutoff_iso`.
+pub fn query_hook_cost_by_day(
+    conn: &Connection,
+    cutoff_iso: &str,
+) -> Result<std::collections::HashMap<String, i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT date(received_at) AS day,
+                COALESCE(SUM(hook_reported_cost_nanos), 0) AS nanos
+         FROM live_events
+         WHERE hook_reported_cost_nanos IS NOT NULL
+           AND received_at >= ?1
+         GROUP BY day
+         ORDER BY day",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![cutoff_iso], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+    })?;
+    let mut map = std::collections::HashMap::new();
+    for row in rows {
+        let (day, nanos) = row?;
+        map.insert(day, nanos);
+    }
+    Ok(map)
+}
+
+/// Sum local-estimate cost (nanos) by `date(timestamp)` from `turns` since `cutoff_iso`.
+pub fn query_local_cost_by_day(
+    conn: &Connection,
+    cutoff_iso: &str,
+) -> Result<std::collections::HashMap<String, i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT date(timestamp) AS day,
+                COALESCE(SUM(estimated_cost_nanos), 0) AS nanos
+         FROM turns
+         WHERE timestamp >= ?1
+         GROUP BY day
+         ORDER BY day",
+    )?;
+    let rows = stmt.query_map(rusqlite::params![cutoff_iso], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+    })?;
+    let mut map = std::collections::HashMap::new();
+    for row in rows {
+        let (day, nanos) = row?;
+        map.insert(day, nanos);
+    }
+    Ok(map)
+}
+
+// ── Statusline cost queries ─────────────────────────────────────────────────
+
+/// Sum `estimated_cost_nanos` from `turns` for one `session_id`.
+/// Returns 0 when no rows match.
+pub fn query_session_estimated_cost_nanos(conn: &Connection, session_id: &str) -> Result<i64> {
+    let cost: i64 = conn.query_row(
+        "SELECT COALESCE(SUM(estimated_cost_nanos), 0) FROM turns WHERE session_id = ?1",
+        rusqlite::params![session_id],
+        |r| r.get(0),
+    )?;
+    Ok(cost)
+}
+
+/// Sum `estimated_cost_nanos` from `turns` over a half-open `[start, end)` range.
+pub fn query_estimated_cost_nanos_in_range(
+    conn: &Connection,
+    start_inclusive: &str,
+    end_exclusive: &str,
+) -> Result<i64> {
+    let cost: i64 = conn.query_row(
+        "SELECT COALESCE(SUM(estimated_cost_nanos), 0) FROM turns \
+         WHERE timestamp >= ?1 AND timestamp < ?2",
+        rusqlite::params![start_inclusive, end_exclusive],
+        |r| r.get(0),
+    )?;
+    Ok(cost)
+}
+
+// ── Menubar widget queries ──────────────────────────────────────────────────
+
+/// `(SUM(estimated_cost_nanos), COUNT(DISTINCT session_id))` for a single
+/// `YYYY-MM-DD` day prefix (matched via `substr(timestamp, 1, 10) = ?1`).
+pub fn query_day_cost_and_session_count(
+    conn: &Connection,
+    day_yyyymmdd: &str,
+) -> Result<(i64, i64)> {
+    let row: (i64, i64) = conn.query_row(
+        "SELECT COALESCE(SUM(estimated_cost_nanos), 0), COUNT(DISTINCT session_id)
+         FROM turns
+         WHERE substr(timestamp, 1, 10) = ?1",
+        rusqlite::params![day_yyyymmdd],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    Ok(row)
+}
+
+/// Average one-shot rate across classifiable sessions, or `None` when no
+/// classified sessions exist.  (Same SQL as `query_stats_oneshot_avg` but uses
+/// `Result<Option<f64>>` semantics so callers do not need to hand-roll the
+/// `Optional` extension.)
+pub fn query_oneshot_rate(conn: &Connection) -> Result<Option<f64>> {
+    let rate: Option<f64> = conn
+        .query_row(
+            "SELECT AVG(CAST(one_shot AS REAL)) FROM sessions WHERE one_shot IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    // The query returns Some(NULL) when zero rows match the WHERE clause, which
+    // rusqlite surfaces as Some(None). Flatten so callers get a single Option.
+    Ok(rate)
+}
+
+// ── Atomic-rescan: merge live runtime history into a freshly-scanned DB ─────
+
+/// Statistics returned by [`merge_live_db`] (informational only; callers may
+/// ignore).  Counts indicate how many rows were inserted into the destination
+/// for each section.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct MergeStats {
+    pub live_events: usize,
+    pub agent_status_history: usize,
+    pub claude_usage_runs: usize,
+    pub claude_usage_factors: usize,
+    pub rate_window_history: usize,
+}
+
+/// Merge runtime history from a "live" database (the user's existing DB) into
+/// a freshly-scanned temp database.
+///
+/// This is invoked by the atomic-rescan flow: `scan` writes to a temp DB,
+/// then this function ports forward the runtime tables that are not produced
+/// by the scanner pipeline (live_events, agent_status_history, claude_usage_*,
+/// and `rate_window_history`).  The temp DB is the destination; the live DB
+/// is read via `ATTACH`.
+///
+/// All operations use `INSERT OR IGNORE` (or `NOT EXISTS` for the
+/// near-duplicate `rate_window_history` rule) so the merge is idempotent.
+///
+/// Returns informational counts.  When `live_path` does not exist, returns
+/// `Ok(MergeStats::default())` without side effects.
+pub fn merge_live_db(target_conn: &Connection, live_path: &std::path::Path) -> Result<MergeStats> {
+    if !live_path.exists() {
+        return Ok(MergeStats::default());
+    }
+
+    target_conn.execute(
+        "ATTACH DATABASE ?1 AS live_db",
+        [live_path.to_string_lossy().as_ref()],
+    )?;
+
+    target_conn.execute_batch(
+        "INSERT OR IGNORE INTO live_events
+             (dedup_key, received_at, session_id, tool_name, cost_usd_nanos,
+              input_tokens, output_tokens, raw_json, context_input_tokens,
+              context_window_size, hook_reported_cost_nanos)
+         SELECT dedup_key, received_at, session_id, tool_name, cost_usd_nanos,
+                input_tokens, output_tokens, raw_json, context_input_tokens,
+                context_window_size, hook_reported_cost_nanos
+         FROM live_db.live_events;
+
+         INSERT OR IGNORE INTO agent_status_history
+             (ts_epoch, provider, component_id, component_name, status)
+         SELECT ts_epoch, provider, component_id, component_name, status
+         FROM live_db.agent_status_history;",
+    )?;
+
+    target_conn.execute_batch(
+        "INSERT OR IGNORE INTO claude_usage_runs
+             (id, captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary)
+         SELECT id, captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary
+         FROM live_db.claude_usage_runs;
+
+         INSERT OR IGNORE INTO claude_usage_factors
+             (id, run_id, factor_key, display_label, percent, description, advice_text, display_order)
+         SELECT id, run_id, factor_key, display_label, percent, description, advice_text, display_order
+         FROM live_db.claude_usage_factors;",
+    )?;
+
+    target_conn.execute(
+        "INSERT INTO rate_window_history
+             (timestamp, window_type, used_percent, resets_at, source_kind, source_path)
+         SELECT lr.timestamp,
+                lr.window_type,
+                lr.used_percent,
+                lr.resets_at,
+                COALESCE(lr.source_kind, 'oauth'),
+                COALESCE(lr.source_path, '')
+         FROM live_db.rate_window_history lr
+         WHERE COALESCE(lr.source_kind, 'oauth') = 'oauth'
+           AND NOT EXISTS (
+               SELECT 1
+               FROM rate_window_history cur
+               WHERE cur.timestamp = lr.timestamp
+                 AND cur.window_type = lr.window_type
+                 AND ABS(cur.used_percent - lr.used_percent) < 0.000001
+                 AND (
+                     (cur.resets_at IS NULL AND lr.resets_at IS NULL)
+                     OR cur.resets_at = lr.resets_at
+                 )
+                 AND cur.source_kind = COALESCE(lr.source_kind, 'oauth')
+                 AND cur.source_path = COALESCE(lr.source_path, '')
+           )",
+        [],
+    )?;
+
+    target_conn.execute_batch("DETACH DATABASE live_db;")?;
+
+    // Counts are intentionally not collected — the caller does not use them
+    // and `changes()` after `execute_batch` is unreliable across rusqlite
+    // versions.  Tests that need precise counts query the destination tables
+    // directly.
+    Ok(MergeStats::default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6158,5 +6466,201 @@ mod tests {
         assert_eq!(rows[1].version, "1.1.0");
         assert_eq!(rows[1].turns, 1);
         assert!((rows[1].cost_usd - 1.0).abs() < 1e-6);
+    }
+
+    // ── merge_live_db ───────────────────────────────────────────────────────
+
+    #[test]
+    fn merge_live_db_copies_runtime_history_and_dedups() {
+        use tempfile::TempDir;
+
+        let dir = TempDir::new().unwrap();
+        let live_path = dir.path().join("live.db");
+        let target_path = dir.path().join("target.db");
+
+        // Build the live (source) DB with rows in every section.
+        {
+            let live_conn = open_db(&live_path).unwrap();
+            init_db(&live_conn).unwrap();
+
+            insert_live_event(
+                &live_conn,
+                &LiveEventRow {
+                    dedup_key: "live:tu1".into(),
+                    received_at: "2026-04-18T10:00:00Z".into(),
+                    session_id: Some("ses-live".into()),
+                    tool_name: Some("Edit".into()),
+                    cost_usd_nanos: 1_000_000,
+                    input_tokens: 100,
+                    output_tokens: 50,
+                    raw_json: "{}".into(),
+                    context_input_tokens: Some(45_000),
+                    context_window_size: Some(200_000),
+                    hook_reported_cost_nanos: Some(1_000_000),
+                },
+            )
+            .unwrap();
+
+            insert_agent_status_samples(
+                &live_conn,
+                "claude",
+                &[(
+                    "api".to_string(),
+                    "API".to_string(),
+                    "operational".to_string(),
+                )],
+                1_700_000_000,
+            )
+            .unwrap();
+
+            live_conn
+                .execute(
+                    "INSERT INTO claude_usage_runs
+                        (id, captured_at, status, exit_code, stdout_raw, stderr_raw, invocation_mode, period, parser_version, error_summary)
+                     VALUES (1, '2026-04-18T10:00:00Z', 'ok', 0, '', '', 'auto', 'today', 'v1', '')",
+                    [],
+                )
+                .unwrap();
+            live_conn
+                .execute(
+                    "INSERT INTO claude_usage_factors
+                        (id, run_id, factor_key, display_label, percent, description, advice_text, display_order)
+                     VALUES (1, 1, 'k', 'L', 0.5, '', '', 0)",
+                    [],
+                )
+                .unwrap();
+
+            live_conn
+                .execute(
+                    "INSERT INTO rate_window_history
+                        (timestamp, window_type, used_percent, resets_at, source_kind, source_path)
+                     VALUES ('2026-04-18T10:00:00Z', '5h', 0.42, '2026-04-18T15:00:00Z', 'oauth', '')",
+                    [],
+                )
+                .unwrap();
+        }
+
+        // Build a fresh target DB.
+        {
+            let target_conn = open_db(&target_path).unwrap();
+            init_db(&target_conn).unwrap();
+        }
+
+        // Run the merge.
+        let target_conn = open_db(&target_path).unwrap();
+        merge_live_db(&target_conn, &live_path).unwrap();
+
+        // Each section copied exactly one row.
+        let live_events: i64 = target_conn
+            .query_row("SELECT COUNT(*) FROM live_events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(live_events, 1);
+        let agent_history: i64 = target_conn
+            .query_row("SELECT COUNT(*) FROM agent_status_history", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(agent_history, 1);
+        let runs: i64 = target_conn
+            .query_row("SELECT COUNT(*) FROM claude_usage_runs", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(runs, 1);
+        let factors: i64 = target_conn
+            .query_row("SELECT COUNT(*) FROM claude_usage_factors", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(factors, 1);
+        let rwh: i64 = target_conn
+            .query_row("SELECT COUNT(*) FROM rate_window_history", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rwh, 1);
+
+        // Idempotency: a second merge does NOT duplicate rows.
+        merge_live_db(&target_conn, &live_path).unwrap();
+        let live_events_after: i64 = target_conn
+            .query_row("SELECT COUNT(*) FROM live_events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            live_events_after, 1,
+            "live_events must dedup on second merge"
+        );
+        let rwh_after: i64 = target_conn
+            .query_row("SELECT COUNT(*) FROM rate_window_history", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            rwh_after, 1,
+            "rate_window_history must dedup on second merge"
+        );
+    }
+
+    #[test]
+    fn merge_live_db_missing_live_path_is_ok() {
+        use tempfile::TempDir;
+        let dir = TempDir::new().unwrap();
+        let target_path = dir.path().join("target.db");
+        let conn = open_db(&target_path).unwrap();
+        init_db(&conn).unwrap();
+        // Should be a no-op when the live path does not exist.
+        let stats = merge_live_db(&conn, &dir.path().join("nonexistent.db")).unwrap();
+        assert_eq!(stats, MergeStats::default());
+    }
+
+    #[test]
+    fn insert_live_event_writes_expected_columns() {
+        let conn = test_conn();
+        let row = LiveEventRow {
+            dedup_key: "k1".into(),
+            received_at: "2026-04-18T10:00:00Z".into(),
+            session_id: Some("ses1".into()),
+            tool_name: Some("Bash".into()),
+            cost_usd_nanos: 500_000,
+            input_tokens: 200,
+            output_tokens: 50,
+            raw_json: "{}".into(),
+            context_input_tokens: Some(1234),
+            context_window_size: Some(200_000),
+            hook_reported_cost_nanos: Some(500_000),
+        };
+        insert_live_event(&conn, &row).unwrap();
+        // Second insert with the same dedup_key is silently ignored.
+        insert_live_event(&conn, &row).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM live_events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn query_latest_context_window_returns_most_recent() {
+        let conn = test_conn();
+        // Two rows: an older one and a newer one.
+        for (dedup_key, ts, ctx) in [
+            ("k_old", "2026-04-18T08:00:00Z", 30_000_i64),
+            ("k_new", "2026-04-18T10:00:00Z", 45_000_i64),
+        ] {
+            insert_live_event(
+                &conn,
+                &LiveEventRow {
+                    dedup_key: dedup_key.into(),
+                    received_at: ts.into(),
+                    session_id: Some("s".into()),
+                    tool_name: None,
+                    cost_usd_nanos: 0,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    raw_json: "{}".into(),
+                    context_input_tokens: Some(ctx),
+                    context_window_size: Some(200_000),
+                    hook_reported_cost_nanos: None,
+                },
+            )
+            .unwrap();
+        }
+        let row = query_latest_context_window(&conn).unwrap().unwrap();
+        assert_eq!(row.context_input_tokens, 45_000);
+        assert_eq!(row.context_window_size, 200_000);
+        assert_eq!(row.session_id.as_deref(), Some("s"));
+        assert_eq!(row.received_at, "2026-04-18T10:00:00Z");
     }
 }

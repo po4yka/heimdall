@@ -174,13 +174,8 @@ fn zeroed_stats(input: &HookInput, cost_source: CostSource) -> ComputedStats {
 
 fn query_session_cost_from_db(conn: &rusqlite::Connection, raw_session_id: &str) -> Result<i64> {
     // Try the raw session_id first.
-    let raw_cost: i64 = conn
-        .query_row(
-            "SELECT COALESCE(SUM(estimated_cost_nanos), 0) FROM turns WHERE session_id = ?1",
-            rusqlite::params![raw_session_id],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
+    let raw_cost =
+        crate::scanner::db::query_session_estimated_cost_nanos(conn, raw_session_id).unwrap_or(0);
 
     if raw_cost > 0 {
         return Ok(raw_cost);
@@ -188,13 +183,8 @@ fn query_session_cost_from_db(conn: &rusqlite::Connection, raw_session_id: &str)
 
     // Try prefixed form "claude:<id>".
     let prefixed = format!("claude:{}", raw_session_id);
-    let prefixed_cost: i64 = conn
-        .query_row(
-            "SELECT COALESCE(SUM(estimated_cost_nanos), 0) FROM turns WHERE session_id = ?1",
-            rusqlite::params![prefixed],
-            |r| r.get(0),
-        )
-        .unwrap_or(0);
+    let prefixed_cost =
+        crate::scanner::db::query_session_estimated_cost_nanos(conn, &prefixed).unwrap_or(0);
 
     Ok(prefixed_cost)
 }
@@ -212,13 +202,7 @@ fn query_today_cost(conn: &rusqlite::Connection, now: DateTime<Utc>) -> Result<i
     let start_utc = start_local.with_timezone(&Utc).to_rfc3339();
     let end_utc = end_local.with_timezone(&Utc).to_rfc3339();
 
-    let cost: i64 = conn
-        .query_row(
-            "SELECT COALESCE(SUM(estimated_cost_nanos), 0) FROM turns \
-             WHERE timestamp >= ?1 AND timestamp < ?2",
-            rusqlite::params![start_utc, end_utc],
-            |r| r.get(0),
-        )
+    let cost = crate::scanner::db::query_estimated_cost_nanos_in_range(conn, &start_utc, &end_utc)
         .unwrap_or(0);
 
     Ok(cost)

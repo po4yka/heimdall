@@ -73,6 +73,7 @@ impl Detector for ClaudeMdBloatDetector {
         }
 
         // Count sessions in the DB.
+        // SQL kept here for detector-local cohesion; see scanner/db.rs for shared queries.
         let session_count: i64 =
             conn.query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))?;
 
