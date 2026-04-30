@@ -51,7 +51,7 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 aes = "0.8"
 aes-gcm = "0.10"
 cbc = { version = "0.1", features = ["alloc"] }
-hmac = "0.12"
+hmac = "0.13"
 pbkdf2 = "0.12"
 sha1 = "0.10"
 
