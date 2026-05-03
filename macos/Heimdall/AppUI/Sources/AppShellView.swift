@@ -35,7 +35,18 @@ struct AppShellView: View {
                     case .liveMonitor:
                         WindowLiveMonitorView(model: self.liveMonitor, helperPort: self.helperPort)
                     case .provider(let provider):
-                        WindowProviderView(model: self.providerModel(provider))
+                        WindowProviderView(
+                            model: self.providerModel(provider),
+                            onErrorTap: { toolName in
+                                self.shell.navigationSelection = .toolErrors(toolName: toolName)
+                            }
+                        )
+                    case .toolErrors(let toolName):
+                        WindowToolErrorsView(
+                            toolName: toolName,
+                            port: self.helperPort,
+                            onBack: { self.shell.navigationSelection = .overview }
+                        )
                     }
                 }
                 .padding(24)
@@ -62,6 +73,8 @@ struct AppShellView: View {
                             await self.liveMonitor.refresh()
                         case .provider(let provider):
                             await self.providerModel(provider).refresh()
+                        case .toolErrors:
+                            break
                         }
                     }
                 }
@@ -97,6 +110,8 @@ struct AppShellView: View {
             return self.liveMonitor.isRefreshing
         case .provider(let provider):
             return self.providerModel(provider).isBusy
+        case .toolErrors:
+            return false
         }
     }
 
@@ -2734,6 +2749,7 @@ private struct WindowOverviewTotalsCard: View {
 
 private struct WindowProviderView: View {
     @Bindable var model: ProviderFeatureModel
+    var onErrorTap: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -2753,7 +2769,7 @@ private struct WindowProviderView: View {
                 isRetrying: self.model.isBusy
             )
 
-            ProviderMenuCard(providerModel: self.model)
+            ProviderMenuCard(providerModel: self.model, onErrorTap: self.onErrorTap)
 
             if let forecast = WindowDepletionForecastModel.make(forecast: self.model.projection.depletionForecast) {
                 WindowOverviewDepletionForecastStrip(model: forecast)

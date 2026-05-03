@@ -44,6 +44,8 @@ struct RootMenuView: View {
     let helperPort: Int
     let onQuit: () -> Void
 
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
         let overview = self.overview.projection
 
@@ -77,7 +79,16 @@ struct RootMenuView: View {
                     OverviewMenuCard(providerModel: self.providerModel, projection: overview)
                 } else if let provider = self.shell.selectedMenuTab.providerID {
                     let providerModel = self.providerModel(provider)
-                    ProviderMenuCard(providerModel: providerModel)
+                    ProviderMenuCard(
+                        providerModel: providerModel,
+                        onErrorTap: { toolName in
+                            self.shell.navigationSelection = .toolErrors(toolName: toolName)
+                            WindowReopener.reopenMainWindow(
+                                openWindow: { id in self.openWindow(id: id) },
+                                activateApp: { NSApplication.shared.activate(ignoringOtherApps: true) }
+                            )
+                        }
+                    )
                     SessionActionGroup(models: [providerModel])
                 }
 
@@ -110,8 +121,11 @@ struct RootMenuView: View {
 
 struct ProviderMenuView: View {
     @Bindable var model: ProviderFeatureModel
+    let shell: AppShellModel
     let helperPort: Int
     let onQuit: () -> Void
+
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         MenuScrollableContainer {
@@ -128,7 +142,16 @@ struct ProviderMenuView: View {
                         detail: self.model.projection.isShowingCachedData ? "Showing last known provider data" : nil
                     )
                 }
-                ProviderMenuCard(providerModel: self.model)
+                ProviderMenuCard(
+                    providerModel: self.model,
+                    onErrorTap: { [shell = self.shell] toolName in
+                        shell.navigationSelection = .toolErrors(toolName: toolName)
+                        WindowReopener.reopenMainWindow(
+                            openWindow: { id in self.openWindow(id: id) },
+                            activateApp: { NSApplication.shared.activate(ignoringOtherApps: true) }
+                        )
+                    }
+                )
                 SessionActionGroup(models: [self.model])
 
                 Divider()
@@ -212,12 +235,13 @@ private struct MenuContentHeightPreferenceKey: PreferenceKey {
 
 struct ProviderMenuCard: View {
     @Bindable var providerModel: ProviderFeatureModel
+    var onErrorTap: ((String) -> Void)?
 
     var body: some View {
         let projection = self.providerModel.projection
         VStack(alignment: .leading, spacing: 8) {
             RateLanesSection(providerModel: self.providerModel, projection: projection)
-            BreakdownChartsSection(projection: projection)
+            BreakdownChartsSection(projection: projection, onErrorTap: self.onErrorTap)
             ActivityChartsSection(projection: projection)
             MetaFooterSection(projection: projection)
         }
@@ -378,6 +402,7 @@ private struct RateLanesSection: View {
 
 private struct BreakdownChartsSection: View {
     let projection: ProviderMenuProjection
+    var onErrorTap: ((String) -> Void)?
 
     var body: some View {
         if let breakdown = self.projection.todayBreakdown, !breakdown.isEmpty {
@@ -422,7 +447,7 @@ private struct BreakdownChartsSection: View {
             ProjectCostTable(rows: self.projection.byProject)
         }
         if !self.projection.byTool.isEmpty {
-            ToolUsageTable(rows: self.projection.byTool)
+            ToolUsageTable(rows: self.projection.byTool, onErrorTap: self.onErrorTap)
         }
         if !self.projection.byMcp.isEmpty {
             McpSummaryTable(rows: self.projection.byMcp)

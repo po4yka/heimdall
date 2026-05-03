@@ -5,6 +5,7 @@ import SwiftUI
 /// Compact per-tool invocation table with category/MCP chips and an error dot.
 struct ToolUsageTable: View {
     let rows: [ProviderToolRow]
+    var onErrorTap: ((String) -> Void)?
 
     private static let displayCap = 8
 
@@ -24,7 +25,7 @@ struct ToolUsageTable: View {
                 let maxInvocations = capped.map(\.invocations).max() ?? 1
                 VStack(spacing: 4) {
                     ForEach(capped) { row in
-                        ToolUsageRow(row: row, maxInvocations: maxInvocations)
+                        ToolUsageRow(row: row, maxInvocations: maxInvocations, onErrorTap: self.onErrorTap)
                     }
                 }
             }
@@ -48,6 +49,7 @@ struct ToolUsageTable: View {
 private struct ToolUsageRow: View {
     let row: ProviderToolRow
     let maxInvocations: Int
+    var onErrorTap: ((String) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -70,16 +72,22 @@ private struct ToolUsageRow: View {
 
                 Spacer(minLength: 4)
 
-                // Error indicator
+                // Error indicator — taps open the tool-errors detail screen
                 if self.row.errors > 0 {
-                    HStack(spacing: 3) {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 5, height: 5)
-                        Text("\(self.row.errors) err")
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.red)
+                    Button {
+                        self.onErrorTap?(self.row.toolName)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 5, height: 5)
+                            Text("\(self.row.errors) err")
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(.red)
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .help("View error details")
                 }
 
                 // Invocation count
@@ -143,7 +151,7 @@ private struct ToolChip: View {
         ProviderToolRow(toolName: "query-docs", category: nil, mcpServer: "context7", invocations: 440, errors: 0, turnsUsed: 210, sessionsUsed: 18),
         ProviderToolRow(toolName: "codex", category: nil, mcpServer: "codex-mcp", invocations: 88, errors: 2, turnsUsed: 55, sessionsUsed: 9),
     ]
-    ToolUsageTable(rows: rows)
+    ToolUsageTable(rows: rows, onErrorTap: nil)
         .padding()
         .frame(width: 336)
 }

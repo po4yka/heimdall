@@ -6,6 +6,7 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
     case overview
     case liveMonitor
     case provider(ProviderID)
+    case toolErrors(toolName: String)
 
     public var id: String {
         switch self {
@@ -15,6 +16,8 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
             return "live-monitor"
         case .provider(let provider):
             return "provider:\(provider.rawValue)"
+        case .toolErrors(let toolName):
+            return "tool-errors:\(toolName)"
         }
     }
 
@@ -26,6 +29,8 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
             return "Live Monitor"
         case .provider(let provider):
             return provider.title
+        case .toolErrors:
+            return "Tool Errors"
         }
     }
 
@@ -39,6 +44,8 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
             return "Anthropic usage"
         case .provider(.codex):
             return "OpenAI usage"
+        case .toolErrors(let toolName):
+            return toolName
         }
     }
 
@@ -52,6 +59,8 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
             return "quote.bubble"
         case .provider(.codex):
             return "curlybraces.square"
+        case .toolErrors:
+            return "exclamationmark.triangle"
         }
     }
 
@@ -59,7 +68,7 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
         switch self {
         case .provider(let provider):
             return provider
-        case .overview, .liveMonitor:
+        case .overview, .liveMonitor, .toolErrors:
             return nil
         }
     }
@@ -132,7 +141,10 @@ public final class AppShellModel {
         if !self.visibleTabs.contains(self.selectedMenuTab) {
             self.selectedMenuTab = self.visibleTabs.first ?? .overview
         }
-        if !self.navigationItems.contains(self.navigationSelection) {
+        // .toolErrors is a programmatic-only destination — never evict it during sync
+        if case .toolErrors = self.navigationSelection {
+            // keep as-is
+        } else if !self.navigationItems.contains(self.navigationSelection) {
             self.navigationSelection = self.navigationItems.first ?? .overview
         }
         if let provider = self.navigationSelection.providerID {

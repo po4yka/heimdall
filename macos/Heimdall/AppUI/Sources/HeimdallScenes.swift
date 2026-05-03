@@ -137,6 +137,7 @@ public struct HeimdallScenes: Scene {
         MenuBarExtra(isInserted: self.$claudeMenuBarInserted) {
             ProviderMenuView(
                 model: self.model.providerModel(for: .claude),
+                shell: self.model.shell,
                 helperPort: self.model.config.helperPort,
                 onQuit: self.quit
             )
@@ -155,6 +156,7 @@ public struct HeimdallScenes: Scene {
         MenuBarExtra(isInserted: self.$codexMenuBarInserted) {
             ProviderMenuView(
                 model: self.model.providerModel(for: .codex),
+                shell: self.model.shell,
                 helperPort: self.model.config.helperPort,
                 onQuit: self.quit
             )
