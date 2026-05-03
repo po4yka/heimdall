@@ -1721,11 +1721,17 @@ pub struct ToolErrorsQuery<'a> {
 
 /// Query individual error rows for a specific tool, with optional filters.
 /// Returns (rows, total_count) for pagination.
-pub fn query_tool_errors(
-    conn: &Connection,
-    q: &ToolErrorsQuery<'_>,
-) -> Result<ToolErrorsResponse> {
-    let ToolErrorsQuery { tool_name, provider, mcp_server, start, end, tz, limit, offset } = q;
+pub fn query_tool_errors(conn: &Connection, q: &ToolErrorsQuery<'_>) -> Result<ToolErrorsResponse> {
+    let ToolErrorsQuery {
+        tool_name,
+        provider,
+        mcp_server,
+        start,
+        end,
+        tz,
+        limit,
+        offset,
+    } = q;
     // Build WHERE clause fragments. The tool_name filter is mandatory.
     let mut filters = vec![
         "ti.tool_name = ?1".to_string(),
