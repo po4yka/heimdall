@@ -81,6 +81,24 @@ export interface ToolSummary {
   errors: number;
 }
 
+export interface ToolErrorRow {
+  timestamp: string;
+  session_id: string;
+  project: string;
+  model: string;
+  provider: string;
+  tool_name: string;
+  mcp_server: string | null;
+  tool_input: string | null;
+  error_text: string | null;
+  source_path: string;
+}
+
+export interface ToolErrorsResponse {
+  rows: ToolErrorRow[];
+  total: number;
+}
+
 export interface McpServerSummary {
   provider: string;
   server: string;

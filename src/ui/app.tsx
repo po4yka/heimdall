@@ -11,6 +11,7 @@ import { createDashboardRuntime } from './dashboard/runtime';
 import { MonitorHeader } from './monitor/MonitorHeader';
 import { createLiveMonitorRuntime } from './monitor/runtime';
 import { hydrateLiveMonitorPreferences } from './monitor/store';
+import { startToolErrorsPage } from './tool_errors/runtime';
 import { applyTheme, getTheme } from './lib/theme';
 import { backupSnapshots, backupLoadState, archiveImports, webConversations, companionHeartbeat, rawData, syncDashboardUrl, type WebConversationSummary, type CompanionHeartbeat } from './state/store';
 
@@ -33,10 +34,11 @@ async function triggerSnapshot(): Promise<void> {
 
 applyTheme(getTheme());
 const isMonitorRoute = window.location.pathname === '/monitor';
+const isToolErrorsRoute = window.location.pathname === '/tool-errors';
 if (isMonitorRoute) {
   hydrateLiveMonitorPreferences();
 }
-const dashboardRuntime = !isMonitorRoute ? createDashboardRuntime() : null;
+const dashboardRuntime = (!isMonitorRoute && !isToolErrorsRoute) ? createDashboardRuntime() : null;
 const monitorRuntime = isMonitorRoute ? createLiveMonitorRuntime() : null;
 
 function toggleTheme(): void {
@@ -54,6 +56,16 @@ const headerMount = document.getElementById('header-mount');
 if (headerMount) {
   if (isMonitorRoute && monitorRuntime) {
     render(<MonitorHeader onThemeToggle={toggleTheme} onRefresh={monitorRuntime.loadData} />, headerMount);
+  } else if (isToolErrorsRoute) {
+    render(
+      <Header
+        onDataReload={async () => { /* no-op: tool-errors page manages its own refresh */ }}
+        onThemeToggle={toggleTheme}
+        navigationHref="/"
+        navigationLabel="Dashboard"
+      />,
+      headerMount
+    );
   } else if (dashboardRuntime) {
     render(
       <Header
@@ -138,4 +150,7 @@ if (dashboardRuntime) {
 }
 if (monitorRuntime) {
   monitorRuntime.start();
+}
+if (isToolErrorsRoute) {
+  startToolErrorsPage();
 }

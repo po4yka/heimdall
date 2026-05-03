@@ -443,6 +443,8 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
         progress_marker,
         session_titles: HashMap::new(),
         tool_results,
+        tool_error_texts: HashMap::new(),
+        tool_input_jsons: HashMap::new(),
     }
 }
 

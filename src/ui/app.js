@@ -1276,8 +1276,8 @@
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
   }
-  function anyHasCredits(rows) {
-    return rows.some((r4) => r4.credits != null);
+  function anyHasCredits(rows2) {
+    return rows2.some((r4) => r4.credits != null);
   }
   function fmtCredits(n3) {
     if (n3 == null) return "\u2014";
@@ -1390,9 +1390,9 @@
   }
 
   // src/ui/components/WebCapturesPanel.tsx
-  function vendorCounts(rows) {
+  function vendorCounts(rows2) {
     const out = {};
-    for (const r4 of rows) out[r4.vendor] = (out[r4.vendor] ?? 0) + 1;
+    for (const r4 of rows2) out[r4.vendor] = (out[r4.vendor] ?? 0) + 1;
     return out;
   }
   function relativeMinutes(iso) {
@@ -1406,9 +1406,9 @@
     return `${Math.round(hrs / 24)}d ago`;
   }
   function WebCapturesPanel({ onReload }) {
-    const rows = webConversations.value;
+    const rows2 = webConversations.value;
     const heartbeat = companionHeartbeat.value;
-    const counts = vendorCounts(rows);
+    const counts = vendorCounts(rows2);
     return /* @__PURE__ */ u4("section", { class: "web-captures-panel", children: [
       /* @__PURE__ */ u4("header", { class: "web-captures-panel-header", children: [
         /* @__PURE__ */ u4("h2", { children: "Web captures" }),
@@ -1424,14 +1424,14 @@
         " \xB7 last seen ",
         esc(relativeMinutes(heartbeat.last_seen_at))
       ] }),
-      !heartbeat && rows.length === 0 && /* @__PURE__ */ u4("p", { class: "web-captures-panel-empty", children: [
+      !heartbeat && rows2.length === 0 && /* @__PURE__ */ u4("p", { class: "web-captures-panel-empty", children: [
         "No web captures yet. Install the Heimdall companion browser extension at ",
         /* @__PURE__ */ u4("code", { children: "extensions/heimdall-companion/" }),
         ", pair it with the token from ",
         /* @__PURE__ */ u4("code", { children: "heimdall companion-token show" }),
         ", and your claude.ai + chatgpt.com chats will appear here on the next sync."
       ] }),
-      rows.length > 0 && /* @__PURE__ */ u4(S, { children: [
+      rows2.length > 0 && /* @__PURE__ */ u4(S, { children: [
         /* @__PURE__ */ u4("p", { class: "web-captures-panel-counts", children: Object.entries(counts).map(([vendor, n3]) => `${vendor}: ${n3}`).join(" \xB7 ") }),
         /* @__PURE__ */ u4("table", { class: "data-table", children: [
           /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
@@ -1440,7 +1440,7 @@
             /* @__PURE__ */ u4("th", { children: "CAPTURED" }),
             /* @__PURE__ */ u4("th", { children: "HISTORY" })
           ] }) }),
-          /* @__PURE__ */ u4("tbody", { children: rows.map((r4) => /* @__PURE__ */ u4("tr", { children: [
+          /* @__PURE__ */ u4("tbody", { children: rows2.map((r4) => /* @__PURE__ */ u4("tr", { children: [
             /* @__PURE__ */ u4("td", { children: esc(r4.vendor) }),
             /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("code", { children: esc(r4.conversation_id) }) }),
             /* @__PURE__ */ u4("td", { children: esc(relativeMinutes(r4.captured_at)) }),
@@ -1722,7 +1722,7 @@
   function createTriggerRescan({
     button,
     fetchImpl,
-    loadData,
+    loadData: loadData2,
     showError,
     setTimer,
     logError = () => void 0
@@ -1739,7 +1739,7 @@
         }
         const data = await resp.json();
         button.textContent = "\u21BB Rescan (" + data.new + " new, " + data.updated + " updated)";
-        await loadData(true);
+        await loadData2(true);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         showError("Rescan failed: " + msg);
@@ -1967,9 +1967,9 @@
     const d5 = /* @__PURE__ */ new Date();
     return d5.getUTCFullYear() + "-" + String(d5.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d5.getUTCDate()).padStart(2, "0") + "_" + String(d5.getUTCHours()).padStart(2, "0") + String(d5.getUTCMinutes()).padStart(2, "0");
   }
-  function downloadCSV(reportType, header, rows) {
+  function downloadCSV(reportType, header, rows2) {
     const lines = [header.map(csvField).join(",")];
-    for (const row of rows) lines.push(row.map(csvField).join(","));
+    for (const row of rows2) lines.push(row.map(csvField).join(","));
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const a4 = document.createElement("a");
     a4.href = URL.createObjectURL(blob);
@@ -4335,7 +4335,7 @@
       };
       table._getPinnedRows = (visibleRows, pinnedRowIds, position) => {
         var _table$options$keepPi;
-        const rows = ((_table$options$keepPi = table.options.keepPinnedRows) != null ? _table$options$keepPi : true) ? (
+        const rows2 = ((_table$options$keepPi = table.options.keepPinnedRows) != null ? _table$options$keepPi : true) ? (
           //get all rows that are pinned even if they would not be otherwise visible
           //account for expanded parent rows, but not pagination or filtering
           (pinnedRowIds != null ? pinnedRowIds : []).map((rowId) => {
@@ -4346,7 +4346,7 @@
           //else get only visible rows that are pinned
           (pinnedRowIds != null ? pinnedRowIds : []).map((rowId) => visibleRows.find((row) => row.id === rowId))
         );
-        return rows.filter(Boolean).map((d5) => ({
+        return rows2.filter(Boolean).map((d5) => ({
           ...d5,
           position
         }));
@@ -4576,8 +4576,8 @@
     const rowSelection = table.getState().rowSelection;
     const newSelectedFlatRows = [];
     const newSelectedRowsById = {};
-    const recurseRows = function(rows, depth) {
-      return rows.map((row) => {
+    const recurseRows = function(rows2, depth) {
+      return rows2.map((row) => {
         var _row$subRows2;
         const isSelected = isRowSelected(row, rowSelection);
         if (isSelected) {
@@ -5086,12 +5086,12 @@
         if (depth === void 0) {
           depth = 0;
         }
-        const rows = [];
+        const rows2 = [];
         for (let i4 = 0; i4 < originalRows.length; i4++) {
           const row = createRow(table, table._getRowId(originalRows[i4], i4, parentRow), originalRows[i4], i4, depth, void 0, parentRow == null ? void 0 : parentRow.id);
           rowModel.flatRows.push(row);
           rowModel.rowsById[row.id] = row;
-          rows.push(row);
+          rows2.push(row);
           if (table.options.getSubRows) {
             var _row$originalSubRows;
             row.originalSubRows = table.options.getSubRows(originalRows[i4], i4);
@@ -5100,7 +5100,7 @@
             }
           }
         }
-        return rows;
+        return rows2;
       };
       rowModel.rows = accessRows(data);
       return rowModel;
@@ -5132,23 +5132,23 @@
         pageIndex
       } = pagination;
       let {
-        rows,
+        rows: rows2,
         flatRows,
         rowsById
       } = rowModel;
       const pageStart = pageSize * pageIndex;
       const pageEnd = pageStart + pageSize;
-      rows = rows.slice(pageStart, pageEnd);
+      rows2 = rows2.slice(pageStart, pageEnd);
       let paginatedRowModel;
       if (!table.options.paginateExpandedRows) {
         paginatedRowModel = expandRows({
-          rows,
+          rows: rows2,
           flatRows,
           rowsById
         });
       } else {
         paginatedRowModel = {
-          rows,
+          rows: rows2,
           flatRows,
           rowsById
         };
@@ -5185,8 +5185,8 @@
           sortingFn: column.getSortingFn()
         };
       });
-      const sortData = (rows) => {
-        const sortedData = rows.map((row) => ({
+      const sortData = (rows2) => {
+        const sortedData = rows2.map((row) => ({
           ...row
         }));
         sortedData.sort((rowA, rowB) => {
@@ -5348,7 +5348,7 @@
     }));
     const table = tableRef.current;
     const headerGroups = table.getHeaderGroups();
-    const rows = table.getRowModel().rows;
+    const rows2 = table.getRowModel().rows;
     const headingId = title ? `table-heading-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}` : void 0;
     const sectionContentId = sectionKey ? `section-content-${sectionKey}` : void 0;
     const collapsed = sectionKey ? isSectionCollapsed(sectionKey) : false;
@@ -5415,7 +5415,7 @@
               header.id
             );
           }) }, headerGroup.id)) }),
-          /* @__PURE__ */ u4("tbody", { children: rows.map((row) => /* @__PURE__ */ u4("tr", { class: costRows ? "cost-row" : void 0, children: row.getVisibleCells().map((cell) => /* @__PURE__ */ u4("td", { children: renderCell(cell) }, cell.id)) }, row.id)) })
+          /* @__PURE__ */ u4("tbody", { children: rows2.map((row) => /* @__PURE__ */ u4("tr", { class: costRows ? "cost-row" : void 0, children: row.getVisibleCells().map((cell) => /* @__PURE__ */ u4("td", { children: renderCell(cell) }, cell.id)) }, row.id)) })
         ] }),
         pageSize && /* @__PURE__ */ u4("div", { class: "pagination", children: [
           /* @__PURE__ */ u4("span", { children: table.getRowCount() > 0 ? `Showing ${pagination.pageIndex * pagination.pageSize + 1}\u2013${Math.min(
@@ -5901,7 +5901,7 @@
     billingModeBreakdown,
     pricingVersions
   }) {
-    const formatBreakdown = (rows) => rows.map(([key, value]) => `${fmtLabel(key)}: ${value.sessions.toLocaleString()}`).join(" \xB7 ");
+    const formatBreakdown = (rows2) => rows2.map(([key, value]) => `${fmtLabel(key)}: ${value.sessions.toLocaleString()}`).join(" \xB7 ");
     return /* @__PURE__ */ u4(S, { children: [
       /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cost Confidence" }),
@@ -6021,7 +6021,7 @@
     return "0%";
   }
   function MetricDonut({
-    rows,
+    rows: rows2,
     metric,
     metricOptions,
     metricLabel,
@@ -6042,16 +6042,16 @@
     formatCalls,
     formatTokens
   }) {
-    if (!rows.length) return null;
-    const sorted = rows.map((row) => ({ row, value: metricValue(row, metric) })).filter((entry) => entry.value > 0).sort((a4, b4) => b4.value - a4.value);
+    if (!rows2.length) return null;
+    const sorted = rows2.map((row) => ({ row, value: metricValue(row, metric) })).filter((entry) => entry.value > 0).sort((a4, b4) => b4.value - a4.value);
     if (!sorted.length) return null;
     const top = sorted.slice(0, TOP_N);
     const rest = sorted.slice(TOP_N);
-    const total = sorted.reduce((sum2, entry) => sum2 + entry.value, 0);
+    const total2 = sorted.reduce((sum2, entry) => sum2 + entry.value, 0);
     const donutRows = top.map((entry, index) => ({
       label: rowLabel(entry.row),
       value: entry.value,
-      share: total > 0 ? entry.value / total * 100 : 0,
+      share: total2 > 0 ? entry.value / total2 * 100 : 0,
       cost: rowCost(entry.row),
       calls: rowCalls(entry.row),
       tokens: rowTokens(entry.row),
@@ -6064,7 +6064,7 @@
       donutRows.push({
         label: `Other (${rest.length})`,
         value: otherValue,
-        share: total > 0 ? otherValue / total * 100 : 0,
+        share: total2 > 0 ? otherValue / total2 * 100 : 0,
         cost: rest.reduce((sum2, entry) => sum2 + rowCost(entry.row), 0),
         calls: rest.reduce((sum2, entry) => sum2 + rowCalls(entry.row), 0),
         tokens: rest.reduce((sum2, entry) => sum2 + rowTokens(entry.row), 0),
@@ -6132,7 +6132,7 @@
         /* @__PURE__ */ u4(ApexChart, { options, id }),
         /* @__PURE__ */ u4("div", { class: "model-chart-center", "aria-hidden": "true", children: /* @__PURE__ */ u4("div", { class: "model-chart-center-inner", children: [
           /* @__PURE__ */ u4("div", { class: "model-chart-center-kicker", children: kicker }),
-          /* @__PURE__ */ u4("div", { class: "model-chart-center-total", children: metricFormat(total, metric, true) }),
+          /* @__PURE__ */ u4("div", { class: "model-chart-center-total", children: metricFormat(total2, metric, true) }),
           hasOther ? /* @__PURE__ */ u4("div", { class: "model-chart-center-meta", children: [
             "Top ",
             TOP_N,
@@ -6450,10 +6450,10 @@
   }
 
   // src/ui/components/OfficialSyncPanel.tsx
-  function sourceVisible(provider, providerFilter) {
-    if (providerFilter === "both") return true;
+  function sourceVisible(provider, providerFilter2) {
+    if (providerFilter2 === "both") return true;
     if (provider === "frankfurter") return true;
-    if (providerFilter === "claude") return provider === "anthropic";
+    if (providerFilter2 === "claude") return provider === "anthropic";
     return provider === "openai";
   }
   function statusLabel(status) {
@@ -6472,12 +6472,12 @@
     if (!ts) return "n/a";
     return ts.slice(0, 19).replace("T", " ");
   }
-  function OfficialSyncPanel({ summary, providerFilter }) {
+  function OfficialSyncPanel({ summary, providerFilter: providerFilter2 }) {
     const expanded = official_sync_expanded.value;
-    const sources = summary.sources.filter((source) => sourceVisible(source.provider, providerFilter));
+    const sources = summary.sources.filter((source) => sourceVisible(source.provider, providerFilter2));
     const recordCounts = summary.record_counts.filter((record) => {
-      if (providerFilter === "both") return true;
-      if (providerFilter === "claude") {
+      if (providerFilter2 === "both") return true;
+      if (providerFilter2 === "claude") {
         return !record.record_type.startsWith("usage_");
       }
       return true;
@@ -8271,12 +8271,25 @@ ${row.project}` : row.project;
           const e4 = row.original.errors;
           if (!e4) return /* @__PURE__ */ u4("span", { class: "dim", children: "0" });
           const pct = row.original.invocations > 0 ? (e4 / row.original.invocations * 100).toFixed(1) : "0";
-          return /* @__PURE__ */ u4("span", { class: "num", style: { color: "var(--accent)" }, children: [
-            e4,
-            " (",
-            pct,
-            "%)"
-          ] });
+          const href = `/tool-errors?tool=${encodeURIComponent(row.original.tool_name)}&provider=${encodeURIComponent(row.original.provider)}&range=${selectedRange.value}`;
+          return /* @__PURE__ */ u4(
+            "button",
+            {
+              type: "button",
+              class: "table-action-btn",
+              style: { color: "var(--accent)", fontFamily: "var(--font-mono)", fontVariantNumeric: "tabular-nums" },
+              onClick: () => {
+                window.location.href = href;
+              },
+              title: "View error details",
+              children: [
+                e4,
+                " (",
+                pct,
+                "%)"
+              ]
+            }
+          );
         }
       }
     ];
@@ -8312,8 +8325,8 @@ ${row.project}` : row.project;
         return fmt(value);
     }
   }
-  function VersionDonut({ rows, metric, onMetricChange }) {
-    const normalized = rows.map((r4) => ({
+  function VersionDonut({ rows: rows2, metric, onMetricChange }) {
+    const normalized = rows2.map((r4) => ({
       ...r4,
       version: r4.version === "" || r4.version === "unknown" ? "(unknown)" : r4.version
     }));
@@ -8403,10 +8416,10 @@ ${row.project}` : row.project;
         custom: ({ dataPointIndex }) => {
           const w5 = weekly[dataPointIndex];
           if (!w5) return "";
-          const total = w5.input + w5.output + w5.cache_read + w5.cache_creation;
+          const total2 = w5.input + w5.output + w5.cache_read + w5.cache_creation;
           const costUsd = w5.cost_nanos / 1e9;
           const costStr = costUsd < 1e-4 ? "<$0.0001" : "$" + costUsd.toFixed(4);
-          return '<div style="padding:8px 12px;font-family:var(--font-mono);font-size:12px;background:var(--surface);border:1px solid var(--border)"><div style="margin-bottom:4px;font-weight:600">' + esc(w5.week) + "</div><div>Input: " + fmt(w5.input) + "</div><div>Output: " + fmt(w5.output) + "</div><div>Cached Input: " + fmt(w5.cache_read) + "</div><div>Cache Creation: " + fmt(w5.cache_creation) + '</div><div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px">Total: ' + fmt(total) + " tokens</div><div>Cost: " + costStr + "</div></div>";
+          return '<div style="padding:8px 12px;font-family:var(--font-mono);font-size:12px;background:var(--surface);border:1px solid var(--border)"><div style="margin-bottom:4px;font-weight:600">' + esc(w5.week) + "</div><div>Input: " + fmt(w5.input) + "</div><div>Output: " + fmt(w5.output) + "</div><div>Cached Input: " + fmt(w5.cache_read) + "</div><div>Cache Creation: " + fmt(w5.cache_creation) + '</div><div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px">Total: ' + fmt(total2) + " tokens</div><div>Cost: " + costStr + "</div></div>";
         }
       }
     };
@@ -8439,11 +8452,11 @@ ${row.project}` : row.project;
     const firstMondayUtc = new Date(Date.UTC(year, 0, 1 + daysToFirstMon));
     return new Date(firstMondayUtc.getTime() + (week - 1) * 7 * 86400 * 1e3);
   }
-  function buildWeeklyAgg(rows, selectedModels2, range) {
-    if (!rows.length) return [];
+  function buildWeeklyAgg(rows2, selectedModels2, range) {
+    if (!rows2.length) return [];
     const cutoff = getRangeCutoff(range);
     const weekMap = {};
-    for (const row of rows) {
+    for (const row of rows2) {
       if (!selectedModels2.has(row.model)) continue;
       if (cutoff) {
         const weekStart = weekLabelToWeekStart(row.week);
@@ -9101,7 +9114,7 @@ ${row.project}` : row.project;
       "Reasoning Output",
       "Est. Cost"
     ];
-    const rows = rowsData.map((project) => [
+    const rows2 = rowsData.map((project) => [
       project.project,
       project.sessions,
       project.turns,
@@ -9112,7 +9125,7 @@ ${row.project}` : row.project;
       project.reasoning_output,
       project.cost.toFixed(4)
     ]);
-    downloadCSV(filename, header, rows);
+    downloadCSV(filename, header, rows2);
   }
   function exportSessionsCSV() {
     const header = [
@@ -9130,7 +9143,7 @@ ${row.project}` : row.project;
       "Reasoning Output",
       "Est. Cost"
     ];
-    const rows = rawData.value ? rawData.value.sessions_all.filter((session) => selectedModels.value.has(session.model)).map((session) => [
+    const rows2 = rawData.value ? rawData.value.sessions_all.filter((session) => selectedModels.value.has(session.model)).map((session) => [
       session.session_id,
       session.provider,
       session.project,
@@ -9145,7 +9158,7 @@ ${row.project}` : row.project;
       session.reasoning_output,
       session.cost.toFixed(4)
     ]) : [];
-    downloadCSV("sessions", header, rows);
+    downloadCSV("sessions", header, rows2);
   }
   function exportProjectsCSV() {
     exportProjectRowsCSV("projects", lastByProject.value);
@@ -9352,7 +9365,7 @@ ${row.project}` : row.project;
     const loadContextWindow = createContextWindowLoader(state, applyFilter);
     const loadCostReconciliation = createCostReconciliationLoader(state);
     const loadHeatmap = createHeatmapLoader(state);
-    const loadData = createDataLoader(state, applyFilter);
+    const loadData2 = createDataLoader(state, applyFilter);
     return {
       applyFilter,
       handleDashboardTabChange(tab) {
@@ -9361,7 +9374,7 @@ ${row.project}` : row.project;
         syncDashboardUrl();
         refreshSectionVisibility();
       },
-      loadData,
+      loadData: loadData2,
       start() {
         startDashboardPolling({
           applyFilter,
@@ -9371,7 +9384,7 @@ ${row.project}` : row.project;
           loadCommunitySignal,
           loadContextWindow,
           loadCostReconciliation,
-          loadData,
+          loadData: loadData2,
           loadHeatmap,
           loadUsageWindows
         });
@@ -9953,7 +9966,7 @@ ${row.project}` : row.project;
     function renderView() {
       R(renderLiveMonitorView(), mount);
     }
-    async function loadData() {
+    async function loadData2() {
       liveMonitorRefreshing.value = true;
       try {
         const tzOffset = (/* @__PURE__ */ new Date()).getTimezoneOffset() * -1;
@@ -9979,23 +9992,23 @@ ${row.project}` : row.project;
       if (typeof EventSource === "undefined") return;
       eventSource = new EventSource("/api/stream");
       eventSource.addEventListener("scan_completed", () => {
-        void loadData();
+        void loadData2();
       });
     }
     function start() {
       document.title = "Live Monitor";
       toggleVisibility(true);
       renderView();
-      void loadData();
+      void loadData2();
       visibilityHandler = () => {
         if (!document.hidden) {
-          void loadData();
+          void loadData2();
         }
       };
       document.addEventListener("visibilitychange", visibilityHandler);
       intervalId = window.setInterval(() => {
         if (!document.hidden) {
-          void loadData();
+          void loadData2();
         }
       }, 1e4);
       subscribeToStream();
@@ -10013,7 +10026,319 @@ ${row.project}` : row.project;
       visibilityHandler = null;
       toggleVisibility(false);
     }
-    return { loadData, start, stop };
+    return { loadData: loadData2, start, stop };
+  }
+
+  // src/ui/tool_errors/store.ts
+  var toolName = y3("");
+  var providerFilter = y3("");
+  var rangeFilter = y3("30d");
+  var pageOffset = y3(0);
+  var rows = y3([]);
+  var total = y3(0);
+  var loadState2 = y3("idle");
+  var errorMessage = y3(null);
+  var PAGE_SIZE = 100;
+  function readUrlParams() {
+    const p5 = new URLSearchParams(window.location.search);
+    toolName.value = p5.get("tool") ?? "";
+    providerFilter.value = p5.get("provider") ?? "";
+    rangeFilter.value = p5.get("range") ?? "30d";
+    const off = Number.parseInt(p5.get("offset") ?? "0", 10);
+    pageOffset.value = Number.isFinite(off) && off >= 0 ? off : 0;
+  }
+  function syncUrl() {
+    const p5 = new URLSearchParams();
+    if (toolName.value) p5.set("tool", toolName.value);
+    if (providerFilter.value) p5.set("provider", providerFilter.value);
+    if (rangeFilter.value !== "30d") p5.set("range", rangeFilter.value);
+    if (pageOffset.value > 0) p5.set("offset", String(pageOffset.value));
+    const next = `${window.location.pathname}?${p5.toString()}`;
+    window.history.replaceState(null, "", next);
+  }
+
+  // src/ui/tool_errors/ToolErrorsTable.tsx
+  var expandedInputs = y3(/* @__PURE__ */ new Set());
+  var expandedErrors = y3(/* @__PURE__ */ new Set());
+  function toggle(set, key) {
+    const next = new Set(set.value);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    set.value = next;
+  }
+  function ExpandableCell({ value, rowKey, store }) {
+    if (!value) return /* @__PURE__ */ u4("span", { class: "dim", children: "\u2014" });
+    const PREVIEW = 200;
+    const isLong = value.length > PREVIEW;
+    const isExpanded = store.value.has(rowKey);
+    const display = isLong && !isExpanded ? value.slice(0, PREVIEW) + "\u2026" : value;
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4(
+        "pre",
+        {
+          style: {
+            margin: 0,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
+            fontFamily: "var(--font-mono)",
+            fontSize: "11px",
+            color: "var(--color-text-secondary)",
+            maxHeight: isExpanded ? "none" : "4.5em",
+            overflow: "hidden"
+          },
+          dangerouslySetInnerHTML: { __html: esc(display) }
+        }
+      ),
+      isLong && /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: "table-action-btn",
+          style: { fontSize: "11px", marginTop: "2px" },
+          onClick: () => toggle(store, rowKey),
+          children: isExpanded ? "show less" : "show full"
+        }
+      )
+    ] });
+  }
+  function makeColumns4() {
+    return [
+      {
+        accessorKey: "timestamp",
+        header: "Timestamp",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num muted", children: String(getValue()) })
+      },
+      {
+        accessorKey: "project",
+        header: "Project",
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "muted", style: { wordBreak: "break-all" }, children: String(getValue()) })
+      },
+      {
+        accessorKey: "session_id",
+        header: "Session",
+        cell: ({ getValue }) => {
+          const v4 = String(getValue());
+          return /* @__PURE__ */ u4("span", { class: "num muted", title: v4, children: v4.slice(-12) });
+        }
+      },
+      {
+        accessorKey: "model",
+        header: "Model",
+        cell: ({ getValue }) => {
+          const v4 = String(getValue());
+          return v4 ? /* @__PURE__ */ u4("span", { class: "model-tag", children: v4 }) : /* @__PURE__ */ u4("span", { class: "dim", children: "\u2014" });
+        }
+      },
+      {
+        accessorKey: "mcp_server",
+        header: "MCP Server",
+        cell: ({ getValue }) => {
+          const v4 = getValue();
+          return v4 ? /* @__PURE__ */ u4("span", { class: "muted", children: v4 }) : /* @__PURE__ */ u4("span", { class: "dim", children: "\u2014" });
+        }
+      },
+      {
+        id: "tool_input",
+        header: "Input",
+        cell: ({ row }) => /* @__PURE__ */ u4(
+          ExpandableCell,
+          {
+            value: row.original.tool_input,
+            rowKey: `input-${row.index}`,
+            store: expandedInputs
+          }
+        )
+      },
+      {
+        id: "error_text",
+        header: "Error",
+        cell: ({ row }) => /* @__PURE__ */ u4(
+          ExpandableCell,
+          {
+            value: row.original.error_text ?? "(no message captured \u2014 db reset to backfill)",
+            rowKey: `err-${row.index}`,
+            store: expandedErrors
+          }
+        )
+      }
+    ];
+  }
+  function ToolErrorsTable({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u4(
+      DataTable,
+      {
+        columns: makeColumns4(),
+        data,
+        title: "Error details",
+        sectionKey: "tool-errors-detail"
+      }
+    );
+  }
+
+  // src/ui/tool_errors/ToolErrorsPage.tsx
+  var RANGE_OPTIONS = ["7d", "30d", "90d", "all"];
+  function ToolErrorsPage({ onLoad }) {
+    const name = toolName.value;
+    const count2 = total.value;
+    const offset = pageOffset.value;
+    const state = loadState2.value;
+    const err = errorMessage.value;
+    const data = rows.value;
+    const hasNullErrors = data.some((r4) => r4.error_text === null);
+    const totalPages = Math.ceil(count2 / PAGE_SIZE);
+    const currentPage = Math.floor(offset / PAGE_SIZE);
+    function navigate(newOffset) {
+      pageOffset.value = newOffset;
+      void onLoad();
+    }
+    return /* @__PURE__ */ u4("div", { style: { maxWidth: "1400px", margin: "0 auto", padding: "24px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", gap: "16px", marginBottom: "20px", flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ u4(
+          "a",
+          {
+            href: "/",
+            style: { color: "var(--color-text-secondary)", textDecoration: "none", fontSize: "13px" },
+            children: "\u2190 Dashboard"
+          }
+        ),
+        /* @__PURE__ */ u4("h1", { style: { margin: 0, fontSize: "18px", fontWeight: 600 }, children: [
+          name,
+          " \u2014 error details"
+        ] }),
+        state !== "loading" && /* @__PURE__ */ u4("span", { class: "muted", style: { fontSize: "13px" }, children: [
+          fmt(count2),
+          " errors total"
+        ] }),
+        state === "loading" && /* @__PURE__ */ u4("span", { class: "muted", style: { fontSize: "13px" }, children: "[loading\u2026]" })
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "12px", alignItems: "center", marginBottom: "16px", flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ u4("label", { style: { fontSize: "13px", color: "var(--color-text-secondary)" }, children: [
+          "Range:",
+          /* @__PURE__ */ u4(
+            "select",
+            {
+              value: rangeFilter.value,
+              onChange: (e4) => {
+                rangeFilter.value = e4.target.value;
+                pageOffset.value = 0;
+                void onLoad();
+              },
+              style: { marginLeft: "6px", background: "var(--card-bg)", color: "var(--color-text-primary)", border: "1px solid var(--border)", borderRadius: "4px", padding: "2px 6px", fontSize: "13px" },
+              children: RANGE_OPTIONS.map((r4) => /* @__PURE__ */ u4("option", { value: r4, children: r4 }, r4))
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u4("label", { style: { fontSize: "13px", color: "var(--color-text-secondary)" }, children: [
+          "Provider:",
+          /* @__PURE__ */ u4(
+            "input",
+            {
+              type: "text",
+              value: providerFilter.value,
+              placeholder: "all",
+              onInput: (e4) => {
+                providerFilter.value = e4.target.value;
+                pageOffset.value = 0;
+                void onLoad();
+              },
+              style: { marginLeft: "6px", width: "80px", background: "var(--card-bg)", color: "var(--color-text-primary)", border: "1px solid var(--border)", borderRadius: "4px", padding: "2px 6px", fontSize: "13px" }
+            }
+          )
+        ] })
+      ] }),
+      err && /* @__PURE__ */ u4("div", { class: "card", style: { color: "var(--accent)", padding: "16px", marginBottom: "16px" }, children: [
+        "[Error: ",
+        err,
+        "]"
+      ] }),
+      hasNullErrors && /* @__PURE__ */ u4("div", { class: "card", style: { fontSize: "12px", color: "var(--color-text-secondary)", padding: "10px 16px", marginBottom: "12px" }, children: [
+        "[Note: some rows have no error message \u2014 run ",
+        /* @__PURE__ */ u4("code", { children: "cargo run -- db reset --yes && cargo run -- scan" }),
+        " to capture pre-upgrade errors]"
+      ] }),
+      data.length > 0 ? /* @__PURE__ */ u4(ToolErrorsTable, { data }) : state === "idle" && /* @__PURE__ */ u4("p", { class: "muted", children: "No errors found for the selected filters." }),
+      totalPages > 1 && /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "8px", alignItems: "center", marginTop: "16px", fontSize: "13px" }, children: [
+        /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: "table-action-btn",
+            disabled: currentPage === 0,
+            onClick: () => navigate(Math.max(0, offset - PAGE_SIZE)),
+            children: "\u2190 Prev"
+          }
+        ),
+        /* @__PURE__ */ u4("span", { class: "muted", children: [
+          "Page ",
+          currentPage + 1,
+          " of ",
+          totalPages
+        ] }),
+        /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: "table-action-btn",
+            disabled: offset + PAGE_SIZE >= count2,
+            onClick: () => navigate(offset + PAGE_SIZE),
+            children: "Next \u2192"
+          }
+        )
+      ] })
+    ] });
+  }
+
+  // src/ui/tool_errors/runtime.tsx
+  function rangeToDateBounds(range) {
+    if (range === "all") return {};
+    const days = range === "7d" ? 7 : range === "90d" ? 90 : 30;
+    const end = /* @__PURE__ */ new Date();
+    const start = /* @__PURE__ */ new Date();
+    start.setDate(start.getDate() - days);
+    const fmt2 = (d5) => d5.toISOString().slice(0, 10);
+    return { start: fmt2(start), end: fmt2(end) };
+  }
+  function renderPage() {
+    const mount = document.getElementById("main-content");
+    if (mount) R(/* @__PURE__ */ u4(ToolErrorsPage, { onLoad: loadData }), mount);
+  }
+  async function loadData() {
+    loadState2.value = "loading";
+    errorMessage.value = null;
+    syncUrl();
+    try {
+      const tzOffset = (/* @__PURE__ */ new Date()).getTimezoneOffset() * -1;
+      const p5 = new URLSearchParams();
+      p5.set("tool", toolName.value);
+      if (providerFilter.value) p5.set("provider", providerFilter.value);
+      p5.set("limit", String(PAGE_SIZE));
+      p5.set("offset", String(pageOffset.value));
+      p5.set("tz_offset_min", String(tzOffset));
+      const { start, end } = rangeToDateBounds(rangeFilter.value);
+      if (start) p5.set("start", start);
+      if (end) p5.set("end", end);
+      const resp = await fetch(`/api/tool-errors?${p5.toString()}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      rows.value = data.rows;
+      total.value = data.total;
+      loadState2.value = "idle";
+    } catch (err) {
+      errorMessage.value = err instanceof Error ? err.message : "Failed to load errors";
+      loadState2.value = "error";
+    }
+    renderPage();
+  }
+  function startToolErrorsPage() {
+    readUrlParams();
+    const filterBar = document.getElementById("filter-bar-mount");
+    const tabsMount = document.getElementById("dashboard-tabs-mount");
+    if (filterBar) filterBar.style.display = "none";
+    if (tabsMount) tabsMount.style.display = "none";
+    document.title = toolName.value ? `${toolName.value} Errors` : "Tool Errors";
+    renderPage();
+    void loadData();
   }
 
   // src/ui/lib/theme.ts
@@ -10049,10 +10374,11 @@ ${row.project}` : row.project;
   }
   applyTheme(getTheme());
   var isMonitorRoute = window.location.pathname === "/monitor";
+  var isToolErrorsRoute = window.location.pathname === "/tool-errors";
   if (isMonitorRoute) {
     hydrateLiveMonitorPreferences();
   }
-  var dashboardRuntime = !isMonitorRoute ? createDashboardRuntime() : null;
+  var dashboardRuntime = !isMonitorRoute && !isToolErrorsRoute ? createDashboardRuntime() : null;
   var monitorRuntime = isMonitorRoute ? createLiveMonitorRuntime() : null;
   function toggleTheme() {
     const current = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -10065,6 +10391,20 @@ ${row.project}` : row.project;
   if (headerMount) {
     if (isMonitorRoute && monitorRuntime) {
       R(/* @__PURE__ */ u4(MonitorHeader, { onThemeToggle: toggleTheme, onRefresh: monitorRuntime.loadData }), headerMount);
+    } else if (isToolErrorsRoute) {
+      R(
+        /* @__PURE__ */ u4(
+          Header,
+          {
+            onDataReload: async () => {
+            },
+            onThemeToggle: toggleTheme,
+            navigationHref: "/",
+            navigationLabel: "Dashboard"
+          }
+        ),
+        headerMount
+      );
     } else if (dashboardRuntime) {
       R(
         /* @__PURE__ */ u4(
@@ -10142,6 +10482,9 @@ ${row.project}` : row.project;
   }
   if (monitorRuntime) {
     monitorRuntime.start();
+  }
+  if (isToolErrorsRoute) {
+    startToolErrorsPage();
   }
 })();
 /*! Bundled license information:

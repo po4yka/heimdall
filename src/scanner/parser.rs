@@ -39,6 +39,26 @@ pub fn classify_tool(name: &str) -> (&str, Option<&str>, Option<&str>) {
     ("builtin", None, None)
 }
 
+/// Extract human-readable text from a tool_result content block.
+/// The `content` field may be a plain string or an array of typed blocks.
+fn extract_tool_result_text(block: &serde_json::Value) -> String {
+    match block.get("content") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Array(items)) => items
+            .iter()
+            .filter_map(|item| {
+                if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                    item.get("text").and_then(|t| t.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => String::new(),
+    }
+}
+
 /// Derive a friendly project name from cwd (last 2 path components).
 pub fn project_name_from_cwd(cwd: &str) -> String {
     if cwd.is_empty() {
@@ -71,6 +91,10 @@ pub struct ParseResult {
     pub progress_marker: i64,
     pub session_titles: HashMap<String, String>,
     pub tool_results: HashMap<String, bool>,
+    /// Error message text per tool_use_id (populated only when is_error=true).
+    pub tool_error_texts: HashMap<String, String>,
+    /// Compact JSON of the full tool input object per tool_use_id, capped at 4 KB.
+    pub tool_input_jsons: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -210,6 +234,8 @@ pub(crate) fn parse_provider_turns_result(
         progress_marker: progress_marker.unwrap_or(progress_marker_fallback(filepath)),
         session_titles: HashMap::new(),
         tool_results: HashMap::new(),
+        tool_error_texts: HashMap::new(),
+        tool_input_jsons: HashMap::new(),
     }
 }
 
@@ -306,6 +332,8 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
     let mut session_meta: HashMap<String, SessionMeta> = HashMap::new();
     let mut session_titles: HashMap<String, String> = HashMap::new();
     let mut tool_results: HashMap<String, bool> = HashMap::new();
+    let mut tool_error_texts: HashMap<String, String> = HashMap::new();
+    let mut tool_input_jsons: HashMap<String, String> = HashMap::new();
     let mut progress_marker: i64 = 0;
     let source_path = filepath.to_string_lossy().to_string();
 
@@ -529,6 +557,33 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                 })
                 .unwrap_or_default();
 
+            // Capture full compact input JSON per tool_use_id for the error detail view.
+            // content_arr is Option<&Vec<_>> (Copy), so re-use after tool_inputs above.
+            if let Some(arr) = content_arr {
+                const MAX_INPUT: usize = 4096;
+                for item in arr {
+                    if item.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
+                        continue;
+                    }
+                    let Some(id) = item.get("id").and_then(|v| v.as_str()) else {
+                        continue;
+                    };
+                    if let Some(input) = item.get("input") {
+                        let s = serde_json::to_string(input).unwrap_or_default();
+                        let truncated = if s.len() > MAX_INPUT {
+                            let mut end = MAX_INPUT;
+                            while end > 0 && !s.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            s[..end].to_string()
+                        } else {
+                            s
+                        };
+                        tool_input_jsons.insert(id.to_string(), truncated);
+                    }
+                }
+            }
+
             let service_tier = msg
                 .get("usage")
                 .or_else(|| msg.get("usage_metadata"))
@@ -623,6 +678,22 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
                     tool_results.insert(tool_use_id.to_string(), is_error);
+                    if is_error {
+                        let text = extract_tool_result_text(block);
+                        if !text.is_empty() {
+                            const MAX_ERROR: usize = 4096;
+                            let truncated = if text.len() > MAX_ERROR {
+                                let mut end = MAX_ERROR;
+                                while end > 0 && !text.is_char_boundary(end) {
+                                    end -= 1;
+                                }
+                                text[..end].to_string()
+                            } else {
+                                text
+                            };
+                            tool_error_texts.insert(tool_use_id.to_string(), truncated);
+                        }
+                    }
                 }
             }
         }
@@ -657,6 +728,8 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
         progress_marker,
         session_titles,
         tool_results,
+        tool_error_texts,
+        tool_input_jsons,
     }
 }
 
@@ -667,6 +740,8 @@ pub(crate) fn empty_parse_result() -> ParseResult {
         progress_marker: 0,
         session_titles: HashMap::new(),
         tool_results: HashMap::new(),
+        tool_error_texts: HashMap::new(),
+        tool_input_jsons: HashMap::new(),
     }
 }
 

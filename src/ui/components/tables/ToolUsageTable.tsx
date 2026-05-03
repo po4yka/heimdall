@@ -1,5 +1,6 @@
 import { type ColumnDef } from '@tanstack/table-core';
 import { fmt } from '../../lib/format';
+import { selectedRange } from '../../state/store';
 import type { ToolSummary } from '../../state/types';
 import { InlineRankBar } from '../shared/InlineRankBar';
 import { DataTable } from './DataTable';
@@ -44,7 +45,18 @@ function makeColumns(data: ToolSummary[]): ColumnDef<ToolSummary, unknown>[] {
         const pct = row.original.invocations > 0
           ? ((e / row.original.invocations) * 100).toFixed(1)
           : '0';
-        return <span class="num" style={{ color: 'var(--accent)' }}>{e} ({pct}%)</span>;
+        const href = `/tool-errors?tool=${encodeURIComponent(row.original.tool_name)}&provider=${encodeURIComponent(row.original.provider)}&range=${selectedRange.value}`;
+        return (
+          <button
+            type="button"
+            class="table-action-btn"
+            style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}
+            onClick={() => { window.location.href = href; }}
+            title="View error details"
+          >
+            {e} ({pct}%)
+          </button>
+        );
       } },
   ];
 }

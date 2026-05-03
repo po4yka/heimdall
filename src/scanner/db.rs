@@ -9,7 +9,7 @@ use crate::models::{
     ClaudeUsageSnapshot, ConfidenceSummary, DailyModelRow, DailyProjectRow, DashboardData,
     EntrypointSummary, HourlyRow, McpServerSummary, OfficialSyncRecordCount,
     OfficialSyncSourceStatus, OfficialSyncSummary, ProviderSummary, ServiceTierSummary, SessionRow,
-    ToolEvent, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
+    ToolErrorRow, ToolErrorsResponse, ToolEvent, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
 use crate::pricing_defs::{
     OfficialExtractedRecord, OfficialModelPricing, OfficialSyncRunRecord, PricingSyncRun,
@@ -572,6 +572,21 @@ fn apply_migrations(conn: &Connection) -> Result<()> {
         );
     }
 
+    // Tool error detail: capture error message text and full compact input JSON
+    // per invocation. NULL on rows written before this migration.
+    if !col!("tool_invocations", "error_text") {
+        alter!(
+            "tool_invocations",
+            "ALTER TABLE tool_invocations ADD COLUMN error_text TEXT;"
+        );
+    }
+    if !col!("tool_invocations", "tool_input_json") {
+        alter!(
+            "tool_invocations",
+            "ALTER TABLE tool_invocations ADD COLUMN tool_input_json TEXT;"
+        );
+    }
+
     Ok(())
 }
 
@@ -1069,11 +1084,13 @@ pub fn insert_tool_invocations(
     conn: &Connection,
     turns: &[Turn],
     tool_results: &HashMap<String, bool>,
+    tool_error_texts: &HashMap<String, String>,
+    tool_input_jsons: &HashMap<String, String>,
 ) -> Result<()> {
     let mut stmt = conn.prepare(
         "INSERT OR IGNORE INTO tool_invocations
-            (session_id, provider, message_id, tool_name, mcp_server, mcp_tool, tool_category, tool_use_id, is_error, source_path, timestamp)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            (session_id, provider, message_id, tool_name, mcp_server, mcp_tool, tool_category, tool_use_id, is_error, source_path, timestamp, error_text, tool_input_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
     )?;
     for t in turns {
         let msg_id: Option<&str> = if t.message_id.is_empty() {
@@ -1084,6 +1101,8 @@ pub fn insert_tool_invocations(
         for (tool_use_id, tool_name) in &t.tool_use_ids {
             let (category, server, mcp_tool) = classify_tool(tool_name);
             let is_error = tool_results.get(tool_use_id).copied().unwrap_or(false);
+            let error_text: Option<&str> = tool_error_texts.get(tool_use_id).map(|s| s.as_str());
+            let input_json: Option<&str> = tool_input_jsons.get(tool_use_id).map(|s| s.as_str());
             stmt.execute(rusqlite::params![
                 t.session_id,
                 t.provider,
@@ -1096,6 +1115,8 @@ pub fn insert_tool_invocations(
                 is_error as i32,
                 t.source_path,
                 t.timestamp,
+                error_text,
+                input_json,
             ])?;
         }
     }
@@ -1684,6 +1705,117 @@ pub(crate) fn query_dashboard_tools(conn: &Connection) -> Result<Vec<ToolSummary
         })?,
         "dashboard tools",
     ))
+}
+
+/// Query individual error rows for a specific tool, with optional filters.
+/// Returns (rows, total_count) for pagination.
+pub fn query_tool_errors(
+    conn: &Connection,
+    tool_name: &str,
+    provider: Option<&str>,
+    mcp_server: Option<&str>,
+    start: Option<&str>,
+    end: Option<&str>,
+    tz: &TzParams,
+    limit: i64,
+    offset: i64,
+) -> Result<ToolErrorsResponse> {
+    // Build WHERE clause fragments. The tool_name filter is mandatory.
+    let mut filters = vec![
+        "ti.tool_name = ?1".to_string(),
+        "ti.is_error = 1".to_string(),
+    ];
+    let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(tool_name.to_string())];
+    let mut idx = 2usize;
+
+    if let Some(p) = provider {
+        filters.push(format!("ti.provider = ?{idx}"));
+        params.push(Box::new(p.to_string()));
+        idx += 1;
+    }
+    if let Some(ms) = mcp_server {
+        filters.push(format!("ti.mcp_server = ?{idx}"));
+        params.push(Box::new(ms.to_string()));
+        idx += 1;
+    }
+    let offset_min = tz.normalized_offset_min();
+    if let Some(s) = start {
+        // Shift the stored UTC timestamp by the client's tz offset for comparison.
+        let shifted = format!("datetime(ti.timestamp, '{offset_min:+} minutes')");
+        filters.push(format!("{shifted} >= ?{idx}"));
+        params.push(Box::new(s.to_string()));
+        idx += 1;
+    }
+    if let Some(e) = end {
+        let shifted = format!("datetime(ti.timestamp, '{offset_min:+} minutes')");
+        filters.push(format!("{shifted} <= ?{idx}"));
+        params.push(Box::new(e.to_string()));
+        idx += 1;
+    }
+
+    let where_clause = filters.join(" AND ");
+
+    // Count total matching rows for pagination metadata.
+    let count_sql = format!("SELECT COUNT(*) FROM tool_invocations ti WHERE {where_clause}");
+    // Scope the borrow of `params` so it can be moved into `limit_params` below.
+    let total: i64 = {
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        conn.query_row(&count_sql, params_refs.as_slice(), |r| r.get(0))?
+    };
+
+    // Main query: join turns (for model) and sessions (for project_name).
+    let tz_shift = format!("'{offset_min:+} minutes'");
+    let data_sql = format!(
+        "SELECT
+            datetime(ti.timestamp, {tz_shift}) as ts,
+            ti.session_id,
+            COALESCE(s.project_name, '') as project,
+            COALESCE(t.model, '') as model,
+            ti.provider,
+            ti.tool_name,
+            ti.mcp_server,
+            ti.tool_input_json,
+            ti.error_text,
+            ti.source_path
+         FROM tool_invocations ti
+         LEFT JOIN turns t ON t.session_id = ti.session_id AND t.message_id = ti.message_id
+                          AND t.provider = ti.provider
+         LEFT JOIN sessions s ON s.session_id = ti.session_id AND s.provider = ti.provider
+         WHERE {where_clause}
+         ORDER BY ti.timestamp DESC
+         LIMIT ?{idx} OFFSET ?{}",
+        idx + 1
+    );
+
+    let limit_params: Vec<Box<dyn rusqlite::ToSql>> = params
+        .into_iter()
+        .chain([
+            Box::new(limit) as Box<dyn rusqlite::ToSql>,
+            Box::new(offset) as Box<dyn rusqlite::ToSql>,
+        ])
+        .collect();
+    let lp_refs: Vec<&dyn rusqlite::ToSql> = limit_params.iter().map(|p| p.as_ref()).collect();
+
+    let mut stmt = conn.prepare(&data_sql)?;
+    let rows = collect_warn(
+        stmt.query_map(lp_refs.as_slice(), |row| {
+            Ok(ToolErrorRow {
+                timestamp: row.get(0)?,
+                session_id: row.get(1)?,
+                project: row.get(2)?,
+                model: row.get(3)?,
+                provider: row.get(4)?,
+                tool_name: row.get(5)?,
+                mcp_server: row.get(6)?,
+                tool_input: row.get(7)?,
+                error_text: row.get(8)?,
+                source_path: row.get(9)?,
+            })
+        })?,
+        "tool errors",
+    );
+
+    Ok(ToolErrorsResponse { rows, total })
 }
 
 pub(crate) fn query_dashboard_mcp(conn: &Connection) -> Result<Vec<McpServerSummary>> {
@@ -5225,7 +5357,14 @@ mod tests {
             ],
             ..Default::default()
         }];
-        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
+        insert_tool_invocations(
+            &conn,
+            &turns,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM tool_invocations", [], |row| {
                 row.get(0)
@@ -5266,8 +5405,22 @@ mod tests {
             tool_use_ids: vec![("tool-1".into(), "Read".into())],
             ..Default::default()
         }];
-        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
-        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
+        insert_tool_invocations(
+            &conn,
+            &turns,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        insert_tool_invocations(
+            &conn,
+            &turns,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM tool_invocations", [], |row| {
                 row.get(0)
@@ -5289,7 +5442,14 @@ mod tests {
             ],
             ..Default::default()
         }];
-        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
+        insert_tool_invocations(
+            &conn,
+            &turns,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM tool_invocations", [], |row| {
@@ -5318,7 +5478,14 @@ mod tests {
                 ..Default::default()
             },
         ];
-        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
+        insert_tool_invocations(
+            &conn,
+            &turns,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
 
         delete_tool_invocations_by_source_path(&conn, "/tmp/a.jsonl").unwrap();
 
@@ -5413,7 +5580,14 @@ mod tests {
             },
         ];
         insert_turns(&conn, &turns).unwrap();
-        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
+        insert_tool_invocations(
+            &conn,
+            &turns,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
 
         let data = get_dashboard_data(&conn, TzParams::default()).unwrap();
 
@@ -6417,7 +6591,14 @@ mod tests {
             ..Default::default()
         }];
         insert_turns(&conn, &turns).unwrap();
-        insert_tool_invocations(&conn, &turns, &HashMap::new()).unwrap();
+        insert_tool_invocations(
+            &conn,
+            &turns,
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
 
         let rows = get_provider_tool_rows(&conn, "claude", "2026-04-01", 15).unwrap();
         assert!(!rows.is_empty());

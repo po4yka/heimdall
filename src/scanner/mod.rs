@@ -175,7 +175,13 @@ pub fn scan(
                 .collect();
             upsert_sessions(&conn, &sessions)?;
             insert_turns(&conn, &parsed.turns)?;
-            insert_tool_invocations(&conn, &parsed.turns, &parsed.tool_results)?;
+            insert_tool_invocations(
+                &conn,
+                &parsed.turns,
+                &parsed.tool_results,
+                &parsed.tool_error_texts,
+                &parsed.tool_input_jsons,
+            )?;
             sync_session_titles(&conn, &session_ids, &parsed.session_titles)?;
 
             // Phase 12: compute and insert tool-event cost attribution rows.

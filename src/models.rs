@@ -1093,6 +1093,27 @@ pub struct ToolSummary {
     pub errors: i64,
 }
 
+/// One row in the /api/tool-errors response.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ToolErrorRow {
+    pub timestamp: String,
+    pub session_id: String,
+    pub project: String,
+    pub model: String,
+    pub provider: String,
+    pub tool_name: String,
+    pub mcp_server: Option<String>,
+    pub tool_input: Option<String>,
+    pub error_text: Option<String>,
+    pub source_path: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ToolErrorsResponse {
+    pub rows: Vec<ToolErrorRow>,
+    pub total: i64,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct McpServerSummary {
     pub provider: String,

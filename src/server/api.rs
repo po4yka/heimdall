@@ -45,6 +45,7 @@ use crate::models::LiveQuotaSuggestions;
 use crate::models::MobileSnapshotEnvelope;
 use crate::models::OpenAiReconciliation;
 use crate::models::TokenBreakdown;
+use crate::models::ToolErrorsResponse;
 use crate::oauth;
 use crate::oauth::models::UsageWindowsResponse;
 use crate::openai;
@@ -2515,6 +2516,69 @@ pub async fn api_archive_web_conversation(
         crate::archive::web::WriteOutcome::Unchanged => serde_json::json!({"unchanged": true}),
     };
     Ok(Json(body))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ToolErrorsQuery {
+    pub tool: Option<String>,
+    pub provider: Option<String>,
+    pub mcp_server: Option<String>,
+    pub start: Option<String>,
+    pub end: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    #[serde(flatten)]
+    pub tz: TzParams,
+}
+
+/// `GET /api/tool-errors` — paginated list of individual tool-invocation errors.
+///
+/// Query params:
+///   `tool`        — required; filters to a single tool name (e.g. "Bash")
+///   `provider`    — optional; filters to a provider (e.g. "claude")
+///   `mcp_server`  — optional; filters by MCP server name
+///   `start`/`end` — optional ISO date strings for range filtering
+///   `limit`       — page size (default 100)
+///   `offset`      — page offset (default 0)
+///   `tz_offset_min` — client timezone offset in minutes (for timestamp display)
+pub async fn api_tool_errors(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ToolErrorsQuery>,
+    request: Request,
+) -> Result<Json<ToolErrorsResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let tool = query.tool.unwrap_or_default();
+    if tool.is_empty() {
+        return Ok(Json(ToolErrorsResponse::default()));
+    }
+    let provider = query.provider;
+    let mcp_server = query.mcp_server;
+    let start = query.start;
+    let end = query.end;
+    let limit = query.limit.unwrap_or(100).clamp(1, 500);
+    let offset = query.offset.unwrap_or(0).max(0);
+    let tz = query.tz;
+    let db_path = state.db_path.clone();
+    let _db_guard = state.db_lock.lock().await;
+    let result = tokio::task::spawn_blocking(move || {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        db::query_tool_errors(
+            &conn,
+            &tool,
+            provider.as_deref(),
+            mcp_server.as_deref(),
+            start.as_deref(),
+            end.as_deref(),
+            &tz,
+            limit,
+            offset,
+        )
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(result))
 }
 
 #[cfg(test)]

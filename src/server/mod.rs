@@ -123,6 +123,13 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             }),
         )
         .route(
+            "/tool-errors",
+            get({
+                let html = assets::render_dashboard();
+                move || async { Html(html) }
+            }),
+        )
+        .route(
             "/favicon.ico",
             get(|| async { axum::http::StatusCode::NO_CONTENT }),
         )
@@ -152,6 +159,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             "/api/cost-reconciliation",
             get(api::api_cost_reconciliation),
         )
+        .route("/api/tool-errors", get(api::api_tool_errors))
         .route("/api/archive", get(api::api_archive_list))
         .route("/api/archive/imports", get(api::api_archive_imports))
         .route("/api/archive/{snapshot_id}", get(api::api_archive_show))
