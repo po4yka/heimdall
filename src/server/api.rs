@@ -2565,14 +2565,16 @@ pub async fn api_tool_errors(
         db::init_db(&conn)?;
         db::query_tool_errors(
             &conn,
-            &tool,
-            provider.as_deref(),
-            mcp_server.as_deref(),
-            start.as_deref(),
-            end.as_deref(),
-            &tz,
-            limit,
-            offset,
+            &db::ToolErrorsQuery {
+                tool_name: &tool,
+                provider: provider.as_deref(),
+                mcp_server: mcp_server.as_deref(),
+                start: start.as_deref(),
+                end: end.as_deref(),
+                tz: &tz,
+                limit,
+                offset,
+            },
         )
     })
     .await

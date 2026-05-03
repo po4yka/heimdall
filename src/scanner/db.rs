@@ -1707,19 +1707,25 @@ pub(crate) fn query_dashboard_tools(conn: &Connection) -> Result<Vec<ToolSummary
     ))
 }
 
+/// Filter and pagination parameters for [`query_tool_errors`].
+pub struct ToolErrorsQuery<'a> {
+    pub tool_name: &'a str,
+    pub provider: Option<&'a str>,
+    pub mcp_server: Option<&'a str>,
+    pub start: Option<&'a str>,
+    pub end: Option<&'a str>,
+    pub tz: &'a TzParams,
+    pub limit: i64,
+    pub offset: i64,
+}
+
 /// Query individual error rows for a specific tool, with optional filters.
 /// Returns (rows, total_count) for pagination.
 pub fn query_tool_errors(
     conn: &Connection,
-    tool_name: &str,
-    provider: Option<&str>,
-    mcp_server: Option<&str>,
-    start: Option<&str>,
-    end: Option<&str>,
-    tz: &TzParams,
-    limit: i64,
-    offset: i64,
+    q: &ToolErrorsQuery<'_>,
 ) -> Result<ToolErrorsResponse> {
+    let ToolErrorsQuery { tool_name, provider, mcp_server, start, end, tz, limit, offset } = q;
     // Build WHERE clause fragments. The tool_name filter is mandatory.
     let mut filters = vec![
         "ti.tool_name = ?1".to_string(),
