@@ -1244,6 +1244,12 @@ pub struct DailyProjectRow {
     /// Aggregated credits for this day/project (Amp only).  `None` when no Amp rows.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credits: Option<f64>,
+    /// Project-management: pinned flag from `project_settings` (defaults to false).
+    #[serde(default)]
+    pub pinned: bool,
+    /// Project-management: user-supplied label override from `project_settings`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_label: Option<String>,
 }
 
 /// A single tool invocation with its share of the parent turn's cost.
@@ -1327,6 +1333,62 @@ pub struct SessionRow {
     /// Total credits for this session (Amp only).  `None` when no Amp data.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub credits: Option<f64>,
+    /// Project-management: pinned flag from `project_settings` (defaults to false).
+    #[serde(default)]
+    pub pinned: bool,
+    /// Project-management: user-supplied label override from `project_settings`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_label: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Project management (custom labels + pinning + UUID handles)
+// ---------------------------------------------------------------------------
+
+/// One row in the `project_settings` table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectSettingsRow {
+    pub project_slug: String,
+    pub project_uuid: String,
+    pub custom_label: Option<String>,
+    pub pinned: bool,
+    pub updated_at: String,
+}
+
+/// Patch payload for [`crate::scanner::db::upsert_project_settings`].
+///
+/// `custom_label` uses double-Option semantics:
+/// - `None`         → leave column unchanged
+/// - `Some(None)`   → clear the column
+/// - `Some(Some(v))`→ set the column to `v`
+///
+/// `pinned` is a plain `Option<bool>` (no clear-vs-unchanged distinction needed
+/// for a non-nullable column).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ProjectSettingsUpdate {
+    pub custom_label: Option<Option<String>>,
+    pub pinned: Option<bool>,
+}
+
+/// One row in the registry view (joined `sessions` + `project_settings`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectRegistryRow {
+    pub slug: String,
+    pub project_uuid: String,
+    /// Audit-derived or path-derived raw name from `sessions.project_name`.
+    /// May be empty when no sessions exist for this slug.
+    pub raw_name: String,
+    /// User-supplied override from `project_settings.custom_label`.
+    pub custom_label: Option<String>,
+    /// Resolved display name: `custom_label > raw_name > slug`.
+    pub display_name: String,
+    pub pinned: bool,
+    pub is_cowork: bool,
+    pub sessions: i64,
+    pub calls: i64,
+    pub cost: f64,
+    pub last_active: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

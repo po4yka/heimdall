@@ -42,6 +42,7 @@ notify = "8"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "macros", "time", "sync", "io-std"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing = "0.1"
+uuid = { version = "1", features = ["v4", "serde"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"
 rmcp = { version = "1.5.0", optional = true, features = ["server", "macros", "schemars", "transport-async-rw"] }

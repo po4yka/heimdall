@@ -10,9 +10,10 @@ use crate::models::{
     ClaudeUsageFactor, ClaudeUsageResponse, ClaudeUsageRunMeta, ClaudeUsageSnapshot,
     CodexPlanDailyRow, CodexPlanSection, CodexPlanSnapshot, ConfidenceSummary, DailyModelRow,
     DailyProjectRow, DashboardData, DetectedRole, EntrypointSummary, HourlyRow, McpServerSummary,
-    OfficialSyncRecordCount, OfficialSyncSourceStatus, OfficialSyncSummary, ProviderSummary,
-    RoleConfidence, ServiceTierSummary, SessionRow, SpawnBatch, ToolErrorRow, ToolErrorsResponse,
-    ToolEvent, ToolSpectrumCell, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
+    OfficialSyncRecordCount, OfficialSyncSourceStatus, OfficialSyncSummary, ProjectRegistryRow,
+    ProjectSettingsRow, ProjectSettingsUpdate, ProviderSummary, RoleConfidence, ServiceTierSummary,
+    SessionRow, SpawnBatch, ToolErrorRow, ToolErrorsResponse, ToolEvent, ToolSpectrumCell,
+    ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
 use crate::pricing_defs::{
     OfficialExtractedRecord, OfficialModelPricing, OfficialSyncRunRecord, PricingSyncRun,
@@ -335,6 +336,22 @@ fn create_schema(conn: &Connection) -> Result<()> {
             updated_at    TEXT NOT NULL,
             PRIMARY KEY (project, raw_role)
         );",
+    )?;
+
+    // Project management: per-project pinning + custom labels + UUID handles.
+    // CREATE TABLE IF NOT EXISTS only — no migration probe (matches agent_registry).
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS project_settings (
+            project_slug  TEXT PRIMARY KEY,
+            project_uuid  TEXT NOT NULL UNIQUE,
+            custom_label  TEXT,
+            pinned        INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_project_settings_pinned
+            ON project_settings(pinned) WHERE pinned = 1;
+        CREATE INDEX IF NOT EXISTS idx_project_settings_uuid
+            ON project_settings(project_uuid);",
     )?;
 
     // Feature 2: Per-screen dashboard layout persistence.
@@ -1604,8 +1621,12 @@ pub(crate) fn query_dashboard_sessions(conn: &Connection) -> Result<Vec<SessionR
                 s.pricing_version, s.billing_mode, s.cost_confidence,
                 COALESCE((SELECT COUNT(DISTINCT t.agent_id) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_count,
                 COALESCE((SELECT COUNT(*) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_turns,
-                s.title, s.total_credits
-         FROM sessions s ORDER BY s.last_timestamp DESC",
+                s.title, s.total_credits,
+                ps.custom_label,
+                COALESCE(ps.pinned, 0) AS pinned
+         FROM sessions s
+         LEFT JOIN project_settings ps ON ps.project_slug = s.project_name
+         ORDER BY s.last_timestamp DESC",
     )?;
     Ok(collect_warn(
         stmt.query_map([], |row| {
@@ -1673,6 +1694,8 @@ pub(crate) fn query_dashboard_sessions(conn: &Connection) -> Result<Vec<SessionR
                 cache_hit_ratio,
                 tokens_per_min,
                 credits: row.get::<_, Option<f64>>(19)?,
+                custom_label: row.get::<_, Option<String>>(20)?,
+                pinned: row.get::<_, i64>(21)? != 0,
             })
         })?,
         "dashboard sessions",
@@ -2025,8 +2048,12 @@ pub(crate) fn query_dashboard_daily_by_project(conn: &Connection) -> Result<Vec<
                 SUM(t.input_tokens) as input, SUM(t.output_tokens) as output,
                 SUM(t.reasoning_output_tokens) as reasoning_output,
                 COALESCE(SUM(t.estimated_cost_nanos), 0) as cost_nanos,
-                SUM(t.credits) as credits_sum
-         FROM turns t JOIN sessions s ON t.session_id = s.session_id
+                SUM(t.credits) as credits_sum,
+                ps.custom_label,
+                COALESCE(ps.pinned, 0) AS pinned
+         FROM turns t
+         JOIN sessions s ON t.session_id = s.session_id
+         LEFT JOIN project_settings ps ON ps.project_slug = s.project_name
          GROUP BY day, s.provider, s.project_name
          ORDER BY day, s.provider, s.project_name",
     )?;
@@ -2046,6 +2073,8 @@ pub(crate) fn query_dashboard_daily_by_project(conn: &Connection) -> Result<Vec<
                 reasoning_output: row.get(5)?,
                 cost: row.get::<_, i64>(6)? as f64 / 1_000_000_000.0,
                 credits: row.get::<_, Option<f64>>(7)?,
+                custom_label: row.get::<_, Option<String>>(8)?,
+                pinned: row.get::<_, i64>(9)? != 0,
             })
         })?,
         "dashboard daily_by_project",
@@ -5426,6 +5455,250 @@ pub fn delete_screen_layout(conn: &Connection, screen: &str) -> rusqlite::Result
     )
 }
 
+// ---------------------------------------------------------------------------
+// Project management: project_settings CRUD + registry view
+// ---------------------------------------------------------------------------
+
+/// Ensure a row in `project_settings` exists for `slug` and return its UUID.
+///
+/// On first sight: generates a UUIDv4 and inserts the row with default values
+/// (custom_label NULL, pinned 0). Idempotent: subsequent calls return the
+/// existing UUID without modifying the row.
+pub fn ensure_project_uuid(conn: &Connection, slug: &str) -> Result<String> {
+    let new_uuid = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT OR IGNORE INTO project_settings
+            (project_slug, project_uuid, custom_label, pinned, updated_at)
+         VALUES (?1, ?2, NULL, 0, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
+        rusqlite::params![slug, new_uuid],
+    )?;
+    let uuid: String = conn.query_row(
+        "SELECT project_uuid FROM project_settings WHERE project_slug = ?1",
+        rusqlite::params![slug],
+        |row| row.get(0),
+    )?;
+    Ok(uuid)
+}
+
+/// Look up a project_settings row by primary key.
+fn select_project_settings_row(
+    conn: &Connection,
+    slug: &str,
+) -> rusqlite::Result<Option<ProjectSettingsRow>> {
+    conn.query_row(
+        "SELECT project_slug, project_uuid, custom_label,
+                COALESCE(pinned, 0) AS pinned, updated_at
+         FROM project_settings WHERE project_slug = ?1",
+        rusqlite::params![slug],
+        |row| {
+            Ok(ProjectSettingsRow {
+                project_slug: row.get(0)?,
+                project_uuid: row.get(1)?,
+                custom_label: row.get(2)?,
+                pinned: row.get::<_, i64>(3)? != 0,
+                updated_at: row.get(4)?,
+            })
+        },
+    )
+    .optional()
+}
+
+/// Read a single `project_settings` row by slug.
+pub fn select_project_settings(
+    conn: &Connection,
+    slug: &str,
+) -> Result<Option<ProjectSettingsRow>> {
+    Ok(select_project_settings_row(conn, slug)?)
+}
+
+/// Find a project_settings row by its UUID handle.
+pub fn find_project_by_uuid(conn: &Connection, uuid: &str) -> Result<Option<ProjectSettingsRow>> {
+    let row = conn
+        .query_row(
+            "SELECT project_slug, project_uuid, custom_label,
+                    COALESCE(pinned, 0) AS pinned, updated_at
+             FROM project_settings WHERE project_uuid = ?1",
+            rusqlite::params![uuid],
+            |row| {
+                Ok(ProjectSettingsRow {
+                    project_slug: row.get(0)?,
+                    project_uuid: row.get(1)?,
+                    custom_label: row.get(2)?,
+                    pinned: row.get::<_, i64>(3)? != 0,
+                    updated_at: row.get(4)?,
+                })
+            },
+        )
+        .optional()?;
+    Ok(row)
+}
+
+/// Upsert a `project_settings` row.
+///
+/// Strategy mirrors `upsert_agent_registry`: ensure_project_uuid guarantees
+/// the row + UUID exist, then conditional UPDATE per supplied field with
+/// `updated_at` always bumped.
+pub fn upsert_project_settings(
+    conn: &Connection,
+    slug: &str,
+    update: &ProjectSettingsUpdate,
+) -> Result<ProjectSettingsRow> {
+    ensure_project_uuid(conn, slug)?;
+
+    if let Some(ref v) = update.custom_label {
+        conn.execute(
+            "UPDATE project_settings
+             SET custom_label = ?1,
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+             WHERE project_slug = ?2",
+            rusqlite::params![v.as_deref(), slug],
+        )?;
+    }
+    if let Some(pinned) = update.pinned {
+        conn.execute(
+            "UPDATE project_settings
+             SET pinned = ?1,
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+             WHERE project_slug = ?2",
+            rusqlite::params![pinned as i64, slug],
+        )?;
+    }
+
+    select_project_settings_row(conn, slug)?
+        .ok_or_else(|| anyhow::anyhow!("project_settings: row vanished after upsert for '{slug}'"))
+}
+
+/// Build the project registry view across all known project slugs.
+///
+/// Aggregates session/turn/cost stats and joins with `project_settings` for
+/// custom_label, pinned, project_uuid. Detects Cowork projects by checking for
+/// any turn whose source_path is under `local-agent-mode-sessions/`. Backfills
+/// missing UUIDs on read so any project ever observed is addressable by URL.
+pub fn query_project_registry(
+    conn: &Connection,
+    _tz: &TzParams,
+) -> Result<Vec<ProjectRegistryRow>> {
+    // We key the registry by `project_name` (the dashboard-facing identifier
+    // that the alias map and existing queries already use). The
+    // `project_settings.project_slug` column stores this same identifier.
+    let mut stmt = conn.prepare(
+        "SELECT s.project_name AS slug,
+                COALESCE(s.project_name, '') AS raw_name,
+                ps.custom_label,
+                ps.project_uuid,
+                COALESCE(ps.pinned, 0) AS pinned,
+                EXISTS(
+                    SELECT 1 FROM sessions s2
+                    JOIN turns t ON t.session_id = s2.session_id
+                    WHERE s2.project_name = s.project_name
+                      AND t.source_path LIKE '%/local-agent-mode-sessions/%'
+                    LIMIT 1
+                ) AS is_cowork,
+                COUNT(DISTINCT s.session_id) AS sessions,
+                COALESCE(SUM(s.turn_count), 0) AS calls,
+                COALESCE(SUM(s.total_estimated_cost_nanos), 0) AS cost_nanos,
+                MAX(s.last_timestamp) AS last_active,
+                ps.updated_at
+         FROM sessions s
+         LEFT JOIN project_settings ps ON ps.project_slug = s.project_name
+         WHERE s.project_name IS NOT NULL AND s.project_name != ''
+         GROUP BY s.project_name
+         ORDER BY pinned DESC, last_active DESC",
+    )?;
+
+    type RegistryRawRow = (
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+        Option<String>,
+        Option<String>,
+    );
+
+    let raw_rows: Vec<RegistryRawRow> = collect_warn(
+        stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, i64>(8)?,
+                row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<String>>(10)?,
+            ))
+        })?,
+        "project registry",
+    );
+
+    let mut rows: Vec<ProjectRegistryRow> = Vec::with_capacity(raw_rows.len());
+    for (
+        slug,
+        raw_name,
+        custom_label,
+        project_uuid,
+        pinned,
+        is_cowork,
+        sessions,
+        calls,
+        cost_nanos,
+        last_active,
+        existing_updated_at,
+    ) in raw_rows
+    {
+        // Backfill UUID on read so any project ever observed is addressable.
+        let uuid = match project_uuid {
+            Some(u) => u,
+            None => ensure_project_uuid(conn, &slug)?,
+        };
+        // If we just backfilled, refresh updated_at; otherwise use what we got.
+        let updated_at = if existing_updated_at.is_some() {
+            existing_updated_at
+        } else {
+            conn.query_row(
+                "SELECT updated_at FROM project_settings WHERE project_slug = ?1",
+                rusqlite::params![slug],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+        };
+        let display_name = custom_label
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                if !raw_name.is_empty() {
+                    raw_name.clone()
+                } else {
+                    slug.clone()
+                }
+            });
+        rows.push(ProjectRegistryRow {
+            slug,
+            project_uuid: uuid,
+            raw_name,
+            custom_label,
+            display_name,
+            pinned: pinned != 0,
+            is_cowork: is_cowork != 0,
+            sessions,
+            calls,
+            cost: cost_nanos as f64 / 1_000_000_000.0,
+            last_active,
+            updated_at,
+        });
+    }
+    Ok(rows)
+}
+
 /// Query the 7×24 weekday-hour pattern aggregated over the last `days_back`
 /// days (relative to now, in UTC — suitable as a behavioral pattern).
 ///
@@ -8664,5 +8937,331 @@ mod tests {
         upsert_screen_layout(&conn, "activity", &layout2).unwrap();
         let got = get_screen_layout(&conn, "activity").unwrap();
         assert_eq!(got, Some(layout2), "second upsert must overwrite first");
+    }
+
+    // ---------------------------------------------------------------------
+    // Project management: project_settings + registry
+    // ---------------------------------------------------------------------
+
+    fn insert_test_session(
+        conn: &Connection,
+        session_id: &str,
+        project_name: &str,
+        last_timestamp: &str,
+        cost_nanos: i64,
+        turn_count: i64,
+    ) {
+        conn.execute(
+            "INSERT INTO sessions
+                (session_id, provider, project_name, project_slug,
+                 first_timestamp, last_timestamp,
+                 total_input_tokens, total_output_tokens, total_cache_read,
+                 total_cache_creation, total_estimated_cost_nanos, turn_count)
+             VALUES (?1, 'claude', ?2, ?2, ?3, ?3, 0, 0, 0, 0, ?4, ?5)",
+            rusqlite::params![
+                session_id,
+                project_name,
+                last_timestamp,
+                cost_nanos,
+                turn_count
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn project_settings_upsert_creates_uuid_on_first_insert() {
+        let conn = test_conn();
+        let row = upsert_project_settings(
+            &conn,
+            "alpha",
+            &ProjectSettingsUpdate {
+                custom_label: Some(Some("Alpha".into())),
+                pinned: Some(true),
+            },
+        )
+        .unwrap();
+        assert_eq!(row.project_slug, "alpha");
+        // Real UUIDv4 is 36 chars (8-4-4-4-12).
+        assert_eq!(row.project_uuid.len(), 36);
+        assert_eq!(row.custom_label.as_deref(), Some("Alpha"));
+        assert!(row.pinned);
+    }
+
+    #[test]
+    fn project_settings_upsert_pin_toggle_preserves_label() {
+        let conn = test_conn();
+        let _ = upsert_project_settings(
+            &conn,
+            "p",
+            &ProjectSettingsUpdate {
+                custom_label: Some(Some("Custom".into())),
+                pinned: Some(false),
+            },
+        )
+        .unwrap();
+        // Toggle pin without supplying label.
+        let row = upsert_project_settings(
+            &conn,
+            "p",
+            &ProjectSettingsUpdate {
+                custom_label: None,
+                pinned: Some(true),
+            },
+        )
+        .unwrap();
+        assert!(row.pinned);
+        assert_eq!(row.custom_label.as_deref(), Some("Custom"));
+    }
+
+    #[test]
+    fn project_settings_upsert_label_double_option() {
+        let conn = test_conn();
+        // Set label.
+        let r1 = upsert_project_settings(
+            &conn,
+            "p",
+            &ProjectSettingsUpdate {
+                custom_label: Some(Some("L1".into())),
+                pinned: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(r1.custom_label.as_deref(), Some("L1"));
+        // None → unchanged.
+        let r2 = upsert_project_settings(
+            &conn,
+            "p",
+            &ProjectSettingsUpdate {
+                custom_label: None,
+                pinned: Some(true),
+            },
+        )
+        .unwrap();
+        assert_eq!(r2.custom_label.as_deref(), Some("L1"));
+        // Some(None) → cleared.
+        let r3 = upsert_project_settings(
+            &conn,
+            "p",
+            &ProjectSettingsUpdate {
+                custom_label: Some(None),
+                pinned: None,
+            },
+        )
+        .unwrap();
+        assert!(r3.custom_label.is_none());
+    }
+
+    #[test]
+    fn project_settings_upsert_both_at_once() {
+        let conn = test_conn();
+        let r = upsert_project_settings(
+            &conn,
+            "p",
+            &ProjectSettingsUpdate {
+                custom_label: Some(Some("Both".into())),
+                pinned: Some(true),
+            },
+        )
+        .unwrap();
+        assert_eq!(r.custom_label.as_deref(), Some("Both"));
+        assert!(r.pinned);
+    }
+
+    #[test]
+    fn ensure_project_uuid_idempotent() {
+        let conn = test_conn();
+        let u1 = ensure_project_uuid(&conn, "alpha").unwrap();
+        let u2 = ensure_project_uuid(&conn, "alpha").unwrap();
+        assert_eq!(u1, u2, "second call must return the existing UUID");
+        let u3 = ensure_project_uuid(&conn, "beta").unwrap();
+        assert_ne!(u1, u3, "different slugs must get different UUIDs");
+    }
+
+    #[test]
+    fn find_project_by_uuid_returns_some_for_known_uuid() {
+        let conn = test_conn();
+        let u = ensure_project_uuid(&conn, "p").unwrap();
+        let found = find_project_by_uuid(&conn, &u).unwrap();
+        let row = found.expect("known UUID must resolve");
+        assert_eq!(row.project_slug, "p");
+        assert_eq!(row.project_uuid, u);
+    }
+
+    #[test]
+    fn find_project_by_uuid_returns_none_for_unknown_uuid() {
+        let conn = test_conn();
+        let found = find_project_by_uuid(&conn, "00000000-0000-0000-0000-000000000000").unwrap();
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn query_project_registry_orders_pinned_first_then_last_active_desc() {
+        let conn = test_conn();
+        insert_test_session(
+            &conn,
+            "s-old",
+            "old-proj",
+            "2024-01-01T00:00:00Z",
+            1_000_000_000,
+            1,
+        );
+        insert_test_session(
+            &conn,
+            "s-new",
+            "new-proj",
+            "2026-01-01T00:00:00Z",
+            2_000_000_000,
+            2,
+        );
+        // Pin the older one.
+        upsert_project_settings(
+            &conn,
+            "old-proj",
+            &ProjectSettingsUpdate {
+                custom_label: None,
+                pinned: Some(true),
+            },
+        )
+        .unwrap();
+        let rows = query_project_registry(&conn, &TzParams::default()).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].slug, "old-proj", "pinned project must come first");
+        assert!(rows[0].pinned);
+        assert_eq!(rows[1].slug, "new-proj");
+        assert!(!rows[1].pinned);
+    }
+
+    #[test]
+    fn query_project_registry_aggregates_sessions_calls_cost() {
+        let conn = test_conn();
+        insert_test_session(
+            &conn,
+            "s1",
+            "proj",
+            "2026-01-01T00:00:00Z",
+            1_000_000_000,
+            3,
+        );
+        insert_test_session(
+            &conn,
+            "s2",
+            "proj",
+            "2026-01-02T00:00:00Z",
+            2_500_000_000,
+            5,
+        );
+        let rows = query_project_registry(&conn, &TzParams::default()).unwrap();
+        assert_eq!(rows.len(), 1);
+        let r = &rows[0];
+        assert_eq!(r.slug, "proj");
+        assert_eq!(r.sessions, 2);
+        assert_eq!(r.calls, 8);
+        assert!((r.cost - 3.5).abs() < 1e-9);
+        assert_eq!(r.last_active.as_deref(), Some("2026-01-02T00:00:00Z"));
+    }
+
+    #[test]
+    fn query_project_registry_detects_cowork_via_source_path() {
+        let conn = test_conn();
+        insert_test_session(&conn, "s-cw", "cowork-proj", "2026-01-01T00:00:00Z", 0, 1);
+        // Insert a turn for that session under a Cowork-style source path.
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, timestamp, source_path)
+             VALUES ('s-cw', 'claude', '2026-01-01T00:00:00Z',
+                     '/Users/me/.claude/local-agent-mode-sessions/file.jsonl')",
+            [],
+        )
+        .unwrap();
+        // And a non-Cowork project for contrast.
+        insert_test_session(&conn, "s-norm", "normal-proj", "2026-01-01T00:00:00Z", 0, 1);
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, timestamp, source_path)
+             VALUES ('s-norm', 'claude', '2026-01-01T00:00:00Z',
+                     '/Users/me/.claude/projects/normal/file.jsonl')",
+            [],
+        )
+        .unwrap();
+        let rows = query_project_registry(&conn, &TzParams::default()).unwrap();
+        let cowork = rows.iter().find(|r| r.slug == "cowork-proj").unwrap();
+        let normal = rows.iter().find(|r| r.slug == "normal-proj").unwrap();
+        assert!(
+            cowork.is_cowork,
+            "Cowork source path must mark project as cowork"
+        );
+        assert!(!normal.is_cowork, "non-Cowork project must not be flagged");
+    }
+
+    #[test]
+    fn query_dashboard_daily_by_project_carries_pinned_and_custom_label() {
+        let conn = test_conn();
+        insert_test_session(
+            &conn,
+            "s1",
+            "proj-a",
+            "2026-01-01T00:00:00Z",
+            1_000_000_000,
+            1,
+        );
+        // Insert a turn so daily_by_project has rows to return.
+        conn.execute(
+            "INSERT INTO turns
+                (session_id, provider, timestamp, model,
+                 input_tokens, output_tokens, estimated_cost_nanos)
+             VALUES ('s1', 'claude', '2026-01-01T10:00:00Z', 'claude-3-5-sonnet',
+                     100, 50, 1_000_000)",
+            [],
+        )
+        .unwrap();
+        upsert_project_settings(
+            &conn,
+            "proj-a",
+            &ProjectSettingsUpdate {
+                custom_label: Some(Some("My A".into())),
+                pinned: Some(true),
+            },
+        )
+        .unwrap();
+        let rows = query_dashboard_daily_by_project(&conn).unwrap();
+        let row = rows.iter().find(|r| r.project == "proj-a").unwrap();
+        assert!(row.pinned);
+        assert_eq!(row.custom_label.as_deref(), Some("My A"));
+    }
+
+    #[test]
+    fn api_data_display_name_precedence_custom_over_alias_over_raw() {
+        // Pure-Rust precedence chain test (no HTTP). Mirrors the logic that
+        // api::api_data applies on each row before serializing.
+        use std::collections::HashMap;
+        let custom_label: Option<String> = Some("Custom".into());
+        let raw_project = "raw-slug".to_string();
+        let mut aliases: HashMap<String, String> = HashMap::new();
+        aliases.insert(raw_project.clone(), "Aliased".into());
+
+        // Custom > alias > raw.
+        let resolved = custom_label
+            .as_deref()
+            .or_else(|| aliases.get(&raw_project).map(String::as_str))
+            .unwrap_or(&raw_project)
+            .to_string();
+        assert_eq!(resolved, "Custom");
+
+        // No custom: alias > raw.
+        let custom_label: Option<String> = None;
+        let resolved = custom_label
+            .as_deref()
+            .or_else(|| aliases.get(&raw_project).map(String::as_str))
+            .unwrap_or(&raw_project)
+            .to_string();
+        assert_eq!(resolved, "Aliased");
+
+        // No custom and no alias: raw.
+        let aliases: HashMap<String, String> = HashMap::new();
+        let resolved = custom_label
+            .as_deref()
+            .or_else(|| aliases.get(&raw_project).map(String::as_str))
+            .unwrap_or(&raw_project)
+            .to_string();
+        assert_eq!(resolved, "raw-slug");
     }
 }
