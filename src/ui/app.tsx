@@ -21,6 +21,10 @@ import {
   backupSnapshots,
   backupLoadState,
   archiveImports,
+  projectsRegistry,
+  projectSearchQuery,
+  registryByUuid,
+  selectedProjectUuid,
   webConversations,
   companionHeartbeat,
   rawData,
@@ -29,6 +33,7 @@ import {
   type WebConversationSummary,
   type CompanionHeartbeat,
 } from './state/store';
+import { fetchProjectsRegistry } from './lib/projects';
 import { ScreenGridManager } from './widgets/ScreenGridManager';
 import { registerMountCallback } from './widgets/mount-registry';
 
@@ -214,4 +219,48 @@ if (registryModalMount && dashboardRuntime) {
   rawData.subscribe(() => {
     render(<RegistryModalRoot />, registryModalMount);
   });
+}
+
+// ── Project deep-linking via #/project/<uuid> hash ──────────────────────────
+// Reads the URL hash, resolves it against the cached registry (fetched once
+// on boot below), and narrows the dashboard project filter to that project.
+// Re-applies whenever the registry signal updates so an initial paint that
+// races the registry fetch still resolves correctly.
+if (dashboardRuntime) {
+  const PROJECT_HASH_RE = /^#\/project\/([^?]+)/;
+
+  function readProjectFromHash(): string | null {
+    const m = PROJECT_HASH_RE.exec(window.location.hash);
+    return m ? decodeURIComponent(m[1]!) : null;
+  }
+
+  function applyProjectHash(): void {
+    const uuid = readProjectFromHash();
+    selectedProjectUuid.value = uuid;
+    if (!uuid) return;
+    const reg = registryByUuid.value.get(uuid);
+    if (!reg) return; // Wait for registry to land.
+    const label = (reg.custom_label ?? reg.display_name ?? reg.slug).toLowerCase();
+    if (projectSearchQuery.value !== label) {
+      projectSearchQuery.value = label;
+      syncDashboardUrl();
+      dashboardRuntime!.applyFilter();
+    }
+  }
+
+  window.addEventListener('hashchange', applyProjectHash);
+
+  // Initial fetch + apply once the registry resolves so deep links work
+  // without round-tripping per click. Re-applies on registry refresh too.
+  void fetchProjectsRegistry()
+    .then(rows => {
+      projectsRegistry.value = rows;
+      applyProjectHash();
+    })
+    .catch(() => { /* registry endpoint optional at boot */ });
+  projectsRegistry.subscribe(() => {
+    if (selectedProjectUuid.value) applyProjectHash();
+  });
+  // Apply once on initial load in case the registry was already cached.
+  applyProjectHash();
 }

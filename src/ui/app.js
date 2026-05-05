@@ -19440,6 +19440,38 @@ ${row.project}` : row.project;
     });
   }
   var RegistryModalRoot2;
+  if (dashboardRuntime) {
+    let readProjectFromHash = function() {
+      const m5 = PROJECT_HASH_RE.exec(window.location.hash);
+      return m5 ? decodeURIComponent(m5[1]) : null;
+    }, applyProjectHash = function() {
+      const uuid = readProjectFromHash();
+      selectedProjectUuid.value = uuid;
+      if (!uuid) return;
+      const reg = registryByUuid.value.get(uuid);
+      if (!reg) return;
+      const label = (reg.custom_label ?? reg.display_name ?? reg.slug).toLowerCase();
+      if (projectSearchQuery.value !== label) {
+        projectSearchQuery.value = label;
+        syncDashboardUrl();
+        dashboardRuntime.applyFilter();
+      }
+    };
+    readProjectFromHash2 = readProjectFromHash, applyProjectHash2 = applyProjectHash;
+    const PROJECT_HASH_RE = /^#\/project\/([^?]+)/;
+    window.addEventListener("hashchange", applyProjectHash);
+    void fetchProjectsRegistry().then((rows2) => {
+      projectsRegistry.value = rows2;
+      applyProjectHash();
+    }).catch(() => {
+    });
+    projectsRegistry.subscribe(() => {
+      if (selectedProjectUuid.value) applyProjectHash();
+    });
+    applyProjectHash();
+  }
+  var readProjectFromHash2;
+  var applyProjectHash2;
 })();
 /*! Bundled license information:
 
