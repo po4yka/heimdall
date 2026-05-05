@@ -116,7 +116,7 @@ function QuotaSuggestionsSection({ data }: { data: BillingBlocksResponse }) {
             <span class="stat-sub">
               {level.label}
               {level.key === suggestions.recommended_key && (
-                <span style={{ marginLeft: '6px', color: 'var(--success)' }}>[RECOMMENDED]</span>
+                <small style={{ marginLeft: '6px', fontSize: '9px', letterSpacing: '0.08em', color: 'var(--text-disabled)', textTransform: 'uppercase' }}>recommended</small>
               )}
             </span>
             <span class="stat-sub" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>

@@ -91,7 +91,7 @@ export function SubscriptionQuotaCard({ snapshot }: SubscriptionQuotaCardProps) 
       <div class="subscription-quota-section">
         <div class="subscription-quota-section-label">
           Estimated{' '}
-          <span class="subscription-quota-tag">[ESTIMATED]</span>
+          <small style={{ fontSize: '9px', letterSpacing: '0.08em', color: 'var(--text-disabled)', textTransform: 'uppercase' }}>estimated</small>
         </div>
         {!hasEstimates && (
           <div class="subscription-quota-empty">

@@ -673,6 +673,42 @@ export function renderDashboardView(
   exportProjectsCSV: () => void,
   onReload?: () => void,
 ): void {
+  // Empty-state: show guidance when no sessions have been ingested yet.
+  const emptyMount = $('empty-state-mount');
+  if (emptyMount) {
+    if (data.sessions_all.length === 0) {
+      render(
+        <div
+          role="status"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            border: '1px solid var(--text-secondary)',
+            borderRadius: '4px',
+            background: 'var(--surface)',
+            marginTop: '12px',
+          }}
+        >
+          [INFO: No sessions ingested yet. Run{' '}
+          <code style={{ fontFamily: 'var(--font-mono)' }}>cargo run -- scan</code>
+          {' '}(or open Claude Code / Codex once and revisit) to populate the dashboard.]
+        </div>,
+        emptyMount
+      );
+      emptyMount.style.display = '';
+    } else {
+      render(null, emptyMount);
+      emptyMount.style.display = 'none';
+    }
+  }
+
   const cutoff = getRangeCutoff(selectedRange.value);
   const filteredDaily = data.daily_by_model.filter(
     row =>
