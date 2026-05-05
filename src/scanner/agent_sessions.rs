@@ -425,6 +425,24 @@ pub fn parse_agent_file(
 // Task output discovery (unix only)
 // ---------------------------------------------------------------------------
 
+/// Cheap content sniff: reads up to 64 bytes from `path` and returns true iff
+/// the first non-whitespace byte is `{` — i.e. this looks like an agent JSONL
+/// record. Returns false for shell outputs (`>`, plain text) and for unreadable
+/// files. Used to filter out non-agent `.output` files written by
+/// `Bash(run_in_background=true)` that happen to share the `tasks/<id>.output`
+/// path convention with the legacy task-output JSONL contract.
+fn looks_like_jsonl(path: &std::path::Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut buf = [0u8; 64];
+    let Ok(n) = f.read(&mut buf) else {
+        return false;
+    };
+    buf[..n].iter().find(|b| !b.is_ascii_whitespace()).copied() == Some(b'{')
+}
+
 #[cfg(unix)]
 fn task_output_roots() -> Vec<PathBuf> {
     let uid = unsafe { libc::getuid() };
@@ -579,6 +597,15 @@ pub fn discover_files(cfg: &DiscoveryConfig) -> Vec<DiscoveredAgentFile> {
                     None => continue,
                 };
                 if parent.file_name().and_then(|n| n.to_str()) != Some("tasks") {
+                    continue;
+                }
+
+                // Modern Claude Code writes background-bash stdout to the same
+                // `tasks/<id>.output` path that legacy task-agents used for JSONL.
+                // Skip files whose first non-whitespace byte isn't `{` so we
+                // don't burn the JSONL parser (and the user's logs) on shell
+                // output.
+                if !looks_like_jsonl(path) {
                     continue;
                 }
 
@@ -1071,5 +1098,44 @@ mod tests {
         };
         let records = discover_and_parse(&cfg);
         assert!(records.is_empty());
+    }
+
+    #[test]
+    fn looks_like_jsonl_accepts_brace_start() {
+        let dir = TempDir::new().unwrap();
+        let p = dir.path().join("a.output");
+        std::fs::write(&p, r#"{"timestamp":"2026-05-01T10:00:00Z"}"#).unwrap();
+        assert!(looks_like_jsonl(&p));
+    }
+
+    #[test]
+    fn looks_like_jsonl_accepts_brace_after_whitespace() {
+        let dir = TempDir::new().unwrap();
+        let p = dir.path().join("a.output");
+        std::fs::write(&p, "   \n\t {\"k\":1}").unwrap();
+        assert!(looks_like_jsonl(&p));
+    }
+
+    #[test]
+    fn looks_like_jsonl_rejects_shell_output() {
+        let dir = TempDir::new().unwrap();
+        let p = dir.path().join("a.output");
+        std::fs::write(&p, "> Task :feature:digest:bundle\nw: ATTENTION!").unwrap();
+        assert!(!looks_like_jsonl(&p));
+    }
+
+    #[test]
+    fn looks_like_jsonl_rejects_empty_file() {
+        let dir = TempDir::new().unwrap();
+        let p = dir.path().join("a.output");
+        std::fs::write(&p, "").unwrap();
+        assert!(!looks_like_jsonl(&p));
+    }
+
+    #[test]
+    fn looks_like_jsonl_rejects_missing_file() {
+        assert!(!looks_like_jsonl(std::path::Path::new(
+            "/nonexistent/missing.output"
+        )));
     }
 }
