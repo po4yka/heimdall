@@ -1,9 +1,20 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
+use rusqlite::Connection;
 use serde::Serialize;
 use tracing::{debug, error, info};
 
 use crate::config::WebhookConfig;
+use crate::models::AgentStopReasonTransition;
+use crate::scanner::db;
+
+/// Default allowlist for `agent_stop_reason_transition` events. When
+/// `WebhookConfig::agent_stop_reason_filter` is `None` this list is used
+/// verbatim — both values indicate that an agent ran out of context or was
+/// refused, both of which usually mean lost work or a config issue worth
+/// investigating.
+pub const DEFAULT_STOP_REASON_FILTER: &[&str] = &["max_tokens", "refusal"];
 
 /// A webhook event payload sent to the configured URL.
 #[derive(Debug, Serialize)]
@@ -101,6 +112,7 @@ pub fn notify_if_configured(config: &WebhookConfig, event: WebhookEvent) {
         "agent_status_degraded" | "agent_status_restored" => config.agent_status,
         "community_signal_spike" => config.spike_webhook,
         "subscription_cap_changed" => config.cap_changes,
+        "agent_stop_reason_transition" => config.agent_stop_reason,
         _ => {
             debug!("Unknown webhook event type: {}", event.event_type);
             false
@@ -376,6 +388,86 @@ pub fn community_signal_spike_event(
         // First observation or true→false — no event.
         _ => None,
     }
+}
+
+/// Produce an `agent_stop_reason_transition` event when a subagent's terminal
+/// `stop_reason` lands on the configured allowlist AND represents a real
+/// change versus the prior emission.
+///
+/// Dedup happens at three layers:
+///   1. The `agent_stop_reason` config flag (returns `Ok(None)` when off).
+///   2. The allowlist filter (default `["max_tokens", "refusal"]`).
+///   3. The persistent `webhook_emitted` table — last emitted value for the
+///      `(source, project, agent_id)` triple is compared against `new_reason`,
+///      and identical values are suppressed even across process restart.
+///
+/// On a real transition the helper writes the new value into
+/// `webhook_emitted` BEFORE returning the event, so concurrent writers will
+/// see the latest value on their next read. The actual webhook dispatch is
+/// the caller's responsibility (`notify_if_configured`).
+pub fn agent_stop_reason_transition_event(
+    config: &WebhookConfig,
+    conn: &Connection,
+    transition: &AgentStopReasonTransition,
+) -> Result<Option<WebhookEvent>> {
+    if !config.agent_stop_reason {
+        return Ok(None);
+    }
+
+    let new_reason = match transition.record.stop_reason.as_deref() {
+        Some(r) if !r.is_empty() => r,
+        _ => return Ok(None),
+    };
+
+    let in_filter = match &config.agent_stop_reason_filter {
+        Some(list) => list.iter().any(|s| s == new_reason),
+        None => DEFAULT_STOP_REASON_FILTER.contains(&new_reason),
+    };
+    if !in_filter {
+        return Ok(None);
+    }
+
+    if transition.prev_stop_reason.as_deref() == Some(new_reason) {
+        return Ok(None);
+    }
+
+    let r = &transition.record;
+    let dedup_key = format!("{}|{}|{}", r.source.as_str(), r.project, r.agent_id);
+
+    let already = db::get_webhook_emitted(conn, "agent_stop_reason_transition", &dedup_key)?;
+    if already.as_deref() == Some(new_reason) {
+        return Ok(None);
+    }
+
+    db::upsert_webhook_emitted(
+        conn,
+        "agent_stop_reason_transition",
+        &dedup_key,
+        Some(new_reason),
+    )?;
+
+    Ok(Some(WebhookEvent {
+        event_type: "agent_stop_reason_transition".to_string(),
+        message: format!(
+            "Agent {} ({}) ended with stop_reason={}",
+            r.agent_id, r.role, new_reason,
+        ),
+        details: serde_json::json!({
+            "agent_id": r.agent_id,
+            "source": r.source.as_str(),
+            "role": r.role,
+            "project": r.project,
+            "session_id": r.session_id,
+            "model": r.model,
+            "stop_reason": new_reason,
+            "prev_stop_reason": transition.prev_stop_reason,
+            "total_tokens": r.total_tokens,
+            "cost_usd": r.cost_nanos as f64 / 1e9,
+            "duration_s": r.duration_s,
+            "ts_start": r.ts_start,
+        }),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    }))
 }
 
 #[cfg(test)]
@@ -873,5 +965,219 @@ mod tests {
         // The actual HTTP call will fail (no server) — that's fine; we only
         // test that the routing logic doesn't blow up.
         notify_if_configured(&config, event);
+    }
+
+    // ── agent_stop_reason_transition_event tests ─────────────────────────────
+
+    fn stop_reason_test_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::scanner::db::init_db(&conn).unwrap();
+        conn
+    }
+
+    fn make_transition(
+        agent_id: &str,
+        stop_reason: Option<&str>,
+        prev: Option<&str>,
+    ) -> AgentStopReasonTransition {
+        use crate::models::{AgentSessionRecord, AgentSource, RoleConfidence};
+        AgentStopReasonTransition {
+            record: AgentSessionRecord {
+                agent_id: agent_id.into(),
+                source: AgentSource::Subagent,
+                project: "my-project".into(),
+                session_id: Some("sess-1".into()),
+                ts_start: "2026-05-01T10:00:00Z".into(),
+                ts_start_epoch: 1_746_093_600,
+                duration_s: 30,
+                role: "executor".into(),
+                role_confidence: RoleConfidence::Meta,
+                description: "test agent".into(),
+                model: "claude-sonnet-4-5".into(),
+                input_tokens: 1000,
+                cache_create_tokens: 0,
+                cache_read_tokens: 0,
+                output_tokens: 500,
+                total_tokens: 1500,
+                cost_nanos: 50_000_000,
+                api_calls: 3,
+                tool_uses: 1,
+                tools_json: "{}".into(),
+                prompt_id: None,
+                stop_reason: stop_reason.map(str::to_string),
+                source_path: format!("/tmp/{agent_id}.jsonl"),
+            },
+            prev_stop_reason: prev.map(str::to_string),
+        }
+    }
+
+    fn stop_reason_config(agent_stop_reason: bool, filter: Option<Vec<String>>) -> WebhookConfig {
+        WebhookConfig {
+            url: Some("https://example.com/hook".to_string()),
+            cost_threshold: None,
+            session_depleted: false,
+            agent_status: false,
+            spike_webhook: false,
+            cap_changes: false,
+            agent_stop_reason,
+            agent_stop_reason_filter: filter,
+        }
+    }
+
+    #[test]
+    fn agent_stop_reason_event_disabled_when_flag_off() {
+        let conn = stop_reason_test_conn();
+        let config = stop_reason_config(false, None);
+        let t = make_transition("a1", Some("max_tokens"), None);
+        let event = agent_stop_reason_transition_event(&config, &conn, &t).unwrap();
+        assert!(event.is_none(), "flag off must suppress event");
+    }
+
+    #[test]
+    fn agent_stop_reason_event_default_filter_only_max_tokens_and_refusal() {
+        let conn = stop_reason_test_conn();
+        let config = stop_reason_config(true, None);
+
+        // end_turn must NOT fire (not on default allowlist).
+        let t = make_transition("a1", Some("end_turn"), Some("tool_use"));
+        assert!(
+            agent_stop_reason_transition_event(&config, &conn, &t)
+                .unwrap()
+                .is_none(),
+            "end_turn is not on the default allowlist",
+        );
+
+        // tool_use must NOT fire.
+        let t = make_transition("a2", Some("tool_use"), None);
+        assert!(
+            agent_stop_reason_transition_event(&config, &conn, &t)
+                .unwrap()
+                .is_none(),
+            "tool_use is not on the default allowlist",
+        );
+
+        // max_tokens fires.
+        let t = make_transition("a3", Some("max_tokens"), Some("tool_use"));
+        let event = agent_stop_reason_transition_event(&config, &conn, &t)
+            .unwrap()
+            .expect("max_tokens must fire");
+        assert_eq!(event.event_type, "agent_stop_reason_transition");
+        assert_eq!(event.details["stop_reason"], "max_tokens");
+
+        // refusal fires.
+        let t = make_transition("a4", Some("refusal"), Some("tool_use"));
+        let event = agent_stop_reason_transition_event(&config, &conn, &t)
+            .unwrap()
+            .expect("refusal must fire");
+        assert_eq!(event.details["stop_reason"], "refusal");
+    }
+
+    #[test]
+    fn agent_stop_reason_event_custom_filter_overrides_default() {
+        let conn = stop_reason_test_conn();
+        let config =
+            stop_reason_config(true, Some(vec!["stop_sequence".into(), "tool_use".into()]));
+
+        // max_tokens (a default value) is NOT in the custom list → no fire.
+        let t = make_transition("a1", Some("max_tokens"), Some("end_turn"));
+        assert!(
+            agent_stop_reason_transition_event(&config, &conn, &t)
+                .unwrap()
+                .is_none(),
+            "custom filter excludes max_tokens",
+        );
+
+        // tool_use IS in the custom list → fires.
+        let t = make_transition("a2", Some("tool_use"), Some("end_turn"));
+        let event = agent_stop_reason_transition_event(&config, &conn, &t)
+            .unwrap()
+            .expect("tool_use must fire under custom filter");
+        assert_eq!(event.details["stop_reason"], "tool_use");
+    }
+
+    #[test]
+    fn agent_stop_reason_event_skips_when_value_unchanged() {
+        let conn = stop_reason_test_conn();
+        let config = stop_reason_config(true, None);
+        // prev == new → no transition.
+        let t = make_transition("a1", Some("max_tokens"), Some("max_tokens"));
+        assert!(
+            agent_stop_reason_transition_event(&config, &conn, &t)
+                .unwrap()
+                .is_none(),
+            "unchanged value must not fire",
+        );
+    }
+
+    #[test]
+    fn agent_stop_reason_event_skips_when_persistent_dedup_matches() {
+        let conn = stop_reason_test_conn();
+        let config = stop_reason_config(true, None);
+
+        // First emission writes the value into webhook_emitted.
+        let t = make_transition("a1", Some("max_tokens"), None);
+        let _ = agent_stop_reason_transition_event(&config, &conn, &t)
+            .unwrap()
+            .expect("first emission fires");
+
+        // Same agent_id with same new value but a different `prev` (e.g. the
+        // in-row prev got cleared) — persistent dedup must still suppress it.
+        let t = make_transition("a1", Some("max_tokens"), Some("end_turn"));
+        assert!(
+            agent_stop_reason_transition_event(&config, &conn, &t)
+                .unwrap()
+                .is_none(),
+            "persistent dedup must suppress identical re-emission",
+        );
+    }
+
+    #[test]
+    fn agent_stop_reason_event_fires_on_first_emission_if_in_filter() {
+        let conn = stop_reason_test_conn();
+        let config = stop_reason_config(true, None);
+        let t = make_transition("brand-new-agent", Some("max_tokens"), None);
+        let event = agent_stop_reason_transition_event(&config, &conn, &t)
+            .unwrap()
+            .expect("first emission must fire");
+        assert_eq!(event.event_type, "agent_stop_reason_transition");
+        assert_eq!(event.details["agent_id"], "brand-new-agent");
+        assert_eq!(event.details["prev_stop_reason"], serde_json::Value::Null);
+
+        // The dedup row must have been written.
+        let stored = db::get_webhook_emitted(
+            &conn,
+            "agent_stop_reason_transition",
+            "subagent|my-project|brand-new-agent",
+        )
+        .unwrap();
+        assert_eq!(stored.as_deref(), Some("max_tokens"));
+    }
+
+    #[test]
+    fn agent_stop_reason_event_fires_again_when_value_transitions_to_new_filtered_value() {
+        let conn = stop_reason_test_conn();
+        let config = stop_reason_config(true, None);
+
+        // First: max_tokens.
+        let t = make_transition("a1", Some("max_tokens"), None);
+        let _ = agent_stop_reason_transition_event(&config, &conn, &t)
+            .unwrap()
+            .expect("max_tokens must fire");
+
+        // Then: refusal — different value, also on allowlist → fires again.
+        let t = make_transition("a1", Some("refusal"), Some("max_tokens"));
+        let event = agent_stop_reason_transition_event(&config, &conn, &t)
+            .unwrap()
+            .expect("refusal after max_tokens must fire");
+        assert_eq!(event.details["stop_reason"], "refusal");
+
+        // The dedup row was updated.
+        let stored = db::get_webhook_emitted(
+            &conn,
+            "agent_stop_reason_transition",
+            "subagent|my-project|a1",
+        )
+        .unwrap();
+        assert_eq!(stored.as_deref(), Some("refusal"));
     }
 }
