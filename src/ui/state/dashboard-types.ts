@@ -409,6 +409,85 @@ export interface SubscriptionQuotaSection {
   generated_at: string;
 }
 
+export interface AgentTelemetryTotals {
+  sessions: number;
+  total_tokens: number;
+  cost_usd: number;
+}
+
+export interface AgentTimelinePoint {
+  bucket: string;          // 'YYYY-MM-DD'
+  role: string;
+  cost_usd: number;
+  sessions: number;
+}
+
+export interface AgentRoleAggregate {
+  role: string;
+  display_name: string | null;
+  sessions: number;
+  total_tokens: number;
+  cost_usd: number;
+  tool_uses: number;
+}
+
+export interface AgentSessionRow {
+  agent_id: string;
+  project: string;
+  session_id: string | null;
+  role: string;
+  description: string;
+  model: string;
+  duration_s: number;
+  total_tokens: number;
+  cost_usd: number;
+  stop_reason: string | null;
+  ts_start: string;        // ISO 8601 UTC
+}
+
+export interface SpawnBatch {
+  prompt_id: string;
+  spawned_at: string;
+  project: string;
+  size: number;
+  roles: string[];
+  total_tokens: number;
+  cost_usd: number;
+}
+
+export interface ToolSpectrumCell {
+  role: string;
+  tool: string;
+  count: number;
+}
+
+export interface DetectedRole {
+  project: string;
+  raw_role: string;
+  count: number;
+  registered: boolean;
+}
+
+export interface AgentTelemetry {
+  totals: AgentTelemetryTotals;
+  timeline: AgentTimelinePoint[];
+  distribution: AgentRoleAggregate[];
+  top_sessions: AgentSessionRow[];
+  spawn_batches: SpawnBatch[];
+  tool_spectrum: ToolSpectrumCell[];
+  detected: DetectedRole[];
+}
+
+export interface AgentRegistryRow {
+  project: string;
+  raw_role: string;
+  display_name: string | null;
+  description: string | null;
+  enabled: boolean;
+  merged_into: string | null;
+  updated_at: string;
+}
+
 export interface DashboardData {
   all_models: string[];
   provider_breakdown: ProviderSummary[];
@@ -417,6 +496,7 @@ export interface DashboardData {
   daily_by_model: DailyModelRow[];
   sessions_all: SessionRow[];
   subagent_summary: SubagentSummary;
+  agent_telemetry: AgentTelemetry;
   entrypoint_breakdown: EntrypointSummary[];
   service_tiers: ServiceTierSummary[];
   tool_summary: ToolSummary[];

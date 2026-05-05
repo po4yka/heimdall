@@ -84,6 +84,15 @@ function makeDashboardData(): DashboardData {
       output_cost_nanos: 0,
       cache_hit_rate: null,
     },
+    agent_telemetry: {
+      totals: { sessions: 0, total_tokens: 0, cost_usd: 0 },
+      timeline: [],
+      distribution: [],
+      top_sessions: [],
+      spawn_batches: [],
+      tool_spectrum: [],
+      detected: [],
+    },
   };
 }
 
