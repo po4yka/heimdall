@@ -248,6 +248,12 @@ pub struct ScanResult {
     pub skipped: usize,
     pub turns: usize,
     pub sessions: usize,
+    /// Subagent terminal `stop_reason` transitions detected during this scan.
+    /// Drained by the dashboard server to fire `agent_stop_reason_transition`
+    /// webhook events. Skipped over JSON serialisation since the payload is
+    /// scanner-internal — the API surface only ever returns the counts above.
+    #[serde(skip)]
+    pub agent_stop_reason_transitions: Vec<AgentStopReasonTransition>,
 }
 
 /// One cell in the 7×24 activity heatmap.

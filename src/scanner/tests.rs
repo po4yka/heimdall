@@ -1658,4 +1658,166 @@ mod tests {
             .unwrap();
         assert_eq!(count2, 0, "stale agent_sessions row must be removed");
     }
+
+    fn make_agent_event_with_stop(
+        ts: &str,
+        request_id: &str,
+        input: i64,
+        output: i64,
+        stop_reason: &str,
+    ) -> String {
+        serde_json::json!({
+            "timestamp": ts,
+            "requestId": request_id,
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "model": "claude-sonnet-4-6",
+                "stop_reason": stop_reason,
+                "usage": {
+                    "input_tokens": input,
+                    "output_tokens": output,
+                    "cache_creation_input_tokens": 0i64,
+                    "cache_read_input_tokens": 0i64,
+                },
+                "content": []
+            }
+        })
+        .to_string()
+    }
+
+    /// Scan twice with the agent's terminal `stop_reason` changing between
+    /// passes; the second scan must surface a transition with `prev` carrying
+    /// the original value.
+    #[test]
+    fn scan_agent_sessions_collects_stop_reason_transitions() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects");
+        let db_path = tmp.path().join("usage.db");
+
+        let subagents_dir = projects.join("proj-x").join("sess-x").join("subagents");
+        let agent_path = write_agent_jsonl(
+            &subagents_dir,
+            "agent-stop-1",
+            &[make_agent_event_with_stop(
+                "2024-06-01T10:00:00Z",
+                "req-1",
+                5_000,
+                2_000,
+                "end_turn",
+            )],
+        );
+
+        // First scan: no prior row → emits one transition (prev=None).
+        let result1 = scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+        assert_eq!(
+            result1.agent_stop_reason_transitions.len(),
+            1,
+            "first scan must emit one transition for the new agent",
+        );
+        assert!(
+            result1.agent_stop_reason_transitions[0]
+                .prev_stop_reason
+                .is_none()
+        );
+        assert_eq!(
+            result1.agent_stop_reason_transitions[0]
+                .record
+                .stop_reason
+                .as_deref(),
+            Some("end_turn"),
+        );
+
+        // Rewrite the file with a new stop_reason and force reprocessing by
+        // clearing the mtime cache for this file (avoids any sub-10ms
+        // mtime-skip race when the test runs fast).
+        let new_lines = vec![make_agent_event_with_stop(
+            "2024-06-01T10:00:01Z",
+            "req-2",
+            6_000,
+            2_500,
+            "max_tokens",
+        )];
+        let mut f = std::fs::File::create(&agent_path).unwrap();
+        for line in &new_lines {
+            writeln!(f, "{}", line).unwrap();
+        }
+        drop(f);
+        let pf_key = format!("agent_session:{}", agent_path.to_string_lossy());
+        {
+            let conn = db::open_db(&db_path).unwrap();
+            conn.execute("DELETE FROM processed_files WHERE path = ?1", [&pf_key])
+                .unwrap();
+        }
+
+        // Second scan: stop_reason changed → emits one transition with the
+        // prior value carried through.
+        let result2 = scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+        assert_eq!(
+            result2.agent_stop_reason_transitions.len(),
+            1,
+            "stop_reason change must produce one transition",
+        );
+        let t = &result2.agent_stop_reason_transitions[0];
+        assert_eq!(t.prev_stop_reason.as_deref(), Some("end_turn"));
+        assert_eq!(t.record.stop_reason.as_deref(), Some("max_tokens"));
+        assert_eq!(t.record.agent_id, "stop-1");
+    }
+
+    /// Scan twice with the same terminal `stop_reason` value; only the
+    /// first-scan emission counts — the unchanged second scan must not
+    /// produce a transition.
+    #[test]
+    fn scan_agent_sessions_does_not_emit_when_stop_reason_unchanged() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects");
+        let db_path = tmp.path().join("usage.db");
+
+        let subagents_dir = projects.join("proj-y").join("sess-y").join("subagents");
+        let agent_path = write_agent_jsonl(
+            &subagents_dir,
+            "agent-stop-2",
+            &[make_agent_event_with_stop(
+                "2024-06-01T11:00:00Z",
+                "req-1",
+                5_000,
+                2_000,
+                "max_tokens",
+            )],
+        );
+
+        // First scan: prior is None → emits one transition.
+        let result1 = scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+        assert_eq!(result1.agent_stop_reason_transitions.len(), 1);
+
+        // Re-touch the file with the SAME stop_reason but a new requestId so
+        // the parser actually re-runs. Force reprocessing by clearing the
+        // mtime cache for this file.
+        let new_lines = vec![make_agent_event_with_stop(
+            "2024-06-01T11:00:01Z",
+            "req-2",
+            6_000,
+            2_500,
+            "max_tokens",
+        )];
+        let mut f = std::fs::File::create(&agent_path).unwrap();
+        for line in &new_lines {
+            writeln!(f, "{}", line).unwrap();
+        }
+        drop(f);
+        let pf_key = format!("agent_session:{}", agent_path.to_string_lossy());
+        {
+            let conn = db::open_db(&db_path).unwrap();
+            conn.execute("DELETE FROM processed_files WHERE path = ?1", [&pf_key])
+                .unwrap();
+        }
+
+        // Second scan: stop_reason unchanged → no transition.
+        let result2 = scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+        assert!(
+            result2.agent_stop_reason_transitions.is_empty(),
+            "unchanged stop_reason must not produce a transition (got {:?})",
+            result2.agent_stop_reason_transitions,
+        );
+    }
 }

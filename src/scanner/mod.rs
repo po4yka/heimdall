@@ -19,14 +19,14 @@ use anyhow::Result;
 use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
-use crate::models::ScanResult;
+use crate::models::{AgentStopReasonTransition, ScanResult};
 use db::{
     compute_tool_events_for_turn, delete_agent_sessions_by_path, delete_processed_file,
     delete_tool_events_by_source_path, delete_tool_invocations_by_source_path,
     delete_turns_by_source_path, get_processed_file, init_db, insert_agent_session,
     insert_tool_events, insert_tool_invocations, insert_turns, list_processed_files, open_db,
-    recompute_session_totals, sync_session_titles, upsert_codex_plan_daily, upsert_processed_file,
-    upsert_sessions,
+    recompute_session_totals, select_prior_agent_stop_reason, sync_session_titles,
+    upsert_codex_plan_daily, upsert_processed_file, upsert_sessions,
 };
 use parser::{PROVIDER_CLAUDE, PROVIDER_CODEX, PROVIDER_XCODE, aggregate_sessions};
 use provider::Provider;
@@ -53,10 +53,11 @@ struct AgentScanStats {
 fn scan_agent_sessions(
     conn: &rusqlite::Connection,
     projects_dirs: Vec<PathBuf>,
-) -> Result<AgentScanStats> {
+) -> Result<(AgentScanStats, Vec<AgentStopReasonTransition>)> {
     use agent_sessions::{DiscoveryConfig, discover_files, parse_one};
 
     let mut stats = AgentScanStats::default();
+    let mut transitions: Vec<AgentStopReasonTransition> = Vec::new();
 
     let cfg = DiscoveryConfig::from_projects_dirs(projects_dirs);
     let discovered = discover_files(&cfg);
@@ -116,10 +117,35 @@ fn scan_agent_sessions(
             continue;
         }
 
+        // Parse the new record first so we can compare its terminal
+        // stop_reason against whatever (if anything) is currently stored
+        // for the same `(source, project, agent_id)` triple. The DELETE
+        // below would otherwise erase the prior value before we can read
+        // it.
+        let parsed = parse_one(file);
+
+        if let Ok(Some(ref rec)) = parsed
+            && rec.stop_reason.is_some()
+        {
+            let prev = select_prior_agent_stop_reason(
+                conn,
+                rec.source.as_str(),
+                &rec.project,
+                &rec.agent_id,
+            )
+            .unwrap_or(None);
+            if prev.as_deref() != rec.stop_reason.as_deref() {
+                transitions.push(AgentStopReasonTransition {
+                    record: rec.clone(),
+                    prev_stop_reason: prev,
+                });
+            }
+        }
+
         // Delete prior rows for this source before reinserting.
         let _ = delete_agent_sessions_by_path(conn, &path_str);
 
-        match parse_one(file) {
+        match parsed {
             Ok(Some(rec)) => {
                 insert_agent_session(conn, &rec).map_err(anyhow::Error::from)?;
                 stats.records_inserted += 1;
@@ -139,7 +165,7 @@ fn scan_agent_sessions(
         upsert_processed_file(conn, &pf_key, mtime, 0)?;
     }
 
-    Ok(stats)
+    Ok((stats, transitions))
 }
 
 fn provider_for_dir(path: &Path) -> &'static str {
@@ -380,15 +406,17 @@ pub fn scan(
         let agent_dirs =
             explicit_dirs.unwrap_or_else(|| vec![home_dir().join(".claude").join("projects")]);
         match scan_agent_sessions(&conn, agent_dirs) {
-            Ok(stats) => {
+            Ok((stats, transitions)) => {
                 info!(
                     files_seen = stats.files_seen,
                     inserted = stats.records_inserted,
                     skipped_unchanged = stats.files_skipped_unchanged,
                     failed = stats.files_failed_sanity,
                     stale_removed = stats.stale_files_removed,
+                    transitions = transitions.len(),
                     "agent_sessions scan complete"
                 );
+                result.agent_stop_reason_transitions.extend(transitions);
             }
             Err(e) => {
                 warn!("agent_sessions scan failed: {:#}", e);
