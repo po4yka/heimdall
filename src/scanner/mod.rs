@@ -1,3 +1,4 @@
+pub mod agent_sessions;
 pub mod classifier;
 pub mod cowork;
 pub mod db;
