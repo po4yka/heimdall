@@ -189,6 +189,8 @@ export function buildAggregations(
       sessions: 0,
       cost: 0,
       credits: null,
+      pinned: session.pinned ?? false,
+      custom_label: session.custom_label ?? null,
     });
 
     project.input += session.input;
@@ -202,10 +204,17 @@ export function buildAggregations(
     if (session.credits != null) {
       project.credits = (project.credits ?? 0) + session.credits;
     }
+    // Sticky: any pinned/custom_label observed wins for the bucket.
+    if (session.pinned) project.pinned = true;
+    if (session.custom_label != null) project.custom_label = session.custom_label;
   }
-  const byProject = Object.values(projectMap).sort(
-    (left, right) => (right.input + right.output) - (left.input + left.output)
-  );
+  const byProject = Object.values(projectMap).sort((left, right) => {
+    // Pinned-first, then by total tokens descending.
+    if ((left.pinned ?? false) !== (right.pinned ?? false)) {
+      return (right.pinned ? 1 : 0) - (left.pinned ? 1 : 0);
+    }
+    return (right.input + right.output) - (left.input + left.output);
+  });
 
   const totals: Totals = {
     sessions: filteredSessions.length,

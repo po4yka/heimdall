@@ -68,6 +68,10 @@ export interface SessionRow {
   cache_hit_ratio: number;
   tokens_per_min: number;
   credits?: number | null;
+  /** Project-management: pinned flag from project_settings (defaults to false). */
+  pinned?: boolean;
+  /** Project-management: user-supplied label override from project_settings. */
+  custom_label?: string | null;
 }
 
 export interface ToolSummary {
@@ -146,6 +150,10 @@ export interface DailyProjectRow {
   reasoning_output: number;
   cost: number;
   credits?: number | null;
+  /** Project-management: pinned flag from project_settings (defaults to false). */
+  pinned?: boolean;
+  /** Project-management: user-supplied label override from project_settings. */
+  custom_label?: string | null;
 }
 
 export interface ProviderSummary {
@@ -253,6 +261,56 @@ export interface ProjectAgg {
   sessions: number;
   cost: number;
   credits?: number | null;
+  /** Project-management: pinned flag from project_settings (defaults to false). */
+  pinned?: boolean;
+  /** Project-management: user-supplied label override from project_settings. */
+  custom_label?: string | null;
+}
+
+// Project management: settings, registry rows, list response, patch body
+// Mirrors src/models.rs ProjectSettingsRow / ProjectRegistryRow.
+
+export interface ProjectSettingsRow {
+  project_slug: string;
+  project_uuid: string;
+  custom_label: string | null;
+  pinned: boolean;
+  updated_at: string;
+}
+
+export interface ProjectRegistryRow {
+  slug: string;
+  project_uuid: string;
+  raw_name: string;
+  custom_label: string | null;
+  display_name: string;
+  pinned: boolean;
+  is_cowork: boolean;
+  sessions: number;
+  calls: number;
+  cost: number;
+  last_active: string | null;
+  updated_at: string | null;
+}
+
+export interface ProjectsListResponse {
+  projects: ProjectRegistryRow[];
+  generated_at: string;
+}
+
+/**
+ * PATCH body for /api/projects/{uuid}.
+ *
+ * `label` honors double-Option semantics on the server:
+ * - omitted → leave column unchanged
+ * - null    → clear the column
+ * - string  → set the column
+ *
+ * `pinned` is a plain optional boolean.
+ */
+export interface ProjectPatchBody {
+  label?: string | null;
+  pinned?: boolean;
 }
 
 export interface Totals {

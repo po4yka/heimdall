@@ -1,6 +1,6 @@
-import { signal } from '@preact/signals';
+import { computed, signal } from '@preact/signals';
 import type { PaginationState, VisibilityState } from '@tanstack/table-core';
-import type { DashboardData, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse, CostReconciliationResponse, VersionInfo, TodayResponse } from './types';
+import type { DashboardData, ProjectRegistryRow, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse, CostReconciliationResponse, VersionInfo, TodayResponse } from './types';
 
 // ── Core data ────────────────────────────────────────────────────────
 export const rawData = signal<DashboardData | null>(null);
@@ -54,7 +54,7 @@ export const archiveImports = signal<ImportMeta[]>([]);
 
 // ── Filter state ─────────────────────────────────────────────────────
 export type ProviderFilter = 'claude' | 'codex' | 'both';
-export type DashboardTab = 'overview' | 'activity' | 'breakdowns' | 'tables' | 'backup' | 'today';
+export type DashboardTab = 'overview' | 'activity' | 'breakdowns' | 'tables' | 'backup' | 'today' | 'projects';
 
 // ── Feature 3: Today view state ───────────────────────────────────────────────
 /// null means "resolve today server-side"; a YYYY-MM-DD string pins a specific day.
@@ -112,7 +112,7 @@ export const rescanDisabled = signal<boolean>(false);
 export const themeMode = signal<'dark' | 'light'>('dark');
 
 // ── Inline status (replaces toasts) ──────────────────────────────────
-export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal' | 'snapshot' | 'agent-registry' | 'layout-save';
+export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal' | 'snapshot' | 'agent-registry' | 'layout-save' | 'project-registry';
 export type StatusKind = 'success' | 'error' | 'loading' | 'info';
 
 export interface StatusEntry {
@@ -130,11 +130,43 @@ export const statusByPlacement = signal<Record<StatusPlacement, StatusEntry | nu
   'snapshot': null,
   'agent-registry': null,
   'layout-save': null,
+  'project-registry': null,
 });
 
 // ── Agent telemetry UI state ─────────────────────────────────────────
 export const registryModalOpen = signal<{ project: string } | null>(null);
 export const setupBannerDismissed = signal(false);
+
+// ── Project management state ────────────────────────────────────────
+/**
+ * Currently-selected project UUID, populated from `#/project/<uuid>` hash.
+ * `null` means no project is deep-linked.
+ */
+export const selectedProjectUuid = signal<string | null>(null);
+
+/** Cached registry rows from /api/projects, populated at dashboard boot. */
+export const projectsRegistry = signal<ProjectRegistryRow[]>([]);
+
+/** Lookup map keyed by `project_uuid` for O(1) hash-resolution. */
+export const registryByUuid = computed(
+  () => new Map(projectsRegistry.value.map(r => [r.project_uuid, r])),
+);
+
+/** Lookup map keyed by `slug` (== project_name in our schema). */
+export const registryBySlug = computed(
+  () => new Map(projectsRegistry.value.map(r => [r.slug, r])),
+);
+
+/**
+ * Replace the `#/project/<uuid>` hash without scrolling. Pass `null` to
+ * clear the hash and revert to the bare path + query string.
+ */
+export function setProjectHash(uuid: string | null): void {
+  const next = uuid
+    ? `${window.location.pathname}${window.location.search}#/project/${encodeURIComponent(uuid)}`
+    : window.location.pathname + window.location.search;
+  history.replaceState(null, '', next);
+}
 
 // ── Feature 2: Widget layout edit mode ────────────────────────────────
 /// When true the dashboard shows drag handles, resize affordances, and
@@ -162,7 +194,7 @@ function readRangeFromUrl(): RangeKey {
 
 function readDashboardTab(): DashboardTab {
   const p = readSearchParam(DASHBOARD_TAB_PARAM);
-  return (['overview', 'activity', 'breakdowns', 'tables', 'backup', 'today'] as DashboardTab[]).includes(p as DashboardTab)
+  return (['overview', 'activity', 'breakdowns', 'tables', 'backup', 'today', 'projects'] as DashboardTab[]).includes(p as DashboardTab)
     ? (p as DashboardTab)
     : 'overview';
 }

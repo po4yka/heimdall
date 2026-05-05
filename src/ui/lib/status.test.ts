@@ -20,6 +20,7 @@ const EMPTY_STATUS = {
   snapshot: null,
   'agent-registry': null,
   'layout-save': null,
+  'project-registry': null,
 };
 
 beforeEach(() => {
