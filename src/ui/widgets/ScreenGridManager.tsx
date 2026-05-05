@@ -19,6 +19,7 @@ const ALL_SCREENS: DashboardScreen[] = [
   'breakdowns',
   'tables',
   'today',
+  'projects',
   'backup',
 ];
 

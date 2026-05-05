@@ -93,6 +93,10 @@ const TODAY_WIDGETS = stack([
   { id: 'today-weekday-hour-mount',   h: 3 },
 ]);
 
+const PROJECTS_WIDGETS = stack([
+  { id: 'projects-registry', h: 12 },
+]);
+
 const BACKUP_WIDGETS = stack([
   { id: 'backup-panel', h: 4 },
 ]);
@@ -103,5 +107,6 @@ export const DEFAULT_LAYOUTS: Record<DashboardScreen, ScreenLayout> = {
   breakdowns: { widgets: BREAKDOWNS_WIDGETS,  hidden: [] },
   tables:     { widgets: TABLES_WIDGETS,      hidden: [] },
   today:      { widgets: TODAY_WIDGETS,       hidden: [] },
+  projects:   { widgets: PROJECTS_WIDGETS,    hidden: [] },
   backup:     { widgets: BACKUP_WIDGETS,      hidden: [] },
 };

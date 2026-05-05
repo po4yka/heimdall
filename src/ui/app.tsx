@@ -3,6 +3,7 @@ import { BackupPanel } from './components/BackupPanel';
 import { ImportsPanel } from './components/ImportsPanel';
 import { WebCapturesPanel } from './components/WebCapturesPanel';
 import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
+import { ProjectsRegistry } from './components/projects/ProjectsRegistry';
 import { DashboardTabs } from './components/DashboardTabs';
 import { FilterBar } from './components/FilterBar';
 import { Footer } from './components/Footer';
@@ -129,6 +130,9 @@ if (dashboardRuntime) {
       el,
     );
     void loadBackupSnapshots();
+  });
+  registerMountCallback('projects-registry', (el) => {
+    render(<ProjectsRegistry onReload={dashboardRuntime.loadData} />, el);
   });
 }
 

@@ -108,6 +108,7 @@ const SECTION_TAB_MAP: Record<string, DashboardTab> = {
   'model-cost-mount': 'tables',
   'sessions-mount': 'tables',
   'project-cost-mount': 'tables',
+  'projects-registry': 'projects',
   'backup-panel': 'backup',
   'today-date-picker-mount': 'today',
   'today-kpis-mount': 'today',
@@ -657,7 +658,8 @@ export function renderDashboardView(
   focusSingleModel: (model: string) => void,
   focusProjectQuery: (project: string) => void,
   exportSessionsCSV: () => void,
-  exportProjectsCSV: () => void
+  exportProjectsCSV: () => void,
+  onReload?: () => void,
 ): void {
   const cutoff = getRangeCutoff(selectedRange.value);
   const filteredDaily = data.daily_by_model.filter(
@@ -754,6 +756,7 @@ export function renderDashboardView(
       byProject={lastByProject.value.slice(0, 30)}
       onExportCSV={exportProjectsCSV}
       onSelectProject={project => focusProjectQuery(project.display_name || project.project)}
+      {...(onReload ? { onReload } : {})}
     />,
     $('project-cost-mount')
   );

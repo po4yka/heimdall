@@ -6,6 +6,7 @@ const TABS: Array<{ key: DashboardTab; label: string }> = [
   { key: 'activity', label: 'Activity' },
   { key: 'breakdowns', label: 'Breakdowns' },
   { key: 'tables', label: 'Tables' },
+  { key: 'projects', label: 'Projects' },
   { key: 'backup', label: 'Backup' },
 ];
 

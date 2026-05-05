@@ -406,6 +406,11 @@ function startDashboardPolling(loaders: {
 export function createDashboardRuntime(): DashboardRuntime {
   const state = createRuntimeState();
 
+  // Forward reference: loadData is defined below; renderDashboardView wires it
+  // as the onReload callback for ProjectCostTable's pin-star column. Captured
+  // lazily so the runtime can build the dependency graph in a single pass.
+  let loadDataRef: (() => void) | undefined;
+
   const applyFilter = (): void => {
     if (!rawData.value) return;
     renderDashboardView(
@@ -413,7 +418,8 @@ export function createDashboardRuntime(): DashboardRuntime {
       focusSingleModel,
       focusProjectQuery,
       exportSessionsCSV,
-      exportProjectsCSV
+      exportProjectsCSV,
+      () => loadDataRef?.(),
     );
   };
 
@@ -439,6 +445,7 @@ export function createDashboardRuntime(): DashboardRuntime {
   const loadCostReconciliation = createCostReconciliationLoader(state);
   const loadHeatmap = createHeatmapLoader(state);
   const loadData = createDataLoader(state, applyFilter);
+  loadDataRef = loadData;
 
   function handleDateChange(date: string | null): void {
     selectedDate.value = date;

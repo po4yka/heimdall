@@ -16,6 +16,7 @@ export type DashboardScreen =
   | 'breakdowns'
   | 'tables'
   | 'today'
+  | 'projects'
   | 'backup';
 
 export interface PlacedWidget {
@@ -625,6 +626,22 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     render: (el: HTMLElement) => {
       el.id = 'backup-panel';
       invokeMountCallback('backup-panel', el);
+    },
+  },
+
+  // ── Projects tab ──────────────────────────────────────────────────────────
+  {
+    id: 'projects-registry',
+    title: 'Projects',
+    description: 'Searchable project registry with pinning, custom labels, and deep links',
+    category: 'table',
+    screens: ['projects'],
+    defaultSize: { w: 4, h: 12 },
+    minW: 2,
+    minH: 4,
+    render: (el: HTMLElement) => {
+      el.id = 'projects-registry';
+      invokeMountCallback('projects-registry', el);
     },
   },
 ];

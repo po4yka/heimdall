@@ -5407,6 +5407,7 @@ const KNOWN_SCREENS: &[&str] = &[
     "breakdowns",
     "tables",
     "today",
+    "projects",
     "backup",
 ];
 
