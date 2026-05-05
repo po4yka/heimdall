@@ -1137,7 +1137,12 @@
   function readDashboardTab() {
     const p5 = readSearchParam(DASHBOARD_TAB_PARAM);
     if (p5 === "today") return "activity";
-    if (p5 === "backup") return "overview";
+    if (p5 === "backup") {
+      if (typeof window !== "undefined" && !/^#\/backup\b/.test(window.location.hash)) {
+        history.replaceState(null, "", window.location.pathname + window.location.search + "#/backup");
+      }
+      return "overview";
+    }
     return ["overview", "activity", "breakdowns", "tables", "projects"].includes(p5) ? p5 : "overview";
   }
   function readProviderFromUrl() {

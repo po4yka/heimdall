@@ -200,7 +200,15 @@ function readDashboardTab(): DashboardTab {
   // Backwards-compat for legacy URLs: `today` was folded into `activity`,
   // `backup` was moved to a header-launched modal (see #/backup hash route).
   if (p === 'today') return 'activity';
-  if (p === 'backup') return 'overview';
+  if (p === 'backup') {
+    // Side effect: write the `#/backup` hash so the existing hash-route
+    // listener in app.tsx picks it up and opens the modal. Mirrors the
+    // landing surface of the new URL form (`?tab=overview#/backup`).
+    if (typeof window !== 'undefined' && !/^#\/backup\b/.test(window.location.hash)) {
+      history.replaceState(null, '', window.location.pathname + window.location.search + '#/backup');
+    }
+    return 'overview';
+  }
   return (['overview', 'activity', 'breakdowns', 'tables', 'projects'] as DashboardTab[]).includes(p as DashboardTab)
     ? (p as DashboardTab)
     : 'overview';
