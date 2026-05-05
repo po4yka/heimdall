@@ -25,7 +25,8 @@ use db::{
     delete_tool_events_by_source_path, delete_tool_invocations_by_source_path,
     delete_turns_by_source_path, get_processed_file, init_db, insert_agent_session,
     insert_tool_events, insert_tool_invocations, insert_turns, list_processed_files, open_db,
-    recompute_session_totals, sync_session_titles, upsert_processed_file, upsert_sessions,
+    recompute_session_totals, sync_session_titles, upsert_codex_plan_daily, upsert_processed_file,
+    upsert_sessions,
 };
 use parser::{PROVIDER_CLAUDE, PROVIDER_CODEX, PROVIDER_XCODE, aggregate_sessions};
 use provider::Provider;
@@ -232,6 +233,9 @@ pub fn scan(
 
     let mut result = ScanResult::default();
     let mut any_changes = false;
+    // Feature 1: accumulate Codex plan data across all Codex files.
+    let mut all_codex_snapshots: Vec<crate::models::CodexPlanSnapshot> = Vec::new();
+    let mut all_codex_limit_hits: Vec<crate::scanner::parser::CodexLimitHit> = Vec::new();
 
     for stale_path in list_processed_files(&conn)?
         .into_iter()
@@ -283,6 +287,12 @@ pub fn scan(
         }
 
         let parsed = provider.parse_source(filepath, 0);
+
+        // Feature 1: accumulate Codex plan snapshots from every Codex file.
+        if provider.name() == PROVIDER_CODEX {
+            all_codex_snapshots.extend(parsed.codex_plan_snapshots.iter().cloned());
+            all_codex_limit_hits.extend(parsed.codex_limit_hits.iter().cloned());
+        }
 
         if !parsed.turns.is_empty() || !parsed.session_metas.is_empty() {
             let sessions = aggregate_sessions(&parsed.session_metas, &parsed.turns);
@@ -338,6 +348,28 @@ pub fn scan(
     // Recompute session totals from turns for dedup correctness
     if any_changes {
         recompute_session_totals(&conn)?;
+    }
+
+    // Feature 1: aggregate and persist Codex plan daily rows.
+    // Run unconditionally (cheap upsert; always reflects current scan state).
+    if !all_codex_snapshots.is_empty() || !all_codex_limit_hits.is_empty() {
+        let daily_rows = providers::codex::aggregate_codex_plan_daily(
+            &all_codex_snapshots,
+            &all_codex_limit_hits,
+            0, // UTC; client tz applied at query time
+        );
+        for row in &daily_rows {
+            if let Err(e) = upsert_codex_plan_daily(&conn, row) {
+                warn!("codex_plan_daily upsert failed for {}: {}", row.day, e);
+            }
+        }
+        if verbose && !daily_rows.is_empty() {
+            info!(
+                "codex_plan: aggregated {} day(s) from {} snapshots",
+                daily_rows.len(),
+                all_codex_snapshots.len()
+            );
+        }
     }
 
     // Phase 21: ingest agent-sessions (subagent JSONL + task-tool outputs).

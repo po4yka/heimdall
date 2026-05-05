@@ -1,4 +1,60 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
+
+// ---------------------------------------------------------------------------
+// Feature 1: Codex plan utilization tracking
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexPlanWindow {
+    pub used_percent: f64,
+    pub window_minutes: i64,
+    pub resets_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexCredits {
+    pub has_credits: bool,
+    pub unlimited: bool,
+    pub balance: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CodexPlanSnapshot {
+    pub plan_type: Option<String>,
+    pub limit_id: Option<String>,
+    pub primary: Option<CodexPlanWindow>,
+    pub secondary: Option<CodexPlanWindow>,
+    pub credits: Option<CodexCredits>,
+    pub rate_limit_reached_type: Option<String>,
+    /// ISO 8601 timestamp of when this snapshot was captured.
+    pub captured_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodexPlanDailyRow {
+    /// YYYY-MM-DD in the local timezone.
+    pub day: String,
+    /// Peak primary (5h) window utilisation across the day.
+    pub primary_pct: f64,
+    /// Peak secondary (7d) window utilisation; `None` when no snapshot reported it.
+    pub secondary_pct: Option<f64>,
+    /// Per-plan-type peak primary %, keyed by plan_type string.
+    pub by_plan: HashMap<String, f64>,
+    /// Plan types that saw a `usage_limit_exceeded` event on this day.
+    pub limit_hit_plans: Vec<String>,
+    /// Total `usage_limit_exceeded` events on this day.
+    pub limit_hit_count: i64,
+    /// Last snapshot of the day (latest `captured_at`).
+    pub snapshot: CodexPlanSnapshot,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CodexPlanSection {
+    pub today: Option<CodexPlanSnapshot>,
+    pub history: Vec<CodexPlanDailyRow>,
+}
 
 // ---------------------------------------------------------------------------
 // Subscription-quota widget (Phase 22)
@@ -237,6 +293,9 @@ pub struct DashboardData {
     /// remains `None` from the pure-DB path (e.g. CLI `today --json`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subscription_quota: Option<SubscriptionQuotaSection>,
+    /// Feature 1: Codex plan utilisation per day.
+    #[serde(default)]
+    pub codex_plan: CodexPlanSection,
 }
 
 /// One entry in the `weekly_by_model` array of `/api/data`.

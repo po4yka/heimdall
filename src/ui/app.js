@@ -8711,6 +8711,193 @@ ${row.project}` : row.project;
     ] });
   }
 
+  // src/ui/components/CodexPlanHistory.tsx
+  var OPACITY_LADDER = [1, 0.65, 0.35, 0.2];
+  function buildOptions(history2) {
+    const rows2 = [...history2].reverse();
+    if (rows2.length === 0) return null;
+    const planSet = /* @__PURE__ */ new Set();
+    for (const row of rows2) {
+      for (const plan of Object.keys(row.by_plan)) {
+        planSet.add(plan);
+      }
+      if (Object.keys(row.by_plan).length === 0 && row.primary_pct > 0) {
+        const pt = row.snapshot?.plan_type ?? "unknown";
+        planSet.add(pt);
+      }
+    }
+    const plans = Array.from(planSet).sort();
+    const categories = rows2.map((r4) => r4.day);
+    const barSeries = plans.map((plan, i4) => {
+      const opacity = OPACITY_LADDER[i4 % OPACITY_LADDER.length];
+      return {
+        name: plan.charAt(0).toUpperCase() + plan.slice(1),
+        type: "bar",
+        data: rows2.map((r4) => {
+          const v4 = r4.by_plan[plan];
+          return v4 != null ? Math.min(100, Math.max(0, v4)) : 0;
+        }),
+        color: `rgba(var(--text-primary-rgb, 232, 232, 232), ${opacity})`
+      };
+    });
+    const secondarySeries = {
+      name: "7d window",
+      type: "line",
+      data: rows2.map((r4) => r4.secondary_pct != null ? Math.min(100, Math.max(0, r4.secondary_pct)) : null),
+      color: "var(--text-secondary, #888)"
+    };
+    const limitHitAnnotations = rows2.filter((r4) => r4.limit_hit_count > 0).map((r4) => ({
+      x: r4.day,
+      strokeDashArray: 0,
+      borderColor: "var(--accent)",
+      label: {
+        text: `limit x${r4.limit_hit_count}`,
+        style: {
+          color: "var(--accent)",
+          background: "transparent",
+          fontFamily: "var(--font-mono)",
+          fontSize: "10px"
+        }
+      }
+    }));
+    const allSeries = [...barSeries, secondarySeries];
+    const opts = {
+      chart: {
+        type: "bar",
+        stacked: true,
+        toolbar: { show: false },
+        animations: { enabled: false },
+        fontFamily: "var(--font-mono)"
+      },
+      theme: { mode: "dark" },
+      series: allSeries,
+      colors: allSeries.map((s4) => s4.color),
+      stroke: {
+        width: allSeries.map((_4, i4) => i4 < barSeries.length ? 0 : 2),
+        curve: "smooth",
+        dashArray: allSeries.map((_4, i4) => i4 < barSeries.length ? 0 : 4)
+      },
+      fill: {
+        type: allSeries.map(() => "solid"),
+        opacity: allSeries.map(() => 1)
+      },
+      plotOptions: {
+        bar: { columnWidth: "70%" }
+      },
+      grid: {
+        borderColor: "var(--border)",
+        strokeDashArray: 2,
+        xaxis: { lines: { show: false } },
+        yaxis: { lines: { show: true } }
+      },
+      legend: {
+        position: "top",
+        labels: { colors: "var(--text-secondary)", fontFamily: "var(--font-mono)" },
+        itemMargin: { horizontal: 12, vertical: 4 }
+      },
+      xaxis: {
+        categories,
+        labels: {
+          rotate: -45,
+          style: {
+            colors: "var(--text-secondary)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "10px"
+          }
+        },
+        axisBorder: { show: false },
+        axisTicks: { show: false }
+      },
+      yaxis: [
+        {
+          min: 0,
+          max: 100,
+          labels: {
+            style: {
+              colors: "var(--text-secondary)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px"
+            },
+            formatter: (v4) => `${v4.toFixed(0)}%`
+          }
+        },
+        {
+          opposite: true,
+          min: 0,
+          max: 100,
+          show: false
+        }
+      ],
+      tooltip: {
+        theme: "dark",
+        style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
+        y: {
+          formatter: (val) => val != null && Number.isFinite(val) ? `${val.toFixed(1)}%` : "\u2014"
+        }
+      },
+      dataLabels: { enabled: false },
+      markers: { size: 0, strokeWidth: 0, hover: { size: 3 } },
+      ...limitHitAnnotations.length > 0 ? { annotations: { xaxis: limitHitAnnotations } } : {}
+    };
+    return opts;
+  }
+  function CodexPlanHistory({ history: history2 }) {
+    const options = T2(() => buildOptions(history2), [history2]);
+    if (!options) return null;
+    return /* @__PURE__ */ u4("div", { class: "card codex-plan-history-card", children: [
+      /* @__PURE__ */ u4("div", { class: "codex-plan-history-header", children: /* @__PURE__ */ u4("div", { class: "codex-plan-history-title", children: "Codex plan utilisation (30 days)" }) }),
+      /* @__PURE__ */ u4("div", { class: "codex-plan-history-body", children: /* @__PURE__ */ u4("div", { class: "chart-wrap tall", children: /* @__PURE__ */ u4(ApexChart, { options, id: "codex-plan-history-chart" }) }) })
+    ] });
+  }
+
+  // src/ui/components/CodexPlanKpi.tsx
+  function planLabel(planType) {
+    if (!planType) return "Unknown";
+    const s4 = planType.trim();
+    if (!s4) return "Unknown";
+    return s4.charAt(0).toUpperCase() + s4.slice(1).toLowerCase();
+  }
+  function creditState(snapshot) {
+    const c4 = snapshot.credits;
+    if (!c4) return "\u2014";
+    if (c4.unlimited) return "Unlimited";
+    if (c4.has_credits && c4.balance != null) return `$${c4.balance.toFixed(2)} balance`;
+    if (c4.has_credits) return "Has credits";
+    return "\u2014";
+  }
+  function progressClass(pct) {
+    if (pct >= 85) return "codex-plan-progress codex-plan-progress--high";
+    if (pct >= 60) return "codex-plan-progress codex-plan-progress--mid";
+    return "codex-plan-progress codex-plan-progress--low";
+  }
+  function CodexPlanKpi({ today }) {
+    const pct = Math.min(100, Math.max(0, today.primary?.used_percent ?? 0));
+    const pctText = pct.toFixed(1) + "%";
+    const plan = planLabel(today.plan_type);
+    const credits = creditState(today);
+    return /* @__PURE__ */ u4("div", { class: "card stat-card codex-plan-kpi", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Codex plan" }),
+      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontFamily: "var(--font-mono)" }, children: esc(plan) }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", children: /* @__PURE__ */ u4(
+        "span",
+        {
+          class: progressClass(pct),
+          style: { width: `${pct}%` },
+          "aria-valuenow": pct,
+          "aria-valuemin": 0,
+          "aria-valuemax": 100,
+          role: "progressbar",
+          "aria-label": "5h window usage"
+        }
+      ) }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", marginTop: "4px" }, children: [
+        pctText,
+        " \xB7 5h window"
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", children: esc(credits) })
+    ] }) });
+  }
+
   // src/ui/components/SubscriptionQuotaCard.tsx
   var PROVIDER_LABELS = {
     claude: "Claude",
@@ -8726,13 +8913,13 @@ ${row.project}` : row.project;
   }
   function SubscriptionQuotaCard({ snapshot }) {
     const title = providerTitle(snapshot.provider);
-    const planLabel = snapshot.published.plan_label ? fmtLabel(snapshot.published.plan_label) : "\u2014";
+    const planLabel2 = snapshot.published.plan_label ? fmtLabel(snapshot.published.plan_label) : "\u2014";
     const estimated = snapshot.estimated?.windows ?? [];
     const hasEstimates = estimated.length > 0;
     return /* @__PURE__ */ u4("div", { class: "card subscription-quota-card", children: [
       /* @__PURE__ */ u4("div", { class: "subscription-quota-header", children: [
         /* @__PURE__ */ u4("div", { class: "subscription-quota-title", children: title }),
-        /* @__PURE__ */ u4("div", { class: "subscription-quota-plan", title: `Source: ${snapshot.source_used}`, children: planLabel })
+        /* @__PURE__ */ u4("div", { class: "subscription-quota-plan", title: `Source: ${snapshot.source_used}`, children: planLabel2 })
       ] }),
       /* @__PURE__ */ u4("div", { class: "subscription-quota-section", children: [
         /* @__PURE__ */ u4("div", { class: "subscription-quota-section-label", children: "Published" }),
@@ -8833,11 +9020,11 @@ ${row.project}` : row.project;
     codex_primary: "Codex \xB7 primary",
     codex_secondary: "Codex \xB7 secondary"
   };
-  var OPACITY_LADDER = [1, 0.65, 0.35, 0.2];
+  var OPACITY_LADDER2 = [1, 0.65, 0.35, 0.2];
   function inferProvider(windowType) {
     return windowType.startsWith("codex_") ? "codex" : "claude";
   }
-  function buildOptions(history2, changelog, provider) {
+  function buildOptions2(history2, changelog, provider) {
     const filtered = history2.filter((row) => {
       if (row.estimated_cap_tokens == null) return false;
       if (provider === "all") return true;
@@ -8863,7 +9050,7 @@ ${row.project}` : row.project;
       data: (seriesMap.get(key) ?? []).sort((a4, b4) => a4.x - b4.x),
       // The opacity ladder is applied via the per-series `colors` array below.
       color: void 0,
-      _opacity: OPACITY_LADDER[i4 % OPACITY_LADDER.length]
+      _opacity: OPACITY_LADDER2[i4 % OPACITY_LADDER2.length]
     }));
     const annotationPoints = changelog.filter((entry) => provider === "all" || entry.provider === provider).map((entry) => ({
       x: Date.parse(`${entry.date}T12:00:00Z`),
@@ -8948,7 +9135,7 @@ ${row.project}` : row.project;
   function SubscriptionHistoryChart({ history: history2, changelog }) {
     const [provider, setProvider] = d2("all");
     const options = T2(
-      () => buildOptions(history2, changelog, provider),
+      () => buildOptions2(history2, changelog, provider),
       [history2, changelog, provider]
     );
     return /* @__PURE__ */ u4("div", { class: "card subscription-history-card", children: [
@@ -9404,6 +9591,8 @@ ${row.project}` : row.project;
     "official-sync": "overview",
     "openai-reconciliation": "overview",
     "stats-row": "overview",
+    "codex-plan-kpi-mount": "overview",
+    "codex-plan-history-mount": "activity",
     "daily-chart-card": "activity",
     "model-chart-card": "activity",
     "project-chart-card": "activity",
@@ -9435,7 +9624,8 @@ ${row.project}` : row.project;
     "agent-status": "grid",
     "estimation-meta": "grid",
     "stats-row": "grid",
-    "agent-kpis-row": "grid"
+    "agent-kpis-row": "grid",
+    "codex-plan-kpi-mount": "grid"
   };
   function matchesProvider(row) {
     if (selectedProvider.value === "both") return true;
@@ -9659,6 +9849,33 @@ ${row.project}` : row.project;
       container
     );
   }
+  function renderCodexPlan(section) {
+    const hasToday = !!section?.today;
+    const hasHistory = !!(section?.history && section.history.length > 0);
+    const hasAny = hasToday || hasHistory;
+    if (hasToday) {
+      renderSection(
+        "codex-plan-kpi-mount",
+        true,
+        /* @__PURE__ */ u4(CodexPlanKpi, { today: section.today }),
+        "grid"
+      );
+    } else {
+      setSectionVisibility("codex-plan-kpi-mount", false, "grid");
+      R(null, $2("codex-plan-kpi-mount"));
+    }
+    if (hasHistory) {
+      renderSection(
+        "codex-plan-history-mount",
+        true,
+        /* @__PURE__ */ u4(CodexPlanHistory, { history: section.history })
+      );
+    } else {
+      setSectionVisibility("codex-plan-history-mount", false);
+      R(null, $2("codex-plan-history-mount"));
+    }
+    void hasAny;
+  }
   function renderUsageWindows(data, previousSessionPercent, setPreviousSessionPercent, setStatusMessage, clearStatusMessage) {
     const container = $2("usage-windows");
     if (!container) return;
@@ -9810,6 +10027,7 @@ ${row.project}` : row.project;
     setSectionVisibility("stats-row", true, "grid");
     renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
     renderSubscriptionQuota(data.subscription_quota);
+    renderCodexPlan(data.codex_plan);
     renderOfficialSync(data.official_sync);
     renderOpenAiReconciliation(data.openai_reconciliation);
     if (bucketIsWeek) {

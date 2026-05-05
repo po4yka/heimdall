@@ -95,6 +95,19 @@ pub struct ParseResult {
     pub tool_error_texts: HashMap<String, String>,
     /// Compact JSON of the full tool input object per tool_use_id, capped at 4 KB.
     pub tool_input_jsons: HashMap<String, String>,
+    /// Feature 1: Codex rate-limit snapshots extracted from this file.
+    pub codex_plan_snapshots: Vec<crate::models::CodexPlanSnapshot>,
+    /// Feature 1: Codex usage_limit_exceeded events (timestamp + plan active at that point).
+    pub codex_limit_hits: Vec<CodexLimitHit>,
+}
+
+/// A `usage_limit_exceeded` event observed in a Codex session file.
+#[derive(Debug, Clone)]
+pub struct CodexLimitHit {
+    /// ISO 8601 timestamp of the event.
+    pub ts: String,
+    /// Plan type active at the time (carried from the most recent rate_limits snapshot).
+    pub plan_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -236,6 +249,8 @@ pub(crate) fn parse_provider_turns_result(
         tool_results: HashMap::new(),
         tool_error_texts: HashMap::new(),
         tool_input_jsons: HashMap::new(),
+        codex_plan_snapshots: vec![],
+        codex_limit_hits: vec![],
     }
 }
 
@@ -730,6 +745,8 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
         tool_results,
         tool_error_texts,
         tool_input_jsons,
+        codex_plan_snapshots: vec![],
+        codex_limit_hits: vec![],
     }
 }
 
@@ -742,6 +759,8 @@ pub(crate) fn empty_parse_result() -> ParseResult {
         tool_results: HashMap::new(),
         tool_error_texts: HashMap::new(),
         tool_input_jsons: HashMap::new(),
+        codex_plan_snapshots: vec![],
+        codex_limit_hits: vec![],
     }
 }
 

@@ -8,11 +8,11 @@ use crate::models::{
     AgentRegistryRow, AgentRegistryUpdate, AgentRoleAggregate, AgentSessionRecord, AgentSessionRow,
     AgentTelemetry, AgentTelemetryTotals, AgentTimelinePoint, BillingModeSummary, BranchSummary,
     ClaudeUsageFactor, ClaudeUsageResponse, ClaudeUsageRunMeta, ClaudeUsageSnapshot,
-    ConfidenceSummary, DailyModelRow, DailyProjectRow, DashboardData, DetectedRole,
-    EntrypointSummary, HourlyRow, McpServerSummary, OfficialSyncRecordCount,
-    OfficialSyncSourceStatus, OfficialSyncSummary, ProviderSummary, RoleConfidence,
-    ServiceTierSummary, SessionRow, SpawnBatch, ToolErrorRow, ToolErrorsResponse, ToolEvent,
-    ToolSpectrumCell, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
+    CodexPlanDailyRow, CodexPlanSection, CodexPlanSnapshot, ConfidenceSummary, DailyModelRow,
+    DailyProjectRow, DashboardData, DetectedRole, EntrypointSummary, HourlyRow, McpServerSummary,
+    OfficialSyncRecordCount, OfficialSyncSourceStatus, OfficialSyncSummary, ProviderSummary,
+    RoleConfidence, ServiceTierSummary, SessionRow, SpawnBatch, ToolErrorRow, ToolErrorsResponse,
+    ToolEvent, ToolSpectrumCell, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
 use crate::pricing_defs::{
     OfficialExtractedRecord, OfficialModelPricing, OfficialSyncRunRecord, PricingSyncRun,
@@ -335,6 +335,21 @@ fn create_schema(conn: &Connection) -> Result<()> {
             updated_at    TEXT NOT NULL,
             PRIMARY KEY (project, raw_role)
         );",
+    )?;
+
+    // Feature 1: Codex plan utilisation per-day aggregates.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS codex_plan_daily (
+            day              TEXT PRIMARY KEY,
+            primary_pct      REAL NOT NULL,
+            secondary_pct    REAL,
+            snapshot_json    TEXT NOT NULL,
+            by_plan_json     TEXT NOT NULL,
+            limit_hits_json  TEXT NOT NULL,
+            updated_at       TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_codex_plan_daily_day
+            ON codex_plan_daily(day);",
     )?;
 
     Ok(())
@@ -2239,6 +2254,18 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         AgentTelemetry::default()
     });
 
+    let codex_plan = {
+        let today = query_codex_plan_today(conn, &tz).unwrap_or_else(|e| {
+            warn!("codex_plan_today query failed: {e}");
+            None
+        });
+        let history = query_codex_plan_history(conn, &tz, 30).unwrap_or_else(|e| {
+            warn!("codex_plan_history query failed: {e}");
+            vec![]
+        });
+        CodexPlanSection { today, history }
+    };
+
     // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
     // summing across providers so the frontend gets a single series per model/week.
     let weekly_by_model: Vec<WeeklyModelRow> = {
@@ -2288,6 +2315,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         cache_efficiency,
         weekly_by_model,
         subscription_quota: None,
+        codex_plan,
     })
 }
 
@@ -4993,6 +5021,157 @@ pub fn query_dashboard_agent_telemetry(
         tool_spectrum,
         detected,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Feature 1: Codex plan utilisation per-day helpers
+// ---------------------------------------------------------------------------
+
+/// Upsert one day's Codex plan aggregate. Idempotent on re-scan.
+pub fn upsert_codex_plan_daily(conn: &Connection, row: &CodexPlanDailyRow) -> Result<()> {
+    let snapshot_json = serde_json::to_string(&row.snapshot).unwrap_or_else(|_| "{}".to_string());
+    let by_plan_json = serde_json::to_string(&row.by_plan).unwrap_or_else(|_| "{}".to_string());
+
+    #[derive(serde::Serialize)]
+    struct LimitHitsJson<'a> {
+        plans: &'a Vec<String>,
+        count: i64,
+    }
+    let limit_hits_json = serde_json::to_string(&LimitHitsJson {
+        plans: &row.limit_hit_plans,
+        count: row.limit_hit_count,
+    })
+    .unwrap_or_else(|_| r#"{"plans":[],"count":0}"#.to_string());
+
+    let updated_at = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+
+    conn.execute(
+        "INSERT INTO codex_plan_daily
+            (day, primary_pct, secondary_pct, snapshot_json, by_plan_json, limit_hits_json, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(day) DO UPDATE SET
+            primary_pct     = excluded.primary_pct,
+            secondary_pct   = excluded.secondary_pct,
+            snapshot_json   = excluded.snapshot_json,
+            by_plan_json    = excluded.by_plan_json,
+            limit_hits_json = excluded.limit_hits_json,
+            updated_at      = excluded.updated_at",
+        rusqlite::params![
+            row.day,
+            row.primary_pct,
+            row.secondary_pct,
+            snapshot_json,
+            by_plan_json,
+            limit_hits_json,
+            updated_at,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Return the last snapshot for today (local-tz day via `TzParams`).
+pub fn query_codex_plan_today(
+    conn: &Connection,
+    tz: &TzParams,
+) -> Result<Option<CodexPlanSnapshot>> {
+    // Compute today's date string in the local timezone.
+    let today: String = if let Some(param) = tz.offset_sql_param() {
+        conn.query_row(
+            "SELECT substr(datetime('now', ?1), 1, 10)",
+            rusqlite::params![param],
+            |row| row.get(0),
+        )?
+    } else {
+        conn.query_row("SELECT substr(datetime('now'), 1, 10)", [], |row| {
+            row.get(0)
+        })?
+    };
+    let json: Option<String> = conn
+        .query_row(
+            "SELECT snapshot_json FROM codex_plan_daily WHERE day = ?1 LIMIT 1",
+            rusqlite::params![today],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match json {
+        None => Ok(None),
+        Some(j) => {
+            let snap: CodexPlanSnapshot = serde_json::from_str(&j).unwrap_or_default();
+            Ok(Some(snap))
+        }
+    }
+}
+
+/// Return the last `days_back` days of Codex plan aggregates, ordered DESC.
+pub fn query_codex_plan_history(
+    conn: &Connection,
+    tz: &TzParams,
+    days_back: i64,
+) -> Result<Vec<CodexPlanDailyRow>> {
+    // Compute the cutoff date in the local timezone.
+    let cutoff: String = if let Some(param) = tz.offset_sql_param() {
+        conn.query_row(
+            "SELECT substr(datetime('now', ?1, ?2), 1, 10)",
+            rusqlite::params![param, format!("-{days_back} days")],
+            |row| row.get(0),
+        )?
+    } else {
+        conn.query_row(
+            "SELECT substr(datetime('now', ?1), 1, 10)",
+            rusqlite::params![format!("-{days_back} days")],
+            |row| row.get(0),
+        )?
+    };
+
+    let mut stmt = conn.prepare(
+        "SELECT day, primary_pct, secondary_pct, snapshot_json, by_plan_json, limit_hits_json
+         FROM codex_plan_daily
+         WHERE day >= ?1
+         ORDER BY day DESC",
+    )?;
+
+    #[derive(serde::Deserialize)]
+    struct LimitHitsJson {
+        #[serde(default)]
+        plans: Vec<String>,
+        #[serde(default)]
+        count: i64,
+    }
+
+    let rows = collect_warn(
+        stmt.query_map(rusqlite::params![cutoff], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, f64>(1)?,
+                row.get::<_, Option<f64>>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+            ))
+        })?,
+        "codex_plan_daily history row",
+    );
+
+    let mut result = Vec::with_capacity(rows.len());
+    for (day, primary_pct, secondary_pct, snap_json, by_plan_json, lh_json) in rows {
+        let snapshot: CodexPlanSnapshot = serde_json::from_str(&snap_json).unwrap_or_default();
+        let by_plan: HashMap<String, f64> = serde_json::from_str(&by_plan_json).unwrap_or_default();
+        let lh: LimitHitsJson = serde_json::from_str(&lh_json).unwrap_or(LimitHitsJson {
+            plans: vec![],
+            count: 0,
+        });
+
+        result.push(CodexPlanDailyRow {
+            day,
+            primary_pct,
+            secondary_pct,
+            by_plan,
+            limit_hit_plans: lh.plans,
+            limit_hit_count: lh.count,
+            snapshot,
+        });
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -7877,5 +8056,80 @@ mod tests {
             "dominant confidence should be Meta even though one session was Prompt"
         );
         assert_eq!(analyst.count, 2, "both sessions must be counted");
+    }
+
+    // -----------------------------------------------------------------
+    // Feature 1: codex_plan_daily DB helpers
+    // -----------------------------------------------------------------
+
+    fn sample_codex_plan_row(day: &str, primary_pct: f64) -> crate::models::CodexPlanDailyRow {
+        crate::models::CodexPlanDailyRow {
+            day: day.to_string(),
+            primary_pct,
+            secondary_pct: Some(10.0),
+            by_plan: [("plus".to_string(), primary_pct)].into_iter().collect(),
+            limit_hit_plans: vec![],
+            limit_hit_count: 0,
+            snapshot: crate::models::CodexPlanSnapshot {
+                plan_type: Some("plus".to_string()),
+                captured_at: Some(format!("{day}T12:00:00Z")),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn query_codex_plan_today_returns_today_snapshot() {
+        let conn = test_conn();
+        // Insert today's row and yesterday's row using real dates.
+        let today: String = conn
+            .query_row("SELECT substr(datetime('now'), 1, 10)", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let yesterday: String = conn
+            .query_row(
+                "SELECT substr(datetime('now', '-1 days'), 1, 10)",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        let row_today = sample_codex_plan_row(&today, 55.0);
+        let row_yesterday = sample_codex_plan_row(&yesterday, 30.0);
+        upsert_codex_plan_daily(&conn, &row_today).unwrap();
+        upsert_codex_plan_daily(&conn, &row_yesterday).unwrap();
+
+        let tz = TzParams::default();
+        let result = query_codex_plan_today(&conn, &tz).unwrap();
+        assert!(result.is_some(), "today's snapshot should be returned");
+        let snap = result.unwrap();
+        assert_eq!(snap.plan_type.as_deref(), Some("plus"));
+    }
+
+    #[test]
+    fn query_codex_plan_history_orders_desc() {
+        let conn = test_conn();
+        let days = [
+            "2026-05-01",
+            "2026-05-02",
+            "2026-05-03",
+            "2026-05-04",
+            "2026-05-05",
+        ];
+        for (i, day) in days.iter().enumerate() {
+            upsert_codex_plan_daily(&conn, &sample_codex_plan_row(day, (i + 1) as f64 * 10.0))
+                .unwrap();
+        }
+        let tz = TzParams::default();
+        let rows = query_codex_plan_history(&conn, &tz, 30).unwrap();
+        // Should be ordered descending.
+        let returned_days: Vec<&str> = rows.iter().map(|r| r.day.as_str()).collect();
+        let mut sorted_desc = returned_days.clone();
+        sorted_desc.sort_by(|a, b| b.cmp(a));
+        assert_eq!(
+            returned_days, sorted_desc,
+            "rows must be ordered DESC by day"
+        );
     }
 }

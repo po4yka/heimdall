@@ -2,15 +2,17 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use tracing::{debug, warn};
 use walkdir::WalkDir;
 
-use crate::models::{SessionMeta, Turn};
+use crate::models::{CodexPlanDailyRow, CodexPlanSnapshot, SessionMeta, Turn};
 use crate::pricing;
 use crate::scanner::parser::{
-    PROVIDER_CODEX, ParseResult, empty_parse_result, file_timestamp_rfc3339, project_name_from_cwd,
-    session_key, touch_session_meta, upsert_session_meta,
+    CodexLimitHit, PROVIDER_CODEX, ParseResult, empty_parse_result, file_timestamp_rfc3339,
+    project_name_from_cwd, session_key, touch_session_meta, upsert_session_meta,
 };
 use crate::scanner::provider::{Provider, SessionSource};
 
@@ -80,6 +82,11 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
     let mut turn_contexts: HashMap<String, CodexTurnContext> = HashMap::new();
     let mut turn_tools: HashMap<String, Vec<(String, String)>> = HashMap::new();
     let mut progress_marker: i64 = 0;
+    // Feature 1: Codex plan tracking accumulators.
+    let mut codex_plan_snapshots: Vec<crate::models::CodexPlanSnapshot> = Vec::new();
+    let mut codex_limit_hits: Vec<crate::scanner::parser::CodexLimitHit> = Vec::new();
+    // Track the last seen plan_type so limit events can carry it forward.
+    let mut last_plan_type: Option<String> = None;
     let source_path = filepath.to_string_lossy().to_string();
     let fallback_timestamp = file_timestamp_rfc3339(filepath);
     let fallback_session_id = filepath
@@ -274,6 +281,15 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
                                 usage.source.unwrap_or("unknown")
                             );
                         }
+                        // Feature 1: extract rate_limits snapshot if present.
+                        if let Some(snap) = parse_codex_rate_limits(&payload, &timestamp) {
+                            if let Some(ref pt) = snap.plan_type
+                                && !pt.is_empty()
+                            {
+                                last_plan_type = Some(pt.clone());
+                            }
+                            codex_plan_snapshots.push(snap);
+                        }
 
                         let turn_id = current_turn_id
                             .clone()
@@ -368,6 +384,14 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
                             &session_entrypoint,
                         );
                     }
+                    "usage_limit_exceeded" => {
+                        // Feature 1: record a limit-hit event, carrying forward
+                        // the plan_type from the most recent rate_limits snapshot.
+                        codex_limit_hits.push(crate::scanner::parser::CodexLimitHit {
+                            ts: timestamp.clone(),
+                            plan_type: last_plan_type.clone(),
+                        });
+                    }
                     _ if payload_type.ends_with("_end") => {
                         if let Some(call_id) = payload.get("call_id").and_then(|v| v.as_str()) {
                             let status = payload
@@ -445,6 +469,8 @@ pub(crate) fn parse_codex_jsonl_file(filepath: &Path, skip_lines: i64) -> ParseR
         tool_results,
         tool_error_texts: HashMap::new(),
         tool_input_jsons: HashMap::new(),
+        codex_plan_snapshots,
+        codex_limit_hits,
     }
 }
 
@@ -507,6 +533,84 @@ fn parse_codex_token_usage(payload: &serde_json::Map<String, serde_json::Value>)
     }
 }
 
+/// Extract a `CodexPlanSnapshot` from a `token_count` payload if it contains
+/// a `rate_limits` object. Returns `None` when the field is absent or null.
+fn parse_codex_rate_limits(
+    payload: &serde_json::Map<String, serde_json::Value>,
+    timestamp: &str,
+) -> Option<crate::models::CodexPlanSnapshot> {
+    let rl = payload.get("rate_limits")?.as_object()?;
+
+    let primary = rl.get("primary").and_then(|v| v.as_object()).map(|w| {
+        let resets_at = w.get("resets_at").and_then(|v| v.as_i64()).map(|epoch| {
+            chrono::DateTime::from_timestamp(epoch, 0)
+                .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                .unwrap_or_default()
+        });
+        crate::models::CodexPlanWindow {
+            used_percent: w
+                .get("used_percent")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0),
+            window_minutes: w
+                .get("window_minutes")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+            resets_at,
+        }
+    });
+
+    let secondary = rl.get("secondary").and_then(|v| v.as_object()).map(|w| {
+        let resets_at = w.get("resets_at").and_then(|v| v.as_i64()).map(|epoch| {
+            chrono::DateTime::from_timestamp(epoch, 0)
+                .map(|dt| dt.format("%Y-%m-%dT%H:%M:%SZ").to_string())
+                .unwrap_or_default()
+        });
+        crate::models::CodexPlanWindow {
+            used_percent: w
+                .get("used_percent")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0),
+            window_minutes: w
+                .get("window_minutes")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+            resets_at,
+        }
+    });
+
+    let credits =
+        rl.get("credits")
+            .and_then(|v| v.as_object())
+            .map(|c| crate::models::CodexCredits {
+                has_credits: c
+                    .get("has_credits")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+                unlimited: c
+                    .get("unlimited")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+                balance: c.get("balance").and_then(|v| v.as_f64()),
+            });
+
+    let plan_type = rl
+        .get("plan_type")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+
+    Some(crate::models::CodexPlanSnapshot {
+        plan_type,
+        limit_id: None,
+        primary,
+        secondary,
+        credits,
+        rate_limit_reached_type: None,
+        captured_at: Some(timestamp.to_string()),
+    })
+}
+
 fn codex_billing_mode(plan_type: Option<&str>) -> String {
     let Some(plan_type) = plan_type.map(str::trim).filter(|value| !value.is_empty()) else {
         return "estimated_local".into();
@@ -516,6 +620,132 @@ fn codex_billing_mode(plan_type: Option<&str>) -> String {
         "api" | "byok" | "payg" | "paygo" => "estimated_local".into(),
         _ => "subscriber_included".into(),
     }
+}
+
+/// Aggregate per-scan Codex plan snapshots and limit-hit events into per-day
+/// `CodexPlanDailyRow`s ready for upsert into `codex_plan_daily`.
+///
+/// `tz_offset_min` is the client timezone offset in minutes (0 = UTC).
+pub fn aggregate_codex_plan_daily(
+    snapshots: &[CodexPlanSnapshot],
+    limit_events: &[CodexLimitHit],
+    tz_offset_min: i32,
+) -> Vec<CodexPlanDailyRow> {
+    // Helper: convert an ISO 8601 UTC timestamp to a local YYYY-MM-DD string.
+    let local_day = |ts: &str| -> Option<String> {
+        let dt = chrono::DateTime::parse_from_rfc3339(ts).ok()?;
+        let shifted = dt + chrono::Duration::minutes(tz_offset_min as i64);
+        Some(shifted.format("%Y-%m-%d").to_string())
+    };
+
+    // Group snapshots by local day.
+    // BTreeMap keeps days sorted for deterministic output.
+    let mut by_day: BTreeMap<String, Vec<&CodexPlanSnapshot>> = BTreeMap::new();
+    for snap in snapshots {
+        if let Some(ts) = &snap.captured_at
+            && let Some(day) = local_day(ts)
+        {
+            by_day.entry(day).or_default().push(snap);
+        }
+    }
+
+    // Group limit hits by local day.
+    let mut hits_by_day: BTreeMap<String, Vec<&CodexLimitHit>> = BTreeMap::new();
+    for hit in limit_events {
+        if let Some(day) = local_day(&hit.ts) {
+            hits_by_day.entry(day).or_default().push(hit);
+        }
+    }
+
+    // Collect all days that appear in either snapshots or hits.
+    let mut all_days: std::collections::BTreeSet<String> =
+        BTreeMap::keys(&by_day).cloned().collect();
+    for day in hits_by_day.keys() {
+        all_days.insert(day.clone());
+    }
+
+    let mut result = Vec::with_capacity(all_days.len());
+    for day in all_days {
+        let snaps = by_day.get(&day).map(|v| v.as_slice()).unwrap_or(&[]);
+        let hits = hits_by_day.get(&day).map(|v| v.as_slice()).unwrap_or(&[]);
+
+        // Peak primary_pct across all snapshots in the day.
+        let primary_pct = snaps
+            .iter()
+            .filter_map(|s| s.primary.as_ref().map(|w| w.used_percent))
+            .fold(f64::NEG_INFINITY, f64::max);
+        let primary_pct = if primary_pct.is_finite() {
+            primary_pct
+        } else {
+            0.0
+        };
+
+        // Peak secondary_pct (nullable).
+        let secondary_values: Vec<f64> = snaps
+            .iter()
+            .filter_map(|s| s.secondary.as_ref().map(|w| w.used_percent))
+            .collect();
+        let secondary_pct = if secondary_values.is_empty() {
+            None
+        } else {
+            secondary_values
+                .iter()
+                .copied()
+                .reduce(f64::max)
+                .filter(|v| v.is_finite())
+        };
+
+        // Per-plan peak primary_pct.
+        let mut by_plan: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+        for snap in snaps {
+            let plan_key = snap
+                .plan_type
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
+            if let Some(w) = &snap.primary {
+                let entry = by_plan.entry(plan_key).or_insert(f64::NEG_INFINITY);
+                if w.used_percent > *entry {
+                    *entry = w.used_percent;
+                }
+            }
+        }
+
+        // Limit hit aggregation: collect unique plan types (insertion-order preserved).
+        let mut limit_hit_plans: Vec<String> = Vec::new();
+        for hit in hits {
+            let plan = hit
+                .plan_type
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
+            if !limit_hit_plans.contains(&plan) {
+                limit_hit_plans.push(plan);
+            }
+        }
+        let limit_hit_count = hits.len() as i64;
+
+        // Last snapshot of the day (latest captured_at).
+        let snapshot = snaps
+            .iter()
+            .max_by(|a, b| {
+                a.captured_at
+                    .as_deref()
+                    .unwrap_or("")
+                    .cmp(b.captured_at.as_deref().unwrap_or(""))
+            })
+            .map(|s| (*s).clone())
+            .unwrap_or_default();
+
+        result.push(CodexPlanDailyRow {
+            day,
+            primary_pct,
+            secondary_pct,
+            by_plan,
+            limit_hit_plans,
+            limit_hit_count,
+            snapshot,
+        });
+    }
+    result
 }
 
 #[cfg(test)]
@@ -652,5 +882,266 @@ mod tests {
         assert_eq!(turns.len(), 1);
         assert_eq!(turns[0].input_tokens, 0);
         assert_eq!(turns[0].output_tokens, 41);
+    }
+
+    // -----------------------------------------------------------------
+    // Feature 1: Codex plan utilisation tracking tests
+    // -----------------------------------------------------------------
+
+    fn make_token_count_line(
+        ts: &str,
+        primary_pct: f64,
+        secondary_pct: Option<f64>,
+        plan_type: Option<&str>,
+        input: i64,
+        output: i64,
+    ) -> String {
+        let mut rl = serde_json::json!({
+            "primary": {
+                "used_percent": primary_pct,
+                "window_minutes": 300,
+                "resets_at": 1764079740_i64
+            },
+            "credits": {
+                "has_credits": false,
+                "unlimited": false,
+                "balance": null
+            }
+        });
+        if let Some(sp) = secondary_pct {
+            rl["secondary"] = serde_json::json!({
+                "used_percent": sp,
+                "window_minutes": 10080,
+                "resets_at": 1764079740_i64
+            });
+        }
+        if let Some(pt) = plan_type {
+            rl["plan_type"] = serde_json::Value::String(pt.to_string());
+        }
+        serde_json::json!({
+            "timestamp": ts,
+            "type": "event_msg",
+            "payload": {
+                "type": "token_count",
+                "info": {
+                    "last_token_usage": {
+                        "input_tokens": input,
+                        "output_tokens": output,
+                        "cached_input_tokens": 0
+                    }
+                },
+                "rate_limits": rl
+            }
+        })
+        .to_string()
+    }
+
+    fn session_meta_line(ts: &str) -> String {
+        serde_json::json!({
+            "timestamp": ts,
+            "type": "session_meta",
+            "payload": {
+                "id": "sess-plan-test",
+                "cwd": "/tmp/proj",
+                "cli_version": "0.119.0"
+            }
+        })
+        .to_string()
+    }
+
+    fn turn_context_line(ts: &str, turn_id: &str) -> String {
+        serde_json::json!({
+            "timestamp": ts,
+            "type": "turn_context",
+            "payload": {
+                "turn_id": turn_id,
+                "cwd": "/tmp/proj",
+                "model": "gpt-5.4"
+            }
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn parses_rate_limits_event() {
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "rate-limits-test.jsonl",
+            &[
+                session_meta_line("2026-05-05T10:00:00Z"),
+                turn_context_line("2026-05-05T10:00:01Z", "t1"),
+                make_token_count_line(
+                    "2026-05-05T10:00:04Z",
+                    42.0,
+                    Some(14.0),
+                    Some("plus"),
+                    100,
+                    50,
+                ),
+            ],
+        );
+        let result = parse_codex_jsonl_file(&path, 0);
+        assert_eq!(result.codex_plan_snapshots.len(), 1);
+        let snap = &result.codex_plan_snapshots[0];
+        assert_eq!(snap.plan_type.as_deref(), Some("plus"));
+        let primary = snap.primary.as_ref().expect("primary should be present");
+        assert!((primary.used_percent - 42.0).abs() < 0.001);
+        assert_eq!(primary.window_minutes, 300);
+        let secondary = snap
+            .secondary
+            .as_ref()
+            .expect("secondary should be present");
+        assert!((secondary.used_percent - 14.0).abs() < 0.001);
+        assert!(
+            snap.captured_at
+                .as_deref()
+                .unwrap()
+                .starts_with("2026-05-05")
+        );
+    }
+
+    #[test]
+    fn parses_usage_limit_exceeded_event() {
+        let dir = TempDir::new().unwrap();
+        let path = write_jsonl(
+            &dir,
+            "limit-exceeded-test.jsonl",
+            &[
+                session_meta_line("2026-05-05T10:00:00Z"),
+                turn_context_line("2026-05-05T10:00:01Z", "t1"),
+                // Rate-limits snapshot first — establishes plan_type = "pro"
+                make_token_count_line("2026-05-05T10:00:04Z", 95.0, None, Some("pro"), 100, 50),
+                // usage_limit_exceeded event
+                serde_json::json!({
+                    "timestamp": "2026-05-05T10:00:10Z",
+                    "type": "event_msg",
+                    "payload": { "type": "usage_limit_exceeded" }
+                })
+                .to_string(),
+            ],
+        );
+        let result = parse_codex_jsonl_file(&path, 0);
+        assert_eq!(result.codex_limit_hits.len(), 1);
+        let hit = &result.codex_limit_hits[0];
+        assert!(hit.ts.starts_with("2026-05-05T10:00:10"));
+        // plan_type carried forward from the preceding rate_limits snapshot
+        assert_eq!(hit.plan_type.as_deref(), Some("pro"));
+    }
+
+    #[test]
+    fn aggregates_per_day_takes_max_primary() {
+        let snaps = vec![
+            crate::models::CodexPlanSnapshot {
+                plan_type: Some("plus".into()),
+                primary: Some(crate::models::CodexPlanWindow {
+                    used_percent: 30.0,
+                    window_minutes: 300,
+                    resets_at: None,
+                }),
+                captured_at: Some("2026-05-05T10:00:00Z".into()),
+                ..Default::default()
+            },
+            crate::models::CodexPlanSnapshot {
+                plan_type: Some("plus".into()),
+                primary: Some(crate::models::CodexPlanWindow {
+                    used_percent: 85.0,
+                    window_minutes: 300,
+                    resets_at: None,
+                }),
+                captured_at: Some("2026-05-05T11:00:00Z".into()),
+                ..Default::default()
+            },
+            crate::models::CodexPlanSnapshot {
+                plan_type: Some("plus".into()),
+                primary: Some(crate::models::CodexPlanWindow {
+                    used_percent: 40.0,
+                    window_minutes: 300,
+                    resets_at: None,
+                }),
+                captured_at: Some("2026-05-05T12:00:00Z".into()),
+                ..Default::default()
+            },
+        ];
+        let rows = aggregate_codex_plan_daily(&snaps, &[], 0);
+        assert_eq!(rows.len(), 1);
+        assert!((rows[0].primary_pct - 85.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn aggregates_per_day_secondary_nullable() {
+        let snaps = vec![crate::models::CodexPlanSnapshot {
+            plan_type: Some("plus".into()),
+            primary: Some(crate::models::CodexPlanWindow {
+                used_percent: 50.0,
+                window_minutes: 300,
+                resets_at: None,
+            }),
+            secondary: None, // no secondary
+            captured_at: Some("2026-05-05T10:00:00Z".into()),
+            ..Default::default()
+        }];
+        let rows = aggregate_codex_plan_daily(&snaps, &[], 0);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].secondary_pct.is_none());
+    }
+
+    #[test]
+    fn aggregates_per_day_groups_by_plan() {
+        let snaps = vec![
+            crate::models::CodexPlanSnapshot {
+                plan_type: Some("free".into()),
+                primary: Some(crate::models::CodexPlanWindow {
+                    used_percent: 20.0,
+                    window_minutes: 300,
+                    resets_at: None,
+                }),
+                captured_at: Some("2026-05-05T08:00:00Z".into()),
+                ..Default::default()
+            },
+            crate::models::CodexPlanSnapshot {
+                plan_type: Some("plus".into()),
+                primary: Some(crate::models::CodexPlanWindow {
+                    used_percent: 55.0,
+                    window_minutes: 300,
+                    resets_at: None,
+                }),
+                captured_at: Some("2026-05-05T14:00:00Z".into()),
+                ..Default::default()
+            },
+        ];
+        let rows = aggregate_codex_plan_daily(&snaps, &[], 0);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].by_plan.get("free").copied().unwrap_or(0.0), 20.0);
+        assert_eq!(rows[0].by_plan.get("plus").copied().unwrap_or(0.0), 55.0);
+    }
+
+    #[test]
+    fn aggregates_per_day_counts_limit_hits() {
+        let snaps = vec![crate::models::CodexPlanSnapshot {
+            plan_type: Some("free".into()),
+            primary: Some(crate::models::CodexPlanWindow {
+                used_percent: 99.0,
+                window_minutes: 300,
+                resets_at: None,
+            }),
+            captured_at: Some("2026-05-05T10:00:00Z".into()),
+            ..Default::default()
+        }];
+        let hits = vec![
+            crate::scanner::parser::CodexLimitHit {
+                ts: "2026-05-05T10:01:00Z".into(),
+                plan_type: Some("free".into()),
+            },
+            crate::scanner::parser::CodexLimitHit {
+                ts: "2026-05-05T10:02:00Z".into(),
+                plan_type: Some("plus".into()),
+            },
+        ];
+        let rows = aggregate_codex_plan_daily(&snaps, &hits, 0);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].limit_hit_count, 2);
+        assert!(rows[0].limit_hit_plans.contains(&"free".to_string()));
+        assert!(rows[0].limit_hit_plans.contains(&"plus".to_string()));
     }
 }

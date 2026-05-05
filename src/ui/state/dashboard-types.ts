@@ -514,6 +514,8 @@ export interface DashboardData {
   generated_at: string;
   cache_efficiency: CacheEfficiency;
   subscription_quota?: SubscriptionQuotaSection | null;
+  /** Feature 1: Codex plan utilisation per day. */
+  codex_plan?: CodexPlanSection | null;
   error?: string;
 }
 
@@ -527,4 +529,42 @@ export interface VersionInfo {
   next_check_at: string | null;
   last_error: string | null;
   update_available: boolean;
+}
+
+// Feature 1: Codex plan utilisation tracking. Mirrors src/models.rs.
+export interface CodexPlanWindow {
+  used_percent: number;
+  window_minutes: number;
+  resets_at: string | null;
+}
+
+export interface CodexCredits {
+  has_credits: boolean;
+  unlimited: boolean;
+  balance: number | null;
+}
+
+export interface CodexPlanSnapshot {
+  plan_type: string | null;
+  limit_id: string | null;
+  primary: CodexPlanWindow | null;
+  secondary: CodexPlanWindow | null;
+  credits: CodexCredits | null;
+  rate_limit_reached_type: string | null;
+  captured_at: string | null;
+}
+
+export interface CodexPlanDailyRow {
+  day: string;
+  primary_pct: number;
+  secondary_pct: number | null;
+  by_plan: Record<string, number>;
+  limit_hit_plans: string[];
+  limit_hit_count: number;
+  snapshot: CodexPlanSnapshot;
+}
+
+export interface CodexPlanSection {
+  today: CodexPlanSnapshot | null;
+  history: CodexPlanDailyRow[];
 }

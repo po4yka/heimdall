@@ -1612,3 +1612,53 @@
 .confidence-badge.prompt { color: var(--text-secondary); }
 .confidence-badge.unknown { color: var(--warning); }
 
+/* Feature 1: Codex plan utilisation KPI tile and history chart. */
+.codex-plan-kpi {
+  min-width: 180px;
+}
+
+.codex-plan-progress {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  margin: 6px 0 2px;
+  transition: width 0.3s ease;
+  max-width: 100%;
+}
+
+.codex-plan-progress--low {
+  background: var(--success);
+}
+
+.codex-plan-progress--mid {
+  background: var(--warning);
+}
+
+.codex-plan-progress--high {
+  background: var(--accent);
+}
+
+.codex-plan-history-card {
+  width: 100%;
+}
+
+.codex-plan-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 8px;
+}
+
+.codex-plan-history-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-transform: none;
+}
+
+.codex-plan-history-body {
+  padding: 0 12px 12px;
+}
+

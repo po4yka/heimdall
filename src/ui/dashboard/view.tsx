@@ -28,6 +28,8 @@ import { ServiceTiersTable } from '../components/tables/ServiceTiers';
 import { SessionsTable } from '../components/tables/SessionsTable';
 import { StatsCards } from '../components/StatsCards';
 import { SubagentSummary as SubagentSummaryComponent } from '../components/SubagentSummary';
+import { CodexPlanHistory } from '../components/CodexPlanHistory';
+import { CodexPlanKpi } from '../components/CodexPlanKpi';
 import { SubscriptionQuotaCard } from '../components/SubscriptionQuotaCard';
 import { SubscriptionHistoryChart } from '../components/SubscriptionHistoryChart';
 import { ToolUsageTable } from '../components/tables/ToolUsageTable';
@@ -75,6 +77,8 @@ const SECTION_TAB_MAP: Record<string, DashboardTab> = {
   'official-sync': 'overview',
   'openai-reconciliation': 'overview',
   'stats-row': 'overview',
+  'codex-plan-kpi-mount': 'overview',
+  'codex-plan-history-mount': 'activity',
   'daily-chart-card': 'activity',
   'model-chart-card': 'activity',
   'project-chart-card': 'activity',
@@ -108,6 +112,7 @@ const SECTION_DISPLAY_MODE: Record<string, string> = {
   'estimation-meta': 'grid',
   'stats-row': 'grid',
   'agent-kpis-row': 'grid',
+  'codex-plan-kpi-mount': 'grid',
 };
 
 function matchesProvider<T extends { provider?: string }>(row: T): boolean {
@@ -385,6 +390,39 @@ function renderSubscriptionQuota(
   );
 }
 
+function renderCodexPlan(section: DashboardData['codex_plan']): void {
+  const hasToday = !!(section?.today);
+  const hasHistory = !!(section?.history && section.history.length > 0);
+  const hasAny = hasToday || hasHistory;
+
+  // KPI tile
+  if (hasToday) {
+    renderSection(
+      'codex-plan-kpi-mount',
+      true,
+      <CodexPlanKpi today={section!.today!} />,
+      'grid',
+    );
+  } else {
+    setSectionVisibility('codex-plan-kpi-mount', false, 'grid');
+    render(null, $('codex-plan-kpi-mount'));
+  }
+
+  // History chart
+  if (hasHistory) {
+    renderSection(
+      'codex-plan-history-mount',
+      true,
+      <CodexPlanHistory history={section!.history} />,
+    );
+  } else {
+    setSectionVisibility('codex-plan-history-mount', false);
+    render(null, $('codex-plan-history-mount'));
+  }
+
+  void hasAny; // used implicitly via individual section visibility above
+}
+
 export function renderUsageWindows(
   data: UsageWindowsResponse,
   previousSessionPercent: number | null,
@@ -574,6 +612,7 @@ export function renderDashboardView(
   setSectionVisibility('stats-row', true, 'grid');
   renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions);
   renderSubscriptionQuota(data.subscription_quota);
+  renderCodexPlan(data.codex_plan);
   renderOfficialSync(data.official_sync);
   renderOpenAiReconciliation(data.openai_reconciliation);
 

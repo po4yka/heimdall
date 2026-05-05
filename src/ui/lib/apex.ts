@@ -40,6 +40,8 @@ export interface ApexAxisConfig {
   labels?: ApexAxisLabels;
   axisBorder?: { color?: string; show?: boolean };
   axisTicks?: { color?: string; show?: boolean };
+  opposite?: boolean;
+  show?: boolean;
 }
 
 export interface ApexChartOptions {
@@ -73,10 +75,12 @@ export interface ApexLegendOptions {
 
 export interface ApexSeries {
   name?: string;
+  type?: string;
   /// ApexCharts accepts plain numbers for category-axis charts and
   /// `{x, y}` pairs for time-series. Both shapes are passed through to the
   /// underlying chart unchanged.
-  data: number[] | Array<{ x: number | string; y: number | null }>;
+  data: number[] | Array<number | null> | Array<{ x: number | string; y: number | null }>;
+  color?: string;
 }
 
 export interface ApexOptions {
@@ -91,7 +95,7 @@ export interface ApexOptions {
   };
   xaxis?: ApexAxisConfig;
   yaxis?: ApexAxisConfig;
-  stroke?: { width?: number; curve?: 'straight' | 'smooth' | string; colors?: string[] };
+  stroke?: { width?: number | number[]; curve?: 'straight' | 'smooth' | string; colors?: string[]; dashArray?: number | number[] };
   tooltip?: {
     theme?: 'light' | 'dark';
     enabled?: boolean;
@@ -108,7 +112,7 @@ export interface ApexOptions {
     };
   };
   dataLabels?: { enabled?: boolean };
-  fill?: { type?: 'solid' | string; opacity?: number };
+  fill?: { type?: 'solid' | string | Array<'solid' | string>; opacity?: number | number[] };
   series?: ApexSeries[] | number[];
   colors?: string[];
   plotOptions?: {
