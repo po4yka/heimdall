@@ -19,6 +19,8 @@ Persistent storage is a single SQLite database. UI is Preact + Tailwind v4 compi
 - Use `$heimdall-scanner-provider` for work under `src/scanner/providers/` and surrounding provider wiring.
 - Use `$heimdall-schema-evolution` when a change crosses models, parser or provider code, SQLite schema, API output, and dashboard types.
 - Use `$heimdall-dashboard` for dashboard work in `src/ui/`.
+- Use `$heimdall-rust-unsafe-ffi` when touching `src/archive/`, `src/scheduler/`, `src/statusline/`, or any `unsafe` block or libc FFI call.
+- Use `$heimdall-rust-api-discipline` when reviewing or authoring public API signatures, `tokio::spawn` closures, or large-struct processing.
 
 ## Build & Run
 

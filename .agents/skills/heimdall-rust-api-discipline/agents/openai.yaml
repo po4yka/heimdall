@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust API discipline"
+  short_description: "Borrowed args, async callback lifetimes, Drop design, and value-passing perf for heimdall."
+  default_prompt: "Use $heimdall-rust-api-discipline to review or author public Rust API signatures in heimdall."
+
+policy:
+  allow_implicit_invocation: true

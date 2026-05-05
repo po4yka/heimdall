@@ -29,6 +29,9 @@ Use this skill for review requests in the Heimdall repo.
 - No hardcoded secrets, tokens, or API keys.
 - No logged OAuth secrets or tokens.
 - SQLite queries stay parameterized.
+- Missing `// SAFETY:` comment on any `unsafe {}` block (**CRITICAL**)
+- `unsafe impl Sync` or `unsafe impl Send` without a `// SAFETY:` comment listing every field type (**CRITICAL**)
+- `tokio::spawn` capturing a non-`'static` reference (including `&mut State`) (**CRITICAL**)
 
 ### Correctness
 
@@ -38,6 +41,8 @@ Use this skill for review requests in the Heimdall repo.
 - New API routes are wired in `server/mod.rs` and tested.
 - Schema changes are additive only.
 - New config fields use `#[serde(default)]` and are threaded through the call path.
+- `&String`, `&Vec<T>`, or `&PathBuf` as function parameters — prefer `&str`, `&[T]`, `&Path`, or `impl AsRef<...>` (**WARNING**)
+- New `impl Drop` on a struct that has a field external code needs to move out — prefer `ManuallyDrop` guard (**WARNING**)
 
 ### Quality
 

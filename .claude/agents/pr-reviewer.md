@@ -19,6 +19,9 @@ Review Heimdall code changes for correctness, regressions, safety, missing tests
 - Error paths don't panic – use `Result` propagation
 - OAuth credentials not logged (check `tracing::info!`/`debug!` calls near token handling)
 - SQL queries parameterized (no string interpolation in queries)
+- Missing `// SAFETY:` comment on any `unsafe {}` block
+- `unsafe impl Sync` or `unsafe impl Send` without a `// SAFETY:` comment listing every field type
+- `tokio::spawn` closure capturing a non-`'static` reference (including `&mut State`)
 
 ### Correctness (WARNING – should fix)
 - New public functions have corresponding tests
@@ -27,6 +30,8 @@ Review Heimdall code changes for correctness, regressions, safety, missing tests
 - `calc_cost()` uses `calc_cost_nanos()` internally (not direct f64 math)
 - Session totals recomputed after turn inserts (dedup correctness)
 - Config fields have `#[serde(default)]` for backward compatibility
+- `&String`, `&Vec<T>`, or `&PathBuf` as function parameters (prefer `&str`, `&[T]`, `&Path`, or `impl AsRef<...>`)
+- New `impl Drop` on a struct with a field that code needs to consume — prefer `ManuallyDrop` guard type
 
 ### Quality (SUGGESTION – nice to have)
 - TODO comments include author tags: `TODO(name)`

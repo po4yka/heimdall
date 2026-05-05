@@ -15,6 +15,14 @@ For each `.unwrap()` found:
    - Is the unwrap truly infallible? If so, replace it with an explicit justification or a clearer non-panicking pattern
 3. **`.expect("message")`**: These are acceptable if the message explains why it can't fail. Leave them.
 
+## Special handling for `unsafe` paths
+
+When the `.unwrap()` being removed is inside or adjacent to an `unsafe` block:
+1. Identify what SAFETY invariant the `unsafe` block relies on.
+2. Ensure the new error path (using `?` or fallback) does not violate that invariant — returning early must not leave protected state partially initialized.
+3. If the SAFETY comment said "this call cannot fail" and you are removing the `.unwrap()` that asserted this, update the SAFETY comment to explain how failure is now handled.
+4. Verify any open fds, locks, or other resources acquired before the failure point are properly released on the new error path.
+
 ## Process
 1. Run `rg -n '\.unwrap\(' src --glob '*.rs'` to find all occurrences
 2. Filter out test modules (lines inside `#[cfg(test)]` or `mod tests`)

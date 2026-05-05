@@ -29,6 +29,17 @@ Use this skill when the task is to remove panic-prone `.unwrap()` calls from pro
 3. Avoid drive-by refactors outside the touched failure path.
 4. Run the relevant Rust tests after the edits.
 
+## Special case: `unsafe` paths
+
+When removing `.unwrap()` from a code path that contains or calls into an `unsafe` block:
+
+1. Check what SAFETY invariant the `unsafe` block relies on.
+2. The new error path (using `?` or a fallback) must preserve that invariant — verify that returning early does not leave invariant-protected state in a partially-initialized condition.
+3. If the SAFETY comment says "this call cannot fail", and you're removing the `.unwrap()` that asserted that, update the SAFETY comment to explain how failure is now handled.
+4. Add or update the `// SAFETY:` comment to document what happens if an error is returned.
+
+Example: replacing `.unwrap()` on a libc return value — the new `?` path must still close any open fds or release any locks the unsafe code acquired before the failure point.
+
 ## Output expectations
 
 - Report how many `.unwrap()` sites were found in scope.

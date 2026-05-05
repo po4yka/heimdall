@@ -1,0 +1,7 @@
+interface:
+  display_name: "Rust unsafe + libc FFI review"
+  short_description: "Review and author guidance for unsafe blocks and libc FFI in heimdall."
+  default_prompt: "Use $heimdall-rust-unsafe-ffi to review or author unsafe Rust and libc FFI code in heimdall."
+
+policy:
+  allow_implicit_invocation: true

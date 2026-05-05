@@ -13,6 +13,8 @@ Claude Code mirrors the Codex Rust workflow skills through repo-local agent and 
 
 - `.claude/agents/rust-test-runner.md` mirrors `heimdall-rust-test-runner`
 - `.claude/agents/pr-reviewer.md` mirrors `heimdall-pr-review`
+- `.claude/agents/rust-unsafe-ffi.md` mirrors `heimdall-rust-unsafe-ffi`
+- `.claude/agents/rust-api-discipline.md` mirrors `heimdall-rust-api-discipline`
 - `.claude/commands/fix-unwraps.md` mirrors `heimdall-fix-unwraps`
 - `.claude/commands/audit-deps.md` mirrors `heimdall-rust-dependency-audit`
 - `.claude/commands/binary-audit.md` mirrors `heimdall-rust-binary-audit`
