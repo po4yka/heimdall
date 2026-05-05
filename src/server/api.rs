@@ -3107,14 +3107,20 @@ pub async fn api_projects_patch(
 // Feature 2: Screen layout persistence endpoints
 // ---------------------------------------------------------------------------
 
-/// `GET /api/layouts/{screen}` — retrieve the saved layout, or the embedded
-/// default (via the client's DEFAULT_LAYOUTS) when no row exists.
-/// Returns 400 when `screen` is not a known screen identifier.
+/// `GET /api/layouts/{screen}` — retrieve the saved layout for the given
+/// screen, or `null` when no row exists (in which case the client falls back
+/// to its embedded `DEFAULT_LAYOUTS`). Returns 400 when `screen` is unknown.
+///
+/// Previously this returned 404 on miss, which is *intentional* per HTTP
+/// semantics but causes the browser DevTools network panel to surface it as
+/// an error — noise that masks real failures during debugging. We instead
+/// emit a successful `200 null` so the no-saved-layout case is visually
+/// indistinguishable from the saved case in the network log.
 pub async fn api_layout_get(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(screen): axum::extract::Path<String>,
     request: Request,
-) -> Result<Json<crate::models::ScreenLayout>, StatusCode> {
+) -> Result<Json<Option<crate::models::ScreenLayout>>, StatusCode> {
     enforce_loopback_request(&request)?;
     if !db::is_known_screen(&screen) {
         return Err(StatusCode::BAD_REQUEST);
@@ -3131,8 +3137,7 @@ pub async fn api_layout_get(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Return 404 so the client falls back to its embedded DEFAULT_LAYOUTS.
-    layout_opt.map(Json).ok_or(StatusCode::NOT_FOUND)
+    Ok(Json(layout_opt))
 }
 
 /// `PUT /api/layouts/{screen}` — upsert the layout for the given screen.

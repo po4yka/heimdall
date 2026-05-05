@@ -4867,7 +4867,10 @@ mod tests {
     // ── Layout API tests ─────────────────────────────────────────────────────
 
     #[tokio::test]
-    async fn api_layout_get_returns_404_when_no_row() {
+    async fn api_layout_get_returns_200_null_when_no_row() {
+        // No saved layout → 200 with `null` body. The 200 keeps the response
+        // out of the browser DevTools "errors" group; the client treats null
+        // as "use embedded DEFAULT_LAYOUTS".
         let tmp = TempDir::new().unwrap();
         let app = empty_db_app(&tmp);
 
@@ -4880,7 +4883,11 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"null");
     }
 
     #[tokio::test]
@@ -4924,7 +4931,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn api_layout_delete_clears_row_so_get_returns_404() {
+    async fn api_layout_delete_clears_row_so_get_returns_null() {
         let tmp = TempDir::new().unwrap();
         let app = empty_db_app(&tmp);
 
@@ -4967,7 +4974,11 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(get_resp.status(), StatusCode::NOT_FOUND);
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(get_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"null", "after delete the layout must be null");
     }
 
     #[tokio::test]

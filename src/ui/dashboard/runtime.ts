@@ -325,33 +325,51 @@ function createDataLoader(state: RuntimeState, applyFilter: () => void): (force?
           setStatus('header-refresh', 'loading', 'REFRESHING');
         }
 
+        // Split network/parse from render so a render exception never
+        // surfaces as the wrong "Network error" message.
+        let data: DashboardData;
         try {
           const response = await fetch('/api/data');
           if (!response.ok) {
             setStatus('global', 'error', `Failed to load data: HTTP ${response.status}`);
             return;
           }
-
-          const data = (await response.json()) as DashboardData;
-          if (data.error) {
-            setStatus('global', 'error', data.error);
-            return;
-          }
-
-          clearStatus('global');
+          data = (await response.json()) as DashboardData;
+        } catch (err) {
+          // Browser fetch surfaces network failures as TypeError.
+          const isNetwork = err instanceof TypeError;
+          setStatus(
+            'global',
+            'error',
+            isNetwork ? 'Network error loading data' : 'Invalid response from /api/data',
+          );
+          // eslint-disable-next-line no-console
+          console.error('loadData fetch/parse failed:', err);
           clearStatus('header-refresh');
-          rawData.value = data;
-
-          if (!isSubsequentFetch) {
-            restoreDashboardStateFromUrl(data.all_models);
-          }
-
-          applyFilter();
-        } catch {
-          setStatus('global', 'error', 'Network error loading data');
-          clearStatus('header-refresh');
+          return;
         } finally {
           loadState.value = 'idle';
+        }
+
+        if (data.error) {
+          setStatus('global', 'error', data.error);
+          return;
+        }
+
+        clearStatus('global');
+        clearStatus('header-refresh');
+        rawData.value = data;
+
+        if (!isSubsequentFetch) {
+          restoreDashboardStateFromUrl(data.all_models);
+        }
+
+        try {
+          applyFilter();
+        } catch (err) {
+          setStatus('global', 'error', 'Failed to render dashboard');
+          // eslint-disable-next-line no-console
+          console.error('applyFilter failed:', err);
         }
       },
       force

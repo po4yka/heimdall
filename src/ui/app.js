@@ -6967,7 +6967,7 @@
         ] })
       ] }),
       snapshot.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "8px", fontFamily: "var(--font-mono)" }, children: [
-        "Refreshed ",
+        "Last checked ",
         snapshot.fetched_at.slice(0, 19).replace("T", " "),
         " UTC"
       ] })
@@ -8545,9 +8545,25 @@
         /* @__PURE__ */ u4("span", { children: reconciliation.error ?? "Unavailable" })
       ] }) });
     }
+    const statusBracket = deltaMatch ? { label: "[OK]", color: "var(--success, var(--text-primary))" } : { label: `[DRIFT: ${reconciliation.delta_cost >= 0 ? "+" : ""}$${reconciliation.delta_cost.toFixed(4)}]`, color: "var(--accent)" };
     return /* @__PURE__ */ u4("div", { class: "card card-flat bento-full", children: [
-      /* @__PURE__ */ u4("h2", { children: "Subagent Cost Reconciliation" }),
-      /* @__PURE__ */ u4("div", { class: "muted", style: { marginBottom: "12px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ u4("h2", { style: { margin: 0 }, children: "Subagent Cost Reconciliation" }),
+        /* @__PURE__ */ u4(
+          "span",
+          {
+            style: {
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              letterSpacing: "0.04em",
+              color: statusBracket.color
+            },
+            "aria-label": deltaMatch ? "reconciliation matches within tolerance" : "reconciliation drift detected",
+            children: statusBracket.label
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "muted", style: { marginBottom: "12px", marginTop: "4px" }, children: [
         "Compares the child agent JSONL view (",
         /* @__PURE__ */ u4("code", { children: "agent_sessions" }),
         ") against the parent sidechain view (",
@@ -11390,29 +11406,42 @@ ${row.project}` : row.project;
           loadState.value = "refreshing";
           setStatus("header-refresh", "loading", "REFRESHING");
         }
+        let data;
         try {
           const response = await fetch("/api/data");
           if (!response.ok) {
             setStatus("global", "error", `Failed to load data: HTTP ${response.status}`);
             return;
           }
-          const data = await response.json();
-          if (data.error) {
-            setStatus("global", "error", data.error);
-            return;
-          }
-          clearStatus("global");
+          data = await response.json();
+        } catch (err) {
+          const isNetwork = err instanceof TypeError;
+          setStatus(
+            "global",
+            "error",
+            isNetwork ? "Network error loading data" : "Invalid response from /api/data"
+          );
+          console.error("loadData fetch/parse failed:", err);
           clearStatus("header-refresh");
-          rawData.value = data;
-          if (!isSubsequentFetch) {
-            restoreDashboardStateFromUrl(data.all_models);
-          }
-          applyFilter();
-        } catch {
-          setStatus("global", "error", "Network error loading data");
-          clearStatus("header-refresh");
+          return;
         } finally {
           loadState.value = "idle";
+        }
+        if (data.error) {
+          setStatus("global", "error", data.error);
+          return;
+        }
+        clearStatus("global");
+        clearStatus("header-refresh");
+        rawData.value = data;
+        if (!isSubsequentFetch) {
+          restoreDashboardStateFromUrl(data.all_models);
+        }
+        try {
+          applyFilter();
+        } catch (err) {
+          setStatus("global", "error", "Failed to render dashboard");
+          console.error("applyFilter failed:", err);
         }
       },
       force
@@ -18314,9 +18343,8 @@ ${row.project}` : row.project;
   // src/ui/lib/layouts.ts
   async function fetchLayout(screen) {
     const res = await fetch(`/api/layouts/${encodeURIComponent(screen)}`);
-    if (res.status === 404) return null;
     if (!res.ok) throw new Error(`fetchLayout: HTTP ${res.status}`);
-    return res.json();
+    return await res.json();
   }
   async function saveLayout(screen, layout) {
     const res = await fetch(`/api/layouts/${encodeURIComponent(screen)}`, {

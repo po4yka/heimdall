@@ -35,10 +35,27 @@ export function SubagentReconciliationBlock({ reconciliation }: SubagentReconcil
     );
   }
 
+  const statusBracket = deltaMatch
+    ? { label: '[OK]', color: 'var(--success, var(--text-primary))' }
+    : { label: `[DRIFT: ${reconciliation.delta_cost >= 0 ? '+' : ''}$${reconciliation.delta_cost.toFixed(4)}]`, color: 'var(--accent)' };
+
   return (
     <div class="card card-flat bento-full">
-      <h2>Subagent Cost Reconciliation</h2>
-      <div class="muted" style={{ marginBottom: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0 }}>Subagent Cost Reconciliation</h2>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '11px',
+            letterSpacing: '0.04em',
+            color: statusBracket.color,
+          }}
+          aria-label={deltaMatch ? 'reconciliation matches within tolerance' : 'reconciliation drift detected'}
+        >
+          {statusBracket.label}
+        </span>
+      </div>
+      <div class="muted" style={{ marginBottom: '12px', marginTop: '4px' }}>
         Compares the child agent JSONL view (<code>agent_sessions</code>) against the parent
         sidechain view (<code>turns WHERE is_subagent = 1</code>) over the last{' '}
         {reconciliation.lookback_days} days. Drift signals parser divergence.

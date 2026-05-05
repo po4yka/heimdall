@@ -283,7 +283,7 @@ export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardPr
 
         {snapshot.fetched_at && (
           <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '8px', fontFamily: 'var(--font-mono)' }}>
-            Refreshed {snapshot.fetched_at.slice(0, 19).replace('T', ' ')} UTC
+            Last checked {snapshot.fetched_at.slice(0, 19).replace('T', ' ')} UTC
           </div>
         )}
       </div>
