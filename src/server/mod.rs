@@ -233,6 +233,10 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
         let projects_dirs = options.projects_dirs.clone();
         let scan_tx = scan_event_tx.clone();
         let scan_lock = crate::scanner::watcher::new_scan_lock();
+        let webhook_config = state.webhook_config.clone();
+        // Capture a handle to the running tokio runtime so the watcher's
+        // OS thread can schedule webhook dispatch back onto an async task.
+        let runtime_handle = tokio::runtime::Handle::current();
 
         // Determine directories to watch: ~/.claude/projects/ plus any
         // explicit projects_dirs override.
@@ -277,6 +281,29 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
                                 result.new,
                                 result.updated
                             );
+
+                            // Fan out agent_stop_reason webhooks via the
+                            // captured runtime handle: the watcher closure
+                            // runs on a notify worker thread without an
+                            // ambient tokio context, but `notify_if_configured`
+                            // calls `tokio::spawn` internally and therefore
+                            // requires one.
+                            if !result.agent_stop_reason_transitions.is_empty() {
+                                let cfg = webhook_config.clone();
+                                let dbp = db_path.clone();
+                                let transitions = result.agent_stop_reason_transitions.clone();
+                                runtime_handle.spawn(async move {
+                                    tokio::task::spawn_blocking(move || {
+                                        crate::server::api::dispatch_agent_stop_reason_webhooks(
+                                            &cfg,
+                                            &dbp,
+                                            &transitions,
+                                        );
+                                    })
+                                    .await
+                                    .ok();
+                                });
+                            }
                         }
                         Err(e) => {
                             tracing::warn!("file-watcher: scan failed: {}", e);

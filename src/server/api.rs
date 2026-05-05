@@ -697,6 +697,7 @@ pub async fn api_rescan(
     let _db_guard = state.db_lock.lock().await;
     let db_path = state.db_path.clone();
     let projects_dirs = state.projects_dirs.clone();
+    let webhook_config = state.webhook_config.clone();
 
     let result = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         // Atomic rescan: write to temp, then rename
@@ -707,6 +708,14 @@ pub async fn api_rescan(
             preserve_runtime_history(&temp_path, &db_path)?;
             replace_sqlite_files(&temp_path, &db_path)?;
         }
+        // After the atomic rename, the live DB carries the new agent_sessions
+        // rows. Open the production DB (not the temp) so persistent dedup in
+        // `webhook_emitted` survives across rescans.
+        dispatch_agent_stop_reason_webhooks(
+            &webhook_config,
+            &db_path,
+            &scan_result.agent_stop_reason_transitions,
+        );
         Ok(scan_result)
     })
     .await
@@ -715,6 +724,49 @@ pub async fn api_rescan(
 
     let value = serde_json::to_value(result).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(value))
+}
+
+/// Build and fire `agent_stop_reason_transition` webhook events for each
+/// detected transition. Opens its own connection to the production DB so the
+/// `webhook_emitted` dedup table survives across rescans (the temp DB used
+/// during atomic rescan is replaced before this runs). Errors are logged and
+/// swallowed — a failed webhook must never poison the rescan response.
+///
+/// Must be called from within a tokio runtime context — `notify_if_configured`
+/// spawns the HTTP request via `tokio::spawn`. The `/api/rescan` handler
+/// invokes this from inside `tokio::task::spawn_blocking` (which inherits a
+/// runtime handle); the file-watcher dispatches via `Handle::spawn(...)`.
+pub(crate) fn dispatch_agent_stop_reason_webhooks(
+    config: &WebhookConfig,
+    db_path: &std::path::Path,
+    transitions: &[crate::models::AgentStopReasonTransition],
+) {
+    if transitions.is_empty() || !config.agent_stop_reason {
+        return;
+    }
+    let conn = match db::open_db(db_path) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("agent_stop_reason webhook dispatch: db open failed: {}", e);
+            return;
+        }
+    };
+    if let Err(e) = db::init_db(&conn) {
+        tracing::warn!("agent_stop_reason webhook dispatch: init_db failed: {}", e);
+        return;
+    }
+    for transition in transitions {
+        match webhooks::agent_stop_reason_transition_event(config, &conn, transition) {
+            Ok(Some(event)) => webhooks::notify_if_configured(config, event),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "agent_stop_reason webhook dispatch: event build failed: {}",
+                    e
+                );
+            }
+        }
+    }
 }
 
 pub async fn api_usage_windows(
