@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'preact/hooks';
 import { createTriggerRescan } from '../lib/rescan';
 import { setStatus } from '../lib/status';
 import { InlineStatus } from './InlineStatus';
+import { VersionPill } from './VersionPill';
 import { metaText, planBadge, rescanLabel, rescanDisabled, themeMode } from '../state/store';
 
 interface HeaderProps {
@@ -126,6 +127,7 @@ export function Header({
             {navigationLabel}
           </a>
         )}
+        <VersionPill />
         <button
           class="theme-toggle"
           type="button"

@@ -1017,6 +1017,8 @@
   var billingBlocksData = y3(null);
   var contextWindowData = y3(null);
   var costReconciliationData = y3(null);
+  var versionInfo = y3(null);
+  var versionChecking = y3(false);
   var backupSnapshots = y3([]);
   var backupLoadState = y3("idle");
   var webConversations = y3([]);
@@ -2070,6 +2072,39 @@
     };
   }
 
+  // src/ui/components/VersionPill.tsx
+  function VersionPill() {
+    const info = versionInfo.value;
+    const checking = versionChecking.value;
+    if (!info) return null;
+    const current = `v${info.current}`;
+    if (checking) {
+      return /* @__PURE__ */ u4("span", { class: "version-pill version-pill--checking", children: "[CHECKING]" });
+    }
+    if (info.update_available && info.latest && info.latest_url) {
+      return /* @__PURE__ */ u4(
+        "a",
+        {
+          class: "version-pill version-pill--update",
+          href: info.latest_url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          title: `Latest: v${esc(info.latest)} (current: ${current})`,
+          children: [
+            "[v",
+            esc(info.latest),
+            " \u2192]"
+          ]
+        }
+      );
+    }
+    return /* @__PURE__ */ u4("span", { class: "version-pill version-pill--current", title: `Current: ${current}`, children: [
+      "[",
+      current,
+      "]"
+    ] });
+  }
+
   // src/ui/components/Header.tsx
   function Header({
     onDataReload,
@@ -2182,6 +2217,7 @@
             children: navigationLabel
           }
         ),
+        /* @__PURE__ */ u4(VersionPill, {}),
         /* @__PURE__ */ u4(
           "button",
           {
@@ -11144,6 +11180,85 @@ ${row.project}` : row.project;
     themeMode.value = theme;
   }
 
+  // src/ui/lib/version-poll.ts
+  var LOCK_NAME = "heimdall-version-poll";
+  var CHANNEL_NAME = "heimdall-version-poll";
+  var MIN_SPINNER_MS = 1200;
+  var MIN_DELAY_MS = 5e3;
+  var FALLBACK_DELAY_MS = 5 * 60 * 1e3;
+  var POST_POLL_BUFFER_MS = 500;
+  function ensureState() {
+    if (!window.__heimdallVersionPoll) {
+      window.__heimdallVersionPoll = { started: false, isLeader: false, timer: null, bc: null };
+    }
+    return window.__heimdallVersionPoll;
+  }
+  async function fetchOnce() {
+    const t0 = Date.now();
+    versionChecking.value = true;
+    try {
+      const res = await fetch("/api/version");
+      if (!res.ok) return null;
+      const info = await res.json();
+      versionInfo.value = info;
+      return info;
+    } catch (_4) {
+      return null;
+    } finally {
+      const elapsed = Date.now() - t0;
+      if (elapsed < MIN_SPINNER_MS) {
+        await new Promise((r4) => setTimeout(r4, MIN_SPINNER_MS - elapsed));
+      }
+      versionChecking.value = false;
+    }
+  }
+  function broadcastInfo(info) {
+    const st = ensureState();
+    st.bc?.postMessage({ type: "version-data", payload: info });
+  }
+  function scheduleNext(info) {
+    const st = ensureState();
+    if (st.timer) clearTimeout(st.timer);
+    let delay = FALLBACK_DELAY_MS;
+    if (info?.next_check_at) {
+      const t4 = Date.parse(info.next_check_at);
+      if (!Number.isNaN(t4)) {
+        delay = Math.max(MIN_DELAY_MS, t4 + POST_POLL_BUFFER_MS - Date.now());
+      }
+    }
+    st.timer = setTimeout(() => {
+      void tick();
+    }, delay);
+  }
+  async function tick() {
+    const info = await fetchOnce();
+    if (info) broadcastInfo(info);
+    scheduleNext(info);
+  }
+  function startVersionPoll() {
+    const st = ensureState();
+    if (st.started) return;
+    st.started = true;
+    st.bc = new BroadcastChannel(CHANNEL_NAME);
+    st.bc.onmessage = (ev) => {
+      if (ev.data?.type === "version-data") {
+        versionInfo.value = ev.data.payload;
+      } else if (ev.data?.type === "poke" && st.isLeader) {
+        void tick();
+      } else if (ev.data?.type === "hello" && st.isLeader && versionInfo.value) {
+        broadcastInfo(versionInfo.value);
+      }
+    };
+    st.bc.postMessage({ type: "hello" });
+    navigator.locks.request(LOCK_NAME, { mode: "exclusive" }, async () => {
+      st.isLeader = true;
+      await tick();
+      await new Promise(() => {
+      });
+    }).catch(() => {
+    });
+  }
+
   // src/ui/app.tsx
   async function loadBackupSnapshots() {
     backupLoadState.value = "loading";
@@ -11161,6 +11276,7 @@ ${row.project}` : row.project;
     if (!r4.ok) throw new Error(`HTTP ${r4.status}`);
   }
   applyTheme(getTheme());
+  startVersionPoll();
   var isMonitorRoute = window.location.pathname === "/monitor";
   var isToolErrorsRoute = window.location.pathname === "/tool-errors";
   if (isMonitorRoute) {

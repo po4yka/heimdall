@@ -1062,6 +1062,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         })
     }
 

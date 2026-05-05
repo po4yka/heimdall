@@ -99,6 +99,8 @@ pub struct AppState {
     /// Cached live-provider snapshots for native menu consumers.
     pub live_provider_cache: RwLock<Option<(Instant, LiveProvidersResponse)>>,
     pub live_provider_refresh_lock: Mutex<()>,
+    /// Version-check cache: current + latest release info polled from GitHub.
+    pub version_cache: crate::server::version_check::VersionCache,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -900,6 +902,15 @@ pub async fn api_claude_usage(
 
 pub async fn api_health() -> &'static str {
     "ok"
+}
+
+pub async fn api_version(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<crate::server::version_check::VersionInfo>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let info = state.version_cache.read().await.clone();
+    Ok(Json(info))
 }
 
 #[derive(Debug, serde::Deserialize)]

@@ -1,12 +1,16 @@
 import { signal } from '@preact/signals';
 import type { PaginationState, VisibilityState } from '@tanstack/table-core';
-import type { DashboardData, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse, CostReconciliationResponse } from './types';
+import type { DashboardData, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse, CostReconciliationResponse, VersionInfo } from './types';
 
 // ── Core data ────────────────────────────────────────────────────────
 export const rawData = signal<DashboardData | null>(null);
 export const billingBlocksData = signal<BillingBlocksResponse | null>(null);
 export const contextWindowData = signal<ContextWindowResponse | null>(null);
 export const costReconciliationData = signal<CostReconciliationResponse | null>(null);
+
+// ── Version check ─────────────────────────────────────────────────────
+export const versionInfo = signal<VersionInfo | null>(null);
+export const versionChecking = signal<boolean>(false);
 
 // ── Backup / snapshots ────────────────────────────────────────────────
 export interface SnapshotMeta {

@@ -14,6 +14,7 @@ import { createLiveMonitorRuntime } from './monitor/runtime';
 import { hydrateLiveMonitorPreferences } from './monitor/store';
 import { startToolErrorsPage } from './tool_errors/runtime';
 import { applyTheme, getTheme } from './lib/theme';
+import { startVersionPoll } from './lib/version-poll';
 import { backupSnapshots, backupLoadState, archiveImports, webConversations, companionHeartbeat, rawData, registryModalOpen, syncDashboardUrl, type WebConversationSummary, type CompanionHeartbeat } from './state/store';
 
 async function loadBackupSnapshots(): Promise<void> {
@@ -34,6 +35,7 @@ async function triggerSnapshot(): Promise<void> {
 }
 
 applyTheme(getTheme());
+startVersionPoll();
 const isMonitorRoute = window.location.pathname === '/monitor';
 const isToolErrorsRoute = window.location.pathname === '/tool-errors';
 if (isMonitorRoute) {

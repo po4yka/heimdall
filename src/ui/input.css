@@ -182,6 +182,21 @@
   .theme-toggle { display: flex; align-items: center; padding: 4px 8px; min-width: 32px; }
   .theme-toggle svg { flex-shrink: 0; }
 
+  /* ── Version pill ────────────────────────────────────────────────── */
+  .version-pill {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .version-pill--current  { color: var(--text-secondary); }
+  .version-pill--checking { color: var(--text-secondary); opacity: 0.7; }
+  .version-pill--update   { color: var(--warning); }
+  .version-pill--update:hover { color: var(--accent-interactive); }
+
   /* ── Filter Bar ──────────────────────────────────────────────────── */
   #filter-bar {
     position: sticky;

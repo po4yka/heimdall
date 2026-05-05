@@ -172,6 +172,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         }
     }
 
@@ -2791,6 +2792,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         });
 
         let html = assets::render_dashboard();
@@ -2964,6 +2966,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         });
 
         let snapshot = AgentStatusSnapshot {
@@ -3057,6 +3060,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         });
 
         let fetch_count = Arc::new(AtomicUsize::new(0));
@@ -3287,6 +3291,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         });
 
         let html = crate::server::assets::render_dashboard();
@@ -3395,6 +3400,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         });
 
         let html = crate::server::assets::render_dashboard();
@@ -3469,6 +3475,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         });
         let html = assets::render_dashboard();
         Router::new()
@@ -3726,6 +3733,7 @@ mod tests {
             project_aliases: std::collections::HashMap::new(),
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
+            version_cache: crate::server::version_check::new_cache(),
         });
         let app = Router::new()
             .route(

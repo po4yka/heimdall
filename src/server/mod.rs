@@ -3,6 +3,7 @@ pub mod assets;
 #[cfg(test)]
 mod tests;
 pub mod tz;
+pub mod version_check;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -94,6 +95,7 @@ pub(crate) fn build_state(
         project_aliases: options.project_aliases.clone(),
         live_provider_cache: RwLock::new(None),
         live_provider_refresh_lock: Mutex::new(()),
+        version_cache: version_check::new_cache(),
     })
 }
 
@@ -159,6 +161,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             "/api/cost-reconciliation",
             get(api::api_cost_reconciliation),
         )
+        .route("/api/version", get(api::api_version))
         .route("/api/tool-errors", get(api::api_tool_errors))
         .route("/api/archive", get(api::api_archive_list))
         .route("/api/archive/imports", get(api::api_archive_imports))
@@ -204,6 +207,11 @@ pub async fn serve(options: ServeOptions) -> anyhow::Result<()> {
     if options.background_poll {
         start_background_pollers(state.clone());
     }
+
+    // Spawn version-check loop unconditionally — it is lightweight (one HTTP
+    // request every 6h) and honours HEIMDALL_VERSION_CHECK_DISABLED to opt out.
+    let _version_check_handle =
+        version_check::spawn_version_check_loop(state.version_cache.clone());
 
     // Phase 20: start file-watcher if --watch was requested.
     // The watcher lives for the lifetime of the server; it is dropped when

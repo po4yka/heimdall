@@ -516,3 +516,15 @@ export interface DashboardData {
   subscription_quota?: SubscriptionQuotaSection | null;
   error?: string;
 }
+
+export interface VersionInfo {
+  current: string;
+  latest: string | null;
+  latest_url: string | null;
+  latest_name: string | null;
+  published_at: string | null;
+  last_checked_at: string | null;
+  next_check_at: string | null;
+  last_error: string | null;
+  update_available: boolean;
+}

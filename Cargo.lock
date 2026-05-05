@@ -438,6 +438,7 @@ dependencies = [
  "rusqlite",
  "schemars",
  "security-framework",
+ "semver",
  "serde",
  "serde_json",
  "sha1",

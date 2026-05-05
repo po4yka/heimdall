@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Heimdall: local analytics dashboard for coding agent usage and token consumption (Claude Code, Codex)"
 license = "BSD-3-Clause"
+repository = "https://github.com/po4yka/heimdall"
 
 [[bin]]
 name = "heimdall"
@@ -28,6 +29,7 @@ dirs = "6"
 open = "5"
 reqwest = { version = "0.13", features = ["json", "rustls", "webpki-roots", "query", "form"], default-features = false }
 rusqlite = { version = "0.39", features = ["bundled"] }
+semver = "1"
 serde = { version = "1", features = ["derive"] }
 strum = { version = "0.28", features = ["derive"] }
 serde_json = "1"
