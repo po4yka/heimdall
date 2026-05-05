@@ -427,6 +427,7 @@ dependencies = [
  "jaq-core",
  "jaq-json",
  "jaq-std",
+ "libc",
  "notify",
  "open",
  "pbkdf2",

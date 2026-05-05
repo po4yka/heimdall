@@ -207,6 +207,8 @@ pub struct HeatmapCell {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DashboardData {
+    #[serde(default)]
+    pub agent_telemetry: AgentTelemetry,
     pub all_models: Vec<String>,
     pub provider_breakdown: Vec<ProviderSummary>,
     pub confidence_breakdown: Vec<ConfidenceSummary>,

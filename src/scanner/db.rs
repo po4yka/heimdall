@@ -2234,6 +2234,11 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
     let official_sync = query_dashboard_official_sync(conn)?;
     let generated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
+    let agent_telemetry = query_dashboard_agent_telemetry(conn, &tz).unwrap_or_else(|e| {
+        warn!("agent_telemetry query failed, falling back to default: {e}");
+        AgentTelemetry::default()
+    });
+
     // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
     // summing across providers so the frontend gets a single series per model/week.
     let weekly_by_model: Vec<WeeklyModelRow> = {
@@ -2261,6 +2266,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
     };
 
     Ok(DashboardData {
+        agent_telemetry,
         all_models,
         provider_breakdown,
         confidence_breakdown,

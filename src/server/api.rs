@@ -2703,6 +2703,203 @@ pub async fn api_tool_errors(
     Ok(Json(result))
 }
 
+// ---------------------------------------------------------------------------
+// Agent registry helpers
+// ---------------------------------------------------------------------------
+
+/// Distinguishes "field absent" from "field present with null" in JSON bodies.
+///
+/// `{"x": "v"}`   → `DoubleOption::Set(Some("v"))`
+/// `{"x": null}`  → `DoubleOption::Set(None)`
+/// `{}` (no x)    → `DoubleOption::Unset`
+#[derive(Debug, Clone, Default)]
+pub enum DoubleOption<T> {
+    #[default]
+    Unset,
+    Set(Option<T>),
+}
+
+impl<'de, T: serde::Deserialize<'de>> serde::Deserialize<'de> for DoubleOption<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Option::<T>::deserialize(d).map(DoubleOption::Set)
+    }
+}
+
+impl<T> DoubleOption<T> {
+    pub fn into_outer(self) -> Option<Option<T>> {
+        match self {
+            Self::Unset => None,
+            Self::Set(v) => Some(v),
+        }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct RegistryUpsertBody {
+    #[serde(default)]
+    pub display_name: DoubleOption<String>,
+    #[serde(default)]
+    pub description: DoubleOption<String>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub merged_into: DoubleOption<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct RegistryListResponse {
+    pub project: String,
+    pub registry: Vec<crate::models::AgentRegistryRow>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct DeleteResponse {
+    pub deleted: bool,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct AcknowledgeResponse {
+    pub project: String,
+    pub acknowledged: usize,
+    pub already_existed: usize,
+}
+
+// ---------------------------------------------------------------------------
+// Agent registry handlers
+// ---------------------------------------------------------------------------
+
+/// `GET /api/agents/:project_id/registry`
+pub async fn agent_registry_list(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+    request: Request,
+) -> Result<Json<RegistryListResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let db_path = state.db_path.clone();
+    let project_id_clone = project_id.clone();
+    let registry = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        Ok(db::query_agent_registry(&conn, &project_id_clone)?)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(RegistryListResponse {
+        project: project_id,
+        registry,
+    }))
+}
+
+/// `PUT /api/agents/:project_id/registry/:raw_role`
+pub async fn agent_registry_upsert(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path((project_id, raw_role)): axum::extract::Path<(String, String)>,
+    request: Request,
+) -> Result<Json<crate::models::AgentRegistryRow>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _db_guard = state.db_lock.lock().await;
+    let body_bytes = axum::body::to_bytes(request.into_body(), 64 * 1024)
+        .await
+        .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
+    let body: RegistryUpsertBody =
+        serde_json::from_slice(&body_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let update = crate::models::AgentRegistryUpdate {
+        display_name: body.display_name.into_outer(),
+        description: body.description.into_outer(),
+        enabled: body.enabled,
+        merged_into: body.merged_into.into_outer(),
+    };
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || -> Result<_, StatusCode> {
+        let conn = db::open_db(&db_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        db::init_db(&conn).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        db::upsert_agent_registry(&conn, &project_id, &raw_role, &update)
+            .map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map(Json)
+}
+
+/// `DELETE /api/agents/:project_id/registry/:raw_role`
+pub async fn agent_registry_delete(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path((project_id, raw_role)): axum::extract::Path<(String, String)>,
+    request: Request,
+) -> Result<Json<DeleteResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _db_guard = state.db_lock.lock().await;
+    let db_path = state.db_path.clone();
+    let deleted_count = tokio::task::spawn_blocking(move || -> anyhow::Result<usize> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        Ok(db::delete_agent_registry(&conn, &project_id, &raw_role)?)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(DeleteResponse {
+        deleted: deleted_count > 0,
+    }))
+}
+
+/// `POST /api/agents/:project_id/registry/acknowledge-all`
+///
+/// Bulk-creates stub registry rows for every detected role in the project that
+/// does not already have a registry entry. Roles named `"unknown"` are skipped.
+pub async fn agent_registry_acknowledge_all(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(project_id): axum::extract::Path<String>,
+    request: Request,
+) -> Result<Json<AcknowledgeResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _db_guard = state.db_lock.lock().await;
+    let db_path = state.db_path.clone();
+    let (acknowledged, already_existed, project_out) =
+        tokio::task::spawn_blocking(move || -> anyhow::Result<(usize, usize, String)> {
+            let conn = db::open_db(&db_path)?;
+            db::init_db(&conn)?;
+            let tz = crate::tz::TzParams::default();
+            let telemetry = db::query_dashboard_agent_telemetry(&conn, &tz)?;
+            let mut acknowledged = 0usize;
+            let mut already_existed = 0usize;
+            for d in &telemetry.detected {
+                if d.project != project_id || d.raw_role == "unknown" {
+                    continue;
+                }
+                if d.registered {
+                    already_existed += 1;
+                    continue;
+                }
+                match db::upsert_agent_registry(
+                    &conn,
+                    &project_id,
+                    &d.raw_role,
+                    &crate::models::AgentRegistryUpdate::default(),
+                ) {
+                    Ok(_) => acknowledged += 1,
+                    Err(e) => {
+                        tracing::warn!(
+                            "acknowledge-all: failed to upsert role '{}' in project '{}': {e}",
+                            d.raw_role,
+                            project_id
+                        );
+                    }
+                }
+            }
+            Ok((acknowledged, already_existed, project_id.clone()))
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(AcknowledgeResponse {
+        project: project_out,
+        acknowledged,
+        already_existed,
+    }))
+}
+
 #[cfg(test)]
 mod monitor_global_issue_tests {
     use super::*;

@@ -4593,4 +4593,227 @@ mod tests {
             "heartbeat file should exist at {expected:?}"
         );
     }
+
+    // ── Agent telemetry + registry ────────────────────────────────────────────
+
+    fn setup_db_with_agent_sessions(tmp: &TempDir) -> std::path::PathBuf {
+        let db_path = tmp.path().join("usage.db");
+        let conn = crate::scanner::db::open_db(&db_path).unwrap();
+        crate::scanner::db::init_db(&conn).unwrap();
+        let rec_a = crate::models::AgentSessionRecord {
+            agent_id: "ag-explorer".into(),
+            source: crate::models::AgentSource::Subagent,
+            project: "myproj".into(),
+            session_id: Some("s1".into()),
+            ts_start: "2026-05-01T10:00:00Z".into(),
+            ts_start_epoch: 1_746_093_600_000,
+            duration_s: 30,
+            role: "explorer".into(),
+            role_confidence: crate::models::RoleConfidence::Meta,
+            description: "Explorer agent".into(),
+            model: "claude-sonnet-4-5".into(),
+            input_tokens: 1000,
+            cache_create_tokens: 0,
+            cache_read_tokens: 0,
+            output_tokens: 500,
+            total_tokens: 1500,
+            cost_nanos: 50_000_000,
+            api_calls: 3,
+            tool_uses: 2,
+            tools_json: r#"{"Read":2}"#.into(),
+            prompt_id: None,
+            stop_reason: Some("end_turn".into()),
+            source_path: "/some/path.jsonl".into(),
+        };
+        let rec_b = crate::models::AgentSessionRecord {
+            agent_id: "ag-planner".into(),
+            role: "planner".into(),
+            project: "myproj".into(),
+            description: "Planner agent".into(),
+            ..rec_a.clone()
+        };
+        crate::scanner::db::insert_agent_session(&conn, &rec_a).unwrap();
+        crate::scanner::db::insert_agent_session(&conn, &rec_b).unwrap();
+        db_path
+    }
+
+    #[tokio::test]
+    async fn agent_telemetry_in_data_payload() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/data")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let at = json
+            .get("agent_telemetry")
+            .expect("agent_telemetry key missing");
+        assert!(at.get("totals").is_some(), "missing totals");
+        assert!(at.get("timeline").is_some(), "missing timeline");
+        assert!(at.get("distribution").is_some(), "missing distribution");
+        assert!(at.get("top_sessions").is_some(), "missing top_sessions");
+        assert!(at.get("spawn_batches").is_some(), "missing spawn_batches");
+        assert!(at.get("tool_spectrum").is_some(), "missing tool_spectrum");
+        assert!(at.get("detected").is_some(), "missing detected");
+    }
+
+    #[tokio::test]
+    async fn agent_registry_crud() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = setup_db_with_agent_sessions(&tmp);
+        let projects = tmp.path().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+        let app = test_app(db_path, projects);
+
+        // PUT — create a registry row.
+        let put_body = serde_json::json!({
+            "display_name": "Explorer",
+            "description": "reads code"
+        });
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/agents/myproj/registry/explorer")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&put_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let row: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(row["raw_role"], "explorer");
+        assert_eq!(row["display_name"], "Explorer");
+
+        // GET — list should include the row.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/agents/myproj/registry")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let list: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let registry = list["registry"].as_array().unwrap();
+        assert_eq!(registry.len(), 1);
+        assert_eq!(registry[0]["raw_role"], "explorer");
+
+        // DELETE — remove the row.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/agents/myproj/registry/explorer")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let del: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(del["deleted"], true);
+
+        // GET — list should now be empty.
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/agents/myproj/registry")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let list: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let registry = list["registry"].as_array().unwrap();
+        assert!(registry.is_empty(), "registry should be empty after DELETE");
+    }
+
+    #[tokio::test]
+    async fn agent_registry_rejects_self_merge() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = setup_db_with_agent_sessions(&tmp);
+        let projects = tmp.path().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+        let app = test_app(db_path, projects);
+
+        let body = serde_json::json!({"merged_into": "explorer"});
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/agents/myproj/registry/explorer")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn agent_registry_acknowledge_all_creates_stubs() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = setup_db_with_agent_sessions(&tmp);
+        let projects = tmp.path().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+        let app = test_app(db_path, projects);
+
+        // Neither explorer nor planner has a registry entry yet.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/agents/myproj/registry/acknowledge-all")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let ack: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(ack["acknowledged"].as_i64().unwrap(), 2);
+        assert_eq!(ack["already_existed"].as_i64().unwrap(), 0);
+
+        // GET registry — both roles should now have stub rows.
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/agents/myproj/registry")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let list: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let registry = list["registry"].as_array().unwrap();
+        assert_eq!(registry.len(), 2, "both roles should have stub entries");
+    }
 }

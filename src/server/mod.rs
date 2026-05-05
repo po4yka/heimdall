@@ -13,7 +13,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::http::StatusCode;
 use axum::response::Html;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
@@ -175,6 +175,18 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/api/archive/companion-heartbeat",
             post(api::api_archive_companion_heartbeat),
+        )
+        .route(
+            "/api/agents/{project_id}/registry",
+            get(api::agent_registry_list),
+        )
+        .route(
+            "/api/agents/{project_id}/registry/{raw_role}",
+            put(api::agent_registry_upsert).delete(api::agent_registry_delete),
+        )
+        .route(
+            "/api/agents/{project_id}/registry/acknowledge-all",
+            post(api::agent_registry_acknowledge_all),
         )
         .with_state(state)
 }
