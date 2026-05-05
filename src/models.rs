@@ -811,6 +811,12 @@ pub struct LiveMonitorQuota {
     pub remaining_tokens: i64,
     pub current_severity: String,
     pub projected_severity: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runout_in_minutes: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runout_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub will_run_out_before_reset: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
@@ -830,6 +836,12 @@ pub struct DepletionForecastSignal {
     pub pace_label: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub end_time: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runout_in_minutes: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runout_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub will_run_out_before_reset: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]

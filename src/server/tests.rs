@@ -239,6 +239,9 @@ mod tests {
                             resets_in_minutes: Some(120),
                             pace_label: Some("Steady".into()),
                             end_time: Some("2026-04-21T18:00:00Z".into()),
+                            runout_in_minutes: None,
+                            runout_at: None,
+                            will_run_out_before_reset: None,
                         },
                         secondary_signals: vec![],
                         summary_label: "Primary window currently at 42% used".into(),
@@ -328,6 +331,9 @@ mod tests {
                             resets_in_minutes: Some(90),
                             pace_label: Some("Comfortable".into()),
                             end_time: Some("2026-04-21T17:30:00Z".into()),
+                            runout_in_minutes: None,
+                            runout_at: None,
+                            will_run_out_before_reset: None,
                         },
                         secondary_signals: vec![],
                         summary_label: "Primary window currently at 18% used".into(),
@@ -3375,7 +3381,8 @@ mod tests {
 
         let filepath = projects.join("active.jsonl");
         let mut f = std::fs::File::create(&filepath).unwrap();
-        let user_ts = (chrono::Utc::now() - chrono::Duration::minutes(30)).to_rfc3339();
+        let user_ts = (chrono::Utc::now() - chrono::Duration::minutes(60)).to_rfc3339();
+        let first_assistant_ts = (chrono::Utc::now() - chrono::Duration::minutes(30)).to_rfc3339();
         let assistant_ts = (chrono::Utc::now() - chrono::Duration::minutes(5)).to_rfc3339();
         writeln!(
             f,
@@ -3385,6 +3392,28 @@ mod tests {
                 "sessionId": "active-s1",
                 "timestamp": user_ts,
                 "cwd": "/home/user/project"
+            })
+        )
+        .unwrap();
+        writeln!(
+            f,
+            "{}",
+            serde_json::json!({
+                "type": "assistant",
+                "sessionId": "active-s1",
+                "timestamp": first_assistant_ts,
+                "cwd": "/home/user/project",
+                "message": {
+                    "id": "active-msg-0",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "input_tokens": 200000,
+                        "output_tokens": 100000,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation_input_tokens": 0
+                    },
+                    "content": []
+                }
             })
         )
         .unwrap();
@@ -3433,6 +3462,16 @@ mod tests {
         assert_eq!(
             json["depletion_forecast"]["primary_signal"]["kind"],
             "billing_block"
+        );
+        assert!(
+            json["depletion_forecast"]["primary_signal"]["runout_in_minutes"]
+                .as_i64()
+                .is_some(),
+            "forecast must expose time-to-runout"
+        );
+        assert_eq!(
+            json["depletion_forecast"]["primary_signal"]["will_run_out_before_reset"],
+            true
         );
     }
 

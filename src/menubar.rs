@@ -32,6 +32,7 @@
 use std::path::Path;
 
 use anyhow::Result;
+use rusqlite::Connection;
 
 use crate::scanner::db::open_db;
 
@@ -62,6 +63,16 @@ pub struct MenubarData {
     pub last_snapshot_at: Option<String>,
     /// Total bytes in the most recent snapshot, or `None`.
     pub last_snapshot_bytes: Option<u64>,
+    /// Current token-limit forecast for the active billing block.
+    pub token_forecast: Option<MenubarTokenForecast>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct MenubarTokenForecast {
+    pub remaining_tokens: i64,
+    pub runout_in_minutes: Option<i64>,
+    pub runout_at: Option<String>,
+    pub will_run_out_before_reset: Option<bool>,
 }
 
 /// Strip or escape any character that SwiftBar would interpret as a control
@@ -122,7 +133,18 @@ pub fn sanitize_swiftbar_text(input: &str) -> String {
 /// Format the menubar title line (short, fits ~20 chars).
 fn format_title(data: &MenubarData) -> String {
     let cost = format!("${:.2}", data.today_cost_usd);
-    format!("{} · {}", cost, data.today_sessions)
+    let mut title = format!("{} · {}", cost, data.today_sessions);
+    if let Some(forecast) = data
+        .token_forecast
+        .as_ref()
+        .filter(|forecast| forecast.will_run_out_before_reset == Some(true))
+    {
+        title.push_str(" · ");
+        title.push_str(&compact_runout_label(
+            forecast.runout_in_minutes.unwrap_or(0),
+        ));
+    }
+    title
 }
 
 /// Render the full SwiftBar output from `MenubarData`.
@@ -137,6 +159,8 @@ pub fn render(data: &MenubarData) -> String {
         Some(rate) => format!("One-shot rate: {}%", (rate * 100.0).round() as u64),
         None => "One-shot rate: n/a".to_string(),
     });
+    let token_forecast_line =
+        sanitize_swiftbar_text(&format_token_forecast_line(data.token_forecast.as_ref()));
 
     let snapshot_section = match (&data.last_snapshot_at, data.last_snapshot_bytes) {
         (Some(at), Some(bytes)) => format!(
@@ -148,18 +172,94 @@ pub fn render(data: &MenubarData) -> String {
     };
 
     format!(
-        "{title}\n---\nToday\nCost: ${cost:.2}\nSessions: {sessions}\n{one_shot_line}\n---\n{snapshot_section}\n---\nOpen dashboard | href=http://localhost:8080\nRescan | bash=heimdall terminal=false",
+        "{title}\n---\nToday\nCost: ${cost:.2}\nSessions: {sessions}\n{one_shot_line}\n{token_forecast_line}\n---\n{snapshot_section}\n---\nOpen dashboard | href=http://localhost:8080\nRescan | bash=heimdall terminal=false",
         title = title,
         cost = data.today_cost_usd,
         sessions = data.today_sessions,
         one_shot_line = one_shot_line,
+        token_forecast_line = token_forecast_line,
         snapshot_section = snapshot_section,
     )
 }
 
+fn compact_runout_label(total_minutes: i64) -> String {
+    if total_minutes <= 0 {
+        return "now".into();
+    }
+    let hours = total_minutes / 60;
+    let minutes = total_minutes % 60;
+    if hours == 0 {
+        return format!("{minutes}m");
+    }
+    if minutes == 0 {
+        return format!("{hours}h");
+    }
+    format!("{hours}h{minutes:02}")
+}
+
+fn verbose_runout_label(total_minutes: i64) -> String {
+    if total_minutes <= 0 {
+        return "now".into();
+    }
+    let hours = total_minutes / 60;
+    let minutes = total_minutes % 60;
+    if hours == 0 {
+        return format!("{minutes}m");
+    }
+    if minutes == 0 {
+        return format!("{hours}h");
+    }
+    format!("{hours}h {minutes}m")
+}
+
+fn format_token_forecast_line(forecast: Option<&MenubarTokenForecast>) -> String {
+    let Some(forecast) = forecast else {
+        return "Token forecast: n/a".into();
+    };
+
+    let remaining = format_tokens_short(forecast.remaining_tokens);
+    match (
+        forecast.runout_in_minutes,
+        forecast.will_run_out_before_reset,
+    ) {
+        (Some(minutes), Some(true)) if minutes <= 0 => {
+            format!("Token forecast: exhausted now ({remaining} left)")
+        }
+        (Some(minutes), Some(true)) => {
+            format!(
+                "Token forecast: runs out in {} ({remaining} left)",
+                verbose_runout_label(minutes)
+            )
+        }
+        (Some(minutes), Some(false)) => {
+            format!(
+                "Token forecast: reset before runout ({}, {remaining} left)",
+                verbose_runout_label(minutes)
+            )
+        }
+        _ => format!("Token forecast: awaiting burn rate ({remaining} left)"),
+    }
+}
+
+fn format_tokens_short(tokens: i64) -> String {
+    let sign = if tokens < 0 { "-" } else { "" };
+    let abs = tokens.unsigned_abs() as f64;
+    if abs >= 1_000_000.0 {
+        format!("{sign}{:.1}M", abs / 1_000_000.0)
+    } else if abs >= 1_000.0 {
+        format!("{sign}{:.1}K", abs / 1_000.0)
+    } else {
+        format!("{tokens}")
+    }
+}
+
 /// Query the DB and build `MenubarData`. Returns a degraded default if the
 /// DB does not exist (prints a minimal placeholder rather than erroring).
-pub fn run_menubar(db_path: &Path) -> Result<String> {
+pub fn run_menubar(
+    db_path: &Path,
+    blocks_token_limit: Option<i64>,
+    session_hours: f64,
+) -> Result<String> {
     if !db_path.exists() {
         return Ok("heimdall: no data\n---\n".to_string());
     }
@@ -185,6 +285,7 @@ pub fn run_menubar(db_path: &Path) -> Result<String> {
             Some(m) => (Some(m.created_at), Some(m.total_bytes)),
             None => (None, None),
         };
+    let token_forecast = load_token_forecast(&conn, blocks_token_limit, session_hours);
 
     let data = MenubarData {
         today_cost_usd,
@@ -192,9 +293,37 @@ pub fn run_menubar(db_path: &Path) -> Result<String> {
         one_shot_rate,
         last_snapshot_at,
         last_snapshot_bytes,
+        token_forecast,
     };
 
     Ok(render(&data))
+}
+
+fn load_token_forecast(
+    conn: &Connection,
+    blocks_token_limit: Option<i64>,
+    session_hours: f64,
+) -> Option<MenubarTokenForecast> {
+    let limit = blocks_token_limit.filter(|limit| *limit > 0)?;
+    if !(session_hours > 0.0 && session_hours <= 168.0) {
+        return None;
+    }
+
+    let turns = crate::scanner::db::load_all_turns(conn).ok()?;
+    let now = chrono::Utc::now();
+    let blocks = crate::analytics::blocks::identify_blocks_with_now(&turns, session_hours, now);
+    let block = blocks.iter().find(|block| block.is_active)?;
+    let rate = crate::analytics::blocks::calculate_burn_rate(block, now);
+    let projection = crate::analytics::blocks::project_block_usage(block, rate, now);
+    let quota = crate::analytics::quota::compute_quota(block, &projection, limit)?;
+    let runout = crate::analytics::depletion::estimate_token_runout(block, &quota, rate, now);
+
+    Some(MenubarTokenForecast {
+        remaining_tokens: quota.remaining_tokens,
+        runout_in_minutes: runout.map(|value| value.runout_in_minutes),
+        runout_at: runout.map(|value| value.runout_at.to_rfc3339()),
+        will_run_out_before_reset: runout.map(|value| value.will_run_out_before_reset),
+    })
 }
 
 #[cfg(test)]
@@ -320,6 +449,7 @@ mod tests {
             one_shot_rate: Some(0.78),
             last_snapshot_at: None,
             last_snapshot_bytes: None,
+            token_forecast: None,
         };
         let output = render(&data);
         let first_line = output.lines().next().unwrap_or("");
@@ -337,6 +467,7 @@ mod tests {
             one_shot_rate: None,
             last_snapshot_at: None,
             last_snapshot_bytes: None,
+            token_forecast: None,
         };
         let output = render(&data);
         let first_line = output.lines().next().unwrap_or("");
@@ -364,6 +495,7 @@ mod tests {
             one_shot_rate: Some(0.75),
             last_snapshot_at: None,
             last_snapshot_bytes: None,
+            token_forecast: None,
         };
         let output = render(&data);
         assert!(
@@ -380,12 +512,36 @@ mod tests {
             one_shot_rate: None,
             last_snapshot_at: None,
             last_snapshot_bytes: None,
+            token_forecast: None,
         };
         let output = render(&data);
         assert!(
             output.contains("n/a"),
             "render must show 'n/a' when one_shot_rate is None, got: {output:?}"
         );
+    }
+
+    #[test]
+    fn test_render_token_forecast_present() {
+        let data = MenubarData {
+            today_cost_usd: 3.5,
+            today_sessions: 4,
+            one_shot_rate: None,
+            last_snapshot_at: None,
+            last_snapshot_bytes: None,
+            token_forecast: Some(MenubarTokenForecast {
+                remaining_tokens: 120_000,
+                runout_in_minutes: Some(75),
+                runout_at: Some("2026-04-28T09:15:00Z".into()),
+                will_run_out_before_reset: Some(true),
+            }),
+        };
+
+        let output = render(&data);
+        let first_line = output.lines().next().unwrap_or("");
+        assert!(first_line.contains("1h15"));
+        assert!(output.contains("Token forecast: runs out in 1h 15m"));
+        assert!(output.contains("120.0K left"));
     }
 
     // -----------------------------------------------------------------------
@@ -398,7 +554,7 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let path = tmp.path().with_extension("nonexistent.db");
         // path does not exist
-        let result = run_menubar(&path);
+        let result = run_menubar(&path, None, 5.0);
         assert!(result.is_ok(), "missing DB must not error");
         let text = result.unwrap();
         assert!(
@@ -437,6 +593,12 @@ mod tests {
             one_shot_rate: None,
             last_snapshot_at: None,
             last_snapshot_bytes: None,
+            token_forecast: Some(MenubarTokenForecast {
+                remaining_tokens: 120_000,
+                runout_in_minutes: Some(999),
+                runout_at: None,
+                will_run_out_before_reset: Some(true),
+            }),
         };
         let title = format_title(&huge);
         assert!(
@@ -459,6 +621,12 @@ mod tests {
             one_shot_rate: Some(0.99),
             last_snapshot_at: None,
             last_snapshot_bytes: None,
+            token_forecast: Some(MenubarTokenForecast {
+                remaining_tokens: 120_000,
+                runout_in_minutes: Some(90),
+                runout_at: None,
+                will_run_out_before_reset: Some(true),
+            }),
         };
         let output = render(&data);
 
@@ -517,7 +685,7 @@ mod tests {
 
         drop(conn);
 
-        let result = run_menubar(db_path);
+        let result = run_menubar(db_path, None, 5.0);
         assert!(
             result.is_ok(),
             "seeded DB must not error: {:?}",
@@ -543,6 +711,53 @@ mod tests {
     }
 
     #[test]
+    fn test_run_menubar_with_token_limit_forecast() {
+        use crate::scanner::db::{init_db, open_db};
+        use tempfile::NamedTempFile;
+
+        let tmp = NamedTempFile::new().unwrap();
+        let db_path = tmp.path();
+
+        let conn = open_db(db_path).unwrap();
+        init_db(&conn).unwrap();
+
+        let now = chrono::Utc::now();
+        let first_ts = (now - chrono::Duration::minutes(60)).to_rfc3339();
+        let last_ts = (now - chrono::Duration::minutes(30)).to_rfc3339();
+        conn.execute(
+            "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp)
+             VALUES ('claude:sess-runout', 'claude', ?1, ?2)",
+            [&first_ts, &last_ts],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, timestamp, model,
+                                input_tokens, output_tokens, cache_read_tokens,
+                                cache_creation_tokens, reasoning_output_tokens,
+                                estimated_cost_nanos)
+             VALUES ('claude:sess-runout', 'claude', ?1, 'claude-sonnet-4-5',
+                     200000, 0, 0, 0, 0, 100000000)",
+            [&first_ts],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, timestamp, model,
+                                input_tokens, output_tokens, cache_read_tokens,
+                                cache_creation_tokens, reasoning_output_tokens,
+                                estimated_cost_nanos)
+             VALUES ('claude:sess-runout', 'claude', ?1, 'claude-sonnet-4-5',
+                     200000, 0, 0, 0, 0, 100000000)",
+            [&last_ts],
+        )
+        .unwrap();
+
+        drop(conn);
+
+        let text = run_menubar(db_path, Some(600_000), 5.0).unwrap();
+        assert!(text.contains("Token forecast: runs out in"));
+    }
+
+    #[test]
     fn render_includes_snapshots_section() {
         let data = MenubarData {
             today_cost_usd: 1.0,
@@ -550,6 +765,7 @@ mod tests {
             one_shot_rate: None,
             last_snapshot_at: Some("2026-04-28T08:00:00Z".into()),
             last_snapshot_bytes: Some(1234),
+            token_forecast: None,
         };
         let out = render(&data);
         assert!(out.contains("Snapshots"));

@@ -38,9 +38,12 @@ describe('StatsCards', () => {
             remaining_tokens: 380_000,
             remaining_percent: 38,
             end_time: '2026-04-23T12:00:00Z',
+            runout_in_minutes: 75,
+            runout_at: '2026-04-23T11:15:00Z',
+            will_run_out_before_reset: true,
           },
           secondary_signals: [],
-          summary_label: 'Billing block projected to reach 91% before reset',
+          summary_label: 'Billing block runs out in 1h 15m at current burn',
           severity: 'danger',
         },
         predictive_insights: {
@@ -91,6 +94,8 @@ describe('StatsCards', () => {
 
     expect(collectText(withForecast).join(' ')).toContain('Depletion Forecast');
     expect(collectText(withForecast).join(' ')).toContain('Billing block');
+    expect(collectText(withForecast).join(' ')).toContain('Runs out in');
+    expect(collectText(withForecast).join(' ')).toContain('Runout 11:15 UTC');
     expect(collectText(withForecast).join(' ')).toContain('Predictive Signals');
     expect(collectText(withForecast).join(' ')).toContain('ROLLING 1H BURN');
     expect(collectText(withForecast).join(' ')).toContain('LIMIT-HIT RISK');

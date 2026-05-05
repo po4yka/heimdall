@@ -34,6 +34,22 @@ function timingLabel(signal: DepletionForecastSignal): string | null {
   return `Ends ${date.toISOString().slice(11, 16)} UTC`;
 }
 
+function runoutLabel(signal: DepletionForecastSignal): string | null {
+  if (signal.runout_in_minutes == null) return null;
+  if (signal.will_run_out_before_reset === false) {
+    return `Reset before runout (${fmtResetTime(signal.runout_in_minutes)})`;
+  }
+  if (signal.runout_in_minutes <= 0) return 'Limit exhausted now';
+  return `Runs out in ${fmtResetTime(signal.runout_in_minutes)}`;
+}
+
+function runoutTimeLabel(signal: DepletionForecastSignal): string | null {
+  if (!signal.runout_at || signal.will_run_out_before_reset === false) return null;
+  const date = new Date(signal.runout_at);
+  if (Number.isNaN(date.getTime())) return signal.runout_at;
+  return `Runout ${date.toISOString().slice(11, 16)} UTC`;
+}
+
 function supportValue(signal: DepletionForecastSignal): string {
   const percent = signal.projected_percent ?? signal.used_percent;
   return `${Math.round(percent)}%`;
@@ -48,6 +64,8 @@ export function DepletionForecastCard({
 }) {
   const primary = forecast.primary_signal;
   const primaryPercent = Math.max(0, primary.projected_percent ?? primary.used_percent);
+  const primaryRunout = runoutLabel(primary);
+  const primaryRunoutTime = runoutTimeLabel(primary);
 
   return (
     <div class="card stat-card">
@@ -70,6 +88,8 @@ export function DepletionForecastCard({
             aria-label="Depletion forecast pressure"
           />
           <div style={{ display: 'grid', gap: '3px' }}>
+            {primaryRunout && <div class="stat-sub">{primaryRunout}</div>}
+            {primaryRunoutTime && <div class="stat-sub">{primaryRunoutTime}</div>}
             {timingLabel(primary) && <div class="stat-sub">{timingLabel(primary)}</div>}
             {remainingLabel(primary) && <div class="stat-sub">{remainingLabel(primary)}</div>}
           </div>
@@ -89,7 +109,7 @@ export function DepletionForecastCard({
                   </span>
                 </div>
                 <div class="stat-sub">
-                  {[timingLabel(signal), remainingLabel(signal)].filter(Boolean).join(' · ')}
+                  {[runoutLabel(signal), timingLabel(signal), remainingLabel(signal)].filter(Boolean).join(' · ')}
                 </div>
               </div>
             ))}

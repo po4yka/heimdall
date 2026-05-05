@@ -89,6 +89,16 @@ function stateLabel(state: LiveMonitorProvider['visual_state']): string {
   return state.toUpperCase();
 }
 
+function blockRunoutLabel(block: LiveMonitorBlock): string | null {
+  const quota = block.quota;
+  if (!quota || quota.runout_in_minutes == null) return null;
+  if (quota.will_run_out_before_reset === false) {
+    return `Reset before runout (${fmtResetTime(quota.runout_in_minutes)})`;
+  }
+  if (quota.runout_in_minutes <= 0) return 'Runs out now';
+  return `Runs out in ${fmtResetTime(quota.runout_in_minutes)}`;
+}
+
 function ProviderLaneCard({ provider }: { provider: LiveMonitorProvider }) {
   const hasAdminFallback = !!provider.claude_admin;
   return (
@@ -192,6 +202,7 @@ function BlockPanel({ block, density }: { block: LiveMonitorBlock; density: Live
     block.tokens.cache_creation +
     block.tokens.reasoning_output;
   const d = densityTokens(density);
+  const runout = blockRunoutLabel(block);
 
   return (
     <div class="card stat-card" style={{ padding: d.padding }}>
@@ -222,6 +233,11 @@ function BlockPanel({ block, density }: { block: LiveMonitorBlock; density: Live
             <div class="stat-sub" style={{ marginTop: '8px', fontSize: d.fontSize }}>
               {Math.min(block.quota.projected_pct * 100, 999).toFixed(0)}% projected · {fmt(block.quota.remaining_tokens)} tokens left
             </div>
+            {runout && (
+              <div class="stat-sub" style={{ marginTop: '4px', fontSize: d.fontSize }}>
+                {runout}
+              </div>
+            )}
           </div>
         )}
       </div>

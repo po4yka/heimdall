@@ -7346,6 +7346,21 @@ ${row.project}` : row.project;
       return "--";
     }
   }
+  function runoutLabel(block) {
+    const quota = block.quota;
+    if (!quota || quota.runout_in_minutes == null) return null;
+    const eta = fmtResetTime(quota.runout_in_minutes);
+    if (quota.will_run_out_before_reset === false) {
+      return `Reset before runout (${eta})`;
+    }
+    if (quota.runout_in_minutes <= 0) return "Runs out now";
+    return `Runs out in ${eta}`;
+  }
+  function runoutTimeLabel(block) {
+    const quota = block.quota;
+    if (!quota?.runout_at || quota.will_run_out_before_reset === false) return null;
+    return `at ${fmtUtcTime(quota.runout_at)}`;
+  }
   function QuotaSuggestionsSection({ data }) {
     const suggestions = data.quota_suggestions;
     if (!suggestions || suggestions.levels.length === 0) {
@@ -7412,6 +7427,8 @@ ${row.project}` : row.project;
     }
     const currentPct = Math.min(100, quota.current_pct).toFixed(0);
     const projectedPct = Math.min(999, quota.projected_pct).toFixed(0);
+    const runout = runoutLabel(block);
+    const runoutTime = runoutTimeLabel(block);
     return /* @__PURE__ */ u4("div", { style: { marginTop: "10px" }, children: [
       /* @__PURE__ */ u4("div", { style: { marginBottom: "4px" }, children: [
         /* @__PURE__ */ u4(
@@ -7512,6 +7529,11 @@ ${row.project}` : row.project;
             "aria-label": "Projected token quota"
           }
         )
+      ] }),
+      runout && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "8px", fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
+        runout,
+        " ",
+        runoutTime
       ] })
     ] });
   }
@@ -7668,6 +7690,20 @@ ${row.project}` : row.project;
     if (Number.isNaN(date.getTime())) return signal.end_time;
     return `Ends ${date.toISOString().slice(11, 16)} UTC`;
   }
+  function runoutLabel2(signal) {
+    if (signal.runout_in_minutes == null) return null;
+    if (signal.will_run_out_before_reset === false) {
+      return `Reset before runout (${fmtResetTime(signal.runout_in_minutes)})`;
+    }
+    if (signal.runout_in_minutes <= 0) return "Limit exhausted now";
+    return `Runs out in ${fmtResetTime(signal.runout_in_minutes)}`;
+  }
+  function runoutTimeLabel2(signal) {
+    if (!signal.runout_at || signal.will_run_out_before_reset === false) return null;
+    const date = new Date(signal.runout_at);
+    if (Number.isNaN(date.getTime())) return signal.runout_at;
+    return `Runout ${date.toISOString().slice(11, 16)} UTC`;
+  }
   function supportValue(signal) {
     const percent = signal.projected_percent ?? signal.used_percent;
     return `${Math.round(percent)}%`;
@@ -7678,6 +7714,8 @@ ${row.project}` : row.project;
   }) {
     const primary = forecast.primary_signal;
     const primaryPercent = Math.max(0, primary.projected_percent ?? primary.used_percent);
+    const primaryRunout = runoutLabel2(primary);
+    const primaryRunoutTime = runoutTimeLabel2(primary);
     return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", style: { display: "grid", gap: "12px" }, children: [
       /* @__PURE__ */ u4("div", { children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: title }),
@@ -7699,6 +7737,8 @@ ${row.project}` : row.project;
           }
         ),
         /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "3px" }, children: [
+          primaryRunout && /* @__PURE__ */ u4("div", { class: "stat-sub", children: primaryRunout }),
+          primaryRunoutTime && /* @__PURE__ */ u4("div", { class: "stat-sub", children: primaryRunoutTime }),
           timingLabel(primary) && /* @__PURE__ */ u4("div", { class: "stat-sub", children: timingLabel(primary) }),
           remainingLabel(primary) && /* @__PURE__ */ u4("div", { class: "stat-sub", children: remainingLabel(primary) })
         ] })
@@ -7710,7 +7750,7 @@ ${row.project}` : row.project;
             /* @__PURE__ */ u4("span", { class: "stat-sub", children: signal.title }),
             /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: supportValue(signal) })
           ] }),
-          /* @__PURE__ */ u4("div", { class: "stat-sub", children: [timingLabel(signal), remainingLabel(signal)].filter(Boolean).join(" \xB7 ") })
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: [runoutLabel2(signal), timingLabel(signal), remainingLabel(signal)].filter(Boolean).join(" \xB7 ") })
         ] }, `${signal.kind}-${signal.title}`))
       ] }),
       forecast.note && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontStyle: "italic" }, children: forecast.note })
@@ -9703,6 +9743,15 @@ ${row.project}` : row.project;
   function stateLabel(state) {
     return state.toUpperCase();
   }
+  function blockRunoutLabel(block) {
+    const quota = block.quota;
+    if (!quota || quota.runout_in_minutes == null) return null;
+    if (quota.will_run_out_before_reset === false) {
+      return `Reset before runout (${fmtResetTime(quota.runout_in_minutes)})`;
+    }
+    if (quota.runout_in_minutes <= 0) return "Runs out now";
+    return `Runs out in ${fmtResetTime(quota.runout_in_minutes)}`;
+  }
   function ProviderLaneCard({ provider }) {
     const hasAdminFallback = !!provider.claude_admin;
     return /* @__PURE__ */ u4("div", { class: "card", style: { display: "grid", gap: "14px" }, children: [
@@ -9790,6 +9839,7 @@ ${row.project}` : row.project;
   function BlockPanel({ block, density }) {
     const totalTokens2 = block.tokens.input + block.tokens.output + block.tokens.cache_read + block.tokens.cache_creation + block.tokens.reasoning_output;
     const d5 = densityTokens(density);
+    const runout = blockRunoutLabel(block);
     return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
       /* @__PURE__ */ u4("div", { class: "stat-label", children: "Active Block" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", children: fmt(totalTokens2) }),
@@ -9825,7 +9875,8 @@ ${row.project}` : row.project;
           "% projected \xB7 ",
           fmt(block.quota.remaining_tokens),
           " tokens left"
-        ] })
+        ] }),
+        runout && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { marginTop: "4px", fontSize: d5.fontSize }, children: runout })
       ] })
     ] }) });
   }

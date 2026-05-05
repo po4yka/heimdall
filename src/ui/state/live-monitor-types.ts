@@ -39,6 +39,9 @@ export interface LiveMonitorQuota {
   remaining_tokens: number;
   current_severity: QuotaSeverity;
   projected_severity: QuotaSeverity;
+  runout_in_minutes?: number | null;
+  runout_at?: string | null;
+  will_run_out_before_reset?: boolean | null;
 }
 
 export interface LiveMonitorBlock {

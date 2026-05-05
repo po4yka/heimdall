@@ -101,6 +101,9 @@ export interface BlockQuota {
   remaining_tokens: number;
   current_severity: QuotaSeverity;
   projected_severity: QuotaSeverity;
+  runout_in_minutes?: number | null;
+  runout_at?: string | null;
+  will_run_out_before_reset?: boolean | null;
 }
 
 export type QuotaSuggestionKey = 'p90' | 'p95' | 'max';
@@ -133,6 +136,9 @@ export interface DepletionForecastSignal {
   resets_in_minutes?: number | null;
   pace_label?: string | null;
   end_time?: string | null;
+  runout_in_minutes?: number | null;
+  runout_at?: string | null;
+  will_run_out_before_reset?: boolean | null;
 }
 
 export interface DepletionForecast {

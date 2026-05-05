@@ -939,7 +939,8 @@ fn main() -> Result<()> {
         }
         Commands::Menubar { db_path } => {
             let db = default_db(db_path);
-            let output = menubar::run_menubar(&db)?;
+            let output =
+                menubar::run_menubar(&db, cfg_blocks_token_limit, cfg_blocks_session_length)?;
             print!("{}", output);
         }
         Commands::Pricing { action } => {
@@ -3261,6 +3262,7 @@ fn cmd_blocks(
     display_locale: chrono::Locale,
 ) -> anyhow::Result<()> {
     use analytics::blocks::{calculate_burn_rate, identify_blocks_with_gaps, project_block_usage};
+    use analytics::depletion::estimate_token_runout;
     use analytics::quota::compute_quota;
 
     anyhow::ensure!(
@@ -3330,7 +3332,16 @@ fn cmd_blocks(
                 if let Some(limit) = resolved_limit
                     && let Some(quota) = compute_quota(b, &proj, limit)
                 {
-                    v["quota"] = serde_json::to_value(quota).unwrap_or(serde_json::Value::Null);
+                    let mut quota_value =
+                        serde_json::to_value(quota).unwrap_or(serde_json::Value::Null);
+                    if let Some(runout) = estimate_token_runout(b, &quota, rate, now) {
+                        quota_value["runout_in_minutes"] =
+                            serde_json::json!(runout.runout_in_minutes);
+                        quota_value["runout_at"] = serde_json::json!(runout.runout_at);
+                        quota_value["will_run_out_before_reset"] =
+                            serde_json::json!(runout.will_run_out_before_reset);
+                    }
+                    v["quota"] = quota_value;
                 }
                 v
             })
@@ -3442,6 +3453,18 @@ fn cmd_blocks(
                     "    -> PROJECTED:  {proj_tok_q} tokens   {proj_pct_pct}% of {limit_tok} limit   {}",
                     sev_str(quota.projected_severity)
                 );
+                if let Some(runout) = estimate_token_runout(block, &quota, rate, now) {
+                    let eta = format_runout_minutes(runout.runout_in_minutes);
+                    let runout_at = locale::format_date(runout.runout_at, display_locale);
+                    let reset_note = if runout.will_run_out_before_reset {
+                        "before reset"
+                    } else {
+                        "after reset"
+                    };
+                    println!("    -> RUNOUT:     {eta} ({runout_at})   {reset_note}");
+                } else {
+                    println!("    -> RUNOUT:     n/a (need a positive burn rate)");
+                }
             }
         }
     }
@@ -3449,6 +3472,21 @@ fn cmd_blocks(
     println!("{}", "-".repeat(120));
     println!();
     Ok(())
+}
+
+fn format_runout_minutes(total_minutes: i64) -> String {
+    if total_minutes <= 0 {
+        return "now".into();
+    }
+    let hours = total_minutes / 60;
+    let minutes = total_minutes % 60;
+    if hours == 0 {
+        return format!("{minutes}m");
+    }
+    if minutes == 0 {
+        return format!("{hours}h");
+    }
+    format!("{hours}h {minutes:02}m")
 }
 
 // ── scrape helpers ────────────────────────────────────────────────────────────
@@ -3587,6 +3625,7 @@ mod tests {
     use super::PricingAction;
     use super::TokenLimit;
     use super::UsageMonitorAction;
+    use super::format_runout_minutes;
     use super::parse_token_limit;
     use super::parse_weekday;
     use super::weekday_to_u8;
@@ -3634,6 +3673,14 @@ mod tests {
             parse_token_limit("mAx"),
             Ok(TokenLimit::HistoricalMax)
         ));
+    }
+
+    #[test]
+    fn format_runout_minutes_uses_compact_cli_labels() {
+        assert_eq!(format_runout_minutes(0), "now");
+        assert_eq!(format_runout_minutes(12), "12m");
+        assert_eq!(format_runout_minutes(60), "1h");
+        assert_eq!(format_runout_minutes(75), "1h 15m");
     }
 
     // ── parse_weekday tests ───────────────────────────────────────────────────

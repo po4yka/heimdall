@@ -106,6 +106,9 @@ describe('renderLiveMonitorView', () => {
               remaining_tokens: 420_000,
               remaining_percent: 42,
               end_time: '2026-04-23T12:00:00Z',
+              runout_in_minutes: 75,
+              runout_at: '2026-04-23T11:15:00Z',
+              will_run_out_before_reset: true,
             },
             secondary_signals: [
               {
@@ -117,7 +120,7 @@ describe('renderLiveMonitorView', () => {
                 pace_label: 'Steady',
               },
             ],
-            summary_label: 'Billing block projected to reach 92% before reset',
+            summary_label: 'Billing block runs out in 1h 15m at current burn',
             severity: 'danger',
           },
         },
@@ -140,7 +143,8 @@ describe('renderLiveMonitorView', () => {
     const text = collectText(renderLiveMonitorView()).join(' ');
     expect(text).toContain('Suggested Quotas');
     expect(text).toContain('Depletion Forecast');
-    expect(text).toContain('Billing block projected to reach 92% before reset');
+    expect(text).toContain('Billing block runs out in 1h 15m at current burn');
+    expect(text).toContain('Runs out in');
     expect(text).toContain('SUPPORTING SIGNALS');
     expect(text).toContain('P90');
     expect(text).toContain('[RECOMMENDED]');

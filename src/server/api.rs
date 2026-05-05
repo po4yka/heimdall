@@ -1414,16 +1414,33 @@ fn live_monitor_depletion_forecast(
 fn billing_block_depletion_signal(
     block: &BillingBlockViewResponse,
 ) -> Option<crate::models::DepletionForecastSignal> {
-    use crate::analytics::depletion::billing_block_signal;
+    use crate::analytics::depletion::{TokenRunoutForecast, billing_block_signal_with_runout};
 
     let quota = block.quota.as_ref()?;
-    Some(billing_block_signal(
+    let runout = match (
+        quota.runout_in_minutes,
+        quota.runout_at.as_deref(),
+        quota.will_run_out_before_reset,
+    ) {
+        (Some(runout_in_minutes), Some(runout_at), Some(will_run_out_before_reset)) => {
+            chrono::DateTime::parse_from_rfc3339(runout_at)
+                .ok()
+                .map(|runout_at| TokenRunoutForecast {
+                    runout_in_minutes,
+                    runout_at: runout_at.with_timezone(&chrono::Utc),
+                    will_run_out_before_reset,
+                })
+        }
+        _ => None,
+    };
+    Some(billing_block_signal_with_runout(
         "Billing block",
         quota.current_pct * 100.0,
         Some(quota.projected_pct * 100.0),
         Some(quota.remaining_tokens),
         Some(100.0 - (quota.current_pct * 100.0)),
         Some(block.end.clone()),
+        runout,
     ))
 }
 
@@ -1773,7 +1790,9 @@ pub(crate) async fn load_billing_blocks_response(
         calculate_burn_rate, identify_blocks_with_gaps, project_block_usage,
     };
     use crate::analytics::burn_rate::{self as br, BurnRateConfig};
-    use crate::analytics::depletion::{billing_block_signal, build_depletion_forecast};
+    use crate::analytics::depletion::{
+        billing_block_signal_with_runout, build_depletion_forecast, estimate_token_runout,
+    };
     use crate::analytics::predictive::compute_predictive_insights;
     use crate::analytics::quota::{compute_quota, compute_quota_suggestions};
 
@@ -1812,13 +1831,15 @@ pub(crate) async fn load_billing_blocks_response(
                     let rate = calculate_burn_rate(block, now);
                     let projection = project_block_usage(block, rate, now);
                     compute_quota(block, &projection, limit).map(|quota| {
-                        build_depletion_forecast([billing_block_signal(
+                        let runout = estimate_token_runout(block, &quota, rate, now);
+                        build_depletion_forecast([billing_block_signal_with_runout(
                             "Billing block",
                             quota.current_pct * 100.0,
                             Some(quota.projected_pct * 100.0),
                             Some(quota.remaining_tokens),
                             Some(100.0 - (quota.current_pct * 100.0)),
                             Some(block.end.to_rfc3339()),
+                            runout,
                         )])
                     })
                 })
@@ -1875,25 +1896,32 @@ pub(crate) async fn load_billing_blocks_response(
                     quota: token_limit
                         .filter(|_| block.is_active)
                         .and_then(|limit| compute_quota(block, &projection, limit))
-                        .map(|quota| LiveMonitorQuota {
-                            limit_tokens: quota.limit_tokens,
-                            used_tokens: quota.used_tokens,
-                            projected_tokens: quota.projected_tokens,
-                            current_pct: quota.current_pct,
-                            projected_pct: quota.projected_pct,
-                            remaining_tokens: quota.remaining_tokens,
-                            current_severity: match quota.current_severity {
-                                crate::analytics::quota::Severity::Ok => "ok",
-                                crate::analytics::quota::Severity::Warn => "warn",
-                                crate::analytics::quota::Severity::Danger => "danger",
+                        .map(|quota| {
+                            let runout = estimate_token_runout(block, &quota, rate, now);
+                            LiveMonitorQuota {
+                                limit_tokens: quota.limit_tokens,
+                                used_tokens: quota.used_tokens,
+                                projected_tokens: quota.projected_tokens,
+                                current_pct: quota.current_pct,
+                                projected_pct: quota.projected_pct,
+                                remaining_tokens: quota.remaining_tokens,
+                                current_severity: match quota.current_severity {
+                                    crate::analytics::quota::Severity::Ok => "ok",
+                                    crate::analytics::quota::Severity::Warn => "warn",
+                                    crate::analytics::quota::Severity::Danger => "danger",
+                                }
+                                .into(),
+                                projected_severity: match quota.projected_severity {
+                                    crate::analytics::quota::Severity::Ok => "ok",
+                                    crate::analytics::quota::Severity::Warn => "warn",
+                                    crate::analytics::quota::Severity::Danger => "danger",
+                                }
+                                .into(),
+                                runout_in_minutes: runout.map(|value| value.runout_in_minutes),
+                                runout_at: runout.map(|value| value.runout_at.to_rfc3339()),
+                                will_run_out_before_reset: runout
+                                    .map(|value| value.will_run_out_before_reset),
                             }
-                            .into(),
-                            projected_severity: match quota.projected_severity {
-                                crate::analytics::quota::Severity::Ok => "ok",
-                                crate::analytics::quota::Severity::Warn => "warn",
-                                crate::analytics::quota::Severity::Danger => "danger",
-                            }
-                            .into(),
                         }),
                 }
             })

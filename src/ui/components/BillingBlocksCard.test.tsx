@@ -102,8 +102,12 @@ describe('BillingBlocksCard', () => {
             projected_tokens: 700_000,
             current_pct: 30,
             projected_pct: 70,
+            remaining_tokens: 700_000,
             current_severity: 'ok',
             projected_severity: 'warn',
+            runout_in_minutes: 75,
+            runout_at: '2026-04-20T02:45:00Z',
+            will_run_out_before_reset: true,
           },
         },
       ],
@@ -123,6 +127,7 @@ describe('BillingBlocksCard', () => {
     expect(text).toContain('1.00M');
     expect(text).toContain('P95');
     expect(text).toContain('Projects');
+    expect(text).toContain('Runs out in');
     expect(text).toContain('12 near-limit completed blocks');
     expect(bars).toHaveLength(2);
     expect(bars[0]?.props['value']).toBe(300_000);

@@ -1,5 +1,5 @@
 import { SegmentedProgressBar } from './SegmentedProgressBar';
-import { fmt } from '../lib/format';
+import { fmt, fmtResetTime } from '../lib/format';
 import type { BillingBlocksResponse, BillingBlockView, BurnRateTier, QuotaSeverity } from '../state/types';
 import type { SegmentedBarStatus } from './SegmentedProgressBar';
 
@@ -44,6 +44,23 @@ function fmtUtcTime(iso: string): string {
   } catch {
     return '--';
   }
+}
+
+function runoutLabel(block: BillingBlockView): string | null {
+  const quota = block.quota;
+  if (!quota || quota.runout_in_minutes == null) return null;
+  const eta = fmtResetTime(quota.runout_in_minutes);
+  if (quota.will_run_out_before_reset === false) {
+    return `Reset before runout (${eta})`;
+  }
+  if (quota.runout_in_minutes <= 0) return 'Runs out now';
+  return `Runs out in ${eta}`;
+}
+
+function runoutTimeLabel(block: BillingBlockView): string | null {
+  const quota = block.quota;
+  if (!quota?.runout_at || quota.will_run_out_before_reset === false) return null;
+  return `at ${fmtUtcTime(quota.runout_at)}`;
 }
 
 function QuotaSuggestionsSection({ data }: { data: BillingBlocksResponse }) {
@@ -140,6 +157,8 @@ function QuotaSection({ block }: QuotaSectionProps) {
 
   const currentPct = Math.min(100, quota.current_pct).toFixed(0);
   const projectedPct = Math.min(999, quota.projected_pct).toFixed(0);
+  const runout = runoutLabel(block);
+  const runoutTime = runoutTimeLabel(block);
 
   return (
     <div style={{ marginTop: '10px' }}>
@@ -224,6 +243,12 @@ function QuotaSection({ block }: QuotaSectionProps) {
           aria-label="Projected token quota"
         />
       </div>
+
+      {runout && (
+        <div class="stat-sub" style={{ marginTop: '8px', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+          {runout} {runoutTime}
+        </div>
+      )}
     </div>
   );
 }
