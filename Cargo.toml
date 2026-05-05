@@ -42,7 +42,7 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 walkdir = "2"
-rmcp = { version = "1.5.0", optional = true, features = ["server", "macros", "schemars", "transport-async-rw"] }
+rmcp = { version = "1.6.0", optional = true, features = ["server", "macros", "schemars", "transport-async-rw"] }
 schemars = "1"
 jaq-core = "3.0.0"
 jaq-std = "3.0.0"
