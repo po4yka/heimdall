@@ -5,11 +5,14 @@ use tracing::warn;
 use std::collections::{HashMap, HashSet};
 
 use crate::models::{
-    BillingModeSummary, BranchSummary, ClaudeUsageFactor, ClaudeUsageResponse, ClaudeUsageRunMeta,
-    ClaudeUsageSnapshot, ConfidenceSummary, DailyModelRow, DailyProjectRow, DashboardData,
+    AgentRegistryRow, AgentRegistryUpdate, AgentRoleAggregate, AgentSessionRecord, AgentSessionRow,
+    AgentTelemetry, AgentTelemetryTotals, AgentTimelinePoint, BillingModeSummary, BranchSummary,
+    ClaudeUsageFactor, ClaudeUsageResponse, ClaudeUsageRunMeta, ClaudeUsageSnapshot,
+    ConfidenceSummary, DailyModelRow, DailyProjectRow, DashboardData, DetectedRole,
     EntrypointSummary, HourlyRow, McpServerSummary, OfficialSyncRecordCount,
     OfficialSyncSourceStatus, OfficialSyncSummary, ProviderSummary, ServiceTierSummary, SessionRow,
-    ToolErrorRow, ToolErrorsResponse, ToolEvent, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
+    SpawnBatch, ToolErrorRow, ToolErrorsResponse, ToolEvent, ToolSpectrumCell, ToolSummary, Turn,
+    VersionSummary, WeeklyModelRow,
 };
 use crate::pricing_defs::{
     OfficialExtractedRecord, OfficialModelPricing, OfficialSyncRunRecord, PricingSyncRun,
@@ -279,6 +282,59 @@ fn create_schema(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_ash_lookup
             ON agent_status_history(provider, component_id, ts_epoch DESC);",
+    )?;
+
+    // Phase 25: Per-spawn agent telemetry.
+    // agent_sessions: one row per agent spawn (role, tokens, cost, tools, stop_reason).
+    // agent_registry: per-project user-editable role classification with merge support.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS agent_sessions (
+            agent_id            TEXT NOT NULL,
+            source              TEXT NOT NULL,
+            project             TEXT NOT NULL,
+            session_id          TEXT,
+            ts_start            TEXT NOT NULL,
+            ts_start_epoch      INTEGER NOT NULL,
+            duration_s          INTEGER NOT NULL,
+            role                TEXT NOT NULL,
+            role_confidence     TEXT NOT NULL,
+            description         TEXT NOT NULL,
+            model               TEXT NOT NULL,
+            input_tokens        INTEGER NOT NULL,
+            cache_create_tokens INTEGER NOT NULL,
+            cache_read_tokens   INTEGER NOT NULL,
+            output_tokens       INTEGER NOT NULL,
+            total_tokens        INTEGER NOT NULL,
+            cost_nanos          INTEGER NOT NULL,
+            api_calls           INTEGER NOT NULL,
+            tool_uses           INTEGER NOT NULL,
+            tools_json          TEXT NOT NULL,
+            prompt_id           TEXT,
+            stop_reason         TEXT,
+            source_path         TEXT NOT NULL,
+            PRIMARY KEY (source, project, agent_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_agent_sessions_project
+            ON agent_sessions(project);
+        CREATE INDEX IF NOT EXISTS idx_agent_sessions_ts
+            ON agent_sessions(ts_start_epoch);
+        CREATE INDEX IF NOT EXISTS idx_agent_sessions_role
+            ON agent_sessions(role);
+        CREATE INDEX IF NOT EXISTS idx_agent_sessions_prompt
+            ON agent_sessions(prompt_id);
+        CREATE INDEX IF NOT EXISTS idx_agent_sessions_source_path
+            ON agent_sessions(source_path);
+
+        CREATE TABLE IF NOT EXISTS agent_registry (
+            project       TEXT NOT NULL,
+            raw_role      TEXT NOT NULL,
+            display_name  TEXT,
+            description   TEXT,
+            enabled       INTEGER NOT NULL DEFAULT 1,
+            merged_into   TEXT,
+            updated_at    TEXT NOT NULL,
+            PRIMARY KEY (project, raw_role)
+        );",
     )?;
 
     Ok(())
@@ -4455,6 +4511,476 @@ pub fn merge_live_db(target_conn: &Connection, live_path: &std::path::Path) -> R
     Ok(MergeStats::default())
 }
 
+// ---------------------------------------------------------------------------
+// Phase 25: agent_sessions + agent_registry helpers
+// ---------------------------------------------------------------------------
+
+/// Insert or update one agent session record.
+///
+/// Conflict key is `(source, project, agent_id)`. On conflict every mutable
+/// column is refreshed so rescans stay idempotent.
+pub fn insert_agent_session(conn: &Connection, rec: &AgentSessionRecord) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO agent_sessions
+            (agent_id, source, project, session_id, ts_start, ts_start_epoch, duration_s,
+             role, role_confidence, description, model,
+             input_tokens, cache_create_tokens, cache_read_tokens, output_tokens,
+             total_tokens, cost_nanos, api_calls, tool_uses, tools_json,
+             prompt_id, stop_reason, source_path)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
+         ON CONFLICT(source, project, agent_id) DO UPDATE SET
+             session_id          = excluded.session_id,
+             ts_start            = excluded.ts_start,
+             ts_start_epoch      = excluded.ts_start_epoch,
+             duration_s          = excluded.duration_s,
+             role                = excluded.role,
+             role_confidence     = excluded.role_confidence,
+             description         = excluded.description,
+             model               = excluded.model,
+             input_tokens        = excluded.input_tokens,
+             cache_create_tokens = excluded.cache_create_tokens,
+             cache_read_tokens   = excluded.cache_read_tokens,
+             output_tokens       = excluded.output_tokens,
+             total_tokens        = excluded.total_tokens,
+             cost_nanos          = excluded.cost_nanos,
+             api_calls           = excluded.api_calls,
+             tool_uses           = excluded.tool_uses,
+             tools_json          = excluded.tools_json,
+             prompt_id           = excluded.prompt_id,
+             stop_reason         = excluded.stop_reason,
+             source_path         = excluded.source_path",
+        rusqlite::params![
+            rec.agent_id,
+            rec.source.as_str(),
+            rec.project,
+            rec.session_id,
+            rec.ts_start,
+            rec.ts_start_epoch,
+            rec.duration_s,
+            rec.role,
+            rec.role_confidence.as_str(),
+            rec.description,
+            rec.model,
+            rec.input_tokens,
+            rec.cache_create_tokens,
+            rec.cache_read_tokens,
+            rec.output_tokens,
+            rec.total_tokens,
+            rec.cost_nanos,
+            rec.api_calls,
+            rec.tool_uses,
+            rec.tools_json,
+            rec.prompt_id,
+            rec.stop_reason,
+            rec.source_path,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Delete all agent_sessions rows that came from `source_path`.
+///
+/// Called by the scanner when a file is removed or replaced to avoid stale
+/// rows remaining after the source disappears.
+pub fn delete_agent_sessions_by_path(
+    conn: &Connection,
+    source_path: &str,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM agent_sessions WHERE source_path = ?1",
+        rusqlite::params![source_path],
+    )
+}
+
+/// Read one `agent_registry` row by primary key.
+fn select_agent_registry_row(
+    conn: &Connection,
+    project: &str,
+    raw_role: &str,
+) -> rusqlite::Result<Option<AgentRegistryRow>> {
+    conn.query_row(
+        "SELECT project, raw_role, display_name, description, enabled, merged_into, updated_at
+         FROM agent_registry WHERE project = ?1 AND raw_role = ?2",
+        rusqlite::params![project, raw_role],
+        |row| {
+            Ok(AgentRegistryRow {
+                project: row.get(0)?,
+                raw_role: row.get(1)?,
+                display_name: row.get(2)?,
+                description: row.get(3)?,
+                enabled: row.get::<_, i64>(4)? != 0,
+                merged_into: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        },
+    )
+    .optional()
+}
+
+/// Upsert an `agent_registry` row, validating merge-target constraints.
+///
+/// Merge target rules (when `update.merged_into` is `Some(Some(target))`):
+/// - `target != raw_role` (no self-merge)
+/// - `target` must appear in `agent_sessions` for this project
+/// - `target` must not itself have a non-null `merged_into` (no chains)
+pub fn upsert_agent_registry(
+    conn: &Connection,
+    project: &str,
+    raw_role: &str,
+    update: &AgentRegistryUpdate,
+) -> Result<AgentRegistryRow> {
+    // Validate merge target if one is being set.
+    if let Some(Some(ref target)) = update.merged_into {
+        if target == raw_role {
+            let msg = format!(
+                "agent_registry: cannot merge role '{raw_role}' into itself (project '{project}')"
+            );
+            warn!("{}", msg);
+            return Err(anyhow::anyhow!("{}", msg));
+        }
+
+        // Target must be a real detected role in agent_sessions.
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM agent_sessions WHERE project = ?1 AND role = ?2 LIMIT 1",
+                rusqlite::params![project, target],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+        if !exists {
+            let msg = format!(
+                "agent_registry: merge target '{target}' has no agent_sessions rows \
+                 in project '{project}' — only real detected roles can be merge targets"
+            );
+            warn!("{}", msg);
+            return Err(anyhow::anyhow!("{}", msg));
+        }
+
+        // Target must not itself be merged into something else (no chains).
+        let target_merged_into: Option<Option<String>> = conn
+            .query_row(
+                "SELECT merged_into FROM agent_registry WHERE project = ?1 AND raw_role = ?2",
+                rusqlite::params![project, target],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .unwrap_or(None);
+        if let Some(Some(_)) = target_merged_into {
+            let msg = format!(
+                "agent_registry: merge target '{target}' is already merged into another role — \
+                 chains are not allowed (project '{project}')"
+            );
+            warn!("{}", msg);
+            return Err(anyhow::anyhow!("{}", msg));
+        }
+    }
+
+    // Build the upsert. We always update `updated_at`; other columns only
+    // when the caller supplied a value (Some(...)). The double-Option
+    // distinguishes "omitted" (None) from "explicit null" (Some(None)).
+    //
+    // Strategy: INSERT OR IGNORE to ensure the row exists, then UPDATE
+    // only the fields that were supplied. This avoids a sprawling
+    // conditional INSERT ... ON CONFLICT that would duplicate field logic.
+    conn.execute(
+        "INSERT OR IGNORE INTO agent_registry
+             (project, raw_role, display_name, description, enabled, merged_into, updated_at)
+         VALUES (?1, ?2, NULL, NULL, 1, NULL, strftime('%Y-%m-%dT%H:%M:%SZ','now'))",
+        rusqlite::params![project, raw_role],
+    )?;
+
+    if let Some(ref v) = update.display_name {
+        conn.execute(
+            "UPDATE agent_registry SET display_name = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+             WHERE project = ?2 AND raw_role = ?3",
+            rusqlite::params![v.as_deref(), project, raw_role],
+        )?;
+    }
+    if let Some(ref v) = update.description {
+        conn.execute(
+            "UPDATE agent_registry SET description = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+             WHERE project = ?2 AND raw_role = ?3",
+            rusqlite::params![v.as_deref(), project, raw_role],
+        )?;
+    }
+    if let Some(enabled) = update.enabled {
+        conn.execute(
+            "UPDATE agent_registry SET enabled = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+             WHERE project = ?2 AND raw_role = ?3",
+            rusqlite::params![enabled as i64, project, raw_role],
+        )?;
+    }
+    if let Some(ref v) = update.merged_into {
+        conn.execute(
+            "UPDATE agent_registry SET merged_into = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+             WHERE project = ?2 AND raw_role = ?3",
+            rusqlite::params![v.as_deref(), project, raw_role],
+        )?;
+    }
+
+    select_agent_registry_row(conn, project, raw_role)?.ok_or_else(|| {
+        anyhow::anyhow!("agent_registry: row vanished after upsert for '{project}/{raw_role}'")
+    })
+}
+
+/// Delete one `agent_registry` row. Returns the number of rows deleted (0 or 1).
+pub fn delete_agent_registry(
+    conn: &Connection,
+    project: &str,
+    raw_role: &str,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM agent_registry WHERE project = ?1 AND raw_role = ?2",
+        rusqlite::params![project, raw_role],
+    )
+}
+
+/// List all `agent_registry` rows for a project, ordered by raw_role.
+pub fn query_agent_registry(
+    conn: &Connection,
+    project: &str,
+) -> rusqlite::Result<Vec<AgentRegistryRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT project, raw_role, display_name, description, enabled, merged_into, updated_at
+         FROM agent_registry WHERE project = ?1 ORDER BY raw_role",
+    )?;
+    stmt.query_map(rusqlite::params![project], |row| {
+        Ok(AgentRegistryRow {
+            project: row.get(0)?,
+            raw_role: row.get(1)?,
+            display_name: row.get(2)?,
+            description: row.get(3)?,
+            enabled: row.get::<_, i64>(4)? != 0,
+            merged_into: row.get(5)?,
+            updated_at: row.get(6)?,
+        })
+    })?
+    .collect::<rusqlite::Result<Vec<_>>>()
+}
+
+/// Assemble the full agent telemetry payload for the dashboard.
+///
+/// All sections are populated from `agent_sessions` and `agent_registry`.
+/// Registry-disabled roles (enabled = 0) are excluded from timeline and
+/// distribution; unregistered roles are included by default.
+pub fn query_dashboard_agent_telemetry(
+    conn: &Connection,
+    tz: &TzParams,
+) -> rusqlite::Result<AgentTelemetry> {
+    // --- Totals ---
+    let totals = conn
+        .query_row(
+            "SELECT COUNT(*), COALESCE(SUM(total_tokens),0), COALESCE(SUM(cost_nanos),0)
+             FROM agent_sessions",
+            [],
+            |row| {
+                Ok(AgentTelemetryTotals {
+                    sessions: row.get(0)?,
+                    total_tokens: row.get(1)?,
+                    cost_usd: row.get::<_, i64>(2)? as f64 / 1e9,
+                })
+            },
+        )
+        .unwrap_or_default();
+
+    // --- Timeline (day-bucketed, registry-filtered) ---
+    let day_expr = tz.sql_day_expr("s.ts_start");
+    let timeline_sql = format!(
+        "SELECT {day_expr} AS bucket, s.role,
+                COALESCE(SUM(s.cost_nanos), 0) AS cost_nanos,
+                COUNT(*) AS sessions
+         FROM agent_sessions s
+         LEFT JOIN agent_registry ar ON ar.project = s.project AND ar.raw_role = s.role
+         WHERE ar.enabled IS NULL OR ar.enabled = 1
+         GROUP BY bucket, s.role
+         ORDER BY bucket, s.role"
+    );
+    // Each branch collects independently to avoid a closure type mismatch
+    // (two identical closures have distinct types in Rust).
+    let timeline: Vec<AgentTimelinePoint> = {
+        let mut stmt = conn.prepare(&timeline_sql)?;
+        let map_row = |row: &rusqlite::Row<'_>| {
+            Ok(AgentTimelinePoint {
+                bucket: row.get(0)?,
+                role: row.get(1)?,
+                cost_usd: row.get::<_, i64>(2)? as f64 / 1e9,
+                sessions: row.get(3)?,
+            })
+        };
+        if let Some(param) = tz.offset_sql_param() {
+            collect_warn(
+                stmt.query_map(rusqlite::params![param], map_row)?,
+                "agent timeline",
+            )
+        } else {
+            collect_warn(stmt.query_map([], map_row)?, "agent timeline")
+        }
+    };
+
+    // --- Distribution (per-role aggregates, one-level merge resolution) ---
+    let distribution: Vec<AgentRoleAggregate> = {
+        let mut stmt = conn.prepare(
+            "SELECT s.role,
+                    COALESCE(ar2.display_name, ar.display_name) AS display_name,
+                    COUNT(*) AS sessions,
+                    COALESCE(SUM(s.total_tokens), 0) AS total_tokens,
+                    COALESCE(SUM(s.cost_nanos), 0) AS cost_nanos,
+                    COALESCE(SUM(s.tool_uses), 0) AS tool_uses
+             FROM agent_sessions s
+             LEFT JOIN agent_registry ar  ON ar.project  = s.project AND ar.raw_role  = s.role
+             LEFT JOIN agent_registry ar2 ON ar2.project = s.project AND ar2.raw_role = ar.merged_into
+             WHERE ar.enabled IS NULL OR ar.enabled = 1
+             GROUP BY s.role
+             ORDER BY SUM(s.cost_nanos) DESC",
+        )?;
+        collect_warn(
+            stmt.query_map([], |row| {
+                Ok(AgentRoleAggregate {
+                    role: row.get(0)?,
+                    display_name: row.get(1)?,
+                    sessions: row.get(2)?,
+                    total_tokens: row.get(3)?,
+                    cost_usd: row.get::<_, i64>(4)? as f64 / 1e9,
+                    tool_uses: row.get(5)?,
+                })
+            })?,
+            "agent distribution",
+        )
+    };
+
+    // --- Top sessions ---
+    let top_sessions: Vec<AgentSessionRow> = {
+        let mut stmt = conn.prepare(
+            "SELECT agent_id, project, session_id, role, description, model,
+                    duration_s, total_tokens, cost_nanos, stop_reason, ts_start
+             FROM agent_sessions
+             ORDER BY cost_nanos DESC
+             LIMIT 25",
+        )?;
+        collect_warn(
+            stmt.query_map([], |row| {
+                Ok(AgentSessionRow {
+                    agent_id: row.get(0)?,
+                    project: row.get(1)?,
+                    session_id: row.get(2)?,
+                    role: row.get(3)?,
+                    description: row.get(4)?,
+                    model: row.get(5)?,
+                    duration_s: row.get(6)?,
+                    total_tokens: row.get(7)?,
+                    cost_usd: row.get::<_, i64>(8)? as f64 / 1e9,
+                    stop_reason: row.get(9)?,
+                    ts_start: row.get(10)?,
+                })
+            })?,
+            "agent top sessions",
+        )
+    };
+
+    // --- Spawn batches (prompt_id groups with 2+ members) ---
+    let spawn_batches: Vec<SpawnBatch> = {
+        let mut stmt = conn.prepare(
+            "SELECT prompt_id, MIN(ts_start) AS spawned_at, project,
+                    COUNT(*) AS size,
+                    group_concat(DISTINCT role) AS roles_csv,
+                    COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                    COALESCE(SUM(cost_nanos), 0) AS cost_nanos
+             FROM agent_sessions
+             WHERE prompt_id IS NOT NULL
+             GROUP BY prompt_id
+             HAVING COUNT(*) > 1
+             ORDER BY MIN(ts_start_epoch) DESC
+             LIMIT 50",
+        )?;
+        let raw = collect_warn(
+            stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?, // prompt_id
+                    row.get::<_, String>(1)?, // spawned_at
+                    row.get::<_, String>(2)?, // project
+                    row.get::<_, i64>(3)?,    // size
+                    row.get::<_, String>(4)?, // roles_csv
+                    row.get::<_, i64>(5)?,    // total_tokens
+                    row.get::<_, i64>(6)?,    // cost_nanos
+                ))
+            })?,
+            "agent spawn batches",
+        );
+        raw.into_iter()
+            .map(
+                |(prompt_id, spawned_at, project, size, roles_csv, total_tokens, cost_nanos)| {
+                    let mut roles: Vec<String> =
+                        roles_csv.split(',').map(|s| s.to_string()).collect();
+                    roles.sort();
+                    SpawnBatch {
+                        prompt_id,
+                        spawned_at,
+                        project,
+                        size,
+                        roles,
+                        total_tokens,
+                        cost_usd: cost_nanos as f64 / 1e9,
+                    }
+                },
+            )
+            .collect()
+    };
+
+    // --- Tool spectrum (json_each expansion; bundled rusqlite includes json1) ---
+    let tool_spectrum: Vec<ToolSpectrumCell> = {
+        let mut stmt = conn.prepare(
+            "SELECT s.role, je.key AS tool, SUM(CAST(je.value AS INTEGER)) AS count
+             FROM agent_sessions s, json_each(s.tools_json) je
+             GROUP BY s.role, je.key
+             ORDER BY s.role, count DESC",
+        )?;
+        collect_warn(
+            stmt.query_map([], |row| {
+                Ok(ToolSpectrumCell {
+                    role: row.get(0)?,
+                    tool: row.get(1)?,
+                    count: row.get(2)?,
+                })
+            })?,
+            "agent tool spectrum",
+        )
+    };
+
+    // --- Detected roles (all project+role combos, with registry presence flag) ---
+    let detected: Vec<DetectedRole> = {
+        let mut stmt = conn.prepare(
+            "SELECT s.project, s.role, COUNT(*) AS cnt,
+                    CASE WHEN ar.raw_role IS NOT NULL THEN 1 ELSE 0 END AS registered
+             FROM agent_sessions s
+             LEFT JOIN agent_registry ar ON ar.project = s.project AND ar.raw_role = s.role
+             GROUP BY s.project, s.role
+             ORDER BY s.project, cnt DESC",
+        )?;
+        collect_warn(
+            stmt.query_map([], |row| {
+                Ok(DetectedRole {
+                    project: row.get(0)?,
+                    raw_role: row.get(1)?,
+                    count: row.get(2)?,
+                    registered: row.get::<_, i64>(3)? != 0,
+                })
+            })?,
+            "agent detected roles",
+        )
+    };
+
+    Ok(AgentTelemetry {
+        totals,
+        timeline,
+        distribution,
+        top_sessions,
+        spawn_batches,
+        tool_spectrum,
+        detected,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6954,5 +7480,349 @@ mod tests {
         assert_eq!(row.context_window_size, 200_000);
         assert_eq!(row.session_id.as_deref(), Some("s"));
         assert_eq!(row.received_at, "2026-04-18T10:00:00Z");
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 25: agent_sessions + agent_registry tests
+    // -----------------------------------------------------------------------
+
+    fn sample_agent_session(agent_id: &str, role: &str, source_path: &str) -> AgentSessionRecord {
+        AgentSessionRecord {
+            agent_id: agent_id.into(),
+            source: crate::models::AgentSource::Subagent,
+            project: "my-project".into(),
+            session_id: Some("ses1".into()),
+            ts_start: "2026-05-01T10:00:00Z".into(),
+            ts_start_epoch: 1_746_093_600_000,
+            duration_s: 30,
+            role: role.into(),
+            role_confidence: crate::models::RoleConfidence::Meta,
+            description: format!("Agent {agent_id}"),
+            model: "claude-sonnet-4-5".into(),
+            input_tokens: 1000,
+            cache_create_tokens: 200,
+            cache_read_tokens: 100,
+            output_tokens: 500,
+            total_tokens: 1800,
+            cost_nanos: 50_000_000,
+            api_calls: 5,
+            tool_uses: 3,
+            tools_json: r#"{"Edit":2,"Bash":1}"#.into(),
+            prompt_id: None,
+            stop_reason: Some("end_turn".into()),
+            source_path: source_path.into(),
+        }
+    }
+
+    #[test]
+    fn agent_sessions_table_exists_after_init() {
+        let conn = test_conn();
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(
+            tables.contains(&"agent_sessions".to_string()),
+            "agent_sessions table must exist"
+        );
+        assert!(
+            tables.contains(&"agent_registry".to_string()),
+            "agent_registry table must exist"
+        );
+    }
+
+    #[test]
+    fn insert_agent_session_upserts() {
+        let conn = test_conn();
+        let mut rec = sample_agent_session("agent-1", "executor", "/path/a.jsonl");
+        insert_agent_session(&conn, &rec).unwrap();
+
+        // Change totals and insert again — should update, not duplicate.
+        rec.total_tokens = 9999;
+        rec.cost_nanos = 999_000_000;
+        insert_agent_session(&conn, &rec).unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_sessions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1, "upsert must not create duplicate rows");
+
+        let total_tokens: i64 = conn
+            .query_row(
+                "SELECT total_tokens FROM agent_sessions WHERE agent_id = 'agent-1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            total_tokens, 9999,
+            "total_tokens must be updated on conflict"
+        );
+    }
+
+    #[test]
+    fn delete_agent_sessions_by_path_removes_only_matching() {
+        let conn = test_conn();
+        let rec_a = sample_agent_session("agent-a", "executor", "/path/alpha.jsonl");
+        let rec_b = sample_agent_session("agent-b", "planner", "/path/beta.jsonl");
+        insert_agent_session(&conn, &rec_a).unwrap();
+        insert_agent_session(&conn, &rec_b).unwrap();
+
+        let deleted = delete_agent_sessions_by_path(&conn, "/path/alpha.jsonl").unwrap();
+        assert_eq!(deleted, 1);
+
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_sessions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(remaining, 1, "beta.jsonl row must survive");
+
+        let surviving_role: String = conn
+            .query_row(
+                "SELECT role FROM agent_sessions WHERE source_path = '/path/beta.jsonl'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(surviving_role, "planner");
+    }
+
+    #[test]
+    fn upsert_agent_registry_inserts_and_updates() {
+        let conn = test_conn();
+        // Insert an agent_sessions row so the project+role exist.
+        insert_agent_session(&conn, &sample_agent_session("ag1", "executor", "/p")).unwrap();
+
+        // First upsert: set display_name.
+        let row = upsert_agent_registry(
+            &conn,
+            "my-project",
+            "executor",
+            &AgentRegistryUpdate {
+                display_name: Some(Some("Executor Agent".into())),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(row.display_name.as_deref(), Some("Executor Agent"));
+        assert!(row.description.is_none());
+        assert!(row.enabled);
+
+        // Second upsert: add description — display_name must be untouched.
+        let row2 = upsert_agent_registry(
+            &conn,
+            "my-project",
+            "executor",
+            &AgentRegistryUpdate {
+                description: Some(Some("Runs code".into())),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(row2.display_name.as_deref(), Some("Executor Agent"));
+        assert_eq!(row2.description.as_deref(), Some("Runs code"));
+    }
+
+    #[test]
+    fn upsert_agent_registry_rejects_self_merge() {
+        let conn = test_conn();
+        insert_agent_session(&conn, &sample_agent_session("ag1", "executor", "/p")).unwrap();
+
+        let result = upsert_agent_registry(
+            &conn,
+            "my-project",
+            "executor",
+            &AgentRegistryUpdate {
+                merged_into: Some(Some("executor".into())),
+                ..Default::default()
+            },
+        );
+        assert!(result.is_err(), "self-merge must be rejected");
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("itself"), "error must mention 'itself': {msg}");
+    }
+
+    #[test]
+    fn upsert_agent_registry_rejects_unknown_target() {
+        let conn = test_conn();
+        // Only "executor" exists in agent_sessions; "planner" does not.
+        insert_agent_session(&conn, &sample_agent_session("ag1", "executor", "/p")).unwrap();
+
+        let result = upsert_agent_registry(
+            &conn,
+            "my-project",
+            "executor",
+            &AgentRegistryUpdate {
+                merged_into: Some(Some("planner".into())),
+                ..Default::default()
+            },
+        );
+        assert!(result.is_err(), "merge into unknown role must be rejected");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("no agent_sessions rows"),
+            "error must mention missing rows: {msg}"
+        );
+    }
+
+    #[test]
+    fn upsert_agent_registry_rejects_chained_merge() {
+        let conn = test_conn();
+        // Create sessions for both roles.
+        insert_agent_session(&conn, &sample_agent_session("ag1", "role-a", "/p")).unwrap();
+        let mut rec_b = sample_agent_session("ag2", "role-b", "/p2");
+        rec_b.project = "my-project".into();
+        insert_agent_session(&conn, &rec_b).unwrap();
+        let mut rec_c = sample_agent_session("ag3", "role-c", "/p3");
+        rec_c.project = "my-project".into();
+        insert_agent_session(&conn, &rec_c).unwrap();
+
+        // Merge role-a into role-b.
+        upsert_agent_registry(
+            &conn,
+            "my-project",
+            "role-a",
+            &AgentRegistryUpdate {
+                merged_into: Some(Some("role-b".into())),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // Try to merge role-c into role-a — role-a itself is merged, so this
+        // would create a chain.
+        let result = upsert_agent_registry(
+            &conn,
+            "my-project",
+            "role-c",
+            &AgentRegistryUpdate {
+                merged_into: Some(Some("role-a".into())),
+                ..Default::default()
+            },
+        );
+        assert!(result.is_err(), "chained merge must be rejected");
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("chains are not allowed"),
+            "error must mention chains: {msg}"
+        );
+    }
+
+    #[test]
+    fn delete_agent_registry_removes_row() {
+        let conn = test_conn();
+        insert_agent_session(&conn, &sample_agent_session("ag1", "executor", "/p")).unwrap();
+        upsert_agent_registry(
+            &conn,
+            "my-project",
+            "executor",
+            &AgentRegistryUpdate::default(),
+        )
+        .unwrap();
+
+        let deleted = delete_agent_registry(&conn, "my-project", "executor").unwrap();
+        assert_eq!(deleted, 1);
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_registry", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn query_agent_registry_returns_in_order() {
+        let conn = test_conn();
+        // Insert sessions for three roles.
+        for (id, role) in [("a1", "zebra"), ("a2", "alpha"), ("a3", "middle")] {
+            insert_agent_session(&conn, &sample_agent_session(id, role, "/p")).unwrap();
+            upsert_agent_registry(&conn, "my-project", role, &AgentRegistryUpdate::default())
+                .unwrap();
+        }
+
+        let rows = query_agent_registry(&conn, "my-project").unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].raw_role, "alpha");
+        assert_eq!(rows[1].raw_role, "middle");
+        assert_eq!(rows[2].raw_role, "zebra");
+    }
+
+    #[test]
+    fn query_dashboard_agent_telemetry_basic() {
+        let conn = test_conn();
+
+        // Three sessions: 2 with prompt_id "pid-1" (for spawn batch), 1 standalone.
+        let mut rec1 = sample_agent_session("ag-r1-1", "executor", "/f1.jsonl");
+        rec1.prompt_id = Some("pid-1".into());
+        rec1.cost_nanos = 10_000_000;
+        rec1.total_tokens = 1000;
+
+        let mut rec2 = sample_agent_session("ag-r2-1", "planner", "/f1.jsonl");
+        rec2.prompt_id = Some("pid-1".into());
+        rec2.cost_nanos = 20_000_000;
+        rec2.total_tokens = 2000;
+
+        let mut rec3 = sample_agent_session("ag-r1-2", "executor", "/f2.jsonl");
+        rec3.prompt_id = None;
+        rec3.cost_nanos = 5_000_000;
+        rec3.total_tokens = 500;
+
+        insert_agent_session(&conn, &rec1).unwrap();
+        insert_agent_session(&conn, &rec2).unwrap();
+        insert_agent_session(&conn, &rec3).unwrap();
+
+        let tz = TzParams::default();
+        let telemetry = query_dashboard_agent_telemetry(&conn, &tz).unwrap();
+
+        // Totals.
+        assert_eq!(telemetry.totals.sessions, 3);
+        assert_eq!(telemetry.totals.total_tokens, 3500);
+        let expected_cost = 35_000_000_f64 / 1e9;
+        assert!(
+            (telemetry.totals.cost_usd - expected_cost).abs() < 1e-9,
+            "cost_usd mismatch: {} vs {}",
+            telemetry.totals.cost_usd,
+            expected_cost
+        );
+
+        // Distribution: 2 roles (executor with 2 sessions, planner with 1).
+        assert_eq!(telemetry.distribution.len(), 2, "must have 2 roles");
+        // Ordered by cost DESC: planner (20M nanos) > executor (15M nanos).
+        assert_eq!(telemetry.distribution[0].role, "planner");
+        assert_eq!(telemetry.distribution[1].role, "executor");
+        assert_eq!(telemetry.distribution[1].sessions, 2);
+
+        // Top sessions: all 3 present (limit 25 > 3).
+        assert_eq!(telemetry.top_sessions.len(), 3);
+
+        // Spawn batches: prompt_id "pid-1" has 2 members.
+        assert_eq!(telemetry.spawn_batches.len(), 1);
+        let batch = &telemetry.spawn_batches[0];
+        assert_eq!(batch.prompt_id, "pid-1");
+        assert_eq!(batch.size, 2);
+        // Roles should be sorted alphabetically.
+        assert_eq!(batch.roles, vec!["executor", "planner"]);
+
+        // Tool spectrum: each session has {"Edit":2,"Bash":1}.
+        // 3 sessions × executor+planner → per (role,tool) sums.
+        // executor: Edit=4, Bash=2 (2 sessions); planner: Edit=2, Bash=1 (1 session).
+        let total_cells = telemetry.tool_spectrum.len();
+        assert!(
+            total_cells >= 2,
+            "must have tool spectrum cells, got {total_cells}"
+        );
+
+        // Detected: both roles reported.
+        assert_eq!(telemetry.detected.len(), 2);
+        let detected_roles: Vec<&str> = telemetry
+            .detected
+            .iter()
+            .map(|d| d.raw_role.as_str())
+            .collect();
+        assert!(detected_roles.contains(&"executor"));
+        assert!(detected_roles.contains(&"planner"));
+        // registered = false since we didn't call upsert_agent_registry.
+        assert!(telemetry.detected.iter().all(|d| !d.registered));
     }
 }

@@ -1268,6 +1268,187 @@ pub struct SessionRow {
     pub credits: Option<f64>,
 }
 
+// ---------------------------------------------------------------------------
+// Agent telemetry types (Phase 25)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentSource {
+    Subagent,
+    Task,
+}
+
+impl AgentSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Subagent => "subagent",
+            Self::Task => "task",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "subagent" => Some(Self::Subagent),
+            "task" => Some(Self::Task),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RoleConfidence {
+    Meta,
+    Prompt,
+    Unknown,
+}
+
+impl RoleConfidence {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Meta => "meta",
+            Self::Prompt => "prompt",
+            Self::Unknown => "unknown",
+        }
+    }
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "meta" => Self::Meta,
+            "prompt" => Self::Prompt,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSessionRecord {
+    pub agent_id: String,
+    pub source: AgentSource,
+    pub project: String,
+    pub session_id: Option<String>,
+    pub ts_start: String,
+    pub ts_start_epoch: i64,
+    pub duration_s: i64,
+    pub role: String,
+    pub role_confidence: RoleConfidence,
+    pub description: String,
+    pub model: String,
+    pub input_tokens: i64,
+    pub cache_create_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub output_tokens: i64,
+    pub total_tokens: i64,
+    pub cost_nanos: i64,
+    pub api_calls: i64,
+    pub tool_uses: i64,
+    pub tools_json: String,
+    pub prompt_id: Option<String>,
+    pub stop_reason: Option<String>,
+    pub source_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRegistryRow {
+    pub project: String,
+    pub raw_role: String,
+    pub display_name: Option<String>,
+    pub description: Option<String>,
+    pub enabled: bool,
+    pub merged_into: Option<String>,
+    pub updated_at: String,
+}
+
+/// Patch payload for [`crate::scanner::db::upsert_agent_registry`].
+///
+/// Each field is a double `Option`:
+/// - `None`        → field omitted from the request; leave DB column unchanged.
+/// - `Some(None)`  → explicit null; clear the column.
+/// - `Some(Some(v))` → set the column to `v`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentRegistryUpdate {
+    pub display_name: Option<Option<String>>,
+    pub description: Option<Option<String>>,
+    pub enabled: Option<bool>,
+    pub merged_into: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentTelemetryTotals {
+    pub sessions: i64,
+    pub total_tokens: i64,
+    pub cost_usd: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentTimelinePoint {
+    pub bucket: String,
+    pub role: String,
+    pub cost_usd: f64,
+    pub sessions: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRoleAggregate {
+    pub role: String,
+    pub display_name: Option<String>,
+    pub sessions: i64,
+    pub total_tokens: i64,
+    pub cost_usd: f64,
+    pub tool_uses: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSessionRow {
+    pub agent_id: String,
+    pub project: String,
+    pub session_id: Option<String>,
+    pub role: String,
+    pub description: String,
+    pub model: String,
+    pub duration_s: i64,
+    pub total_tokens: i64,
+    pub cost_usd: f64,
+    pub stop_reason: Option<String>,
+    pub ts_start: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpawnBatch {
+    pub prompt_id: String,
+    pub spawned_at: String,
+    pub project: String,
+    pub size: i64,
+    pub roles: Vec<String>,
+    pub total_tokens: i64,
+    pub cost_usd: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSpectrumCell {
+    pub role: String,
+    pub tool: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetectedRole {
+    pub project: String,
+    pub raw_role: String,
+    pub count: i64,
+    pub registered: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentTelemetry {
+    pub totals: AgentTelemetryTotals,
+    pub timeline: Vec<AgentTimelinePoint>,
+    pub distribution: Vec<AgentRoleAggregate>,
+    pub top_sessions: Vec<AgentSessionRow>,
+    pub spawn_batches: Vec<SpawnBatch>,
+    pub tool_spectrum: Vec<ToolSpectrumCell>,
+    pub detected: Vec<DetectedRole>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
