@@ -474,7 +474,8 @@ export function createDashboardRuntime(): DashboardRuntime {
   }
 
   function maybeLoadToday(): void {
-    if (activeDashboardTab.value !== 'today') return;
+    // Today widgets now live on the Activity tab.
+    if (activeDashboardTab.value !== 'activity') return;
     void loadToday(selectedDate.value, currentTimezoneOffsetMinutes()).then(data => {
       if (data) renderTodayView(data, handleDateChange);
     });
@@ -487,8 +488,8 @@ export function createDashboardRuntime(): DashboardRuntime {
       activeDashboardTab.value = tab;
       syncDashboardUrl();
       refreshSectionVisibility();
-      if (tab === 'today') {
-        // Re-render if data already available, otherwise fetch.
+      if (tab === 'activity') {
+        // Re-render today widgets if data already available, otherwise fetch.
         if (todayData.value) {
           renderTodayView(todayData.value, handleDateChange);
         } else {

@@ -5551,15 +5551,7 @@ pub fn query_days_hours_window(
 // Feature 2: screen_layouts CRUD
 // ---------------------------------------------------------------------------
 
-const KNOWN_SCREENS: &[&str] = &[
-    "overview",
-    "activity",
-    "breakdowns",
-    "tables",
-    "today",
-    "projects",
-    "backup",
-];
+const KNOWN_SCREENS: &[&str] = &["overview", "activity", "breakdowns", "tables", "projects"];
 
 /// Returns `true` if `screen` is one of the known dashboard screen identifiers.
 pub fn is_known_screen(screen: &str) -> bool {

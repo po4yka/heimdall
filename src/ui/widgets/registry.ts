@@ -15,9 +15,7 @@ export type DashboardScreen =
   | 'activity'
   | 'breakdowns'
   | 'tables'
-  | 'today'
-  | 'projects'
-  | 'backup';
+  | 'projects';
 
 export interface PlacedWidget {
   i: string;
@@ -532,7 +530,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     title: 'Date picker',
     description: 'Select a specific date to view',
     category: 'today',
-    screens: ['today'],
+    screens: ['activity'],
     defaultSize: { w: 4, h: 1 },
     minW: 2,
     minH: 1,
@@ -543,7 +541,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     title: 'Today KPIs',
     description: 'Key metrics for the selected day',
     category: 'today',
-    screens: ['today'],
+    screens: ['activity'],
     defaultSize: { w: 4, h: 1 },
     minW: 2,
     minH: 1,
@@ -558,7 +556,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     title: 'Hour timeline',
     description: 'Token usage timeline for each hour of the selected day',
     category: 'today',
-    screens: ['today'],
+    screens: ['activity'],
     defaultSize: { w: 4, h: 3 },
     minW: 2,
     minH: 2,
@@ -572,7 +570,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     title: 'Hour heatstrip',
     description: 'Single-row heat strip showing hourly intensity',
     category: 'today',
-    screens: ['today'],
+    screens: ['activity'],
     defaultSize: { w: 4, h: 2 },
     minW: 2,
     minH: 1,
@@ -586,7 +584,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     title: '30-day heat grid',
     description: '30 days × 24 hours usage grid',
     category: 'today',
-    screens: ['today'],
+    screens: ['activity'],
     defaultSize: { w: 4, h: 4 },
     minW: 2,
     minH: 2,
@@ -600,7 +598,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     title: '7-day heat grid',
     description: '7 days × 24 hours usage grid',
     category: 'today',
-    screens: ['today'],
+    screens: ['activity'],
     defaultSize: { w: 4, h: 3 },
     minW: 2,
     minH: 2,
@@ -614,29 +612,13 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     title: 'Weekday × hour pattern',
     description: '7×24 behavioral heatmap over a 90-day window',
     category: 'today',
-    screens: ['today'],
+    screens: ['activity'],
     defaultSize: { w: 4, h: 3 },
     minW: 2,
     minH: 2,
     render: (el) => {
       el.id = 'today-weekday-hour-mount';
       el.className = 'card card-flat bento-full';
-    },
-  },
-
-  // ── Backup tab ────────────────────────────────────────────────────────────
-  {
-    id: 'backup-panel',
-    title: 'Backup',
-    description: 'Snapshot management and export',
-    category: 'system',
-    screens: ['backup'],
-    defaultSize: { w: 4, h: 4 },
-    minW: 2,
-    minH: 2,
-    render: (el: HTMLElement) => {
-      el.id = 'backup-panel';
-      invokeMountCallback('backup-panel', el);
     },
   },
 

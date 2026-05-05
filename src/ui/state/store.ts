@@ -54,7 +54,7 @@ export const archiveImports = signal<ImportMeta[]>([]);
 
 // ── Filter state ─────────────────────────────────────────────────────
 export type ProviderFilter = 'claude' | 'codex' | 'both';
-export type DashboardTab = 'overview' | 'activity' | 'breakdowns' | 'tables' | 'backup' | 'today' | 'projects';
+export type DashboardTab = 'overview' | 'activity' | 'breakdowns' | 'tables' | 'projects';
 
 // ── Feature 3: Today view state ───────────────────────────────────────────────
 /// null means "resolve today server-side"; a YYYY-MM-DD string pins a specific day.
@@ -135,6 +135,9 @@ export const statusByPlacement = signal<Record<StatusPlacement, StatusEntry | nu
 
 // ── Agent telemetry UI state ─────────────────────────────────────────
 export const registryModalOpen = signal<{ project: string } | null>(null);
+// Backup/snapshot modal — opened from Header `[BACKUP]` button or `#/backup`
+// hash route. Replaces the old top-level `backup` tab.
+export const backupModalOpen = signal<boolean>(false);
 export const setupBannerDismissed = signal(false);
 
 // ── Project management state ────────────────────────────────────────
@@ -194,7 +197,11 @@ function readRangeFromUrl(): RangeKey {
 
 function readDashboardTab(): DashboardTab {
   const p = readSearchParam(DASHBOARD_TAB_PARAM);
-  return (['overview', 'activity', 'breakdowns', 'tables', 'backup', 'today', 'projects'] as DashboardTab[]).includes(p as DashboardTab)
+  // Backwards-compat for legacy URLs: `today` was folded into `activity`,
+  // `backup` was moved to a header-launched modal (see #/backup hash route).
+  if (p === 'today') return 'activity';
+  if (p === 'backup') return 'overview';
+  return (['overview', 'activity', 'breakdowns', 'tables', 'projects'] as DashboardTab[]).includes(p as DashboardTab)
     ? (p as DashboardTab)
     : 'overview';
 }
@@ -331,7 +338,9 @@ export function syncDashboardUrl(): void {
   const params = new URLSearchParams();
 
   if (activeDashboardTab.value !== 'overview') params.set(DASHBOARD_TAB_PARAM, activeDashboardTab.value);
-  if (activeDashboardTab.value === 'today' && selectedDate.value) {
+  // Today widgets now live on the Activity tab; preserve a pinned date in
+  // the URL when the user is on Activity (where the date picker lives).
+  if (activeDashboardTab.value === 'activity' && selectedDate.value) {
     params.set(TODAY_DATE_PARAM, selectedDate.value);
   }
   if (selectedRange.value !== '30d') params.set('range', selectedRange.value);

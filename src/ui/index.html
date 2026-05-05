@@ -17,8 +17,8 @@
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <div id="header-mount"></div>
-<div id="filter-bar-mount"></div>
 <div id="dashboard-tabs-mount" style="max-width:1400px;margin:12px auto 0;padding:0 24px"></div>
+<div id="filter-bar-mount"></div>
 <div id="inline-status-global" style="max-width:1400px;margin:12px auto 0;padding:0 24px"></div>
 <div id="empty-state-mount" style="max-width:1400px;margin:0 auto;padding:0 24px"></div>
 
@@ -28,6 +28,9 @@
 
   <!-- Agent registry modal mount (always present, renders nothing when closed) -->
   <div id="agent-registry-modal-mount"></div>
+
+  <!-- Backup/snapshot modal mount (opened from Header [BACKUP] button or #/backup hash) -->
+  <div id="backup-modal-mount"></div>
 
   <!-- Imports tab -->
   <div class="bento-full" id="imports-panel" style="display:none"></div>

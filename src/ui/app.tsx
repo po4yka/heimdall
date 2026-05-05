@@ -1,5 +1,5 @@
 import { render } from 'preact';
-import { BackupPanel } from './components/BackupPanel';
+import { BackupModal } from './components/BackupModal';
 import { ImportsPanel } from './components/ImportsPanel';
 import { WebCapturesPanel } from './components/WebCapturesPanel';
 import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
@@ -18,6 +18,7 @@ import { applyTheme, getTheme } from './lib/theme';
 import { startVersionPoll } from './lib/version-poll';
 import {
   activeDashboardTab,
+  backupModalOpen,
   backupSnapshots,
   backupLoadState,
   archiveImports,
@@ -129,17 +130,35 @@ if (globalStatusMount && dashboardRuntime) {
 // Register mount callbacks for components that require Preact render + callbacks.
 // These are called by the WidgetGrid when it mounts the respective widget elements.
 if (dashboardRuntime) {
-  registerMountCallback('backup-panel', (el) => {
-    render(
-      <BackupPanel onSnapshot={triggerSnapshot} onReload={loadBackupSnapshots} />,
-      el,
-    );
-    void loadBackupSnapshots();
-  });
   registerMountCallback('projects-registry', (el) => {
     render(<ProjectsRegistry onReload={dashboardRuntime.loadData} />, el);
   });
 }
+
+// Backup/snapshot modal — replaces the old `backup` tab. Mirror the
+// AgentRegistryModal reactive-render pattern: subscribe to the open signal
+// and render-or-clear into the dedicated mount div.
+const backupModalMount = document.getElementById('backup-modal-mount');
+if (backupModalMount && dashboardRuntime) {
+  function BackupModalRoot() {
+    if (!backupModalOpen.value) return null;
+    return <BackupModal onSnapshot={triggerSnapshot} onReload={loadBackupSnapshots} />;
+  }
+  backupModalOpen.subscribe(() => {
+    render(<BackupModalRoot />, backupModalMount);
+  });
+}
+
+// `#/backup` hash routing — orthogonal to `?tab=` and `#/project/<uuid>`.
+// Lets users deep-link to the backup modal and survives reloads.
+function readBackupFromHash(): boolean {
+  return /^#\/backup\b/.test(window.location.hash);
+}
+function applyBackupHash(): void {
+  backupModalOpen.value = readBackupFromHash();
+}
+window.addEventListener('hashchange', applyBackupHash);
+applyBackupHash();
 
 // Mount all screen grids into #widget-grid-mount.
 // The ScreenGridManager shows only the active screen's grid; others are hidden.

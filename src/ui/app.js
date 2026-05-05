@@ -1105,6 +1105,7 @@
     "project-registry": null
   });
   var registryModalOpen = y3(null);
+  var backupModalOpen = y3(false);
   var setupBannerDismissed = y3(false);
   var selectedProjectUuid = y3(null);
   var projectsRegistry = y3([]);
@@ -1135,7 +1136,9 @@
   }
   function readDashboardTab() {
     const p5 = readSearchParam(DASHBOARD_TAB_PARAM);
-    return ["overview", "activity", "breakdowns", "tables", "backup", "today", "projects"].includes(p5) ? p5 : "overview";
+    if (p5 === "today") return "activity";
+    if (p5 === "backup") return "overview";
+    return ["overview", "activity", "breakdowns", "tables", "projects"].includes(p5) ? p5 : "overview";
   }
   function readProviderFromUrl() {
     const p5 = readSearchParam("provider");
@@ -1233,7 +1236,7 @@
     const allModels = rawData.value?.all_models ?? [];
     const params = new URLSearchParams();
     if (activeDashboardTab.value !== "overview") params.set(DASHBOARD_TAB_PARAM, activeDashboardTab.value);
-    if (activeDashboardTab.value === "today" && selectedDate.value) {
+    if (activeDashboardTab.value === "activity" && selectedDate.value) {
       params.set(TODAY_DATE_PARAM, selectedDate.value);
     }
     if (selectedRange.value !== "30d") params.set("range", selectedRange.value);
@@ -1413,6 +1416,52 @@
         ] }, s4.snapshot_id)) })
       ] })
     ] });
+  }
+
+  // src/ui/components/BackupModal.tsx
+  function closeModal() {
+    backupModalOpen.value = false;
+    if (/^#\/backup\b/.test(window.location.hash)) {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }
+  function BackupModal({ onSnapshot, onReload }) {
+    y2(() => {
+      const handler = (e4) => {
+        if (e4.key === "Escape") closeModal();
+      };
+      window.addEventListener("keydown", handler);
+      return () => window.removeEventListener("keydown", handler);
+    }, []);
+    y2(() => {
+      void onReload();
+    }, [onReload]);
+    return /* @__PURE__ */ u4("div", { class: "agent-registry-overlay", onClick: closeModal, children: /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "agent-registry-modal",
+        onClick: (e4) => e4.stopPropagation(),
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": "Backup and snapshots",
+        children: [
+          /* @__PURE__ */ u4("div", { class: "agent-registry-header", children: [
+            /* @__PURE__ */ u4("h2", { class: "agent-registry-title", children: "Backup & snapshots" }),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "agent-registry-close",
+                "aria-label": "Close",
+                onClick: closeModal,
+                children: "[X]"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ u4("div", { style: { padding: "0 20px 20px" }, children: /* @__PURE__ */ u4(BackupPanel, { onSnapshot, onReload }) })
+        ]
+      }
+    ) });
   }
 
   // src/ui/components/ImportsPanel.tsx
@@ -5161,12 +5210,12 @@
   // src/ui/components/DashboardTabs.tsx
   var TABS = [
     { key: "overview", label: "Overview" },
-    { key: "today", label: "Today" },
     { key: "activity", label: "Activity" },
     { key: "breakdowns", label: "Breakdowns" },
-    { key: "tables", label: "Tables" },
-    { key: "projects", label: "Projects" },
-    { key: "backup", label: "Backup" }
+    // Internal screen id stays `tables` so saved layouts and `?tab=tables`
+    // bookmarks keep working — only the visible label changed (2026-05-05).
+    { key: "tables", label: "Sessions" },
+    { key: "projects", label: "Projects" }
   ];
   function DashboardTabs({ onTabChange }) {
     return /* @__PURE__ */ u4("nav", { id: "dashboard-tabs", role: "tablist", "aria-label": "Dashboard sections", children: TABS.map((tab) => {
@@ -5632,6 +5681,21 @@
             "aria-pressed": isEditing,
             "aria-label": isEditing ? "Done editing layout" : "Edit layout",
             children: isEditing ? "[DONE]" : "[EDIT LAYOUT]"
+          }
+        ),
+        !isMobile && /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: "header-button",
+            onClick: () => {
+              backupModalOpen.value = true;
+              if (!/^#\/backup\b/.test(window.location.hash)) {
+                history.replaceState(null, "", `${window.location.pathname}${window.location.search}#/backup`);
+              }
+            },
+            "aria-label": "Open backup and snapshots",
+            children: "[BACKUP]"
           }
         ),
         /* @__PURE__ */ u4(
@@ -10617,14 +10681,13 @@ ${row.project}` : row.project;
     "sessions-mount": "tables",
     "project-cost-mount": "tables",
     "projects-registry": "projects",
-    "backup-panel": "backup",
-    "today-date-picker-mount": "today",
-    "today-kpis-mount": "today",
-    "today-hour-timeline-mount": "today",
-    "today-hour-heatstrip-mount": "today",
-    "today-days-hours-30-mount": "today",
-    "today-days-hours-7-mount": "today",
-    "today-weekday-hour-mount": "today"
+    "today-date-picker-mount": "activity",
+    "today-kpis-mount": "activity",
+    "today-hour-timeline-mount": "activity",
+    "today-hour-heatstrip-mount": "activity",
+    "today-days-hours-30-mount": "activity",
+    "today-days-hours-7-mount": "activity",
+    "today-weekday-hour-mount": "activity"
   };
   var SECTION_DISPLAY_MODE = {
     "usage-windows": "grid",
@@ -11566,7 +11629,7 @@ ${row.project}` : row.project;
       });
     }
     function maybeLoadToday() {
-      if (activeDashboardTab.value !== "today") return;
+      if (activeDashboardTab.value !== "activity") return;
       void loadToday(selectedDate.value, currentTimezoneOffsetMinutes()).then((data) => {
         if (data) renderTodayView(data, handleDateChange);
       });
@@ -11578,7 +11641,7 @@ ${row.project}` : row.project;
         activeDashboardTab.value = tab;
         syncDashboardUrl();
         refreshSectionVisibility();
-        if (tab === "today") {
+        if (tab === "activity") {
           if (todayData.value) {
             renderTodayView(todayData.value, handleDateChange);
           } else {
@@ -18877,7 +18940,7 @@ ${row.project}` : row.project;
       title: "Date picker",
       description: "Select a specific date to view",
       category: "today",
-      screens: ["today"],
+      screens: ["activity"],
       defaultSize: { w: 4, h: 1 },
       minW: 2,
       minH: 1,
@@ -18888,7 +18951,7 @@ ${row.project}` : row.project;
       title: "Today KPIs",
       description: "Key metrics for the selected day",
       category: "today",
-      screens: ["today"],
+      screens: ["activity"],
       defaultSize: { w: 4, h: 1 },
       minW: 2,
       minH: 1,
@@ -18903,7 +18966,7 @@ ${row.project}` : row.project;
       title: "Hour timeline",
       description: "Token usage timeline for each hour of the selected day",
       category: "today",
-      screens: ["today"],
+      screens: ["activity"],
       defaultSize: { w: 4, h: 3 },
       minW: 2,
       minH: 2,
@@ -18917,7 +18980,7 @@ ${row.project}` : row.project;
       title: "Hour heatstrip",
       description: "Single-row heat strip showing hourly intensity",
       category: "today",
-      screens: ["today"],
+      screens: ["activity"],
       defaultSize: { w: 4, h: 2 },
       minW: 2,
       minH: 1,
@@ -18931,7 +18994,7 @@ ${row.project}` : row.project;
       title: "30-day heat grid",
       description: "30 days \xD7 24 hours usage grid",
       category: "today",
-      screens: ["today"],
+      screens: ["activity"],
       defaultSize: { w: 4, h: 4 },
       minW: 2,
       minH: 2,
@@ -18945,7 +19008,7 @@ ${row.project}` : row.project;
       title: "7-day heat grid",
       description: "7 days \xD7 24 hours usage grid",
       category: "today",
-      screens: ["today"],
+      screens: ["activity"],
       defaultSize: { w: 4, h: 3 },
       minW: 2,
       minH: 2,
@@ -18959,28 +19022,13 @@ ${row.project}` : row.project;
       title: "Weekday \xD7 hour pattern",
       description: "7\xD724 behavioral heatmap over a 90-day window",
       category: "today",
-      screens: ["today"],
+      screens: ["activity"],
       defaultSize: { w: 4, h: 3 },
       minW: 2,
       minH: 2,
       render: (el) => {
         el.id = "today-weekday-hour-mount";
         el.className = "card card-flat bento-full";
-      }
-    },
-    // ── Backup tab ────────────────────────────────────────────────────────────
-    {
-      id: "backup-panel",
-      title: "Backup",
-      description: "Snapshot management and export",
-      category: "system",
-      screens: ["backup"],
-      defaultSize: { w: 4, h: 4 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "backup-panel";
-        invokeMountCallback("backup-panel", el);
       }
     },
     // ── Projects tab ──────────────────────────────────────────────────────────
@@ -19035,15 +19083,24 @@ ${row.project}` : row.project;
   ]);
   function makeActivityWidgets() {
     const widgets = [
+      // Today block — drilldown for the selected date.
+      { i: "today-date-picker-mount", x: 0, y: 0, w: 4, h: 1 },
+      { i: "today-kpis-mount", x: 0, y: 1, w: 4, h: 1 },
+      { i: "today-hour-timeline-mount", x: 0, y: 2, w: 4, h: 3 },
+      { i: "today-hour-heatstrip-mount", x: 0, y: 5, w: 4, h: 2 },
+      { i: "today-days-hours-30-mount", x: 0, y: 7, w: 4, h: 4 },
+      { i: "today-days-hours-7-mount", x: 0, y: 11, w: 4, h: 3 },
+      { i: "today-weekday-hour-mount", x: 0, y: 14, w: 4, h: 3 },
+      // Range block — applies the dashboard filter strip.
       // Codex plan history — full width
-      { i: "codex-plan-history-mount", x: 0, y: 0, w: 4, h: 3 },
+      { i: "codex-plan-history-mount", x: 0, y: 17, w: 4, h: 3 },
       // Charts row: daily (2 wide) | model (1) | project (1)
-      { i: "daily-chart-card", x: 0, y: 3, w: 2, h: 3, minW: 1, minH: 2 },
-      { i: "model-chart-card", x: 2, y: 3, w: 1, h: 3, minW: 1, minH: 2 },
-      { i: "project-chart-card", x: 3, y: 3, w: 1, h: 3, minW: 1, minH: 2 },
+      { i: "daily-chart-card", x: 0, y: 20, w: 2, h: 3, minW: 1, minH: 2 },
+      { i: "model-chart-card", x: 2, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
+      { i: "project-chart-card", x: 3, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
       // Hourly chart (2 wide) then activity heatmap full width
-      { i: "hourly-chart", x: 0, y: 6, w: 2, h: 3, minW: 1, minH: 2 },
-      { i: "activity-heatmap", x: 0, y: 9, w: 4, h: 2, minW: 2, minH: 2 }
+      { i: "hourly-chart", x: 0, y: 23, w: 2, h: 3, minW: 1, minH: 2 },
+      { i: "activity-heatmap", x: 0, y: 26, w: 4, h: 2, minW: 2, minH: 2 }
     ];
     return widgets;
   }
@@ -19069,29 +19126,15 @@ ${row.project}` : row.project;
     { id: "sessions-mount", h: 5 },
     { id: "project-cost-mount", h: 4 }
   ]);
-  var TODAY_WIDGETS = stack([
-    { id: "today-date-picker-mount", h: 1 },
-    { id: "today-kpis-mount", h: 1 },
-    { id: "today-hour-timeline-mount", h: 3 },
-    { id: "today-hour-heatstrip-mount", h: 2 },
-    { id: "today-days-hours-30-mount", h: 4 },
-    { id: "today-days-hours-7-mount", h: 3 },
-    { id: "today-weekday-hour-mount", h: 3 }
-  ]);
   var PROJECTS_WIDGETS = stack([
     { id: "projects-registry", h: 12 }
-  ]);
-  var BACKUP_WIDGETS = stack([
-    { id: "backup-panel", h: 4 }
   ]);
   var DEFAULT_LAYOUTS = {
     overview: { widgets: OVERVIEW_WIDGETS, hidden: [] },
     activity: { widgets: makeActivityWidgets(), hidden: [] },
     breakdowns: { widgets: BREAKDOWNS_WIDGETS, hidden: [] },
     tables: { widgets: TABLES_WIDGETS, hidden: [] },
-    today: { widgets: TODAY_WIDGETS, hidden: [] },
-    projects: { widgets: PROJECTS_WIDGETS, hidden: [] },
-    backup: { widgets: BACKUP_WIDGETS, hidden: [] }
+    projects: { widgets: PROJECTS_WIDGETS, hidden: [] }
   };
 
   // src/ui/components/widgets/AddWidgetPicker.tsx
@@ -19490,9 +19533,7 @@ ${row.project}` : row.project;
     "activity",
     "breakdowns",
     "tables",
-    "today",
-    "projects",
-    "backup"
+    "projects"
   ];
   function ScreenGridManager() {
     const activeScreen = activeDashboardTab.value;
@@ -19595,17 +19636,30 @@ ${row.project}` : row.project;
     R(/* @__PURE__ */ u4(InlineStatus, { placement: "global" }), globalStatusMount);
   }
   if (dashboardRuntime) {
-    registerMountCallback("backup-panel", (el) => {
-      R(
-        /* @__PURE__ */ u4(BackupPanel, { onSnapshot: triggerSnapshot, onReload: loadBackupSnapshots }),
-        el
-      );
-      void loadBackupSnapshots();
-    });
     registerMountCallback("projects-registry", (el) => {
       R(/* @__PURE__ */ u4(ProjectsRegistry, { onReload: dashboardRuntime.loadData }), el);
     });
   }
+  var backupModalMount = document.getElementById("backup-modal-mount");
+  if (backupModalMount && dashboardRuntime) {
+    let BackupModalRoot = function() {
+      if (!backupModalOpen.value) return null;
+      return /* @__PURE__ */ u4(BackupModal, { onSnapshot: triggerSnapshot, onReload: loadBackupSnapshots });
+    };
+    BackupModalRoot2 = BackupModalRoot;
+    backupModalOpen.subscribe(() => {
+      R(/* @__PURE__ */ u4(BackupModalRoot, {}), backupModalMount);
+    });
+  }
+  var BackupModalRoot2;
+  function readBackupFromHash() {
+    return /^#\/backup\b/.test(window.location.hash);
+  }
+  function applyBackupHash() {
+    backupModalOpen.value = readBackupFromHash();
+  }
+  window.addEventListener("hashchange", applyBackupHash);
+  applyBackupHash();
   var widgetGridMount = document.getElementById("widget-grid-mount");
   if (widgetGridMount && dashboardRuntime) {
     let renderGridManager = function() {

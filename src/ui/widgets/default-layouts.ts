@@ -44,18 +44,30 @@ const OVERVIEW_WIDGETS = stack([
   { id: 'stats-row',             h: 1 },
 ]);
 
-// Activity: charts sit side by side in two rows, then full-width items.
+// Activity: today-drilldown widgets (date picker + KPIs + hour-bucket
+// heatmaps) live at the top, followed by the broader range charts.
+// Today was a separate tab pre-2026-05-05; it folded into Activity so the
+// strip could shrink from 7 → 5 tabs.
 function makeActivityWidgets(): PlacedWidget[] {
   const widgets: PlacedWidget[] = [
+    // Today block — drilldown for the selected date.
+    { i: 'today-date-picker-mount',    x: 0, y: 0,  w: 4, h: 1 },
+    { i: 'today-kpis-mount',           x: 0, y: 1,  w: 4, h: 1 },
+    { i: 'today-hour-timeline-mount',  x: 0, y: 2,  w: 4, h: 3 },
+    { i: 'today-hour-heatstrip-mount', x: 0, y: 5,  w: 4, h: 2 },
+    { i: 'today-days-hours-30-mount',  x: 0, y: 7,  w: 4, h: 4 },
+    { i: 'today-days-hours-7-mount',   x: 0, y: 11, w: 4, h: 3 },
+    { i: 'today-weekday-hour-mount',   x: 0, y: 14, w: 4, h: 3 },
+    // Range block — applies the dashboard filter strip.
     // Codex plan history — full width
-    { i: 'codex-plan-history-mount', x: 0, y: 0, w: 4, h: 3 },
+    { i: 'codex-plan-history-mount',   x: 0, y: 17, w: 4, h: 3 },
     // Charts row: daily (2 wide) | model (1) | project (1)
-    { i: 'daily-chart-card',  x: 0, y: 3, w: 2, h: 3, minW: 1, minH: 2 },
-    { i: 'model-chart-card',  x: 2, y: 3, w: 1, h: 3, minW: 1, minH: 2 },
-    { i: 'project-chart-card', x: 3, y: 3, w: 1, h: 3, minW: 1, minH: 2 },
+    { i: 'daily-chart-card',           x: 0, y: 20, w: 2, h: 3, minW: 1, minH: 2 },
+    { i: 'model-chart-card',           x: 2, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
+    { i: 'project-chart-card',         x: 3, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
     // Hourly chart (2 wide) then activity heatmap full width
-    { i: 'hourly-chart',     x: 0, y: 6, w: 2, h: 3, minW: 1, minH: 2 },
-    { i: 'activity-heatmap', x: 0, y: 9, w: 4, h: 2, minW: 2, minH: 2 },
+    { i: 'hourly-chart',               x: 0, y: 23, w: 2, h: 3, minW: 1, minH: 2 },
+    { i: 'activity-heatmap',           x: 0, y: 26, w: 4, h: 2, minW: 2, minH: 2 },
   ];
   return widgets;
 }
@@ -84,22 +96,8 @@ const TABLES_WIDGETS = stack([
   { id: 'project-cost-mount', h: 4 },
 ]);
 
-const TODAY_WIDGETS = stack([
-  { id: 'today-date-picker-mount',    h: 1 },
-  { id: 'today-kpis-mount',           h: 1 },
-  { id: 'today-hour-timeline-mount',  h: 3 },
-  { id: 'today-hour-heatstrip-mount', h: 2 },
-  { id: 'today-days-hours-30-mount',  h: 4 },
-  { id: 'today-days-hours-7-mount',   h: 3 },
-  { id: 'today-weekday-hour-mount',   h: 3 },
-]);
-
 const PROJECTS_WIDGETS = stack([
   { id: 'projects-registry', h: 12 },
-]);
-
-const BACKUP_WIDGETS = stack([
-  { id: 'backup-panel', h: 4 },
 ]);
 
 export const DEFAULT_LAYOUTS: Record<DashboardScreen, ScreenLayout> = {
@@ -107,7 +105,5 @@ export const DEFAULT_LAYOUTS: Record<DashboardScreen, ScreenLayout> = {
   activity:   { widgets: makeActivityWidgets(), hidden: [] },
   breakdowns: { widgets: BREAKDOWNS_WIDGETS,  hidden: [] },
   tables:     { widgets: TABLES_WIDGETS,      hidden: [] },
-  today:      { widgets: TODAY_WIDGETS,       hidden: [] },
   projects:   { widgets: PROJECTS_WIDGETS,    hidden: [] },
-  backup:     { widgets: BACKUP_WIDGETS,      hidden: [] },
 };

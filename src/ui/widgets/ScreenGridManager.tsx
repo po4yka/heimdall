@@ -18,9 +18,7 @@ const ALL_SCREENS: DashboardScreen[] = [
   'activity',
   'breakdowns',
   'tables',
-  'today',
   'projects',
-  'backup',
 ];
 
 export function ScreenGridManager() {

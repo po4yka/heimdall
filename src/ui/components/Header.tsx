@@ -3,7 +3,7 @@ import { createTriggerRescan } from '../lib/rescan';
 import { setStatus } from '../lib/status';
 import { InlineStatus } from './InlineStatus';
 import { VersionPill } from './VersionPill';
-import { metaText, planBadge, rescanLabel, rescanDisabled, themeMode, editMode } from '../state/store';
+import { metaText, planBadge, rescanLabel, rescanDisabled, themeMode, editMode, backupModalOpen } from '../state/store';
 
 interface HeaderProps {
   onDataReload: (force?: boolean) => Promise<void>;
@@ -148,6 +148,21 @@ export function Header({
             aria-label={isEditing ? 'Done editing layout' : 'Edit layout'}
           >
             {isEditing ? '[DONE]' : '[EDIT LAYOUT]'}
+          </button>
+        )}
+        {!isMobile && (
+          <button
+            type="button"
+            class="header-button"
+            onClick={() => {
+              backupModalOpen.value = true;
+              if (!/^#\/backup\b/.test(window.location.hash)) {
+                history.replaceState(null, '', `${window.location.pathname}${window.location.search}#/backup`);
+              }
+            }}
+            aria-label="Open backup and snapshots"
+          >
+            [BACKUP]
           </button>
         )}
         <button

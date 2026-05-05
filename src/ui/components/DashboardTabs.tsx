@@ -2,12 +2,12 @@ import { activeDashboardTab, type DashboardTab } from '../state/store';
 
 const TABS: Array<{ key: DashboardTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
-  { key: 'today', label: 'Today' },
   { key: 'activity', label: 'Activity' },
   { key: 'breakdowns', label: 'Breakdowns' },
-  { key: 'tables', label: 'Tables' },
+  // Internal screen id stays `tables` so saved layouts and `?tab=tables`
+  // bookmarks keep working — only the visible label changed (2026-05-05).
+  { key: 'tables', label: 'Sessions' },
   { key: 'projects', label: 'Projects' },
-  { key: 'backup', label: 'Backup' },
 ];
 
 interface DashboardTabsProps {
