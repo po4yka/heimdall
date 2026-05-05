@@ -1470,6 +1470,16 @@ pub struct AgentSessionRecord {
     pub source_path: String,
 }
 
+/// A detected change in an agent's terminal `stop_reason` between scan
+/// passes. Produced by the scanner before overwriting an existing
+/// `agent_sessions` row, then drained by the dashboard server to drive
+/// `agent_stop_reason_transition` webhook events.
+#[derive(Debug, Clone)]
+pub struct AgentStopReasonTransition {
+    pub record: AgentSessionRecord,
+    pub prev_stop_reason: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentRegistryRow {
     pub project: String,

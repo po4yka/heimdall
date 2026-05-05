@@ -338,6 +338,23 @@ fn create_schema(conn: &Connection) -> Result<()> {
         );",
     )?;
 
+    // Persistent webhook-emission dedup state. Keyed by (event_type, dedup_key)
+    // so independent event families coexist. `last_value` stores the value most
+    // recently emitted (for value-transition dedup), and `last_emitted_at` is
+    // an RFC3339 timestamp for diagnostics / future TTL pruning.
+    // CREATE TABLE IF NOT EXISTS only — no migration probe (matches agent_registry).
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS webhook_emitted (
+            event_type       TEXT NOT NULL,
+            dedup_key        TEXT NOT NULL,
+            last_value       TEXT,
+            last_emitted_at  TEXT NOT NULL,
+            PRIMARY KEY (event_type, dedup_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_webhook_emitted_time
+            ON webhook_emitted(last_emitted_at);",
+    )?;
+
     // Project management: per-project pinning + custom labels + UUID handles.
     // CREATE TABLE IF NOT EXISTS only — no migration probe (matches agent_registry).
     conn.execute_batch(
@@ -4662,6 +4679,67 @@ pub fn delete_agent_sessions_by_path(
         "DELETE FROM agent_sessions WHERE source_path = ?1",
         rusqlite::params![source_path],
     )
+}
+
+/// SELECT the prior `stop_reason` for one `(source, project, agent_id)` row,
+/// or `Ok(None)` if no row exists. Used by the scanner to detect terminal
+/// stop_reason transitions before overwriting an existing agent_sessions row.
+pub fn select_prior_agent_stop_reason(
+    conn: &Connection,
+    source: &str,
+    project: &str,
+    agent_id: &str,
+) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT stop_reason FROM agent_sessions
+         WHERE source = ?1 AND project = ?2 AND agent_id = ?3",
+        rusqlite::params![source, project, agent_id],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .optional()
+    .map(|opt| opt.flatten())
+}
+
+/// Look up the value most recently emitted for `(event_type, dedup_key)`.
+///
+/// Returns `Ok(None)` when no emission has ever been recorded. Returns
+/// `Ok(Some(""))` when a row exists but the stored value is SQL NULL — callers
+/// compare string equality against the new value, so the empty-string collapse
+/// is safe (real `stop_reason` values are non-empty).
+pub fn get_webhook_emitted(
+    conn: &Connection,
+    event_type: &str,
+    dedup_key: &str,
+) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT last_value FROM webhook_emitted
+         WHERE event_type = ?1 AND dedup_key = ?2",
+        rusqlite::params![event_type, dedup_key],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .optional()
+    .map(|opt| opt.map(|inner| inner.unwrap_or_default()))
+}
+
+/// Insert or refresh the persistent dedup row for `(event_type, dedup_key)`.
+///
+/// `last_emitted_at` is set to `strftime('%Y-%m-%dT%H:%M:%SZ','now')` so the
+/// caller does not need to format a timestamp.
+pub fn upsert_webhook_emitted(
+    conn: &Connection,
+    event_type: &str,
+    dedup_key: &str,
+    value: Option<&str>,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO webhook_emitted (event_type, dedup_key, last_value, last_emitted_at)
+         VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+         ON CONFLICT(event_type, dedup_key) DO UPDATE SET
+             last_value      = excluded.last_value,
+             last_emitted_at = excluded.last_emitted_at",
+        rusqlite::params![event_type, dedup_key, value],
+    )?;
+    Ok(())
 }
 
 /// Read one `agent_registry` row by primary key.
@@ -9264,5 +9342,95 @@ mod tests {
             .unwrap_or(&raw_project)
             .to_string();
         assert_eq!(resolved, "raw-slug");
+    }
+
+    // -----------------------------------------------------------------------
+    // webhook_emitted + select_prior_agent_stop_reason helpers
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn webhook_emitted_get_returns_none_when_absent() {
+        let conn = test_conn();
+        let v = get_webhook_emitted(&conn, "agent_stop_reason_transition", "missing").unwrap();
+        assert!(v.is_none(), "missing key must return None");
+    }
+
+    #[test]
+    fn webhook_emitted_upsert_inserts_then_updates_value() {
+        let conn = test_conn();
+        let event = "agent_stop_reason_transition";
+        let key = "subagent|proj|agent-1";
+
+        // Initial insert with a value.
+        upsert_webhook_emitted(&conn, event, key, Some("max_tokens")).unwrap();
+        assert_eq!(
+            get_webhook_emitted(&conn, event, key).unwrap().as_deref(),
+            Some("max_tokens"),
+        );
+
+        // Upsert overwrites the value (and refreshes timestamp).
+        upsert_webhook_emitted(&conn, event, key, Some("refusal")).unwrap();
+        assert_eq!(
+            get_webhook_emitted(&conn, event, key).unwrap().as_deref(),
+            Some("refusal"),
+        );
+
+        // Only one row should exist for this (event_type, dedup_key).
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM webhook_emitted WHERE event_type = ?1 AND dedup_key = ?2",
+                rusqlite::params![event, key],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "upsert must not create duplicate rows");
+
+        // NULL value collapses to empty string for callers.
+        upsert_webhook_emitted(&conn, event, key, None).unwrap();
+        assert_eq!(
+            get_webhook_emitted(&conn, event, key).unwrap().as_deref(),
+            Some(""),
+            "NULL last_value must collapse to empty string",
+        );
+    }
+
+    #[test]
+    fn select_prior_agent_stop_reason_returns_existing_or_none() {
+        let conn = test_conn();
+
+        // No row → Ok(None).
+        let v = select_prior_agent_stop_reason(&conn, "subagent", "my-project", "agent-z").unwrap();
+        assert!(v.is_none(), "missing row must return None");
+
+        // Insert a row with a stop_reason.
+        let mut rec = sample_agent_session("agent-z", "executor", "/tmp/z.jsonl");
+        rec.stop_reason = Some("end_turn".into());
+        insert_agent_session(&conn, &rec).unwrap();
+
+        let v = select_prior_agent_stop_reason(&conn, "subagent", "my-project", "agent-z").unwrap();
+        assert_eq!(v.as_deref(), Some("end_turn"));
+
+        // Update to NULL stop_reason — must return Ok(None) (column NULL).
+        let mut rec2 = rec.clone();
+        rec2.stop_reason = None;
+        insert_agent_session(&conn, &rec2).unwrap();
+        let v = select_prior_agent_stop_reason(&conn, "subagent", "my-project", "agent-z").unwrap();
+        assert!(v.is_none(), "NULL stop_reason column must surface as None");
+    }
+
+    #[test]
+    fn webhook_emitted_table_exists_after_init() {
+        let conn = test_conn();
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(
+            tables.contains(&"webhook_emitted".to_string()),
+            "webhook_emitted table must exist",
+        );
     }
 }
