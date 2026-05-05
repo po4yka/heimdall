@@ -1,5 +1,12 @@
 import { render } from 'preact';
 import { ActivityHeatmap } from '../components/charts/ActivityHeatmap';
+import { AgentDistribution } from '../components/agents/AgentDistribution';
+import { AgentKpis } from '../components/agents/AgentKpis';
+import { AgentSetupBanner } from '../components/agents/AgentSetupBanner';
+import { AgentSpawnBatches } from '../components/agents/AgentSpawnBatches';
+import { AgentTimeline } from '../components/agents/AgentTimeline';
+import { AgentToolSpectrum } from '../components/agents/AgentToolSpectrum';
+import { AgentTopSessions } from '../components/agents/AgentTopSessions';
 import { AgentStatusCard } from '../components/AgentStatusCard';
 import { BranchTable } from '../components/tables/BranchTable';
 import { ClaudeUsagePanel } from '../components/ClaudeUsagePanel';
@@ -74,6 +81,13 @@ const SECTION_TAB_MAP: Record<string, DashboardTab> = {
   'hourly-chart': 'activity',
   'activity-heatmap': 'activity',
   'subagent-summary': 'breakdowns',
+  'agent-setup-banner': 'breakdowns',
+  'agent-kpis-row': 'breakdowns',
+  'agent-timeline': 'breakdowns',
+  'agent-distribution': 'breakdowns',
+  'agent-top-sessions': 'breakdowns',
+  'agent-spawn-batches': 'breakdowns',
+  'agent-tool-spectrum': 'breakdowns',
   'entrypoint-breakdown': 'breakdowns',
   'service-tiers': 'breakdowns',
   'tool-summary': 'breakdowns',
@@ -93,6 +107,7 @@ const SECTION_DISPLAY_MODE: Record<string, string> = {
   'agent-status': 'grid',
   'estimation-meta': 'grid',
   'stats-row': 'grid',
+  'agent-kpis-row': 'grid',
 };
 
 function matchesProvider<T extends { provider?: string }>(row: T): boolean {
@@ -179,6 +194,62 @@ function renderOfficialSync(summary: DashboardData['official_sync']): void {
     'official-sync',
     !!summary?.available,
     <OfficialSyncPanel summary={summary!} providerFilter={selectedProvider.value} />,
+  );
+}
+
+function renderAgentTelemetry(data: DashboardData): void {
+  const { agent_telemetry } = data;
+  const totalCostUsd = data.provider_breakdown.reduce((s, p) => s + p.cost, 0);
+  const hasAgentActivity = agent_telemetry.totals.sessions > 0;
+
+  // Setup banner (always render — component decides whether to show)
+  const bannerContainer = $('agent-setup-banner');
+  if (bannerContainer) {
+    setSectionVisibility('agent-setup-banner', true);
+    render(<AgentSetupBanner telemetry={agent_telemetry} />, bannerContainer);
+  }
+
+  // KPI cards
+  renderSection(
+    'agent-kpis-row',
+    hasAgentActivity,
+    <AgentKpis telemetry={agent_telemetry} totalCostUsd={totalCostUsd} />,
+    'grid',
+  );
+
+  // Timeline
+  renderSection(
+    'agent-timeline',
+    agent_telemetry.timeline.length > 0,
+    <AgentTimeline timeline={agent_telemetry.timeline} />,
+  );
+
+  // Distribution
+  renderSection(
+    'agent-distribution',
+    agent_telemetry.distribution.length > 0,
+    <AgentDistribution data={agent_telemetry.distribution} />,
+  );
+
+  // Top sessions
+  renderSection(
+    'agent-top-sessions',
+    agent_telemetry.top_sessions.length > 0,
+    <AgentTopSessions data={agent_telemetry.top_sessions} />,
+  );
+
+  // Spawn batches
+  renderSection(
+    'agent-spawn-batches',
+    agent_telemetry.spawn_batches.length > 0,
+    <AgentSpawnBatches data={agent_telemetry.spawn_batches} />,
+  );
+
+  // Tool spectrum
+  renderSection(
+    'agent-tool-spectrum',
+    agent_telemetry.tool_spectrum.length > 0,
+    <AgentToolSpectrum data={agent_telemetry.tool_spectrum} />,
   );
 }
 
@@ -551,6 +622,7 @@ export function renderDashboardView(
   setSectionVisibility('project-cost-mount', lastByProject.value.length > 0);
 
   renderSubagentSummary(data.subagent_summary);
+  renderAgentTelemetry(data);
   renderEntrypointBreakdown((data.entrypoint_breakdown ?? []).filter(matchesProvider));
   renderServiceTiers((data.service_tiers ?? []).filter(matchesProvider));
   renderToolSummary((data.tool_summary ?? []).filter(matchesProvider));

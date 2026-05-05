@@ -101,7 +101,7 @@ export const rescanDisabled = signal<boolean>(false);
 export const themeMode = signal<'dark' | 'light'>('dark');
 
 // ── Inline status (replaces toasts) ──────────────────────────────────
-export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal' | 'snapshot';
+export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal' | 'snapshot' | 'agent-registry';
 export type StatusKind = 'success' | 'error' | 'loading' | 'info';
 
 export interface StatusEntry {
@@ -117,7 +117,12 @@ export const statusByPlacement = signal<Record<StatusPlacement, StatusEntry | nu
   'agent-status': null,
   'community-signal': null,
   'snapshot': null,
+  'agent-registry': null,
 });
+
+// ── Agent telemetry UI state ─────────────────────────────────────────
+export const registryModalOpen = signal<{ project: string } | null>(null);
+export const setupBannerDismissed = signal(false);
 
 // ── Pagination page size (used by SessionsTable via DataTable) ───────
 export const SESSIONS_PAGE_SIZE = 25;

@@ -326,6 +326,11 @@
     var u5 = p2(t2++, 7);
     return C2(u5.__H, r4) && (u5.__ = n3(), u5.__H = r4, u5.__h = n3), u5.__;
   }
+  function q2(n3, t4) {
+    return o2 = 8, T2(function() {
+      return n3;
+    }, t4);
+  }
   function j2() {
     for (var n3; n3 = f2.shift(); ) {
       var t4 = n3.__H;
@@ -992,7 +997,7 @@
       return y3(i4, n3);
     }, []);
   }
-  var q2 = function(i4) {
+  var q3 = function(i4) {
     queueMicrotask(function() {
       queueMicrotask(i4);
     });
@@ -1004,7 +1009,7 @@
     });
   }
   function F() {
-    if (1 === _3.push(this)) (l.requestAnimationFrame || q2)(x3);
+    if (1 === _3.push(this)) (l.requestAnimationFrame || q3)(x3);
   }
 
   // src/ui/state/store.ts
@@ -1061,8 +1066,11 @@
     "header-refresh": null,
     "agent-status": null,
     "community-signal": null,
-    "snapshot": null
+    "snapshot": null,
+    "agent-registry": null
   });
+  var registryModalOpen = y3(null);
+  var setupBannerDismissed = y3(false);
   var SESSIONS_PAGE_SIZE = 25;
   function readSearchParam(name) {
     return new URLSearchParams(window.location.search).get(name);
@@ -1451,6 +1459,300 @@
     ] });
   }
 
+  // src/ui/components/InlineStatus.tsx
+  var LABEL_MAP = {
+    success: "OK",
+    error: "ERROR",
+    loading: "LOADING",
+    info: "INFO"
+  };
+  var COLOR_MAP = {
+    success: "var(--success)",
+    error: "var(--accent)",
+    loading: "var(--text-secondary)",
+    info: "var(--text-secondary)"
+  };
+  function InlineStatus({ placement, inline = false, dismissable = true }) {
+    const entry = statusByPlacement.value[placement];
+    if (!entry) return null;
+    const label = LABEL_MAP[entry.kind];
+    const color = COLOR_MAP[entry.kind];
+    const content = entry.message ? `[${label}: ${entry.message}]` : `[${label}]`;
+    const baseStyle = {
+      fontFamily: "var(--font-mono)",
+      fontSize: "11px",
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      color,
+      animation: "fadeUp 0.15s ease-out",
+      display: inline ? "inline-flex" : "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: inline ? "0" : "8px 16px",
+      border: inline ? "none" : `1px solid ${color}`,
+      borderRadius: inline ? "0" : "4px",
+      background: inline ? "transparent" : "var(--surface)"
+    };
+    return /* @__PURE__ */ u4("div", { role: entry.kind === "error" ? "alert" : "status", style: baseStyle, children: [
+      /* @__PURE__ */ u4("span", { children: content }),
+      dismissable && entry.kind !== "loading" && /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          onClick: () => clearStatus(placement),
+          "aria-label": "Dismiss",
+          style: {
+            background: "transparent",
+            border: "none",
+            color,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: "inherit",
+            letterSpacing: "inherit",
+            padding: "0 4px",
+            opacity: 0.7
+          },
+          children: "[X]"
+        }
+      )
+    ] });
+  }
+
+  // src/ui/lib/agents.ts
+  var ENC = encodeURIComponent;
+  async function jsonOrThrow(res) {
+    if (!res.ok) {
+      const text2 = await res.text().catch(() => "");
+      throw new Error(`${res.status} ${res.statusText}${text2 ? ": " + text2 : ""}`);
+    }
+    return res.json();
+  }
+  async function fetchRegistry(projectId) {
+    const res = await fetch(`/api/agents/${ENC(projectId)}/registry`);
+    return jsonOrThrow(res);
+  }
+  async function upsertRole(projectId, rawRole, body) {
+    const res = await fetch(`/api/agents/${ENC(projectId)}/registry/${ENC(rawRole)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    return jsonOrThrow(res);
+  }
+  async function deleteRole(projectId, rawRole) {
+    const res = await fetch(`/api/agents/${ENC(projectId)}/registry/${ENC(rawRole)}`, {
+      method: "DELETE"
+    });
+    return jsonOrThrow(res);
+  }
+  function unclassifiedDetectedRolesGlobal(telemetry) {
+    return telemetry.detected.filter(
+      (d5) => d5.raw_role !== "unknown" && !d5.registered
+    );
+  }
+
+  // src/ui/components/agents/AgentRegistryModal.tsx
+  function initialRowState(row) {
+    return {
+      display_name: row?.display_name ?? "",
+      description: row?.description ?? "",
+      enabled: row?.enabled ?? true,
+      merged_into: row?.merged_into ?? ""
+    };
+  }
+  function AgentRegistryModal({ project, telemetry, onReload }) {
+    const [registryRows, setRegistryRows] = d2([]);
+    const [loading, setLoading] = d2(true);
+    const [rowStates, setRowStates] = d2({});
+    const detectedForProject = telemetry.detected.filter((d5) => d5.project === project);
+    const allRoles = [
+      .../* @__PURE__ */ new Set([
+        ...detectedForProject.map((d5) => d5.raw_role),
+        ...registryRows.map((r4) => r4.raw_role)
+      ])
+    ].filter((r4) => r4 !== "unknown");
+    const load = q2(async () => {
+      setLoading(true);
+      try {
+        const resp = await fetchRegistry(project);
+        setRegistryRows(resp.registry);
+        const states = {};
+        for (const rawRole of allRoles) {
+          const existing = resp.registry.find((r4) => r4.raw_role === rawRole);
+          states[rawRole] = initialRowState(existing);
+        }
+        setRowStates(states);
+      } catch {
+      } finally {
+        setLoading(false);
+      }
+    }, [project]);
+    y2(() => {
+      void load();
+    }, [load]);
+    y2(() => {
+      const handler = (e4) => {
+        if (e4.key === "Escape") registryModalOpen.value = null;
+      };
+      window.addEventListener("keydown", handler);
+      return () => window.removeEventListener("keydown", handler);
+    }, []);
+    function updateRow(rawRole, patch) {
+      setRowStates((prev) => ({
+        ...prev,
+        [rawRole]: { ...prev[rawRole], ...patch }
+      }));
+    }
+    async function handleSave(rawRole) {
+      const state = rowStates[rawRole];
+      if (!state) return;
+      const body = {
+        display_name: state.display_name || null,
+        description: state.description || null,
+        enabled: state.enabled,
+        merged_into: state.merged_into || null
+      };
+      if (state.merged_into && state.merged_into === rawRole) {
+        setStatus("agent-registry", "error", "cannot merge a role into itself", 2e3);
+        return;
+      }
+      clearStatus("agent-registry");
+      try {
+        await upsertRole(project, rawRole, body);
+        setStatus("agent-registry", "success", "SAVED", 1500);
+        await onReload();
+        await load();
+      } catch (err) {
+        setStatus("agent-registry", "error", err instanceof Error ? err.message : String(err), 3e3);
+      }
+    }
+    async function handleDelete(rawRole) {
+      if (!window.confirm(`Delete registry entry for "${rawRole}"?`)) return;
+      clearStatus("agent-registry");
+      try {
+        await deleteRole(project, rawRole);
+        setStatus("agent-registry", "success", "DELETED", 1500);
+        await onReload();
+        await load();
+      } catch (err) {
+        setStatus("agent-registry", "error", err instanceof Error ? err.message : String(err), 3e3);
+      }
+    }
+    const mergeOptions = allRoles.filter((r4) => r4 !== "unknown");
+    return /* @__PURE__ */ u4("div", { class: "agent-registry-overlay", onClick: () => registryModalOpen.value = null, children: /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "agent-registry-modal",
+        onClick: (e4) => e4.stopPropagation(),
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": `Agent registry \u2014 ${project}`,
+        children: [
+          /* @__PURE__ */ u4("div", { class: "agent-registry-header", children: [
+            /* @__PURE__ */ u4("h2", { class: "agent-registry-title", children: [
+              "Agent registry \u2014 ",
+              esc(project)
+            ] }),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "agent-registry-close",
+                "aria-label": "Close",
+                onClick: () => registryModalOpen.value = null,
+                children: "[X]"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ u4("div", { style: { padding: "0 20px 8px" }, children: /* @__PURE__ */ u4(InlineStatus, { placement: "agent-registry", inline: true }) }),
+          loading ? /* @__PURE__ */ u4("div", { style: { padding: "20px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "11px" }, children: "Loading\u2026" }) : allRoles.length === 0 ? /* @__PURE__ */ u4("div", { class: "empty-state", style: { margin: "20px" }, children: "No agent roles detected for this project" }) : /* @__PURE__ */ u4("div", { class: "agent-registry-table-wrap", children: /* @__PURE__ */ u4("table", { class: "agent-registry-table", children: [
+            /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
+              /* @__PURE__ */ u4("th", { children: "ROLE" }),
+              /* @__PURE__ */ u4("th", { children: "DISPLAY NAME" }),
+              /* @__PURE__ */ u4("th", { children: "DESCRIPTION" }),
+              /* @__PURE__ */ u4("th", { children: "ENABLED" }),
+              /* @__PURE__ */ u4("th", { children: "MERGED INTO" }),
+              /* @__PURE__ */ u4("th", { children: "CONFIDENCE" }),
+              /* @__PURE__ */ u4("th", { children: "ACTIONS" })
+            ] }) }),
+            /* @__PURE__ */ u4("tbody", { children: allRoles.map((rawRole) => {
+              const state = rowStates[rawRole] ?? initialRowState(void 0);
+              const registered = registryRows.find((r4) => r4.raw_role === rawRole);
+              const detected = detectedForProject.find((d5) => d5.raw_role === rawRole);
+              const countBadge = detected ? `${detected.count}\xD7` : "\u2014";
+              return /* @__PURE__ */ u4("tr", { class: !registered ? "agent-row-unclassified" : "", children: [
+                /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("span", { class: "model-tag", title: rawRole, children: esc(rawRole) }) }),
+                /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4(
+                  "input",
+                  {
+                    type: "text",
+                    class: "agent-registry-input",
+                    value: state.display_name,
+                    placeholder: "Display name",
+                    onInput: (e4) => updateRow(rawRole, { display_name: e4.target.value })
+                  }
+                ) }),
+                /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4(
+                  "input",
+                  {
+                    type: "text",
+                    class: "agent-registry-input",
+                    value: state.description,
+                    placeholder: "Description",
+                    onInput: (e4) => updateRow(rawRole, { description: e4.target.value })
+                  }
+                ) }),
+                /* @__PURE__ */ u4("td", { style: { textAlign: "center" }, children: /* @__PURE__ */ u4(
+                  "input",
+                  {
+                    type: "checkbox",
+                    checked: state.enabled,
+                    onChange: (e4) => updateRow(rawRole, { enabled: e4.target.checked })
+                  }
+                ) }),
+                /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4(
+                  "select",
+                  {
+                    class: "agent-registry-select",
+                    value: state.merged_into,
+                    onChange: (e4) => updateRow(rawRole, { merged_into: e4.target.value }),
+                    children: [
+                      /* @__PURE__ */ u4("option", { value: "", children: "(none)" }),
+                      mergeOptions.filter((r4) => r4 !== rawRole).map((r4) => /* @__PURE__ */ u4("option", { value: r4, children: esc(r4) }, r4))
+                    ]
+                  }
+                ) }),
+                /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("span", { class: "agent-confidence-badge", children: countBadge }) }),
+                /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "6px" }, children: [
+                  /* @__PURE__ */ u4(
+                    "button",
+                    {
+                      type: "button",
+                      class: "filter-btn",
+                      style: { fontSize: "10px", padding: "2px 8px" },
+                      onClick: () => void handleSave(rawRole),
+                      children: "Save"
+                    }
+                  ),
+                  registered && /* @__PURE__ */ u4(
+                    "button",
+                    {
+                      type: "button",
+                      class: "filter-btn",
+                      style: { fontSize: "10px", padding: "2px 8px", color: "var(--accent)", borderColor: "var(--accent)" },
+                      onClick: () => void handleDelete(rawRole),
+                      children: "Delete"
+                    }
+                  )
+                ] }) })
+              ] }, rawRole);
+            }) })
+          ] }) })
+        ]
+      }
+    ) });
+  }
+
   // src/ui/components/DashboardTabs.tsx
   var TABS = [
     { key: "overview", label: "Overview" },
@@ -1752,65 +2054,6 @@
         }, 3e3);
       }
     };
-  }
-
-  // src/ui/components/InlineStatus.tsx
-  var LABEL_MAP = {
-    success: "OK",
-    error: "ERROR",
-    loading: "LOADING",
-    info: "INFO"
-  };
-  var COLOR_MAP = {
-    success: "var(--success)",
-    error: "var(--accent)",
-    loading: "var(--text-secondary)",
-    info: "var(--text-secondary)"
-  };
-  function InlineStatus({ placement, inline = false, dismissable = true }) {
-    const entry = statusByPlacement.value[placement];
-    if (!entry) return null;
-    const label = LABEL_MAP[entry.kind];
-    const color = COLOR_MAP[entry.kind];
-    const content = entry.message ? `[${label}: ${entry.message}]` : `[${label}]`;
-    const baseStyle = {
-      fontFamily: "var(--font-mono)",
-      fontSize: "11px",
-      letterSpacing: "0.08em",
-      textTransform: "uppercase",
-      color,
-      animation: "fadeUp 0.15s ease-out",
-      display: inline ? "inline-flex" : "flex",
-      alignItems: "center",
-      gap: "8px",
-      padding: inline ? "0" : "8px 16px",
-      border: inline ? "none" : `1px solid ${color}`,
-      borderRadius: inline ? "0" : "4px",
-      background: inline ? "transparent" : "var(--surface)"
-    };
-    return /* @__PURE__ */ u4("div", { role: entry.kind === "error" ? "alert" : "status", style: baseStyle, children: [
-      /* @__PURE__ */ u4("span", { children: content }),
-      dismissable && entry.kind !== "loading" && /* @__PURE__ */ u4(
-        "button",
-        {
-          type: "button",
-          onClick: () => clearStatus(placement),
-          "aria-label": "Dismiss",
-          style: {
-            background: "transparent",
-            border: "none",
-            color,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            fontSize: "inherit",
-            letterSpacing: "inherit",
-            padding: "0 4px",
-            opacity: 0.7
-          },
-          children: "[X]"
-        }
-      )
-    ] });
   }
 
   // src/ui/components/Header.tsx
@@ -2209,283 +2452,6 @@
     ] });
   }
 
-  // src/ui/components/AgentStatusCard.tsx
-  function IndicatorDot({ indicator }) {
-    const isAlert = indicator === "major" || indicator === "critical";
-    const isMinor = indicator === "minor";
-    const color = isAlert ? "var(--accent)" : "var(--text-secondary)";
-    const opacity = isAlert ? 1 : isMinor ? 0.6 : 0.3;
-    return /* @__PURE__ */ u4(
-      "span",
-      {
-        "aria-hidden": "true",
-        style: {
-          display: "inline-block",
-          width: "10px",
-          height: "10px",
-          borderRadius: "50%",
-          backgroundColor: color,
-          opacity,
-          marginRight: "8px",
-          flexShrink: 0
-        }
-      }
-    );
-  }
-  function ProviderRow({ name, status, expanded }) {
-    if (!status) {
-      return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
-        /* @__PURE__ */ u4(IndicatorDot, { indicator: "none" }),
-        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
-        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: "unavailable" })
-      ] });
-    }
-    const incidentCount = status.active_incidents.length;
-    return /* @__PURE__ */ u4("div", { children: [
-      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
-        /* @__PURE__ */ u4(IndicatorDot, { indicator: status.indicator }),
-        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
-        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: status.description }),
-        incidentCount > 0 && /* @__PURE__ */ u4(
-          "span",
-          {
-            style: {
-              fontFamily: "var(--font-mono)",
-              fontSize: "11px",
-              color: status.indicator === "major" || status.indicator === "critical" ? "var(--accent)" : "var(--text-secondary)",
-              marginLeft: "8px"
-            },
-            children: [
-              "(",
-              incidentCount,
-              " active)"
-            ]
-          }
-        ),
-        /* @__PURE__ */ u4(
-          "a",
-          {
-            href: status.page_url,
-            target: "_blank",
-            rel: "noopener noreferrer",
-            style: {
-              color: "var(--text-secondary)",
-              fontSize: "11px",
-              marginLeft: "4px",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minWidth: "24px",
-              minHeight: "24px"
-            },
-            "aria-label": `${name} status page`,
-            children: "\u2197"
-          }
-        )
-      ] }),
-      expanded && /* @__PURE__ */ u4("div", { style: { paddingLeft: "18px", paddingBottom: "8px" }, children: [
-        status.components.length > 0 && /* @__PURE__ */ u4("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse", marginBottom: "8px" }, children: [
-          /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { style: { color: "var(--text-secondary)" }, children: [
-            /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Component" }),
-            /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 0", fontWeight: 500 }, children: "Status" })
-          ] }) }),
-          /* @__PURE__ */ u4("tbody", { children: status.components.map((c4, i4) => {
-            const fmt2 = (v4) => v4 != null ? `${(v4 * 100).toFixed(2)}%` : "--";
-            const has30 = c4.uptime_30d != null;
-            const has7 = c4.uptime_7d != null;
-            const showUptime = has30 || has7;
-            return /* @__PURE__ */ u4(S, { children: [
-              /* @__PURE__ */ u4("tr", { children: [
-                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: c4.name }),
-                /* @__PURE__ */ u4("td", { style: { padding: "2px 0", color: "var(--text-secondary)" }, children: c4.status.replace(/_/g, " ") })
-              ] }, i4),
-              showUptime && /* @__PURE__ */ u4("tr", { children: /* @__PURE__ */ u4("td", { colSpan: 2, style: { padding: "0 0 4px 0" }, children: /* @__PURE__ */ u4("span", { style: {
-                fontFamily: "var(--font-mono)",
-                fontSize: "11px",
-                letterSpacing: "0.04em"
-              }, children: [
-                /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: "30D " }),
-                /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_30d) }),
-                /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: " \xB7 7D " }),
-                /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_7d) })
-              ] }) }) }, `${i4}-uptime`)
-            ] });
-          }) })
-        ] }),
-        status.active_incidents.map((inc, i4) => /* @__PURE__ */ u4(
-          "div",
-          {
-            style: {
-              fontSize: "12px",
-              color: "var(--text-secondary)",
-              marginBottom: "4px",
-              paddingLeft: "4px",
-              borderLeft: "2px solid var(--border)"
-            },
-            children: [
-              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)" }, children: inc.shortlink ? /* @__PURE__ */ u4(
-                "a",
-                {
-                  href: inc.shortlink,
-                  target: "_blank",
-                  rel: "noopener noreferrer",
-                  style: { color: "inherit", textDecoration: "underline" },
-                  children: inc.name
-                }
-              ) : inc.name }),
-              " ",
-              /* @__PURE__ */ u4("span", { style: { opacity: 0.7 }, children: [
-                "[",
-                inc.impact,
-                "] ",
-                inc.status,
-                " \u2014 ",
-                inc.started_at.slice(0, 16).replace("T", " ")
-              ] })
-            ]
-          },
-          i4
-        ))
-      ] })
-    ] });
-  }
-  function signalLevelStyle(level) {
-    switch (level) {
-      case "spike":
-        return { label: "SPIKE", color: "var(--accent)" };
-      case "elevated":
-        return { label: "ELEVATED", color: "var(--text-primary)" };
-      case "normal":
-        return { label: "NORMAL", color: "var(--text-secondary)" };
-      default:
-        return { label: "UNKNOWN", color: "var(--text-secondary)" };
-    }
-  }
-  function CommunitySignalRow({ label, signals }) {
-    const first = signals[0];
-    if (!first) return null;
-    const levelOrder = ["spike", "elevated", "normal", "unknown"];
-    const worstLevel = levelOrder.find((l5) => signals.some((s4) => s4.level === l5)) ?? "unknown";
-    const { label: levelLabel, color } = signalLevelStyle(worstLevel);
-    return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "4px 0", gap: "8px" }, children: [
-      /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: label }),
-      /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", color }, children: levelLabel }),
-      /* @__PURE__ */ u4(
-        "a",
-        {
-          href: first.source_url,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          style: { color: "var(--text-secondary)", fontSize: "11px" },
-          "aria-label": `${label} community signal source`,
-          children: "\u2197"
-        }
-      )
-    ] });
-  }
-  function AgentStatusCard({ snapshot, communitySignal }) {
-    const expanded = agent_status_expanded.value;
-    const hasData = snapshot.claude != null || snapshot.openai != null;
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { minWidth: "300px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4(
-        "div",
-        {
-          style: {
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "8px"
-          },
-          children: [
-            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent Status" }),
-            hasData && /* @__PURE__ */ u4(
-              "button",
-              {
-                type: "button",
-                onClick: () => {
-                  agent_status_expanded.value = !expanded;
-                  syncDashboardUrl();
-                },
-                style: {
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "4px",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "var(--text-secondary)",
-                  fontSize: "11px",
-                  fontFamily: "var(--font-mono)",
-                  minHeight: "32px",
-                  padding: "6px 8px"
-                },
-                "aria-expanded": expanded,
-                children: [
-                  /* @__PURE__ */ u4("span", { "aria-hidden": "true", children: expanded ? "\u25B2" : "\u25BC" }),
-                  /* @__PURE__ */ u4("span", { children: expanded ? "Collapse" : "Expand" })
-                ]
-              }
-            )
-          ]
-        }
-      ),
-      /* @__PURE__ */ u4(ProviderRow, { name: "Claude", status: snapshot.claude, expanded }),
-      /* @__PURE__ */ u4(ProviderRow, { name: "OpenAI / Codex", status: snapshot.openai, expanded }),
-      communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && /* @__PURE__ */ u4("div", { style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }, children: [
-        /* @__PURE__ */ u4("div", { style: { fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", marginBottom: "6px", letterSpacing: "0.06em" }, children: "COMMUNITY SIGNAL" }),
-        /* @__PURE__ */ u4(CommunitySignalRow, { label: "Claude", signals: communitySignal.claude }),
-        /* @__PURE__ */ u4(CommunitySignalRow, { label: "OpenAI", signals: communitySignal.openai }),
-        communitySignal.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "4px", fontFamily: "var(--font-mono)" }, children: [
-          "Crowd data ",
-          communitySignal.fetched_at.slice(0, 19).replace("T", " "),
-          " UTC"
-        ] })
-      ] }),
-      snapshot.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "8px", fontFamily: "var(--font-mono)" }, children: [
-        "Refreshed ",
-        snapshot.fetched_at.slice(0, 19).replace("T", " "),
-        " UTC"
-      ] })
-    ] }) });
-  }
-
-  // src/ui/components/shared/InlineRankBar.tsx
-  function InlineRankBar({
-    value,
-    max: max2,
-    label
-  }) {
-    const pct = max2 > 0 ? value / max2 * 100 : 0;
-    const tooltip = `${value} (${pct.toFixed(1)}% of max ${max2})`;
-    return /* @__PURE__ */ u4(
-      "span",
-      {
-        style: { position: "relative", display: "inline-block", width: "100%" },
-        title: tooltip,
-        children: [
-          /* @__PURE__ */ u4(
-            "span",
-            {
-              "data-testid": "rank-bar",
-              style: {
-                position: "absolute",
-                top: 0,
-                left: 0,
-                bottom: 0,
-                width: `${pct}%`,
-                backgroundColor: "var(--color-text-primary)",
-                opacity: 0.12,
-                pointerEvents: "none"
-              }
-            }
-          ),
-          /* @__PURE__ */ u4("span", { class: "num", style: { position: "relative", zIndex: 1 }, children: label })
-        ]
-      }
-    );
-  }
-
   // node_modules/@tanstack/table-core/build/lib/index.mjs
   function functionalUpdate(updater, input) {
     return typeof updater === "function" ? updater(input) : updater;
@@ -2774,12 +2740,12 @@
   function buildHeaderGroups(allColumns, columnsToGroup, table, headerFamily) {
     var _headerGroups$0$heade, _headerGroups$;
     let maxDepth = 0;
-    const findMaxDepth = function(columns4, depth) {
+    const findMaxDepth = function(columns7, depth) {
       if (depth === void 0) {
         depth = 1;
       }
       maxDepth = Math.max(maxDepth, depth);
-      columns4.filter((column) => column.getIsVisible()).forEach((column) => {
+      columns7.filter((column) => column.getIsVisible()).forEach((column) => {
         var _column$columns;
         if ((_column$columns = column.columns) != null && _column$columns.length) {
           findMaxDepth(column.columns, depth + 1);
@@ -3389,16 +3355,16 @@
       };
     },
     createColumn: (column, table) => {
-      column.getIndex = memo((position) => [_getVisibleLeafColumns(table, position)], (columns4) => columns4.findIndex((d5) => d5.id === column.id), getMemoOptions(table.options, "debugColumns", "getIndex"));
+      column.getIndex = memo((position) => [_getVisibleLeafColumns(table, position)], (columns7) => columns7.findIndex((d5) => d5.id === column.id), getMemoOptions(table.options, "debugColumns", "getIndex"));
       column.getIsFirstColumn = (position) => {
         var _columns$;
-        const columns4 = _getVisibleLeafColumns(table, position);
-        return ((_columns$ = columns4[0]) == null ? void 0 : _columns$.id) === column.id;
+        const columns7 = _getVisibleLeafColumns(table, position);
+        return ((_columns$ = columns7[0]) == null ? void 0 : _columns$.id) === column.id;
       };
       column.getIsLastColumn = (position) => {
         var _columns;
-        const columns4 = _getVisibleLeafColumns(table, position);
-        return ((_columns = columns4[columns4.length - 1]) == null ? void 0 : _columns.id) === column.id;
+        const columns7 = _getVisibleLeafColumns(table, position);
+        return ((_columns = columns7[columns7.length - 1]) == null ? void 0 : _columns.id) === column.id;
       };
     },
     createTable: (table) => {
@@ -3407,13 +3373,13 @@
         var _table$initialState$c;
         table.setColumnOrder(defaultState ? [] : (_table$initialState$c = table.initialState.columnOrder) != null ? _table$initialState$c : []);
       };
-      table._getOrderColumnsFn = memo(() => [table.getState().columnOrder, table.getState().grouping, table.options.groupedColumnMode], (columnOrder, grouping, groupedColumnMode) => (columns4) => {
+      table._getOrderColumnsFn = memo(() => [table.getState().columnOrder, table.getState().grouping, table.options.groupedColumnMode], (columnOrder, grouping, groupedColumnMode) => (columns7) => {
         let orderedColumns = [];
         if (!(columnOrder != null && columnOrder.length)) {
-          orderedColumns = columns4;
+          orderedColumns = columns7;
         } else {
           const columnOrderCopy = [...columnOrder];
-          const columnsCopy = [...columns4];
+          const columnsCopy = [...columns7];
           while (columnsCopy.length && columnOrderCopy.length) {
             const targetColumnId = columnOrderCopy.shift();
             const foundIndex = columnsCopy.findIndex((d5) => d5.id === targetColumnId);
@@ -3579,8 +3545,8 @@
         const columnSize = table.getState().columnSizing[column.id];
         return Math.min(Math.max((_column$columnDef$min = column.columnDef.minSize) != null ? _column$columnDef$min : defaultColumnSizing.minSize, (_ref = columnSize != null ? columnSize : column.columnDef.size) != null ? _ref : defaultColumnSizing.size), (_column$columnDef$max = column.columnDef.maxSize) != null ? _column$columnDef$max : defaultColumnSizing.maxSize);
       };
-      column.getStart = memo((position) => [position, _getVisibleLeafColumns(table, position), table.getState().columnSizing], (position, columns4) => columns4.slice(0, column.getIndex(position)).reduce((sum2, column2) => sum2 + column2.getSize(), 0), getMemoOptions(table.options, "debugColumns", "getStart"));
-      column.getAfter = memo((position) => [position, _getVisibleLeafColumns(table, position), table.getState().columnSizing], (position, columns4) => columns4.slice(column.getIndex(position) + 1).reduce((sum2, column2) => sum2 + column2.getSize(), 0), getMemoOptions(table.options, "debugColumns", "getAfter"));
+      column.getStart = memo((position) => [position, _getVisibleLeafColumns(table, position), table.getState().columnSizing], (position, columns7) => columns7.slice(0, column.getIndex(position)).reduce((sum2, column2) => sum2 + column2.getSize(), 0), getMemoOptions(table.options, "debugColumns", "getStart"));
+      column.getAfter = memo((position) => [position, _getVisibleLeafColumns(table, position), table.getState().columnSizing], (position, columns7) => columns7.slice(column.getIndex(position) + 1).reduce((sum2, column2) => sum2 + column2.getSize(), 0), getMemoOptions(table.options, "debugColumns", "getAfter"));
       column.resetSize = () => {
         table.setColumnSizing((_ref2) => {
           let {
@@ -3831,8 +3797,8 @@
     },
     createTable: (table) => {
       const makeVisibleColumnsMethod = (key, getColumns) => {
-        return memo(() => [getColumns(), getColumns().filter((d5) => d5.getIsVisible()).map((d5) => d5.id).join("_")], (columns4) => {
-          return columns4.filter((d5) => d5.getIsVisible == null ? void 0 : d5.getIsVisible());
+        return memo(() => [getColumns(), getColumns().filter((d5) => d5.getIsVisible()).map((d5) => d5.id).join("_")], (columns7) => {
+          return columns7.filter((d5) => d5.getIsVisible == null ? void 0 : d5.getIsVisible());
         }, getMemoOptions(table.options, "debugColumns", key));
       };
       table.getVisibleFlatColumns = makeVisibleColumnsMethod("getVisibleFlatColumns", () => table.getAllFlatColumns());
@@ -5259,7 +5225,7 @@
     return typeof updater === "function" ? updater(prev) : updater;
   }
   function DataTable({
-    columns: columns4,
+    columns: columns7,
     data,
     title,
     sectionKey,
@@ -5323,7 +5289,7 @@
         columnPinning: { left: [], right: [] }
       };
       tableRef.current = createTable({
-        columns: columns4,
+        columns: columns7,
         data,
         state: tableState,
         onStateChange: () => {
@@ -5342,7 +5308,7 @@
     }
     tableRef.current.setOptions((prev) => ({
       ...prev,
-      columns: columns4,
+      columns: columns7,
       data,
       state: { ...tableRef.current.getState(), sorting, pagination, columnVisibility }
     }));
@@ -5445,6 +5411,754 @@
         ] })
       ] })
     ] });
+  }
+
+  // src/ui/components/agents/AgentDistribution.tsx
+  var columns = [
+    {
+      accessorKey: "role",
+      header: "ROLE",
+      cell: ({ row }) => {
+        const agg = row.original;
+        const display = agg.display_name ?? agg.role;
+        return /* @__PURE__ */ u4("span", { title: agg.role, children: esc(display) });
+      }
+    },
+    {
+      accessorKey: "sessions",
+      header: "SESSIONS",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0).toLocaleString() })
+    },
+    {
+      accessorKey: "total_tokens",
+      header: "TOKENS",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "cost_usd",
+      header: "COST",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtCostBig(getValue()) })
+    },
+    {
+      accessorKey: "tool_uses",
+      header: "TOOL USES",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0).toLocaleString() })
+    }
+  ];
+  function AgentDistribution({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u4(
+      DataTable,
+      {
+        columns,
+        data,
+        title: "Role distribution",
+        sectionKey: "agent-distribution",
+        defaultSort: [{ id: "cost_usd", desc: true }]
+      }
+    );
+  }
+
+  // src/ui/components/agents/AgentKpis.tsx
+  function AgentKpis({ telemetry, totalCostUsd }) {
+    const { totals } = telemetry;
+    if (totals.sessions === 0) {
+      return /* @__PURE__ */ u4("div", { class: "table-card", style: { padding: "20px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: 0 }, children: "Agent delegation" }),
+        /* @__PURE__ */ u4("div", { class: "empty-state", children: "No agent activity yet" })
+      ] });
+    }
+    const delegationPct = totalCostUsd > 0 ? (totals.cost_usd / totalCostUsd * 100).toFixed(1) : "0.0";
+    const tokensPerSession = totals.sessions > 0 ? Math.round(totals.total_tokens / totals.sessions) : 0;
+    const costPerSession = totals.sessions > 0 ? totals.cost_usd / totals.sessions : 0;
+    const cards = [
+      {
+        label: "Agent delegation",
+        value: `${delegationPct}%`,
+        sub: `${fmtCostBig(totals.cost_usd)} agent cost`
+      },
+      {
+        label: "Agent sessions",
+        value: totals.sessions.toLocaleString(),
+        sub: `${fmt(totals.total_tokens)} total tokens`
+      },
+      {
+        label: "Tokens / session",
+        value: totals.sessions > 0 ? fmt(tokensPerSession) : "\u2014",
+        sub: totals.sessions > 0 ? `${fmtCostBig(costPerSession)} avg cost` : "no sessions"
+      }
+    ];
+    return /* @__PURE__ */ u4(S, { children: cards.map((c4) => /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: c4.label }),
+      /* @__PURE__ */ u4("div", { class: "stat-value", children: c4.value }),
+      /* @__PURE__ */ u4("div", { class: "stat-sub", children: c4.sub })
+    ] }) }, c4.label)) });
+  }
+
+  // src/ui/components/agents/AgentSetupBanner.tsx
+  function AgentSetupBanner({ telemetry }) {
+    if (setupBannerDismissed.value) return null;
+    const unclassified = unclassifiedDetectedRolesGlobal(telemetry);
+    if (!unclassified.length) return null;
+    const projects = [...new Set(unclassified.map((d5) => d5.project))];
+    const roleCount = unclassified.length;
+    const projectCount = projects.length;
+    function openRegistry() {
+      const firstProject = projects[0];
+      if (firstProject) {
+        registryModalOpen.value = { project: firstProject };
+      }
+    }
+    function dismiss() {
+      setupBannerDismissed.value = true;
+    }
+    return /* @__PURE__ */ u4("div", { class: "agent-setup-banner", children: [
+      /* @__PURE__ */ u4("div", { class: "agent-setup-banner-body", children: [
+        /* @__PURE__ */ u4("div", { class: "agent-setup-banner-line1", children: [
+          roleCount,
+          " unclassified agent role",
+          roleCount !== 1 ? "s" : "",
+          " detected",
+          " ",
+          "across ",
+          projectCount,
+          " project",
+          projectCount !== 1 ? "s" : ""
+        ] }),
+        /* @__PURE__ */ u4("div", { class: "agent-setup-banner-line2", children: [
+          "Classify them in the registry to see them in distribution and timeline.",
+          " ",
+          /* @__PURE__ */ u4(
+            "button",
+            {
+              type: "button",
+              class: "agent-setup-banner-action",
+              onClick: openRegistry,
+              children: "[Open registry]"
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: "agent-setup-banner-dismiss",
+          "aria-label": "Dismiss",
+          onClick: dismiss,
+          children: "[X]"
+        }
+      )
+    ] });
+  }
+
+  // src/ui/components/agents/AgentSpawnBatches.tsx
+  var columns2 = [
+    {
+      accessorKey: "spawned_at",
+      header: "SPAWNED",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", title: String(getValue() ?? ""), children: fmtRelativeTime(String(getValue() ?? "")) })
+    },
+    {
+      accessorKey: "project",
+      header: "PROJECT",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { children: esc(String(getValue() ?? "")) })
+    },
+    {
+      accessorKey: "size",
+      header: "SIZE",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
+    },
+    {
+      accessorKey: "roles",
+      header: "ROLES",
+      cell: ({ getValue }) => {
+        const roles = getValue();
+        const sorted = [...roles].sort();
+        const joined = sorted.join(", ");
+        const truncated = joined.length > 60 ? joined.slice(0, 60) + "\u2026" : joined;
+        return /* @__PURE__ */ u4("span", { title: joined, children: esc(truncated) });
+      }
+    },
+    {
+      accessorKey: "total_tokens",
+      header: "TOKENS",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "cost_usd",
+      header: "COST",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtCostBig(getValue()) })
+    }
+  ];
+  function AgentSpawnBatches({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u4(
+      DataTable,
+      {
+        columns: columns2,
+        data,
+        title: "Parallel spawn batches",
+        sectionKey: "agent-spawn-batches",
+        defaultSort: [{ id: "spawned_at", desc: true }]
+      }
+    );
+  }
+
+  // src/ui/components/charts/ApexChart.tsx
+  function ApexChart({ options, id }) {
+    const ref = A2(null);
+    const chartRef = A2(null);
+    y2(() => {
+      if (chartRef.current) chartRef.current.destroy();
+      if (!ref.current || !options) {
+        return () => {
+          chartRef.current?.destroy();
+          chartRef.current = null;
+        };
+      }
+      let cancelled = false;
+      const raf = requestAnimationFrame(() => {
+        if (cancelled || !ref.current) return;
+        const apexCharts = window.ApexCharts;
+        if (!apexCharts) return;
+        const chartCfg = options.chart;
+        const isSparkline = chartCfg?.sparkline?.enabled === true;
+        let opts;
+        if (isSparkline) {
+          opts = options;
+        } else {
+          const parent = ref.current.parentElement;
+          let h5 = parent?.clientHeight ?? 0;
+          if (h5 <= 0) h5 = parent?.classList.contains("tall") ? 300 : 240;
+          opts = { ...options, chart: { ...options.chart, height: h5 } };
+        }
+        chartRef.current = new apexCharts(ref.current, opts);
+        void chartRef.current.render();
+      });
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
+        chartRef.current?.destroy();
+        chartRef.current = null;
+      };
+    }, [id, options]);
+    return /* @__PURE__ */ u4("div", { ref, id, style: { width: "100%", height: "100%" } });
+  }
+
+  // src/ui/components/agents/AgentTimeline.tsx
+  var MAX_ROLES = 8;
+  function AgentTimeline({ timeline }) {
+    const options = T2(() => {
+      if (!timeline.length) return null;
+      const roleCost = /* @__PURE__ */ new Map();
+      for (const pt of timeline) {
+        roleCost.set(pt.role, (roleCost.get(pt.role) ?? 0) + pt.cost_usd);
+      }
+      const sortedRoles = [...roleCost.entries()].sort((a4, b4) => b4[1] - a4[1]).map(([r4]) => r4);
+      const topRoles = sortedRoles.slice(0, MAX_ROLES);
+      const hasOther = sortedRoles.length > MAX_ROLES;
+      const buckets = [...new Set(timeline.map((pt) => pt.bucket))].sort();
+      const seriesRoles = hasOther ? [...topRoles, "Other"] : topRoles;
+      const seriesData = {};
+      for (const role of seriesRoles) seriesData[role] = new Array(buckets.length).fill(0);
+      for (const pt of timeline) {
+        const bucketIdx = buckets.indexOf(pt.bucket);
+        if (bucketIdx < 0) continue;
+        if (topRoles.includes(pt.role)) {
+          const arr = seriesData[pt.role];
+          if (arr) arr[bucketIdx] = (arr[bucketIdx] ?? 0) + pt.cost_usd;
+        } else if (hasOther) {
+          const arr = seriesData["Other"];
+          if (arr) arr[bucketIdx] = (arr[bucketIdx] ?? 0) + pt.cost_usd;
+        }
+      }
+      const opacityLadder = [1, 0.7, 0.5, 0.35, 0.25, 0.18, 0.12, 0.08, 0.06];
+      const colors = seriesRoles.map(
+        (_4, i4) => withAlpha("--text-display", opacityLadder[Math.min(i4, opacityLadder.length - 1)] ?? 0.06)
+      );
+      const series = seriesRoles.map((role) => ({
+        name: role,
+        data: seriesData[role]
+      }));
+      const base = dashboardChartOptions("bar");
+      return {
+        ...base,
+        chart: {
+          ...base.chart,
+          type: "bar",
+          stacked: true
+        },
+        series,
+        colors,
+        xaxis: {
+          ...base.xaxis,
+          categories: buckets,
+          tickAmount: Math.min(buckets.length, 10),
+          labels: {
+            ...base.xaxis?.labels,
+            rotate: -30,
+            style: {
+              ...base.xaxis?.labels?.style,
+              fontSize: "9px"
+            }
+          }
+        },
+        yaxis: {
+          ...base.yaxis,
+          labels: {
+            ...base.yaxis?.labels,
+            formatter: (v4) => fmtCostBig(v4)
+          }
+        },
+        tooltip: {
+          ...base.tooltip,
+          y: {
+            formatter: (v4) => fmtCostBig(v4)
+          }
+        },
+        plotOptions: {
+          bar: { horizontal: false, columnWidth: "60%" }
+        }
+      };
+    }, [timeline]);
+    if (!timeline.length) {
+      return /* @__PURE__ */ u4("div", { class: "table-card agent-timeline-wrap", style: { padding: "20px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "section-title", children: "Agent activity" }),
+        /* @__PURE__ */ u4("div", { class: "empty-state", children: "No timeline data" })
+      ] });
+    }
+    return /* @__PURE__ */ u4("div", { class: "table-card agent-timeline-wrap", children: [
+      /* @__PURE__ */ u4("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: 0 }, children: "Agent activity" }) }),
+      /* @__PURE__ */ u4("div", { class: "chart-wrap tall", style: { padding: "0 12px 12px" }, children: options && /* @__PURE__ */ u4(ApexChart, { options, id: "agent-timeline-chart" }) })
+    ] });
+  }
+
+  // src/ui/components/agents/AgentToolSpectrum.tsx
+  var MAX_TOOLS = 12;
+  function AgentToolSpectrum({ data }) {
+    if (!data.length) {
+      return /* @__PURE__ */ u4("div", { class: "table-card", style: { padding: "20px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "section-title", children: "Tool spectrum" }),
+        /* @__PURE__ */ u4("div", { class: "empty-state", children: "No tool data" })
+      ] });
+    }
+    const toolTotals = /* @__PURE__ */ new Map();
+    for (const c4 of data) {
+      toolTotals.set(c4.tool, (toolTotals.get(c4.tool) ?? 0) + c4.count);
+    }
+    const sortedTools = [...toolTotals.entries()].sort((a4, b4) => b4[1] - a4[1]).map(([t4]) => t4);
+    const topTools = sortedTools.slice(0, MAX_TOOLS);
+    const hasOtherTool = sortedTools.length > MAX_TOOLS;
+    const displayTools = hasOtherTool ? [...topTools, "Other"] : topTools;
+    const roleTotals = /* @__PURE__ */ new Map();
+    for (const c4 of data) roleTotals.set(c4.role, (roleTotals.get(c4.role) ?? 0) + c4.count);
+    const roles = [...roleTotals.entries()].sort((a4, b4) => b4[1] - a4[1]).map(([r4]) => r4);
+    const cellMap = /* @__PURE__ */ new Map();
+    for (const c4 of data) {
+      if (!cellMap.has(c4.role)) cellMap.set(c4.role, /* @__PURE__ */ new Map());
+      const toolKey = topTools.includes(c4.tool) ? c4.tool : hasOtherTool ? "Other" : null;
+      if (!toolKey) continue;
+      const row = cellMap.get(c4.role);
+      row.set(toolKey, (row.get(toolKey) ?? 0) + c4.count);
+    }
+    function rowMax(role) {
+      const row = cellMap.get(role);
+      if (!row) return 0;
+      return Math.max(...row.values(), 0);
+    }
+    const gridCols = displayTools.length;
+    return /* @__PURE__ */ u4("div", { class: "table-card", style: { padding: "20px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "section-title", style: { marginBottom: "16px" }, children: "Tool spectrum" }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          class: "agent-tool-spectrum",
+          style: {
+            gridTemplateColumns: `minmax(80px, 160px) repeat(${gridCols}, minmax(0, 1fr))`
+          },
+          children: [
+            /* @__PURE__ */ u4("div", { class: "spectrum-cell spectrum-header-corner" }),
+            displayTools.map((tool) => /* @__PURE__ */ u4("div", { class: "spectrum-cell spectrum-col-header", title: tool, children: esc(tool.length > 14 ? tool.slice(0, 12) + "\u2026" : tool) }, tool)),
+            roles.map((role) => {
+              const maxVal = rowMax(role);
+              const row = cellMap.get(role);
+              return [
+                /* @__PURE__ */ u4("div", { class: "spectrum-cell spectrum-row-label", title: role, children: esc(role.length > 18 ? role.slice(0, 16) + "\u2026" : role) }, `label-${role}`),
+                ...displayTools.map((tool) => {
+                  const count2 = row?.get(tool) ?? 0;
+                  const opacity = maxVal > 0 && count2 > 0 ? Math.min(0.08 + 0.82 * (count2 / maxVal), 0.9) : 0;
+                  const bg = opacity > 0 ? withAlpha("--text-primary", opacity) : "transparent";
+                  const textColor = opacity > 0.5 ? "var(--black)" : opacity > 0 ? "var(--text-primary)" : "var(--text-disabled)";
+                  return /* @__PURE__ */ u4(
+                    "div",
+                    {
+                      class: "spectrum-cell spectrum-data-cell",
+                      title: `${role} / ${tool}: ${count2}`,
+                      style: { background: bg },
+                      children: /* @__PURE__ */ u4("span", { style: { color: textColor }, children: count2 > 0 ? count2 : "" })
+                    },
+                    `${role}-${tool}`
+                  );
+                })
+              ];
+            })
+          ]
+        }
+      )
+    ] });
+  }
+
+  // src/ui/components/agents/AgentTopSessions.tsx
+  function fmtDuration(seconds) {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const m4 = Math.floor(seconds / 60);
+    const s4 = Math.round(seconds % 60);
+    return `${m4}m ${s4}s`;
+  }
+  function StopReasonBadge({ reason }) {
+    if (!reason) return /* @__PURE__ */ u4("span", { class: "num", style: { color: "var(--text-disabled)" }, children: "\u2014" });
+    let cls = "agent-stop-reason-badge";
+    if (reason === "end_turn") cls += " agent-stop-reason--success";
+    else if (reason === "max_tokens") cls += " agent-stop-reason--warning";
+    else cls += " agent-stop-reason--error";
+    return /* @__PURE__ */ u4("span", { class: cls, children: esc(reason) });
+  }
+  var columns3 = [
+    {
+      accessorKey: "ts_start",
+      header: "STARTED",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", title: String(getValue() ?? ""), children: fmtRelativeTime(String(getValue() ?? "")) })
+    },
+    {
+      accessorKey: "role",
+      header: "ROLE",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { children: esc(String(getValue() ?? "")) })
+    },
+    {
+      accessorKey: "description",
+      header: "DESCRIPTION",
+      cell: ({ getValue }) => {
+        const raw = String(getValue() ?? "");
+        const truncated = raw.length > 60 ? raw.slice(0, 60) + "\u2026" : raw;
+        return /* @__PURE__ */ u4("span", { title: raw, children: esc(truncated) });
+      }
+    },
+    {
+      accessorKey: "model",
+      header: "MODEL",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: esc(String(getValue() ?? "")) })
+    },
+    {
+      accessorKey: "duration_s",
+      header: "DURATION",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtDuration(getValue()) })
+    },
+    {
+      accessorKey: "total_tokens",
+      header: "TOKENS",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
+    },
+    {
+      accessorKey: "cost_usd",
+      header: "COST",
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtCostBig(getValue()) })
+    },
+    {
+      accessorKey: "stop_reason",
+      header: "STOP",
+      cell: ({ getValue }) => /* @__PURE__ */ u4(StopReasonBadge, { reason: getValue() })
+    }
+  ];
+  function AgentTopSessions({ data }) {
+    if (!data.length) return null;
+    return /* @__PURE__ */ u4(
+      DataTable,
+      {
+        columns: columns3,
+        data: data.slice(0, 25),
+        title: "Top agent sessions",
+        sectionKey: "agent-top-sessions",
+        defaultSort: [{ id: "cost_usd", desc: true }]
+      }
+    );
+  }
+
+  // src/ui/components/AgentStatusCard.tsx
+  function IndicatorDot({ indicator }) {
+    const isAlert = indicator === "major" || indicator === "critical";
+    const isMinor = indicator === "minor";
+    const color = isAlert ? "var(--accent)" : "var(--text-secondary)";
+    const opacity = isAlert ? 1 : isMinor ? 0.6 : 0.3;
+    return /* @__PURE__ */ u4(
+      "span",
+      {
+        "aria-hidden": "true",
+        style: {
+          display: "inline-block",
+          width: "10px",
+          height: "10px",
+          borderRadius: "50%",
+          backgroundColor: color,
+          opacity,
+          marginRight: "8px",
+          flexShrink: 0
+        }
+      }
+    );
+  }
+  function ProviderRow({ name, status, expanded }) {
+    if (!status) {
+      return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
+        /* @__PURE__ */ u4(IndicatorDot, { indicator: "none" }),
+        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
+        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: "unavailable" })
+      ] });
+    }
+    const incidentCount = status.active_incidents.length;
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
+        /* @__PURE__ */ u4(IndicatorDot, { indicator: status.indicator }),
+        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
+        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: status.description }),
+        incidentCount > 0 && /* @__PURE__ */ u4(
+          "span",
+          {
+            style: {
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              color: status.indicator === "major" || status.indicator === "critical" ? "var(--accent)" : "var(--text-secondary)",
+              marginLeft: "8px"
+            },
+            children: [
+              "(",
+              incidentCount,
+              " active)"
+            ]
+          }
+        ),
+        /* @__PURE__ */ u4(
+          "a",
+          {
+            href: status.page_url,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            style: {
+              color: "var(--text-secondary)",
+              fontSize: "11px",
+              marginLeft: "4px",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: "24px",
+              minHeight: "24px"
+            },
+            "aria-label": `${name} status page`,
+            children: "\u2197"
+          }
+        )
+      ] }),
+      expanded && /* @__PURE__ */ u4("div", { style: { paddingLeft: "18px", paddingBottom: "8px" }, children: [
+        status.components.length > 0 && /* @__PURE__ */ u4("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse", marginBottom: "8px" }, children: [
+          /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { style: { color: "var(--text-secondary)" }, children: [
+            /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Component" }),
+            /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 0", fontWeight: 500 }, children: "Status" })
+          ] }) }),
+          /* @__PURE__ */ u4("tbody", { children: status.components.map((c4, i4) => {
+            const fmt2 = (v4) => v4 != null ? `${(v4 * 100).toFixed(2)}%` : "--";
+            const has30 = c4.uptime_30d != null;
+            const has7 = c4.uptime_7d != null;
+            const showUptime = has30 || has7;
+            return /* @__PURE__ */ u4(S, { children: [
+              /* @__PURE__ */ u4("tr", { children: [
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: c4.name }),
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 0", color: "var(--text-secondary)" }, children: c4.status.replace(/_/g, " ") })
+              ] }, i4),
+              showUptime && /* @__PURE__ */ u4("tr", { children: /* @__PURE__ */ u4("td", { colSpan: 2, style: { padding: "0 0 4px 0" }, children: /* @__PURE__ */ u4("span", { style: {
+                fontFamily: "var(--font-mono)",
+                fontSize: "11px",
+                letterSpacing: "0.04em"
+              }, children: [
+                /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: "30D " }),
+                /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_30d) }),
+                /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: " \xB7 7D " }),
+                /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_7d) })
+              ] }) }) }, `${i4}-uptime`)
+            ] });
+          }) })
+        ] }),
+        status.active_incidents.map((inc, i4) => /* @__PURE__ */ u4(
+          "div",
+          {
+            style: {
+              fontSize: "12px",
+              color: "var(--text-secondary)",
+              marginBottom: "4px",
+              paddingLeft: "4px",
+              borderLeft: "2px solid var(--border)"
+            },
+            children: [
+              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)" }, children: inc.shortlink ? /* @__PURE__ */ u4(
+                "a",
+                {
+                  href: inc.shortlink,
+                  target: "_blank",
+                  rel: "noopener noreferrer",
+                  style: { color: "inherit", textDecoration: "underline" },
+                  children: inc.name
+                }
+              ) : inc.name }),
+              " ",
+              /* @__PURE__ */ u4("span", { style: { opacity: 0.7 }, children: [
+                "[",
+                inc.impact,
+                "] ",
+                inc.status,
+                " \u2014 ",
+                inc.started_at.slice(0, 16).replace("T", " ")
+              ] })
+            ]
+          },
+          i4
+        ))
+      ] })
+    ] });
+  }
+  function signalLevelStyle(level) {
+    switch (level) {
+      case "spike":
+        return { label: "SPIKE", color: "var(--accent)" };
+      case "elevated":
+        return { label: "ELEVATED", color: "var(--text-primary)" };
+      case "normal":
+        return { label: "NORMAL", color: "var(--text-secondary)" };
+      default:
+        return { label: "UNKNOWN", color: "var(--text-secondary)" };
+    }
+  }
+  function CommunitySignalRow({ label, signals }) {
+    const first = signals[0];
+    if (!first) return null;
+    const levelOrder = ["spike", "elevated", "normal", "unknown"];
+    const worstLevel = levelOrder.find((l5) => signals.some((s4) => s4.level === l5)) ?? "unknown";
+    const { label: levelLabel, color } = signalLevelStyle(worstLevel);
+    return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "4px 0", gap: "8px" }, children: [
+      /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: label }),
+      /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", color }, children: levelLabel }),
+      /* @__PURE__ */ u4(
+        "a",
+        {
+          href: first.source_url,
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: { color: "var(--text-secondary)", fontSize: "11px" },
+          "aria-label": `${label} community signal source`,
+          children: "\u2197"
+        }
+      )
+    ] });
+  }
+  function AgentStatusCard({ snapshot, communitySignal }) {
+    const expanded = agent_status_expanded.value;
+    const hasData = snapshot.claude != null || snapshot.openai != null;
+    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { minWidth: "300px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "8px"
+          },
+          children: [
+            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent Status" }),
+            hasData && /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                onClick: () => {
+                  agent_status_expanded.value = !expanded;
+                  syncDashboardUrl();
+                },
+                style: {
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "4px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text-secondary)",
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono)",
+                  minHeight: "32px",
+                  padding: "6px 8px"
+                },
+                "aria-expanded": expanded,
+                children: [
+                  /* @__PURE__ */ u4("span", { "aria-hidden": "true", children: expanded ? "\u25B2" : "\u25BC" }),
+                  /* @__PURE__ */ u4("span", { children: expanded ? "Collapse" : "Expand" })
+                ]
+              }
+            )
+          ]
+        }
+      ),
+      /* @__PURE__ */ u4(ProviderRow, { name: "Claude", status: snapshot.claude, expanded }),
+      /* @__PURE__ */ u4(ProviderRow, { name: "OpenAI / Codex", status: snapshot.openai, expanded }),
+      communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && /* @__PURE__ */ u4("div", { style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }, children: [
+        /* @__PURE__ */ u4("div", { style: { fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", marginBottom: "6px", letterSpacing: "0.06em" }, children: "COMMUNITY SIGNAL" }),
+        /* @__PURE__ */ u4(CommunitySignalRow, { label: "Claude", signals: communitySignal.claude }),
+        /* @__PURE__ */ u4(CommunitySignalRow, { label: "OpenAI", signals: communitySignal.openai }),
+        communitySignal.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "4px", fontFamily: "var(--font-mono)" }, children: [
+          "Crowd data ",
+          communitySignal.fetched_at.slice(0, 19).replace("T", " "),
+          " UTC"
+        ] })
+      ] }),
+      snapshot.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "8px", fontFamily: "var(--font-mono)" }, children: [
+        "Refreshed ",
+        snapshot.fetched_at.slice(0, 19).replace("T", " "),
+        " UTC"
+      ] })
+    ] }) });
+  }
+
+  // src/ui/components/shared/InlineRankBar.tsx
+  function InlineRankBar({
+    value,
+    max: max2,
+    label
+  }) {
+    const pct = max2 > 0 ? value / max2 * 100 : 0;
+    const tooltip = `${value} (${pct.toFixed(1)}% of max ${max2})`;
+    return /* @__PURE__ */ u4(
+      "span",
+      {
+        style: { position: "relative", display: "inline-block", width: "100%" },
+        title: tooltip,
+        children: [
+          /* @__PURE__ */ u4(
+            "span",
+            {
+              "data-testid": "rank-bar",
+              style: {
+                position: "absolute",
+                top: 0,
+                left: 0,
+                bottom: 0,
+                width: `${pct}%`,
+                backgroundColor: "var(--color-text-primary)",
+                opacity: 0.12,
+                pointerEvents: "none"
+              }
+            }
+          ),
+          /* @__PURE__ */ u4("span", { class: "num", style: { position: "relative", zIndex: 1 }, children: label })
+        ]
+      }
+    );
   }
 
   // src/ui/components/tables/BranchTable.tsx
@@ -5782,47 +6496,6 @@
     ] });
   }
 
-  // src/ui/components/charts/ApexChart.tsx
-  function ApexChart({ options, id }) {
-    const ref = A2(null);
-    const chartRef = A2(null);
-    y2(() => {
-      if (chartRef.current) chartRef.current.destroy();
-      if (!ref.current || !options) {
-        return () => {
-          chartRef.current?.destroy();
-          chartRef.current = null;
-        };
-      }
-      let cancelled = false;
-      const raf = requestAnimationFrame(() => {
-        if (cancelled || !ref.current) return;
-        const apexCharts = window.ApexCharts;
-        if (!apexCharts) return;
-        const chartCfg = options.chart;
-        const isSparkline = chartCfg?.sparkline?.enabled === true;
-        let opts;
-        if (isSparkline) {
-          opts = options;
-        } else {
-          const parent = ref.current.parentElement;
-          let h5 = parent?.clientHeight ?? 0;
-          if (h5 <= 0) h5 = parent?.classList.contains("tall") ? 300 : 240;
-          opts = { ...options, chart: { ...options.chart, height: h5 } };
-        }
-        chartRef.current = new apexCharts(ref.current, opts);
-        void chartRef.current.render();
-      });
-      return () => {
-        cancelled = true;
-        cancelAnimationFrame(raf);
-        chartRef.current?.destroy();
-        chartRef.current = null;
-      };
-    }, [id, options]);
-    return /* @__PURE__ */ u4("div", { ref, id, style: { width: "100%", height: "100%" } });
-  }
-
   // src/ui/components/charts/DailyChart.tsx
   function DailyChart({ daily }) {
     const base = dashboardChartOptions("bar");
@@ -5854,7 +6527,7 @@
   }
 
   // src/ui/components/tables/EntrypointTable.tsx
-  var columns = [
+  var columns4 = [
     {
       accessorKey: "provider",
       header: "Provider",
@@ -5888,7 +6561,7 @@
   ];
   function EntrypointTable({ data }) {
     if (!data.length) return null;
-    return /* @__PURE__ */ u4(DataTable, { columns, data, title: "Usage by Entrypoint", sectionKey: "entrypoint-breakdown" });
+    return /* @__PURE__ */ u4(DataTable, { columns: columns4, data, title: "Usage by Entrypoint", sectionKey: "entrypoint-breakdown" });
   }
 
   // src/ui/components/EstimationMeta.tsx
@@ -6435,11 +7108,11 @@
       [byModel]
     );
     const showCredits = anyHasCredits(byModel);
-    const columns4 = useModelColumns(totalCost, totalCacheReadCost, totalCacheWriteCost, showCredits, onSelectModel);
+    const columns7 = useModelColumns(totalCost, totalCacheReadCost, totalCacheWriteCost, showCredits, onSelectModel);
     return /* @__PURE__ */ u4(
       DataTable,
       {
-        columns: columns4,
+        columns: columns7,
         data: byModel,
         title: "Cost by Model",
         sectionKey: "model-cost-mount",
@@ -6771,11 +7444,11 @@
     onSelectProject
   }) {
     const showCredits = anyHasCredits(byProject);
-    const columns4 = useProjectColumns(showCredits, onSelectProject);
+    const columns7 = useProjectColumns(showCredits, onSelectProject);
     return /* @__PURE__ */ u4(
       DataTable,
       {
-        columns: columns4,
+        columns: columns7,
         data: byProject,
         title: "Cost by Project",
         sectionKey: "project-cost-mount",
@@ -6970,7 +7643,7 @@
   }
 
   // src/ui/components/tables/ServiceTiers.tsx
-  var columns2 = [
+  var columns5 = [
     {
       accessorKey: "provider",
       header: "Provider",
@@ -6994,7 +7667,7 @@
   ];
   function ServiceTiersTable({ data }) {
     if (!data.length) return null;
-    return /* @__PURE__ */ u4(DataTable, { columns: columns2, data, title: "Service Tiers", sectionKey: "service-tiers" });
+    return /* @__PURE__ */ u4(DataTable, { columns: columns5, data, title: "Service Tiers", sectionKey: "service-tiers" });
   }
 
   // src/ui/components/tables/SessionsTable.tsx
@@ -7187,7 +7860,7 @@ ${row.project}` : row.project;
   }) {
     const data = lastFilteredSessions.value;
     const showCredits = anyHasCredits(data);
-    const columns4 = useSessionColumns(showCredits, onSelectProject, onSelectModel);
+    const columns7 = useSessionColumns(showCredits, onSelectProject, onSelectModel);
     const pagination = sessionsTablePagination.value;
     const columnVisibility = sessionsTableColumnVisibility.value;
     const handlePaginationChange = (nextPagination) => {
@@ -7201,7 +7874,7 @@ ${row.project}` : row.project;
     return /* @__PURE__ */ u4(
       DataTable,
       {
-        columns: columns4,
+        columns: columns7,
         data,
         title: "Recent Sessions",
         sectionKey: "sessions-mount",
@@ -8392,7 +9065,7 @@ ${row.project}` : row.project;
   }
 
   // src/ui/components/tables/VersionTable.tsx
-  var columns3 = [
+  var columns6 = [
     {
       accessorKey: "provider",
       header: "Provider",
@@ -8417,9 +9090,9 @@ ${row.project}` : row.project;
   function VersionTable({ data, title = "CLI Versions" }) {
     if (!data.length) return null;
     if (title == null) {
-      return /* @__PURE__ */ u4(DataTable, { columns: columns3, data });
+      return /* @__PURE__ */ u4(DataTable, { columns: columns6, data });
     }
-    return /* @__PURE__ */ u4(DataTable, { columns: columns3, data, title });
+    return /* @__PURE__ */ u4(DataTable, { columns: columns6, data, title });
   }
 
   // src/ui/components/charts/WeeklyChart.tsx
@@ -8687,6 +9360,13 @@ ${row.project}` : row.project;
     "hourly-chart": "activity",
     "activity-heatmap": "activity",
     "subagent-summary": "breakdowns",
+    "agent-setup-banner": "breakdowns",
+    "agent-kpis-row": "breakdowns",
+    "agent-timeline": "breakdowns",
+    "agent-distribution": "breakdowns",
+    "agent-top-sessions": "breakdowns",
+    "agent-spawn-batches": "breakdowns",
+    "agent-tool-spectrum": "breakdowns",
     "entrypoint-breakdown": "breakdowns",
     "service-tiers": "breakdowns",
     "tool-summary": "breakdowns",
@@ -8704,7 +9384,8 @@ ${row.project}` : row.project;
     "subscription-quota": "block",
     "agent-status": "grid",
     "estimation-meta": "grid",
-    "stats-row": "grid"
+    "stats-row": "grid",
+    "agent-kpis-row": "grid"
   };
   function matchesProvider(row) {
     if (selectedProvider.value === "both") return true;
@@ -8772,6 +9453,47 @@ ${row.project}` : row.project;
       "official-sync",
       !!summary?.available,
       /* @__PURE__ */ u4(OfficialSyncPanel, { summary, providerFilter: selectedProvider.value })
+    );
+  }
+  function renderAgentTelemetry(data) {
+    const { agent_telemetry } = data;
+    const totalCostUsd = data.provider_breakdown.reduce((s4, p5) => s4 + p5.cost, 0);
+    const hasAgentActivity = agent_telemetry.totals.sessions > 0;
+    const bannerContainer = $2("agent-setup-banner");
+    if (bannerContainer) {
+      setSectionVisibility("agent-setup-banner", true);
+      R(/* @__PURE__ */ u4(AgentSetupBanner, { telemetry: agent_telemetry }), bannerContainer);
+    }
+    renderSection(
+      "agent-kpis-row",
+      hasAgentActivity,
+      /* @__PURE__ */ u4(AgentKpis, { telemetry: agent_telemetry, totalCostUsd }),
+      "grid"
+    );
+    renderSection(
+      "agent-timeline",
+      agent_telemetry.timeline.length > 0,
+      /* @__PURE__ */ u4(AgentTimeline, { timeline: agent_telemetry.timeline })
+    );
+    renderSection(
+      "agent-distribution",
+      agent_telemetry.distribution.length > 0,
+      /* @__PURE__ */ u4(AgentDistribution, { data: agent_telemetry.distribution })
+    );
+    renderSection(
+      "agent-top-sessions",
+      agent_telemetry.top_sessions.length > 0,
+      /* @__PURE__ */ u4(AgentTopSessions, { data: agent_telemetry.top_sessions })
+    );
+    renderSection(
+      "agent-spawn-batches",
+      agent_telemetry.spawn_batches.length > 0,
+      /* @__PURE__ */ u4(AgentSpawnBatches, { data: agent_telemetry.spawn_batches })
+    );
+    renderSection(
+      "agent-tool-spectrum",
+      agent_telemetry.tool_spectrum.length > 0,
+      /* @__PURE__ */ u4(AgentToolSpectrum, { data: agent_telemetry.tool_spectrum })
     );
   }
   function renderSubagentSummary(summary) {
@@ -9090,6 +9812,7 @@ ${row.project}` : row.project;
     setSectionVisibility("sessions-mount", filteredSessions.length > 0);
     setSectionVisibility("project-cost-mount", lastByProject.value.length > 0);
     renderSubagentSummary(data.subagent_summary);
+    renderAgentTelemetry(data);
     renderEntrypointBreakdown((data.entrypoint_breakdown ?? []).filter(matchesProvider));
     renderServiceTiers((data.service_tiers ?? []).filter(matchesProvider));
     renderToolSummary((data.tool_summary ?? []).filter(matchesProvider));
@@ -10537,6 +11260,30 @@ ${row.project}` : row.project;
   if (isToolErrorsRoute) {
     startToolErrorsPage();
   }
+  var registryModalMount = document.getElementById("agent-registry-modal-mount");
+  if (registryModalMount && dashboardRuntime) {
+    let RegistryModalRoot = function() {
+      const modalState = registryModalOpen.value;
+      const data = rawData.value;
+      if (!modalState || !data) return null;
+      return /* @__PURE__ */ u4(
+        AgentRegistryModal,
+        {
+          project: modalState.project,
+          telemetry: data.agent_telemetry,
+          onReload: dashboardRuntime.loadData
+        }
+      );
+    };
+    RegistryModalRoot2 = RegistryModalRoot;
+    registryModalOpen.subscribe(() => {
+      R(/* @__PURE__ */ u4(RegistryModalRoot, {}), registryModalMount);
+    });
+    rawData.subscribe(() => {
+      R(/* @__PURE__ */ u4(RegistryModalRoot, {}), registryModalMount);
+    });
+  }
+  var RegistryModalRoot2;
 })();
 /*! Bundled license information:
 

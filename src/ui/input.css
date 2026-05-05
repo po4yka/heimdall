@@ -1272,3 +1272,317 @@
   color: var(--accent-interactive);
   border-bottom-color: var(--accent-interactive);
 }
+
+/* ── Agent telemetry widgets ──────────────────────────────────────────── */
+
+/* Empty state placeholder */
+.empty-state {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-disabled);
+  padding: 16px 0;
+  letter-spacing: 0.04em;
+}
+
+/* Agent timeline chart wrapper */
+.agent-timeline-wrap {
+  padding: 0;
+  overflow: visible;
+}
+
+/* Tool spectrum heatmap grid */
+.agent-tool-spectrum {
+  display: grid;
+  gap: 2px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-feature-settings: "tnum";
+}
+
+.spectrum-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.spectrum-header-corner {
+  /* empty top-left corner */
+}
+
+.spectrum-col-header {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  justify-content: center;
+}
+
+.spectrum-row-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  justify-content: flex-end;
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+  text-align: right;
+}
+
+.spectrum-data-cell {
+  min-width: 28px;
+  font-size: 9px;
+  font-feature-settings: "tnum";
+  border-radius: 2px;
+  transition: outline 0.1s ease;
+}
+
+.spectrum-data-cell:hover {
+  outline: 1px solid var(--text-display);
+  outline-offset: 1px;
+}
+
+/* Stop reason badges */
+.agent-stop-reason-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+}
+
+.agent-stop-reason--success {
+  color: var(--success);
+}
+
+.agent-stop-reason--warning {
+  color: var(--warning);
+}
+
+.agent-stop-reason--error {
+  color: var(--accent);
+}
+
+/* Setup banner */
+.agent-setup-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-interactive);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+}
+
+.agent-setup-banner-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-setup-banner-line1 {
+  font-size: 12px;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.agent-setup-banner-line2 {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+}
+
+.agent-setup-banner-action {
+  background: transparent;
+  border: none;
+  color: var(--accent-interactive);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.agent-setup-banner-action:hover {
+  color: var(--text-display);
+}
+
+.agent-setup-banner-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-disabled);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.agent-setup-banner-dismiss:hover {
+  color: var(--text-secondary);
+}
+
+/* Registry modal overlay + panel */
+.agent-registry-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px 16px;
+  overflow-y: auto;
+}
+
+.agent-registry-modal {
+  background: var(--surface);
+  border: 1px solid var(--border-visible);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 900px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-registry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.agent-registry-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.agent-registry-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.agent-registry-close:hover {
+  color: var(--text-display);
+}
+
+.agent-registry-table-wrap {
+  overflow-x: auto;
+  flex: 1;
+}
+
+.agent-registry-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.agent-registry-table th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-visible);
+  background: var(--surface);
+  text-align: left;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+
+.agent-registry-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  vertical-align: middle;
+}
+
+.agent-registry-table tr:last-child td {
+  border-bottom: none;
+}
+
+.agent-row-unclassified td {
+  background: color-mix(in srgb, var(--accent-interactive) 5%, transparent);
+}
+
+.agent-registry-input {
+  background: transparent;
+  border: 1px solid var(--border-visible);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  width: 100%;
+  min-width: 100px;
+  letter-spacing: 0.04em;
+}
+
+.agent-registry-input:focus {
+  outline: 1px solid var(--accent-interactive);
+  outline-offset: 1px;
+}
+
+.agent-registry-select {
+  background: var(--surface);
+  border: 1px solid var(--border-visible);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  width: 100%;
+  min-width: 80px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.agent-registry-select:focus {
+  outline: 1px solid var(--accent-interactive);
+  outline-offset: 1px;
+}
+
+.agent-confidence-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  background: var(--surface-raised);
+  border-radius: 4px;
+}
+

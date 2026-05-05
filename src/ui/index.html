@@ -50,8 +50,22 @@
     <div class="chart-wrap"><div id="chart-project"></div></div>
   </div>
 
+  <!-- Agent telemetry setup banner -->
+  <div class="bento-full" id="agent-setup-banner" style="display:none"></div>
+
   <!-- Data sections -->
   <div class="card card-flat bento-full table-card" id="subagent-summary" style="display:none"></div>
+
+  <!-- Agent telemetry section -->
+  <div class="bento-full" id="agent-kpis-row" style="display:none;grid-template-columns:repeat(3,1fr);gap:16px"></div>
+  <div class="card card-flat bento-full table-card" id="agent-timeline" style="display:none"></div>
+  <div class="card card-flat bento-full table-card" id="agent-distribution" style="display:none"></div>
+  <div class="card card-flat bento-full table-card" id="agent-top-sessions" style="display:none"></div>
+  <div class="card card-flat bento-full table-card" id="agent-spawn-batches" style="display:none"></div>
+  <div class="card card-flat bento-full table-card" id="agent-tool-spectrum" style="display:none"></div>
+
+  <!-- Agent registry modal mount (always present, renders nothing when closed) -->
+  <div id="agent-registry-modal-mount"></div>
   <div class="card card-flat bento-full table-card" id="entrypoint-breakdown" style="display:none"></div>
   <div class="card card-flat bento-full table-card" id="service-tiers" style="display:none"></div>
   <div class="card card-flat bento-full table-card" id="tool-summary" style="display:none"></div>

@@ -2,6 +2,7 @@ import { render } from 'preact';
 import { BackupPanel } from './components/BackupPanel';
 import { ImportsPanel } from './components/ImportsPanel';
 import { WebCapturesPanel } from './components/WebCapturesPanel';
+import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
 import { DashboardTabs } from './components/DashboardTabs';
 import { FilterBar } from './components/FilterBar';
 import { Footer } from './components/Footer';
@@ -13,7 +14,7 @@ import { createLiveMonitorRuntime } from './monitor/runtime';
 import { hydrateLiveMonitorPreferences } from './monitor/store';
 import { startToolErrorsPage } from './tool_errors/runtime';
 import { applyTheme, getTheme } from './lib/theme';
-import { backupSnapshots, backupLoadState, archiveImports, webConversations, companionHeartbeat, rawData, syncDashboardUrl, type WebConversationSummary, type CompanionHeartbeat } from './state/store';
+import { backupSnapshots, backupLoadState, archiveImports, webConversations, companionHeartbeat, rawData, registryModalOpen, syncDashboardUrl, type WebConversationSummary, type CompanionHeartbeat } from './state/store';
 
 async function loadBackupSnapshots(): Promise<void> {
   backupLoadState.value = 'loading';
@@ -153,4 +154,29 @@ if (monitorRuntime) {
 }
 if (isToolErrorsRoute) {
   startToolErrorsPage();
+}
+
+// Agent registry modal — reactive: re-renders whenever registryModalOpen signal changes.
+// Uses a preact effect-free signal-subscribe pattern via a thin wrapper component.
+const registryModalMount = document.getElementById('agent-registry-modal-mount');
+if (registryModalMount && dashboardRuntime) {
+  function RegistryModalRoot() {
+    const modalState = registryModalOpen.value;
+    const data = rawData.value;
+    if (!modalState || !data) return null;
+    return (
+      <AgentRegistryModal
+        project={modalState.project}
+        telemetry={data.agent_telemetry}
+        onReload={dashboardRuntime!.loadData}
+      />
+    );
+  }
+  // Re-render whenever signal changes
+  registryModalOpen.subscribe(() => {
+    render(<RegistryModalRoot />, registryModalMount);
+  });
+  rawData.subscribe(() => {
+    render(<RegistryModalRoot />, registryModalMount);
+  });
 }
