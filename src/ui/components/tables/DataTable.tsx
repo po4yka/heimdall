@@ -198,18 +198,25 @@ export function DataTable<T>({
       <div id={sectionContentId} style={collapsed ? { display: 'none' } : undefined}>
         {enableColumnVisibility && (
           <div class="column-toggle">
-            {table.getAllLeafColumns().map(column => (
-              <label key={column.id}>
-                <input
-                  type="checkbox"
-                  checked={column.getIsVisible()}
-                  onChange={column.getToggleVisibilityHandler()}
-                />
-                {typeof column.columnDef.header === 'string'
-                  ? column.columnDef.header
-                  : column.id}
-              </label>
-            ))}
+            {table.getAllLeafColumns().map(column => {
+              const colLabel = typeof column.columnDef.header === 'string'
+                ? column.columnDef.header
+                : column.id;
+              const inputId = `col-toggle-${column.id}`;
+              return (
+                <label key={column.id} htmlFor={inputId}>
+                  <input
+                    id={inputId}
+                    name={inputId}
+                    type="checkbox"
+                    checked={column.getIsVisible()}
+                    onChange={column.getToggleVisibilityHandler()}
+                    aria-label={`Toggle column: ${colLabel}`}
+                  />
+                  {colLabel}
+                </label>
+              );
+            })}
           </div>
         )}
 

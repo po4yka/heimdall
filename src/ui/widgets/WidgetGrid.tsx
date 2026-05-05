@@ -181,6 +181,7 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
       addBtn.type = 'button';
       addBtn.className = 'widget-add-button header-button';
       addBtn.textContent = '[+] Add widget';
+      addBtn.setAttribute('aria-label', 'Add widget');
       addBtn.style.display = 'none';
       addBtn.addEventListener('click', () => renderPicker(true));
       addBtnRef.current = addBtn;
@@ -189,6 +190,7 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
       resetBtn.type = 'button';
       resetBtn.className = 'widget-reset-button header-button';
       resetBtn.textContent = '[Reset layout]';
+      resetBtn.setAttribute('aria-label', 'Reset layout to defaults');
       resetBtn.style.display = 'none';
       resetBtn.addEventListener('click', async () => {
         if (!confirm('Reset layout to defaults? Your custom positions will be lost.')) return;
@@ -318,6 +320,7 @@ function buildChrome(
   removeBtn.className = 'widget-remove-button';
   removeBtn.type = 'button';
   removeBtn.title = 'Hide widget';
+  removeBtn.setAttribute('aria-label', 'Hide widget');
   removeBtn.textContent = '×';
   // The remove logic is wired up via the 'widget-hidden' custom event in setupGridEvents.
   removeBtn.addEventListener('click', () => {
