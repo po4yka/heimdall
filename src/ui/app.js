@@ -10719,7 +10719,12 @@ ${row.project}` : row.project;
     const container = $2(sectionId);
     if (!container) return;
     container.dataset["hasContent"] = hasContent ? "1" : "0";
-    if (container.closest(".widget-body")) return;
+    const widgetBody = container.closest(".widget-body");
+    if (widgetBody) {
+      const gridItem = widgetBody.closest(".grid-stack-item");
+      if (gridItem) gridItem.style.display = hasContent ? "" : "none";
+      return;
+    }
     const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
     container.style.display = hasContent && visibleInTab ? displayMode : "none";
   }

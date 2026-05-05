@@ -152,9 +152,18 @@ export function setSectionVisibility(
   const container = $(sectionId);
   if (!container) return;
   container.dataset['hasContent'] = hasContent ? '1' : '0';
-  // When this element lives inside a GridStack widget body the grid manages
-  // visibility; only apply display toggling for legacy static containers.
-  if (container.closest('.widget-body')) return;
+  // GridStack-managed widgets: GridStack owns position/sizing, but when a
+  // section explicitly reports `hasContent: false` (e.g. /api/usage-windows
+  // returned `available: false` with no error), nothing else hides the
+  // empty grid cell — the card border still draws as a blank rectangle.
+  // Toggle display on the .grid-stack-item ancestor so empty-data widgets
+  // disappear instead of leaving a hollow card.
+  const widgetBody = container.closest('.widget-body');
+  if (widgetBody) {
+    const gridItem = widgetBody.closest('.grid-stack-item');
+    if (gridItem) (gridItem as HTMLElement).style.display = hasContent ? '' : 'none';
+    return;
+  }
   const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
   container.style.display = hasContent && visibleInTab ? displayMode : 'none';
 }
