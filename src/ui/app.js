@@ -1024,11 +1024,15 @@
   var webConversations = y3([]);
   var companionHeartbeat = y3(null);
   var archiveImports = y3([]);
+  var selectedDate = y3(null);
+  var todayData = y3(null);
+  var todayLoading = y3(false);
   var SESSIONS_PAGE_PARAM = "sessions_page";
   var SESSIONS_HIDDEN_COLUMNS_PARAM = "sessions_hidden";
   var FILTERS_EXPANDED_PARAM = "filters_expanded";
   var DASHBOARD_TAB_PARAM = "tab";
   var COLLAPSED_SECTIONS_PARAM = "collapsed_sections";
+  var TODAY_DATE_PARAM = "today_date";
   var SESSIONS_TABLE_COLUMN_IDS = /* @__PURE__ */ new Set([
     "session",
     "project",
@@ -1089,7 +1093,7 @@
   }
   function readDashboardTab() {
     const p5 = readSearchParam(DASHBOARD_TAB_PARAM);
-    return ["overview", "activity", "breakdowns", "tables", "backup"].includes(p5) ? p5 : "overview";
+    return ["overview", "activity", "breakdowns", "tables", "backup", "today"].includes(p5) ? p5 : "overview";
   }
   function readProviderFromUrl() {
     const p5 = readSearchParam("provider");
@@ -1181,11 +1185,15 @@
     collapsedSectionKeys.value = readCollapsedSections();
     sessionsTablePagination.value = readSessionsTablePagination();
     sessionsTableColumnVisibility.value = readSessionsTableColumnVisibility();
+    selectedDate.value = readSearchParam(TODAY_DATE_PARAM);
   }
   function syncDashboardUrl() {
     const allModels = rawData.value?.all_models ?? [];
     const params = new URLSearchParams();
     if (activeDashboardTab.value !== "overview") params.set(DASHBOARD_TAB_PARAM, activeDashboardTab.value);
+    if (activeDashboardTab.value === "today" && selectedDate.value) {
+      params.set(TODAY_DATE_PARAM, selectedDate.value);
+    }
     if (selectedRange.value !== "30d") params.set("range", selectedRange.value);
     if (selectedProvider.value !== "both") params.set("provider", selectedProvider.value);
     if (!isDefaultModelSelection(allModels)) {
@@ -1772,6 +1780,7 @@
   // src/ui/components/DashboardTabs.tsx
   var TABS = [
     { key: "overview", label: "Overview" },
+    { key: "today", label: "Today" },
     { key: "activity", label: "Activity" },
     { key: "breakdowns", label: "Breakdowns" },
     { key: "tables", label: "Tables" },
@@ -2271,6 +2280,92 @@
     setTimeout(() => URL.revokeObjectURL(a4.href), 1e3);
   }
 
+  // src/ui/components/today/DatePicker.tsx
+  function addDays(dateStr, delta) {
+    const d5 = /* @__PURE__ */ new Date(`${dateStr}T00:00:00`);
+    d5.setDate(d5.getDate() + delta);
+    return d5.toISOString().slice(0, 10);
+  }
+  function localToday() {
+    const now = /* @__PURE__ */ new Date();
+    const y5 = now.getFullYear();
+    const m4 = String(now.getMonth() + 1).padStart(2, "0");
+    const d5 = String(now.getDate()).padStart(2, "0");
+    return `${y5}-${m4}-${d5}`;
+  }
+  function DatePicker({ onDateChange }) {
+    const today = localToday();
+    const resolvedDate = selectedDate.value ?? todayData.value?.day ?? today;
+    const isToday = resolvedDate === today || selectedDate.value === null;
+    function previousDay() {
+      const next = addDays(resolvedDate, -1);
+      selectedDate.value = next;
+      onDateChange(next);
+    }
+    function nextDay() {
+      if (resolvedDate >= today) return;
+      const next = addDays(resolvedDate, 1);
+      selectedDate.value = next === today ? null : next;
+      onDateChange(next === today ? null : next);
+    }
+    function goToday() {
+      selectedDate.value = null;
+      onDateChange(null);
+    }
+    function onPick(e4) {
+      const val = e4.target.value;
+      if (!val) return;
+      const next = val === today ? null : val;
+      selectedDate.value = next;
+      onDateChange(next);
+    }
+    return /* @__PURE__ */ u4("div", { class: "date-picker", children: [
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: "date-picker-btn",
+          onClick: previousDay,
+          "aria-label": "Previous day",
+          children: "\u25C0"
+        }
+      ),
+      /* @__PURE__ */ u4(
+        "input",
+        {
+          type: "date",
+          class: "date-picker-input",
+          value: resolvedDate,
+          max: today,
+          onChange: onPick,
+          "aria-label": "Select date"
+        }
+      ),
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: "date-picker-btn",
+          onClick: nextDay,
+          disabled: resolvedDate >= today,
+          "aria-label": "Next day",
+          children: "\u25B6"
+        }
+      ),
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: `date-picker-btn date-picker-today-btn${isToday ? " date-picker-btn--active" : ""}`,
+          onClick: goToday,
+          disabled: isToday,
+          "aria-label": "Go to today",
+          children: "Today"
+        }
+      )
+    ] });
+  }
+
   // src/ui/lib/charts.ts
   var RANGE_LABELS = {
     "7d": "Last 7 Days",
@@ -2361,14 +2456,289 @@
     return base;
   }
 
-  // src/ui/components/charts/ActivityHeatmap.tsx
+  // src/ui/components/today/DaysHoursHeatmap.tsx
+  function cellOpacity(value, max2) {
+    if (max2 <= 0 || value <= 0) return 0.05;
+    return Math.min(0.05 + 0.85 * (value / max2), 0.9);
+  }
+  function DaysHoursHeatmap({ cells, daysCount, title, onDayClick }) {
+    const maxCost = Math.max(...cells.map((c4) => c4.cost_nanos), 1);
+    const daysSet = /* @__PURE__ */ new Set();
+    for (const c4 of cells) daysSet.add(c4.day);
+    const days = Array.from(daysSet).sort((a4, b4) => b4.localeCompare(a4));
+    const lookup = /* @__PURE__ */ new Map();
+    for (const c4 of cells) lookup.set(`${c4.day},${c4.hour}`, c4);
+    const HOUR_LABELS = [0, 6, 12, 18, 23];
+    return /* @__PURE__ */ u4("div", { class: "days-hours-heatmap-wrap", children: [
+      /* @__PURE__ */ u4("div", { class: "days-hours-heatmap-title", children: title }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          class: "days-hours-heatmap",
+          style: {
+            display: "grid",
+            gridTemplateColumns: `60px repeat(24, 1fr)`,
+            gap: "1px"
+          },
+          role: "figure",
+          "aria-label": `${daysCount} days by 24 hours heatmap`,
+          children: [
+            /* @__PURE__ */ u4("div", {}),
+            Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "8px",
+                  textAlign: "center",
+                  color: "var(--text-secondary)",
+                  paddingBottom: "2px",
+                  visibility: HOUR_LABELS.includes(h5) ? "visible" : "hidden"
+                },
+                children: String(h5).padStart(2, "0")
+              },
+              h5
+            )),
+            days.map((day) => [
+              // Day label
+              /* @__PURE__ */ u4(
+                "div",
+                {
+                  style: {
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "9px",
+                    color: "var(--text-secondary)",
+                    display: "flex",
+                    alignItems: "center",
+                    paddingRight: "4px",
+                    whiteSpace: "nowrap"
+                  },
+                  children: [
+                    day.slice(5),
+                    " "
+                  ]
+                },
+                `label-${day}`
+              ),
+              // Hour cells
+              ...Array.from({ length: 24 }, (_4, hour) => {
+                const cell = lookup.get(`${day},${hour}`);
+                const cost = cell?.cost_nanos ?? 0;
+                const turns = cell?.turns ?? 0;
+                const opacity = cellOpacity(cost, maxCost);
+                const bg = withAlpha("--text-primary", opacity);
+                const costUsd = cost / 1e9;
+                const title_ = `${day} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${fmt(turns)} turn${turns !== 1 ? "s" : ""}`;
+                const clickable = onDayClick && cost > 0;
+                return /* @__PURE__ */ u4(
+                  "div",
+                  {
+                    class: `days-hours-heatmap-cell${clickable ? " days-hours-heatmap-cell--clickable" : ""}`,
+                    title: title_,
+                    role: "img",
+                    "aria-label": title_,
+                    style: { background: bg },
+                    onClick: clickable ? () => onDayClick(day) : void 0
+                  },
+                  `${day}-${hour}`
+                );
+              })
+            ])
+          ]
+        }
+      )
+    ] });
+  }
+
+  // src/ui/components/today/HourHeatstrip.tsx
+  function cellOpacity2(value, max2) {
+    if (max2 <= 0 || value <= 0) return 0.05;
+    return Math.min(0.05 + 0.85 * (value / max2), 0.9);
+  }
+  function HourHeatstrip({ hours }) {
+    const maxCost = Math.max(...hours.map((h5) => h5.cost_nanos), 1);
+    return /* @__PURE__ */ u4("div", { class: "hour-heatstrip", role: "figure", "aria-label": "Hour-by-hour cost heatstrip", children: hours.map((h5) => {
+      const opacity = cellOpacity2(h5.cost_nanos, maxCost);
+      const bg = withAlpha("--text-primary", opacity);
+      const costUsd = h5.cost_nanos / 1e9;
+      const title = `${String(h5.hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${fmt(h5.turns)} turn${h5.turns !== 1 ? "s" : ""}`;
+      return /* @__PURE__ */ u4(
+        "div",
+        {
+          class: "hour-heatstrip-cell",
+          title,
+          role: "img",
+          "aria-label": title,
+          style: { background: bg }
+        },
+        h5.hour
+      );
+    }) });
+  }
+
+  // src/ui/components/today/HourTimeline.tsx
+  function HourTimeline({ hours }) {
+    const maxCost = Math.max(...hours.map((h5) => h5.cost_nanos), 1);
+    const totalCost = hours.reduce((s4, h5) => s4 + h5.cost_nanos, 0);
+    if (totalCost === 0) {
+      return /* @__PURE__ */ u4("div", { class: "today-empty-state", children: /* @__PURE__ */ u4("span", { children: "No activity for this day" }) });
+    }
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "flex-end",
+            gap: "2px",
+            height: "80px"
+          },
+          children: hours.map((h5) => {
+            const pct = h5.cost_nanos / maxCost * 100;
+            const background = h5.cost_nanos > 0 ? withAlpha("--text-display", 0.35 + pct / 100 * 0.55) : cssVar("--border");
+            const costUsd = h5.cost_nanos / 1e9;
+            const totalTokens2 = h5.input_tokens + h5.output_tokens + h5.cache_read_tokens + h5.cache_creation_tokens;
+            const title = `${String(h5.hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${fmt(h5.turns)} turn${h5.turns !== 1 ? "s" : ""} / ${fmt(totalTokens2)} tokens`;
+            return /* @__PURE__ */ u4(
+              "div",
+              {
+                title,
+                style: {
+                  flex: 1,
+                  height: `${Math.max(pct, 2)}%`,
+                  background,
+                  borderRadius: 0
+                }
+              },
+              h5.hour
+            );
+          })
+        }
+      ),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "2px", marginTop: "6px" }, children: hours.map((h5) => /* @__PURE__ */ u4(
+        "span",
+        {
+          style: {
+            flex: 1,
+            fontFamily: "var(--font-mono)",
+            fontSize: "9px",
+            textAlign: "center",
+            letterSpacing: "0.04em",
+            color: cssVar("--text-secondary"),
+            visibility: [0, 6, 12, 18].includes(h5.hour) ? "visible" : "hidden"
+          },
+          children: String(h5.hour).padStart(2, "0")
+        },
+        h5.hour
+      )) })
+    ] });
+  }
+
+  // src/ui/components/today/TodayKpis.tsx
+  function TodayKpis({ totals, day }) {
+    const costUsd = totals.cost_nanos / 1e9;
+    const peakLabel = totals.peak_hour !== null ? `${String(totals.peak_hour).padStart(2, "0")}:00` : "--";
+    const cards = [
+      { label: "Cost", value: fmtCostBig(costUsd), sub: day },
+      { label: "Tokens", value: fmt(totals.total_tokens), sub: "input + output + cache" },
+      { label: "Turns", value: fmt(totals.turns), sub: "API calls" },
+      { label: "Peak hour", value: peakLabel, sub: "highest cost hour" }
+    ];
+    return /* @__PURE__ */ u4("div", { class: "today-kpi-grid", children: cards.map((card) => /* @__PURE__ */ u4("div", { class: "stat-card", children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: card.label }),
+      /* @__PURE__ */ u4("div", { class: "stat-value", children: card.value }),
+      card.sub && /* @__PURE__ */ u4("div", { class: "stat-sub", children: card.sub })
+    ] }, card.label)) });
+  }
+
+  // src/ui/components/today/WeekdayHourHeatmap.tsx
   var DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function cellOpacity3(value, max2) {
+    if (max2 <= 0 || value <= 0) return 0.05;
+    return Math.min(0.05 + 0.85 * (value / max2), 0.9);
+  }
+  function WeekdayHourHeatmap({ cells }) {
+    const maxCost = Math.max(...cells.map((c4) => c4.cost_nanos), 1);
+    const lookup = /* @__PURE__ */ new Map();
+    for (const c4 of cells) lookup.set(`${c4.dow},${c4.hour}`, c4);
+    const HOUR_LABELS = [0, 6, 12, 18, 23];
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "days-hours-heatmap",
+        style: {
+          display: "grid",
+          gridTemplateColumns: `40px repeat(24, 1fr)`,
+          gap: "1px"
+        },
+        role: "figure",
+        "aria-label": "7\xD724 weekday by hour pattern heatmap (90-day window)",
+        children: [
+          /* @__PURE__ */ u4("div", {}),
+          Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                fontFamily: "var(--font-mono)",
+                fontSize: "8px",
+                textAlign: "center",
+                color: "var(--text-secondary)",
+                paddingBottom: "2px",
+                visibility: HOUR_LABELS.includes(h5) ? "visible" : "hidden"
+              },
+              children: String(h5).padStart(2, "0")
+            },
+            h5
+          )),
+          Array.from({ length: 7 }, (_4, dow) => [
+            /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "9px",
+                  color: "var(--text-secondary)",
+                  display: "flex",
+                  alignItems: "center"
+                },
+                children: DOW_LABELS[dow]
+              },
+              `label-${dow}`
+            ),
+            ...Array.from({ length: 24 }, (_5, hour) => {
+              const cell = lookup.get(`${dow},${hour}`);
+              const cost = cell?.cost_nanos ?? 0;
+              const turns = cell?.turns ?? 0;
+              const opacity = cellOpacity3(cost, maxCost);
+              const bg = withAlpha("--text-primary", opacity);
+              const costUsd = cost / 1e9;
+              const title = `${DOW_LABELS[dow]} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${fmt(turns)} turn${turns !== 1 ? "s" : ""} (90d avg)`;
+              return /* @__PURE__ */ u4(
+                "div",
+                {
+                  class: "days-hours-heatmap-cell",
+                  title,
+                  role: "img",
+                  "aria-label": title,
+                  style: { background: bg }
+                },
+                `${dow}-${hour}`
+              );
+            })
+          ])
+        ]
+      }
+    );
+  }
+
+  // src/ui/components/charts/ActivityHeatmap.tsx
+  var DOW_LABELS2 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var METRIC_LABELS = {
     cost: "Cost",
     calls: "Calls"
   };
   var LEGEND_STEPS = [0.05, 0.2, 0.4, 0.6, 0.9];
-  function cellOpacity(value, max2) {
+  function cellOpacity4(value, max2) {
     if (max2 <= 0 || value <= 0) return 0.05;
     const ratio = value / max2;
     return Math.min(0.05 + 0.85 * ratio, 0.9);
@@ -2450,17 +2820,17 @@
             Array.from({ length: 7 }, (_4, dow) => {
               const isWeekend = dow === 0 || dow === 6;
               return [
-                /* @__PURE__ */ u4("div", { class: "heatmap-dow-label", children: DOW_LABELS[dow] }, `label-${dow}`),
+                /* @__PURE__ */ u4("div", { class: "heatmap-dow-label", children: DOW_LABELS2[dow] }, `label-${dow}`),
                 ...Array.from({ length: 24 }, (_5, hour) => {
                   const key = `${dow},${hour}`;
                   const cell = lookup.get(key);
                   const costNanos = cell?.cost_nanos ?? 0;
                   const callCount = cell?.call_count ?? 0;
                   const raw = metric === "cost" ? costNanos : callCount;
-                  const opacity = cellOpacity(raw, metricMaxRaw);
+                  const opacity = cellOpacity4(raw, metricMaxRaw);
                   const bg = withAlpha("--text-display", opacity);
                   const costUsd = costNanos / 1e9;
-                  const title = `${DOW_LABELS[dow]} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${callCount} call${callCount !== 1 ? "s" : ""}`;
+                  const title = `${DOW_LABELS2[dow]} ${String(hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${callCount} call${callCount !== 1 ? "s" : ""}`;
                   const isPeak = key === peakKey && peakVal > 0;
                   const classes = [
                     "heatmap-cell",
@@ -9616,7 +9986,14 @@ ${row.project}` : row.project;
     "model-cost-mount": "tables",
     "sessions-mount": "tables",
     "project-cost-mount": "tables",
-    "backup-panel": "backup"
+    "backup-panel": "backup",
+    "today-date-picker-mount": "today",
+    "today-kpis-mount": "today",
+    "today-hour-timeline-mount": "today",
+    "today-hour-heatstrip-mount": "today",
+    "today-days-hours-30-mount": "today",
+    "today-days-hours-7-mount": "today",
+    "today-weekday-hour-mount": "today"
   };
   var SECTION_DISPLAY_MODE = {
     "usage-windows": "grid",
@@ -9625,7 +10002,8 @@ ${row.project}` : row.project;
     "estimation-meta": "grid",
     "stats-row": "grid",
     "agent-kpis-row": "grid",
-    "codex-plan-kpi-mount": "grid"
+    "codex-plan-kpi-mount": "grid",
+    "today-kpis-mount": "grid"
   };
   function matchesProvider(row) {
     if (selectedProvider.value === "both") return true;
@@ -9982,6 +10360,73 @@ ${row.project}` : row.project;
     setSectionVisibility("cost-reconciliation", true);
     R(/* @__PURE__ */ u4(CostReconciliationPanel, { data }), container);
   }
+  function renderTodayView(data, onDateChange) {
+    const pickerContainer = $2("today-date-picker-mount");
+    if (pickerContainer) {
+      setSectionVisibility("today-date-picker-mount", true);
+      R(/* @__PURE__ */ u4(DatePicker, { onDateChange }), pickerContainer);
+    }
+    renderSection(
+      "today-kpis-mount",
+      true,
+      /* @__PURE__ */ u4(TodayKpis, { totals: data.totals, day: data.day }),
+      "grid"
+    );
+    renderSection(
+      "today-hour-timeline-mount",
+      true,
+      /* @__PURE__ */ u4("div", { style: { padding: "20px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "section-title", style: { marginBottom: "12px" }, children: [
+          "Hour timeline \u2014 ",
+          data.day
+        ] }),
+        /* @__PURE__ */ u4(HourTimeline, { hours: data.hours })
+      ] })
+    );
+    renderSection(
+      "today-hour-heatstrip-mount",
+      true,
+      /* @__PURE__ */ u4("div", { style: { padding: "20px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "section-title", style: { marginBottom: "12px" }, children: "Hour heatstrip" }),
+        /* @__PURE__ */ u4(HourHeatstrip, { hours: data.hours })
+      ] })
+    );
+    renderSection(
+      "today-days-hours-30-mount",
+      data.days_hours_30.length > 0,
+      /* @__PURE__ */ u4("div", { style: { padding: "20px", overflowX: "auto" }, children: /* @__PURE__ */ u4(
+        DaysHoursHeatmap,
+        {
+          cells: data.days_hours_30,
+          daysCount: 30,
+          title: "30 days \xD7 24 hours",
+          onDayClick: onDateChange
+        }
+      ) })
+    );
+    renderSection(
+      "today-days-hours-7-mount",
+      data.days_hours_7.length > 0,
+      /* @__PURE__ */ u4("div", { style: { padding: "20px", overflowX: "auto" }, children: /* @__PURE__ */ u4(
+        DaysHoursHeatmap,
+        {
+          cells: data.days_hours_7,
+          daysCount: 7,
+          title: "7 days \xD7 24 hours",
+          onDayClick: onDateChange
+        }
+      ) })
+    );
+    renderSection(
+      "today-weekday-hour-mount",
+      data.weekday_hour_90.length > 0,
+      /* @__PURE__ */ u4("div", { style: { padding: "20px", overflowX: "auto" }, children: [
+        /* @__PURE__ */ u4("div", { class: "section-title", style: { marginBottom: "12px" }, children: "Weekday \xD7 hour pattern (90-day window)" }),
+        /* @__PURE__ */ u4(WeekdayHourHeatmap, { cells: data.weekday_hour_90 })
+      ] })
+    );
+    refreshSectionVisibility();
+  }
   function renderDashboardView(data, focusSingleModel, focusProjectQuery, exportSessionsCSV2, exportProjectsCSV2) {
     const cutoff = getRangeCutoff(selectedRange.value);
     const filteredDaily = data.daily_by_model.filter(
@@ -10090,6 +10535,24 @@ ${row.project}` : row.project;
     renderHourlyChart((data.hourly_distribution ?? []).filter(matchesProvider));
     renderCostReconciliation();
     refreshSectionVisibility();
+  }
+
+  // src/ui/lib/today.ts
+  async function loadToday(date, tzOffsetMin) {
+    todayLoading.value = true;
+    try {
+      let url = `/api/today?tz_offset_min=${tzOffsetMin}`;
+      if (date) url += `&date=${encodeURIComponent(date)}`;
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      todayData.value = data;
+      return data;
+    } catch {
+      return null;
+    } finally {
+      todayLoading.value = false;
+    }
   }
 
   // src/ui/dashboard/runtime.ts
@@ -10397,6 +10860,19 @@ ${row.project}` : row.project;
     const loadCostReconciliation = createCostReconciliationLoader(state);
     const loadHeatmap = createHeatmapLoader(state);
     const loadData2 = createDataLoader(state, applyFilter);
+    function handleDateChange(date) {
+      selectedDate.value = date;
+      syncDashboardUrl();
+      void loadToday(date, currentTimezoneOffsetMinutes()).then((data) => {
+        if (data) renderTodayView(data, handleDateChange);
+      });
+    }
+    function maybeLoadToday() {
+      if (activeDashboardTab.value !== "today") return;
+      void loadToday(selectedDate.value, currentTimezoneOffsetMinutes()).then((data) => {
+        if (data) renderTodayView(data, handleDateChange);
+      });
+    }
     return {
       applyFilter,
       handleDashboardTabChange(tab) {
@@ -10404,6 +10880,13 @@ ${row.project}` : row.project;
         activeDashboardTab.value = tab;
         syncDashboardUrl();
         refreshSectionVisibility();
+        if (tab === "today") {
+          if (todayData.value) {
+            renderTodayView(todayData.value, handleDateChange);
+          } else {
+            maybeLoadToday();
+          }
+        }
       },
       loadData: loadData2,
       start() {
@@ -10419,6 +10902,7 @@ ${row.project}` : row.project;
           loadHeatmap,
           loadUsageWindows
         });
+        maybeLoadToday();
       }
     };
   }

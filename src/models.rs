@@ -1584,3 +1584,61 @@ mod tests {
         assert!(rate > 0.60 && rate < 0.70, "expected ~0.645, got {rate}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Feature 3: Today view — per-hour breakdown for a single local-tz calendar day
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TodayHourRow {
+    pub hour: u32,
+    pub turns: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_creation_tokens: i64,
+    pub cost_nanos: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DayHourCell {
+    pub day: String,
+    pub hour: u32,
+    pub turns: i64,
+    pub cost_nanos: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeekdayHourCell {
+    /// 0 = Sunday … 6 = Saturday (sqlite strftime('%w') convention).
+    pub dow: u32,
+    pub hour: u32,
+    pub turns: i64,
+    pub cost_nanos: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TodayTotals {
+    pub turns: i64,
+    pub total_tokens: i64,
+    pub cost_nanos: i64,
+    /// Hour (0-23) with maximum cost; `None` when the day has no turns.
+    pub peak_hour: Option<u32>,
+    pub peak_hour_cost_nanos: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TodayResponse {
+    /// Resolved calendar day in the client's local timezone (YYYY-MM-DD).
+    pub day: String,
+    pub tz_offset_min: i32,
+    /// Always 24 entries (hours 0-23), zero-filled for empty hours.
+    pub hours: Vec<TodayHourRow>,
+    pub totals: TodayTotals,
+    /// Last 30 days × 24 hours grid anchored at `day`.
+    pub days_hours_30: Vec<DayHourCell>,
+    /// Last 7 days × 24 hours grid anchored at `day`.
+    pub days_hours_7: Vec<DayHourCell>,
+    /// 7×24 weekday-hour pattern over the last 90 days.
+    pub weekday_hour_90: Vec<WeekdayHourCell>,
+}

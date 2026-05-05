@@ -2911,6 +2911,103 @@ pub async fn agent_registry_acknowledge_all(
     }))
 }
 
+// ── Feature 3: Today view ─────────────────────────────────────────────────────
+
+/// Query-string parameters for `GET /api/today`.
+#[derive(Debug, serde::Deserialize)]
+pub struct TodayQuery {
+    /// Explicit YYYY-MM-DD date in the client's local timezone.
+    /// When absent the server resolves "today" via a one-shot SQL query
+    /// using the client-supplied `tz_offset_min`.
+    #[serde(default)]
+    pub date: Option<String>,
+}
+
+/// `GET /api/today?tz_offset_min=<n>[&date=YYYY-MM-DD]`
+///
+/// Returns per-hour usage for a single local-timezone calendar day plus
+/// multi-day grid data for 30×24, 7×24, and 7×24 weekday-hour pattern views.
+pub async fn api_today(
+    State(state): State<Arc<AppState>>,
+    Query(tz): Query<TzParams>,
+    Query(qs): Query<TodayQuery>,
+    request: Request,
+) -> Result<Json<crate::models::TodayResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _db_guard = state.db_lock.lock().await;
+    let db_path = state.db_path.clone();
+
+    let result =
+        tokio::task::spawn_blocking(move || -> anyhow::Result<crate::models::TodayResponse> {
+            let conn = db::open_db(&db_path)?;
+            db::init_db(&conn)?;
+
+            // Resolve the target day.
+            let day = if let Some(d) = qs.date.filter(|s| {
+                // Basic YYYY-MM-DD validation.
+                s.len() == 10 && chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").is_ok()
+            }) {
+                d
+            } else {
+                // Compute "today" in the client's timezone via a one-shot SQL query.
+                let param = tz.offset_sql_param();
+                let sql = if let Some(ref p) = param {
+                    format!("SELECT date('now', '{}')", p)
+                } else {
+                    "SELECT date('now')".to_string()
+                };
+                conn.query_row(&sql, [], |row| row.get::<_, String>(0))?
+            };
+
+            let hours = db::query_today_hourly(&conn, &tz, &day)?;
+            let days_hours_30 = db::query_days_hours_window(&conn, &tz, 30, &day)?;
+            let days_hours_7 = db::query_days_hours_window(&conn, &tz, 7, &day)?;
+            let weekday_hour_90 = db::query_weekday_hour_pattern(&conn, &tz, 90)?;
+
+            // Compute totals from the 24 hour rows.
+            let total_turns: i64 = hours.iter().map(|h| h.turns).sum();
+            let total_tokens: i64 = hours
+                .iter()
+                .map(|h| {
+                    h.input_tokens + h.output_tokens + h.cache_read_tokens + h.cache_creation_tokens
+                })
+                .sum();
+            let total_cost_nanos: i64 = hours.iter().map(|h| h.cost_nanos).sum();
+
+            let peak = hours
+                .iter()
+                .max_by_key(|h| h.cost_nanos)
+                .filter(|h| h.cost_nanos > 0);
+            let (peak_hour, peak_hour_cost_nanos) = match peak {
+                Some(h) => (Some(h.hour), h.cost_nanos),
+                None => (None, 0),
+            };
+
+            let totals = crate::models::TodayTotals {
+                turns: total_turns,
+                total_tokens,
+                cost_nanos: total_cost_nanos,
+                peak_hour,
+                peak_hour_cost_nanos,
+            };
+
+            Ok(crate::models::TodayResponse {
+                day,
+                tz_offset_min: tz.normalized_offset_min(),
+                hours,
+                totals,
+                days_hours_30,
+                days_hours_7,
+                weekday_hour_90,
+            })
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(result))
+}
+
 #[cfg(test)]
 mod monitor_global_issue_tests {
     use super::*;

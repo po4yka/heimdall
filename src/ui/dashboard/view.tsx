@@ -1,4 +1,10 @@
 import { render } from 'preact';
+import { DatePicker } from '../components/today/DatePicker';
+import { DaysHoursHeatmap } from '../components/today/DaysHoursHeatmap';
+import { HourHeatstrip } from '../components/today/HourHeatstrip';
+import { HourTimeline } from '../components/today/HourTimeline';
+import { TodayKpis } from '../components/today/TodayKpis';
+import { WeekdayHourHeatmap } from '../components/today/WeekdayHourHeatmap';
 import { ActivityHeatmap } from '../components/charts/ActivityHeatmap';
 import { AgentDistribution } from '../components/agents/AgentDistribution';
 import { AgentKpis } from '../components/agents/AgentKpis';
@@ -103,6 +109,13 @@ const SECTION_TAB_MAP: Record<string, DashboardTab> = {
   'sessions-mount': 'tables',
   'project-cost-mount': 'tables',
   'backup-panel': 'backup',
+  'today-date-picker-mount': 'today',
+  'today-kpis-mount': 'today',
+  'today-hour-timeline-mount': 'today',
+  'today-hour-heatstrip-mount': 'today',
+  'today-days-hours-30-mount': 'today',
+  'today-days-hours-7-mount': 'today',
+  'today-weekday-hour-mount': 'today',
 };
 
 const SECTION_DISPLAY_MODE: Record<string, string> = {
@@ -113,6 +126,7 @@ const SECTION_DISPLAY_MODE: Record<string, string> = {
   'stats-row': 'grid',
   'agent-kpis-row': 'grid',
   'codex-plan-kpi-mount': 'grid',
+  'today-kpis-mount': 'grid',
 };
 
 function matchesProvider<T extends { provider?: string }>(row: T): boolean {
@@ -549,6 +563,88 @@ export function renderCostReconciliation(): void {
   }
   setSectionVisibility('cost-reconciliation', true);
   render(<CostReconciliationPanel data={data} />, container);
+}
+
+export function renderTodayView(
+  data: import('../state/types').TodayResponse,
+  onDateChange: (date: string | null) => void
+): void {
+  // Date picker (always shown when Today tab is active)
+  const pickerContainer = $('today-date-picker-mount');
+  if (pickerContainer) {
+    setSectionVisibility('today-date-picker-mount', true);
+    render(<DatePicker onDateChange={onDateChange} />, pickerContainer);
+  }
+
+  // KPI grid
+  renderSection(
+    'today-kpis-mount',
+    true,
+    <TodayKpis totals={data.totals} day={data.day} />,
+    'grid'
+  );
+
+  // Hour timeline
+  renderSection(
+    'today-hour-timeline-mount',
+    true,
+    <div style={{ padding: '20px' }}>
+      <div class="section-title" style={{ marginBottom: '12px' }}>Hour timeline — {data.day}</div>
+      <HourTimeline hours={data.hours} />
+    </div>
+  );
+
+  // Hour heatstrip
+  renderSection(
+    'today-hour-heatstrip-mount',
+    true,
+    <div style={{ padding: '20px' }}>
+      <div class="section-title" style={{ marginBottom: '12px' }}>Hour heatstrip</div>
+      <HourHeatstrip hours={data.hours} />
+    </div>
+  );
+
+  // 30-day × 24-hour grid
+  renderSection(
+    'today-days-hours-30-mount',
+    data.days_hours_30.length > 0,
+    <div style={{ padding: '20px', overflowX: 'auto' }}>
+      <DaysHoursHeatmap
+        cells={data.days_hours_30}
+        daysCount={30}
+        title="30 days × 24 hours"
+        onDayClick={onDateChange}
+      />
+    </div>
+  );
+
+  // 7-day × 24-hour grid
+  renderSection(
+    'today-days-hours-7-mount',
+    data.days_hours_7.length > 0,
+    <div style={{ padding: '20px', overflowX: 'auto' }}>
+      <DaysHoursHeatmap
+        cells={data.days_hours_7}
+        daysCount={7}
+        title="7 days × 24 hours"
+        onDayClick={onDateChange}
+      />
+    </div>
+  );
+
+  // 7×24 weekday-hour pattern (90 days)
+  renderSection(
+    'today-weekday-hour-mount',
+    data.weekday_hour_90.length > 0,
+    <div style={{ padding: '20px', overflowX: 'auto' }}>
+      <div class="section-title" style={{ marginBottom: '12px' }}>
+        Weekday × hour pattern (90-day window)
+      </div>
+      <WeekdayHourHeatmap cells={data.weekday_hour_90} />
+    </div>
+  );
+
+  refreshSectionVisibility();
 }
 
 export function renderDashboardView(

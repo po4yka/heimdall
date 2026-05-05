@@ -645,6 +645,126 @@
   }
   .heatmap-legend-step { flex: 1 1 0; }
 
+  /* ── Feature 3: Today view ─────────────────────────────────────────── */
+
+  /* Date picker */
+  .date-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+  }
+
+  .date-picker-btn {
+    background: transparent;
+    border: 1px solid var(--border-visible);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .date-picker-btn:hover:not(:disabled) {
+    border-color: var(--accent-interactive);
+    color: var(--accent-interactive);
+  }
+
+  .date-picker-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .date-picker-btn--active {
+    border-color: var(--accent-interactive);
+    color: var(--accent-interactive);
+  }
+
+  .date-picker-input {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-feature-settings: "tnum";
+    color: var(--text-primary);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-visible);
+    border-radius: 4px;
+    padding: 4px 8px;
+    outline: none;
+    color-scheme: dark;
+  }
+
+  [data-theme="light"] .date-picker-input {
+    color-scheme: light;
+  }
+
+  .date-picker-input:focus {
+    border-color: var(--accent-interactive);
+  }
+
+  /* Today KPI grid */
+  .today-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+  }
+
+  /* Hour heatstrip: single 24-cell row */
+  .hour-heatstrip {
+    display: grid;
+    grid-template-columns: repeat(24, 1fr);
+    gap: 1px;
+    height: 24px;
+  }
+
+  .hour-heatstrip-cell {
+    border-radius: 2px;
+    cursor: default;
+  }
+
+  .hour-heatstrip-cell:hover {
+    outline: 1px solid var(--border-visible);
+  }
+
+  /* Days × hours heatmap */
+  .days-hours-heatmap-wrap {
+    overflow-x: auto;
+  }
+
+  .days-hours-heatmap-title {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .days-hours-heatmap-cell {
+    height: 12px;
+    border-radius: 1px;
+  }
+
+  .days-hours-heatmap-cell--clickable {
+    cursor: pointer;
+  }
+
+  .days-hours-heatmap-cell--clickable:hover {
+    outline: 1px solid var(--accent-interactive);
+  }
+
+  /* Today empty state */
+  .today-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 80px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-style: italic;
+  }
+
   .model-chart-panel {
     display: flex;
     flex-direction: column;

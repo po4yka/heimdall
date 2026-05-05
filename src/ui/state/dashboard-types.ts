@@ -568,3 +568,46 @@ export interface CodexPlanSection {
   today: CodexPlanSnapshot | null;
   history: CodexPlanDailyRow[];
 }
+
+// Feature 3: Today view types
+export interface TodayHourRow {
+  hour: number;
+  turns: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
+  cost_nanos: number;
+}
+
+export interface DayHourCell {
+  day: string;
+  hour: number;
+  turns: number;
+  cost_nanos: number;
+}
+
+export interface WeekdayHourCell {
+  dow: number;
+  hour: number;
+  turns: number;
+  cost_nanos: number;
+}
+
+export interface TodayTotals {
+  turns: number;
+  total_tokens: number;
+  cost_nanos: number;
+  peak_hour: number | null;
+  peak_hour_cost_nanos: number;
+}
+
+export interface TodayResponse {
+  day: string;
+  tz_offset_min: number;
+  hours: TodayHourRow[];
+  totals: TodayTotals;
+  days_hours_30: DayHourCell[];
+  days_hours_7: DayHourCell[];
+  weekday_hour_90: WeekdayHourCell[];
+}

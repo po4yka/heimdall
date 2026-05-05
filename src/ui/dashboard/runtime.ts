@@ -22,8 +22,10 @@ import {
   projectSearchQuery,
   rawData,
   restoreDashboardStateFromUrl,
+  selectedDate,
   selectedModels,
   syncDashboardUrl,
+  todayData,
   type DashboardTab,
 } from '../state/store';
 import {
@@ -33,8 +35,10 @@ import {
   renderClaudeUsage,
   renderCostReconciliation,
   renderDashboardView,
+  renderTodayView,
   renderUsageWindows,
 } from './view';
+import { loadToday } from '../lib/today';
 
 export interface DashboardRuntime {
   applyFilter(): void;
@@ -436,6 +440,21 @@ export function createDashboardRuntime(): DashboardRuntime {
   const loadHeatmap = createHeatmapLoader(state);
   const loadData = createDataLoader(state, applyFilter);
 
+  function handleDateChange(date: string | null): void {
+    selectedDate.value = date;
+    syncDashboardUrl();
+    void loadToday(date, currentTimezoneOffsetMinutes()).then(data => {
+      if (data) renderTodayView(data, handleDateChange);
+    });
+  }
+
+  function maybeLoadToday(): void {
+    if (activeDashboardTab.value !== 'today') return;
+    void loadToday(selectedDate.value, currentTimezoneOffsetMinutes()).then(data => {
+      if (data) renderTodayView(data, handleDateChange);
+    });
+  }
+
   return {
     applyFilter,
     handleDashboardTabChange(tab: DashboardTab): void {
@@ -443,6 +462,14 @@ export function createDashboardRuntime(): DashboardRuntime {
       activeDashboardTab.value = tab;
       syncDashboardUrl();
       refreshSectionVisibility();
+      if (tab === 'today') {
+        // Re-render if data already available, otherwise fetch.
+        if (todayData.value) {
+          renderTodayView(todayData.value, handleDateChange);
+        } else {
+          maybeLoadToday();
+        }
+      }
     },
     loadData,
     start(): void {
@@ -458,6 +485,8 @@ export function createDashboardRuntime(): DashboardRuntime {
         loadHeatmap,
         loadUsageWindows,
       });
+      // If the page loads directly on the Today tab, fetch immediately.
+      maybeLoadToday();
     },
   };
 }

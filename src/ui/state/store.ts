@@ -1,6 +1,6 @@
 import { signal } from '@preact/signals';
 import type { PaginationState, VisibilityState } from '@tanstack/table-core';
-import type { DashboardData, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse, CostReconciliationResponse, VersionInfo } from './types';
+import type { DashboardData, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse, CostReconciliationResponse, VersionInfo, TodayResponse } from './types';
 
 // ── Core data ────────────────────────────────────────────────────────
 export const rawData = signal<DashboardData | null>(null);
@@ -54,12 +54,19 @@ export const archiveImports = signal<ImportMeta[]>([]);
 
 // ── Filter state ─────────────────────────────────────────────────────
 export type ProviderFilter = 'claude' | 'codex' | 'both';
-export type DashboardTab = 'overview' | 'activity' | 'breakdowns' | 'tables' | 'backup';
+export type DashboardTab = 'overview' | 'activity' | 'breakdowns' | 'tables' | 'backup' | 'today';
+
+// ── Feature 3: Today view state ───────────────────────────────────────────────
+/// null means "resolve today server-side"; a YYYY-MM-DD string pins a specific day.
+export const selectedDate = signal<string | null>(null);
+export const todayData = signal<TodayResponse | null>(null);
+export const todayLoading = signal<boolean>(false);
 const SESSIONS_PAGE_PARAM = 'sessions_page';
 const SESSIONS_HIDDEN_COLUMNS_PARAM = 'sessions_hidden';
 const FILTERS_EXPANDED_PARAM = 'filters_expanded';
 const DASHBOARD_TAB_PARAM = 'tab';
 const COLLAPSED_SECTIONS_PARAM = 'collapsed_sections';
+const TODAY_DATE_PARAM = 'today_date';
 
 // Allowlist of column IDs declared in SessionsTable.tsx. Used to validate
 // untrusted columnIds parsed from the URL before they are used as object keys,
@@ -149,7 +156,7 @@ function readRangeFromUrl(): RangeKey {
 
 function readDashboardTab(): DashboardTab {
   const p = readSearchParam(DASHBOARD_TAB_PARAM);
-  return (['overview', 'activity', 'breakdowns', 'tables', 'backup'] as DashboardTab[]).includes(p as DashboardTab)
+  return (['overview', 'activity', 'breakdowns', 'tables', 'backup', 'today'] as DashboardTab[]).includes(p as DashboardTab)
     ? (p as DashboardTab)
     : 'overview';
 }
@@ -278,6 +285,7 @@ export function restoreDashboardStateFromUrl(allModels: string[]): void {
   collapsedSectionKeys.value = readCollapsedSections();
   sessionsTablePagination.value = readSessionsTablePagination();
   sessionsTableColumnVisibility.value = readSessionsTableColumnVisibility();
+  selectedDate.value = readSearchParam(TODAY_DATE_PARAM);
 }
 
 export function syncDashboardUrl(): void {
@@ -285,6 +293,9 @@ export function syncDashboardUrl(): void {
   const params = new URLSearchParams();
 
   if (activeDashboardTab.value !== 'overview') params.set(DASHBOARD_TAB_PARAM, activeDashboardTab.value);
+  if (activeDashboardTab.value === 'today' && selectedDate.value) {
+    params.set(TODAY_DATE_PARAM, selectedDate.value);
+  }
   if (selectedRange.value !== '30d') params.set('range', selectedRange.value);
   if (selectedProvider.value !== 'both') params.set('provider', selectedProvider.value);
   if (!isDefaultModelSelection(allModels)) {

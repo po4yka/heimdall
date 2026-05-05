@@ -5174,6 +5174,260 @@ pub fn query_codex_plan_history(
     Ok(result)
 }
 
+// ── Feature 3: Today view queries ────────────────────────────────────────────
+
+/// Query 24 hour-buckets for a single local-timezone calendar day.
+///
+/// Returns exactly 24 rows (hours 0-23), zero-filled for hours with no turns.
+/// `day` must be a `YYYY-MM-DD` string in the client's local timezone.
+/// The TZ offset is applied before bucketing so that UTC timestamps are shifted
+/// into the correct local hour.
+pub fn query_today_hourly(
+    conn: &Connection,
+    tz: &crate::tz::TzParams,
+    day: &str,
+) -> rusqlite::Result<Vec<crate::models::TodayHourRow>> {
+    let offset = tz.normalized_offset_min();
+    let (ts_shifted, needs_param) = if offset == 0 {
+        ("timestamp".to_string(), false)
+    } else {
+        ("datetime(timestamp, ?)".to_string(), true)
+    };
+
+    let sql = format!(
+        "SELECT
+            CAST(strftime('%H', {ts_shifted}) AS INTEGER) AS hour,
+            COUNT(*) AS turns,
+            COALESCE(SUM(input_tokens), 0)            AS input_tokens,
+            COALESCE(SUM(output_tokens), 0)           AS output_tokens,
+            COALESCE(SUM(cache_read_tokens), 0)       AS cache_read_tokens,
+            COALESCE(SUM(cache_creation_tokens), 0)   AS cache_creation_tokens,
+            COALESCE(SUM(estimated_cost_nanos), 0)    AS cost_nanos
+         FROM turns
+         WHERE timestamp IS NOT NULL
+           AND date({ts_shifted}) = ?
+         GROUP BY hour
+         ORDER BY hour"
+    );
+
+    let mut params: Vec<String> = Vec::new();
+    let offset_str = tz.offset_sql_param().unwrap_or_default();
+    if needs_param {
+        // Two references to ts_shifted in the SELECT + WHERE clauses.
+        params.push(offset_str.clone());
+        params.push(offset_str);
+    }
+    params.push(day.to_string());
+
+    let mut stmt = conn.prepare(&sql)?;
+    let non_zero: Vec<(u32, i64, i64, i64, i64, i64, i64)> = collect_warn(
+        stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((
+                row.get::<_, u32>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })?,
+        "today hourly row error",
+    );
+
+    // Build lookup and back-fill all 24 hours with zeros.
+    let mut lookup: std::collections::HashMap<u32, (i64, i64, i64, i64, i64, i64)> =
+        std::collections::HashMap::with_capacity(non_zero.len());
+    for (h, turns, inp, out, cr, cc, cost) in non_zero {
+        lookup.insert(h, (turns, inp, out, cr, cc, cost));
+    }
+
+    let mut rows: Vec<crate::models::TodayHourRow> = Vec::with_capacity(24);
+    for hour in 0u32..24 {
+        let (
+            turns,
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+            cost_nanos,
+        ) = lookup.get(&hour).copied().unwrap_or((0, 0, 0, 0, 0, 0));
+        rows.push(crate::models::TodayHourRow {
+            hour,
+            turns,
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+            cost_nanos,
+        });
+    }
+    Ok(rows)
+}
+
+/// Query N×24 hour-bucket cells for the `days_back` days ending at `anchor_day`
+/// (inclusive, in the client's local timezone).
+///
+/// Missing (day, hour) pairs are back-filled with zeros so callers receive a
+/// complete grid.  `days_back` is typically 7 or 30.
+pub fn query_days_hours_window(
+    conn: &Connection,
+    tz: &crate::tz::TzParams,
+    days_back: i64,
+    anchor_day: &str,
+) -> rusqlite::Result<Vec<crate::models::DayHourCell>> {
+    let offset = tz.normalized_offset_min();
+    let (ts_shifted, needs_param) = if offset == 0 {
+        ("timestamp".to_string(), false)
+    } else {
+        ("datetime(timestamp, ?)".to_string(), true)
+    };
+
+    // Build start day by subtracting days from anchor_day in SQL.
+    let days_back_minus1 = days_back.saturating_sub(1);
+    let sql = format!(
+        "SELECT
+            date({ts_shifted}) AS local_day,
+            CAST(strftime('%H', {ts_shifted}) AS INTEGER) AS hour,
+            COUNT(*) AS turns,
+            COALESCE(SUM(estimated_cost_nanos), 0) AS cost_nanos
+         FROM turns
+         WHERE timestamp IS NOT NULL
+           AND date({ts_shifted}) BETWEEN date(?, '-{days_back_minus1} days') AND ?
+         GROUP BY local_day, hour
+         ORDER BY local_day, hour"
+    );
+
+    let mut params: Vec<String> = Vec::new();
+    let offset_str = tz.offset_sql_param().unwrap_or_default();
+    if needs_param {
+        // Three references: SELECT col1, SELECT col2, WHERE clause.
+        params.push(offset_str.clone());
+        params.push(offset_str.clone());
+        params.push(offset_str);
+    }
+    params.push(anchor_day.to_string());
+    params.push(anchor_day.to_string());
+
+    let mut stmt = conn.prepare(&sql)?;
+    let non_zero: Vec<(String, u32, i64, i64)> = collect_warn(
+        stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, u32>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?,
+        "days-hours window row error",
+    );
+
+    // Build lookup for non-zero cells.
+    let mut lookup: std::collections::HashMap<(String, u32), (i64, i64)> =
+        std::collections::HashMap::with_capacity(non_zero.len());
+    for (day, hour, turns, cost) in non_zero {
+        lookup.insert((day, hour), (turns, cost));
+    }
+
+    // Enumerate all (day, hour) pairs by computing start date client-side.
+    // Parse anchor_day as a NaiveDate, then back-fill the full grid.
+    let anchor = match chrono::NaiveDate::parse_from_str(anchor_day, "%Y-%m-%d") {
+        Ok(d) => d,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let start = anchor - chrono::Duration::days(days_back_minus1);
+
+    let total = (days_back as usize).saturating_mul(24);
+    let mut cells: Vec<crate::models::DayHourCell> = Vec::with_capacity(total);
+    let mut current = start;
+    while current <= anchor {
+        let day_str = current.format("%Y-%m-%d").to_string();
+        for hour in 0u32..24 {
+            let (turns, cost_nanos) = lookup
+                .get(&(day_str.clone(), hour))
+                .copied()
+                .unwrap_or((0, 0));
+            cells.push(crate::models::DayHourCell {
+                day: day_str.clone(),
+                hour,
+                turns,
+                cost_nanos,
+            });
+        }
+        current += chrono::Duration::days(1);
+    }
+    Ok(cells)
+}
+
+/// Query the 7×24 weekday-hour pattern aggregated over the last `days_back`
+/// days (relative to now, in UTC — suitable as a behavioral pattern).
+///
+/// `dow` follows SQLite's `strftime('%w')` convention: 0 = Sunday … 6 = Saturday.
+/// Missing (dow, hour) pairs are back-filled with zeros so callers receive all
+/// 168 cells.
+pub fn query_weekday_hour_pattern(
+    conn: &Connection,
+    tz: &crate::tz::TzParams,
+    days_back: i64,
+) -> rusqlite::Result<Vec<crate::models::WeekdayHourCell>> {
+    let (ts_expr, needs_tz_param) = shifted_ts_expr(tz);
+
+    let sql = format!(
+        "SELECT
+            CAST(strftime('%w', {ts_expr}) AS INTEGER) AS dow,
+            CAST(strftime('%H', {ts_expr}) AS INTEGER) AS hour,
+            COUNT(*) AS turns,
+            COALESCE(SUM(estimated_cost_nanos), 0) AS cost_nanos
+         FROM turns
+         WHERE timestamp IS NOT NULL
+           AND timestamp >= datetime('now', '-{days_back} days')
+         GROUP BY dow, hour
+         ORDER BY dow, hour"
+    );
+
+    let mut params: Vec<String> = Vec::new();
+    if needs_tz_param {
+        let offset_str = tz.offset_sql_param().unwrap_or_default();
+        // Two strftime calls in SELECT.
+        params.push(offset_str.clone());
+        params.push(offset_str);
+    }
+
+    let mut stmt = conn.prepare(&sql)?;
+    let non_zero: Vec<(u32, u32, i64, i64)> = collect_warn(
+        stmt.query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok((
+                row.get::<_, u32>(0)?,
+                row.get::<_, u32>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?,
+        "weekday-hour pattern row error",
+    );
+
+    // Build lookup and fill all 168 cells.
+    let mut lookup: std::collections::HashMap<(u32, u32), (i64, i64)> =
+        std::collections::HashMap::with_capacity(non_zero.len());
+    for (dow, hour, turns, cost) in non_zero {
+        lookup.insert((dow, hour), (turns, cost));
+    }
+
+    let mut cells: Vec<crate::models::WeekdayHourCell> = Vec::with_capacity(168);
+    for dow in 0u32..7 {
+        for hour in 0u32..24 {
+            let (turns, cost_nanos) = lookup.get(&(dow, hour)).copied().unwrap_or((0, 0));
+            cells.push(crate::models::WeekdayHourCell {
+                dow,
+                hour,
+                turns,
+                cost_nanos,
+            });
+        }
+    }
+    Ok(cells)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -8130,6 +8384,144 @@ mod tests {
         assert_eq!(
             returned_days, sorted_desc,
             "rows must be ordered DESC by day"
+        );
+    }
+
+    // ── Feature 3: Today view query tests ────────────────────────────────────
+
+    fn insert_turn_at(conn: &Connection, ts: &str, input: i64, output: i64, cost_nanos: i64) {
+        conn.execute(
+            "INSERT INTO sessions (session_id, project_name, provider) VALUES ('s-today','proj','claude') ON CONFLICT DO NOTHING",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, timestamp, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, estimated_cost_nanos, model)
+             VALUES (?1, ?2, ?3, ?4, 0, 0, ?5, 'claude-sonnet-4-6')",
+            rusqlite::params![
+                "s-today",
+                ts,
+                input,
+                output,
+                cost_nanos,
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn query_today_hourly_returns_24_buckets() {
+        let conn = test_conn();
+        insert_turn_at(&conn, "2026-04-30T05:15:00Z", 100, 50, 1_000_000);
+        insert_turn_at(&conn, "2026-04-30T14:00:00Z", 200, 100, 2_000_000);
+        insert_turn_at(&conn, "2026-04-30T22:45:00Z", 150, 75, 1_500_000);
+
+        let tz = TzParams::default(); // UTC
+        let rows = query_today_hourly(&conn, &tz, "2026-04-30").unwrap();
+
+        assert_eq!(rows.len(), 24, "must always have 24 hour buckets");
+
+        let h5 = &rows[5];
+        assert_eq!(h5.hour, 5);
+        assert_eq!(h5.turns, 1);
+        assert_eq!(h5.cost_nanos, 1_000_000);
+
+        let h14 = &rows[14];
+        assert_eq!(h14.hour, 14);
+        assert_eq!(h14.turns, 1);
+        assert_eq!(h14.cost_nanos, 2_000_000);
+
+        let h22 = &rows[22];
+        assert_eq!(h22.hour, 22);
+        assert_eq!(h22.turns, 1);
+        assert_eq!(h22.cost_nanos, 1_500_000);
+
+        // All other hours must be zero.
+        for row in &rows {
+            if ![5u32, 14, 22].contains(&row.hour) {
+                assert_eq!(row.turns, 0, "hour {} should be zero", row.hour);
+            }
+        }
+    }
+
+    #[test]
+    fn query_today_hourly_respects_tz_offset() {
+        // A turn at 2026-04-30T23:30:00Z becomes 2026-05-01 08:30 in UTC+9 (JST).
+        let conn = test_conn();
+        insert_turn_at(&conn, "2026-04-30T23:30:00Z", 100, 50, 500_000);
+
+        // UTC: falls on 2026-04-30 hour 23.
+        let tz_utc = TzParams::default();
+        let rows_utc = query_today_hourly(&conn, &tz_utc, "2026-04-30").unwrap();
+        assert_eq!(
+            rows_utc[23].turns, 1,
+            "UTC: turn should be in hour 23 of 2026-04-30"
+        );
+
+        // JST (UTC+9 = 540 min): turn shifts to 2026-05-01 hour 8.
+        let tz_jst = TzParams {
+            tz_offset_min: Some(540),
+            week_starts_on: None,
+        };
+        let rows_jst_apr = query_today_hourly(&conn, &tz_jst, "2026-04-30").unwrap();
+        // The turn is no longer on Apr 30 in JST.
+        let total_turns_apr: i64 = rows_jst_apr.iter().map(|r| r.turns).sum();
+        assert_eq!(
+            total_turns_apr, 0,
+            "JST: turn must NOT appear on 2026-04-30"
+        );
+
+        let rows_jst_may = query_today_hourly(&conn, &tz_jst, "2026-05-01").unwrap();
+        assert_eq!(
+            rows_jst_may[8].turns, 1,
+            "JST: turn should be in hour 8 of 2026-05-01"
+        );
+    }
+
+    #[test]
+    fn query_days_hours_window_backfills_missing_cells() {
+        let conn = test_conn();
+        // Only insert a turn 2 days ago (relative to 2026-04-30 anchor = 2026-04-28).
+        insert_turn_at(&conn, "2026-04-28T10:00:00Z", 100, 50, 1_000_000);
+
+        let tz = TzParams::default();
+        let cells = query_days_hours_window(&conn, &tz, 30, "2026-04-30").unwrap();
+
+        // 30 days × 24 hours = 720 cells.
+        assert_eq!(cells.len(), 720, "30×24 grid must have 720 cells");
+
+        // The one non-zero cell should be at 2026-04-28, hour 10.
+        let nonzero: Vec<_> = cells.iter().filter(|c| c.cost_nanos > 0).collect();
+        assert_eq!(nonzero.len(), 1, "exactly one cell should have data");
+        assert_eq!(nonzero[0].day, "2026-04-28");
+        assert_eq!(nonzero[0].hour, 10);
+
+        // All other cells must be zero.
+        let zero_count = cells.iter().filter(|c| c.cost_nanos == 0).count();
+        assert_eq!(zero_count, 719);
+    }
+
+    #[test]
+    fn query_weekday_hour_pattern_aggregates() {
+        let conn = test_conn();
+        // Insert two turns at the same weekday+hour across different weeks.
+        // 2026-04-22T10:00:00Z is a Wednesday (dow=3), hour 10.
+        // 2026-04-29T10:00:00Z is also a Wednesday (dow=3), hour 10.
+        insert_turn_at(&conn, "2026-04-22T10:00:00Z", 100, 50, 1_000_000);
+        insert_turn_at(&conn, "2026-04-29T10:00:00Z", 200, 100, 2_000_000);
+
+        let tz = TzParams::default();
+        let cells = query_weekday_hour_pattern(&conn, &tz, 90).unwrap();
+
+        // Always 168 cells (7×24).
+        assert_eq!(cells.len(), 168, "weekday-hour pattern must have 168 cells");
+
+        // dow=3 (Wednesday), hour=10 should have turns=2, cost=3_000_000.
+        let wed_10 = cells.iter().find(|c| c.dow == 3 && c.hour == 10).unwrap();
+        assert_eq!(wed_10.turns, 2, "Wednesday 10:00 should have 2 turns");
+        assert_eq!(
+            wed_10.cost_nanos, 3_000_000,
+            "Wednesday 10:00 should sum costs"
         );
     }
 }

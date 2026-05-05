@@ -162,6 +162,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             get(api::api_cost_reconciliation),
         )
         .route("/api/version", get(api::api_version))
+        .route("/api/today", get(api::api_today))
         .route("/api/tool-errors", get(api::api_tool_errors))
         .route("/api/archive", get(api::api_archive_list))
         .route("/api/archive/imports", get(api::api_archive_imports))

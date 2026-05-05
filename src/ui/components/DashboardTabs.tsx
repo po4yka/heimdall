@@ -2,6 +2,7 @@ import { activeDashboardTab, type DashboardTab } from '../state/store';
 
 const TABS: Array<{ key: DashboardTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
+  { key: 'today', label: 'Today' },
   { key: 'activity', label: 'Activity' },
   { key: 'breakdowns', label: 'Breakdowns' },
   { key: 'tables', label: 'Tables' },
