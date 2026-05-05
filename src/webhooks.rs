@@ -411,6 +411,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         };
 
         let event = WebhookEvent {
@@ -433,6 +435,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         };
 
         let event = WebhookEvent {
@@ -455,6 +459,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         };
 
         let event = WebhookEvent {
@@ -477,6 +483,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         };
 
         let event = WebhookEvent {
@@ -499,6 +507,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         };
         let mut state = WebhookState::default();
 
@@ -522,6 +532,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         };
         let mut state = WebhookState::default();
 
@@ -564,6 +576,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         };
         let mut state = WebhookState::default();
 
@@ -618,6 +632,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         };
         let disabled = WebhookConfig {
             cap_changes: false,
@@ -667,6 +683,8 @@ mod tests {
             agent_status: true,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         }
     }
 
@@ -678,6 +696,8 @@ mod tests {
             agent_status: false,
             spike_webhook: true,
             cap_changes: true,
+            agent_stop_reason: true,
+            agent_stop_reason_filter: None,
         }
     }
 

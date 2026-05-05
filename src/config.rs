@@ -419,6 +419,14 @@ pub struct WebhookConfig {
     /// materially (default: true when the webhooks section is present).
     #[serde(default = "default_true")]
     pub cap_changes: bool,
+    /// Notify when a Claude subagent's terminal `stop_reason` lands on the
+    /// configured allowlist (default: `["max_tokens", "refusal"]`).
+    #[serde(default = "default_true")]
+    pub agent_stop_reason: bool,
+    /// Optional override for the stop_reason allowlist. `None` resolves to the
+    /// hardcoded default (`["max_tokens", "refusal"]`).
+    #[serde(default)]
+    pub agent_stop_reason_filter: Option<Vec<String>>,
 }
 
 fn default_true() -> bool {
@@ -957,6 +965,29 @@ output = 8.0
         assert!(config.webhooks.agent_status);
         assert!(config.webhooks.spike_webhook);
         assert!(config.webhooks.cap_changes);
+        assert!(config.webhooks.agent_stop_reason);
+        assert!(config.webhooks.agent_stop_reason_filter.is_none());
+    }
+
+    #[test]
+    fn test_webhook_config_agent_stop_reason_filter_custom() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(
+            f,
+            "[webhooks]\nurl = \"https://hooks.example.com\"\nagent_stop_reason = false\nagent_stop_reason_filter = [\"max_tokens\", \"refusal\", \"stop_sequence\"]\n"
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert!(!config.webhooks.agent_stop_reason);
+        let filter = config
+            .webhooks
+            .agent_stop_reason_filter
+            .as_ref()
+            .expect("filter present");
+        assert_eq!(filter.len(), 3);
+        assert!(filter.iter().any(|s| s == "stop_sequence"));
     }
 
     #[test]
