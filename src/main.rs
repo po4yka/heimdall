@@ -112,7 +112,9 @@ enum Commands {
         /// IPv6, or `--host 0.0.0.0` to bind all interfaces.
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
-        #[arg(long, default_value = "8080")]
+        /// Listen port. Defaults to 8787 to match the macOS Heimdall.app
+        /// helper convention (see Domain/Sources/ProviderConfig.swift).
+        #[arg(long, default_value = "8787")]
         port: u16,
         /// Enable file-watcher auto-refresh: re-scan whenever .jsonl files change
         #[arg(long, default_value_t = false)]
