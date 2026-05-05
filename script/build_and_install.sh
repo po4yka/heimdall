@@ -19,7 +19,11 @@ PROJECT_FILE="$PROJECT_DIR/Heimdall.xcodeproj"
 DERIVED_DATA="$PROJECT_DIR/.derived"
 INSTALL_DIR="${HEIMDALL_INSTALL_DIR:-/Applications}"
 
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+
 uninstall_existing() {
+  local purge_derived="${1:-0}"
+
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
   # Use heimdall's own uninstall verbs so version-independent ownership
@@ -44,6 +48,22 @@ uninstall_existing() {
     echo "removed: $app"
   done
 
+  # Xcode's default DerivedData also lands a launchable Heimdall.app that
+  # Spotlight/Launchpad surface. Pre-install runs skip this so incremental
+  # rebuilds stay fast; explicit `uninstall` mode wipes it.
+  if [[ "$purge_derived" == "1" ]]; then
+    local dd
+    while IFS= read -r dd; do
+      rm -rf "$dd"
+      echo "removed: $dd"
+    done < <(find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 1 -type d -name "$APP_NAME-*" 2>/dev/null)
+    if [[ -d "$DERIVED_DATA" ]]; then
+      rm -rf "$DERIVED_DATA"
+      echo "removed: $DERIVED_DATA"
+    fi
+    [[ -x "$LSREGISTER" ]] && "$LSREGISTER" -kill -r -domain local -domain system -domain user >/dev/null 2>&1 || true
+  fi
+
   if [[ "${HEIMDALL_PURGE_DATA:-0}" == "1" ]]; then
     rm -rf "$HOME/.config/heimdall"
     echo "purged: $HOME/.config/heimdall"
@@ -53,7 +73,7 @@ uninstall_existing() {
 case "$MODE" in
   Debug|Release) ;;
   uninstall)
-    uninstall_existing
+    uninstall_existing 1
     exit 0
     ;;
   *)
