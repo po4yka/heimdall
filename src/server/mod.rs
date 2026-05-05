@@ -198,6 +198,11 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
                 .put(api::api_layout_upsert)
                 .delete(api::api_layout_delete),
         )
+        .route("/api/projects", get(api::api_projects_list))
+        .route(
+            "/api/projects/{uuid}",
+            axum::routing::patch(api::api_projects_patch),
+        )
         .with_state(state)
 }
 

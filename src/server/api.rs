@@ -205,20 +205,24 @@ pub async fn api_data(
 
     maybe_send_cost_threshold_webhook(&state, &result).await;
 
-    // Phase 11: apply project aliases — resolve display_name on every row.
-    // Aliases are pre-loaded into AppState at startup; no per-request disk read.
+    // Display-name precedence: custom_label (from project_settings) > config
+    // alias > raw project_name. custom_label is populated by the LEFT JOIN in
+    // the underlying SQL queries; aliases come from the static config map
+    // pre-loaded into AppState at startup (no per-request disk read).
     let aliases = &state.project_aliases;
     for row in &mut result.daily_by_project {
-        row.display_name = aliases
-            .get(&row.project)
-            .map(|s| s.as_str())
+        row.display_name = row
+            .custom_label
+            .as_deref()
+            .or_else(|| aliases.get(&row.project).map(|s| s.as_str()))
             .unwrap_or(&row.project)
             .to_string();
     }
     for row in &mut result.sessions_all {
-        row.display_name = aliases
-            .get(&row.project)
-            .map(|s| s.as_str())
+        row.display_name = row
+            .custom_label
+            .as_deref()
+            .or_else(|| aliases.get(&row.project).map(|s| s.as_str()))
             .unwrap_or(&row.project)
             .to_string();
     }
@@ -2909,6 +2913,92 @@ pub async fn agent_registry_acknowledge_all(
         acknowledged,
         already_existed,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Project management: pinning + custom-label endpoints
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ProjectPatchBody {
+    #[serde(default)]
+    pub label: DoubleOption<String>,
+    #[serde(default)]
+    pub pinned: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ProjectsListResponse {
+    pub projects: Vec<crate::models::ProjectRegistryRow>,
+    pub generated_at: String,
+}
+
+/// `GET /api/projects` — full project registry with stats and settings.
+pub async fn api_projects_list(
+    State(state): State<Arc<AppState>>,
+    Query(tz): Query<TzParams>,
+    request: Request,
+) -> Result<Json<ProjectsListResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _db_guard = state.db_lock.lock().await;
+    let db_path = state.db_path.clone();
+    let aliases = state.project_aliases.clone();
+    let projects = tokio::task::spawn_blocking(
+        move || -> anyhow::Result<Vec<crate::models::ProjectRegistryRow>> {
+            let conn = db::open_db(&db_path)?;
+            db::init_db(&conn)?;
+            let mut rows = db::query_project_registry(&conn, &tz)?;
+            // Apply config-file alias as a fallback when no custom_label is set.
+            for row in &mut rows {
+                if row.custom_label.is_none()
+                    && let Some(alias) = aliases.get(&row.slug)
+                {
+                    row.display_name = alias.clone();
+                }
+            }
+            Ok(rows)
+        },
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(ProjectsListResponse {
+        projects,
+        generated_at: chrono::Utc::now().to_rfc3339(),
+    }))
+}
+
+/// `PATCH /api/projects/{uuid}` — update label and/or pinned state.
+/// Returns 404 when the UUID does not match any known project.
+pub async fn api_projects_patch(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(uuid): axum::extract::Path<String>,
+    request: Request,
+) -> Result<Json<crate::models::ProjectSettingsRow>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let _db_guard = state.db_lock.lock().await;
+    let body_bytes = axum::body::to_bytes(request.into_body(), 64 * 1024)
+        .await
+        .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
+    let body: ProjectPatchBody =
+        serde_json::from_slice(&body_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let update = crate::models::ProjectSettingsUpdate {
+        custom_label: body.label.into_outer(),
+        pinned: body.pinned,
+    };
+    let db_path = state.db_path.clone();
+    tokio::task::spawn_blocking(move || -> Result<_, StatusCode> {
+        let conn = db::open_db(&db_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        db::init_db(&conn).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let row = db::find_project_by_uuid(&conn, &uuid)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
+        db::upsert_project_settings(&conn, &row.project_slug, &update)
+            .map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map(Json)
 }
 
 // ---------------------------------------------------------------------------
