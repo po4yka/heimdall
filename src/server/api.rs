@@ -426,7 +426,12 @@ pub(crate) async fn build_subscription_quota_section(
                             est, &history,
                         );
                         if let Some(shift) = smoothed.cap_shift {
-                            tracing::warn!(
+                            // Cap shifts are informational telemetry — the
+                            // detector flags ≥±20% deltas vs the smoothed
+                            // baseline, which signals a genuine policy
+                            // change (e.g. the OpenAI 2× Codex promo). It's
+                            // not a failure, so log at info, not warn.
+                            tracing::info!(
                                 target: "quota.cap_shift",
                                 provider = %provider_for_task,
                                 window_type = %spec.kind,
