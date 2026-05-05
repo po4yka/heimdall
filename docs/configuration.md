@@ -121,6 +121,7 @@ url = "https://hooks.example.com/notify"
 cost_threshold = 50.0
 session_depleted = true
 agent_status = true
+cap_changes = true
 
 # Upstream coding-agent status monitoring
 [agent_status]

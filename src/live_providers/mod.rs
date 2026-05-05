@@ -376,6 +376,66 @@ const WINDOW_SEVEN_DAY_SONNET: &str = "seven_day_sonnet";
 const WINDOW_CODEX_PRIMARY: &str = "codex_primary";
 const WINDOW_CODEX_SECONDARY: &str = "codex_secondary";
 
+#[derive(Debug)]
+struct SubscriptionCapChangeObservation {
+    provider: String,
+    service_label: String,
+    window_type: String,
+    window_label: String,
+    cap_shift: Option<String>,
+    estimated_cap_tokens: i64,
+    smoothed_cap_tokens: Option<i64>,
+    observed_tokens: i64,
+    used_percent: f64,
+    confidence: f64,
+    sample_count: Option<u32>,
+    plan: Option<String>,
+    source_used: String,
+}
+
+fn provider_service_label(provider: &str) -> &str {
+    match provider {
+        "claude" => "Claude Code",
+        "codex" => "Codex",
+        _ => provider,
+    }
+}
+
+async fn send_subscription_cap_change_webhooks(
+    state: &Arc<AppState>,
+    observations: Vec<SubscriptionCapChangeObservation>,
+) {
+    if observations.is_empty() {
+        return;
+    }
+
+    let mut webhook_state = state.webhook_state.lock().await;
+    for observation in &observations {
+        let event = crate::webhooks::cap_change_transition_event(
+            &state.webhook_config,
+            &mut webhook_state,
+            crate::webhooks::CapChangeObservation {
+                provider: observation.provider.as_str(),
+                service_label: observation.service_label.as_str(),
+                window_type: observation.window_type.as_str(),
+                window_label: observation.window_label.as_str(),
+                cap_shift: observation.cap_shift.as_deref(),
+                estimated_cap_tokens: observation.estimated_cap_tokens,
+                smoothed_cap_tokens: observation.smoothed_cap_tokens,
+                observed_tokens: observation.observed_tokens,
+                used_percent: observation.used_percent,
+                confidence: observation.confidence,
+                sample_count: observation.sample_count,
+                plan: observation.plan.as_deref(),
+                source_used: observation.source_used.as_str(),
+            },
+        );
+        if let Some(event) = event {
+            crate::webhooks::notify_if_configured(&state.webhook_config, event);
+        }
+    }
+}
+
 /// Persist quota snapshots for the current response on a fire-and-forget task.
 /// Failure to record is non-fatal: the historical chart simply skips that
 /// data point. We never want to block the live-provider response on disk IO.
@@ -387,9 +447,11 @@ fn record_subscription_quota_snapshots(state: &Arc<AppState>, response: &LivePro
     struct WindowSpec<'a> {
         provider: &'a str,
         window_type: &'a str,
+        window_label: &'a str,
         used_percent: f64,
         resets_at: Option<String>,
         plan: Option<String>,
+        source_used: &'a str,
         window_seconds: i64,
         model_pattern: Option<&'a str>,
     }
@@ -403,9 +465,11 @@ fn record_subscription_quota_snapshots(state: &Arc<AppState>, response: &LivePro
                     specs.push(WindowSpec {
                         provider: "claude",
                         window_type: WINDOW_FIVE_HOUR,
+                        window_label: "5-hour window",
                         used_percent: window.used_percent,
                         resets_at: window.resets_at.clone(),
                         plan: plan.clone(),
+                        source_used: snapshot.source_used.as_str(),
                         window_seconds: 5 * 3600,
                         model_pattern: None,
                     });
@@ -414,9 +478,11 @@ fn record_subscription_quota_snapshots(state: &Arc<AppState>, response: &LivePro
                     specs.push(WindowSpec {
                         provider: "claude",
                         window_type: WINDOW_SEVEN_DAY,
+                        window_label: "Weekly (overall)",
                         used_percent: window.used_percent,
                         resets_at: window.resets_at.clone(),
                         plan: plan.clone(),
+                        source_used: snapshot.source_used.as_str(),
                         window_seconds: 7 * 86_400,
                         model_pattern: None,
                     });
@@ -432,18 +498,22 @@ fn record_subscription_quota_snapshots(state: &Arc<AppState>, response: &LivePro
                     specs.push(WindowSpec {
                         provider: "claude",
                         window_type: WINDOW_SEVEN_DAY_OPUS,
+                        window_label: "Weekly Opus",
                         used_percent: used,
                         resets_at: resets.clone(),
                         plan: plan.clone(),
+                        source_used: snapshot.source_used.as_str(),
                         window_seconds: 7 * 86_400,
                         model_pattern: Some("%opus%"),
                     });
                     specs.push(WindowSpec {
                         provider: "claude",
                         window_type: WINDOW_SEVEN_DAY_SONNET,
+                        window_label: "Weekly Sonnet",
                         used_percent: used,
                         resets_at: resets,
                         plan: plan.clone(),
+                        source_used: snapshot.source_used.as_str(),
                         window_seconds: 7 * 86_400,
                         model_pattern: Some("%sonnet%"),
                     });
@@ -454,9 +524,11 @@ fn record_subscription_quota_snapshots(state: &Arc<AppState>, response: &LivePro
                     specs.push(WindowSpec {
                         provider: "codex",
                         window_type: WINDOW_CODEX_PRIMARY,
+                        window_label: "Primary window",
                         used_percent: window.used_percent,
                         resets_at: window.resets_at.clone(),
                         plan: plan.clone(),
+                        source_used: snapshot.source_used.as_str(),
                         window_seconds: window.window_minutes.unwrap_or(5 * 60) * 60,
                         model_pattern: None,
                     });
@@ -465,9 +537,11 @@ fn record_subscription_quota_snapshots(state: &Arc<AppState>, response: &LivePro
                     specs.push(WindowSpec {
                         provider: "codex",
                         window_type: WINDOW_CODEX_SECONDARY,
+                        window_label: "Secondary window",
                         used_percent: window.used_percent,
                         resets_at: window.resets_at.clone(),
                         plan,
+                        source_used: snapshot.source_used.as_str(),
                         window_seconds: window.window_minutes.unwrap_or(7 * 24 * 60) * 60,
                         model_pattern: None,
                     });
@@ -493,9 +567,11 @@ fn record_subscription_quota_snapshots(state: &Arc<AppState>, response: &LivePro
     struct OwnedSpec {
         provider: String,
         window_type: String,
+        window_label: String,
         used_percent: f64,
         resets_at: Option<String>,
         plan: Option<String>,
+        source_used: String,
         window_seconds: i64,
         model_pattern: Option<String>,
     }
@@ -504,57 +580,98 @@ fn record_subscription_quota_snapshots(state: &Arc<AppState>, response: &LivePro
         .map(|s| OwnedSpec {
             provider: s.provider.to_string(),
             window_type: s.window_type.to_string(),
+            window_label: s.window_label.to_string(),
             used_percent: s.used_percent,
             resets_at: s.resets_at,
             plan: s.plan,
+            source_used: s.source_used.to_string(),
             window_seconds: s.window_seconds,
             model_pattern: s.model_pattern.map(|p| p.to_string()),
         })
         .collect();
     let db_path = state.db_path.clone();
+    let webhook_state = Arc::clone(state);
 
-    tokio::task::spawn_blocking(move || {
-        use crate::scanner::db::{init_db, observed_tokens_for_window, open_db};
-        let conn = match open_db(&db_path) {
-            Ok(c) => c,
-            Err(err) => {
-                tracing::warn!("subscription_quota: open_db failed: {err}");
-                return;
-            }
-        };
-        if let Err(err) = init_db(&conn) {
-            tracing::warn!("subscription_quota: init_db failed: {err}");
-            return;
-        }
-        for spec in &owned {
-            let observed = observed_tokens_for_window(
-                &conn,
-                &spec.provider,
-                spec.window_seconds,
-                spec.model_pattern.as_deref(),
-                spec.resets_at.as_deref(),
-            )
-            .unwrap_or(0);
-            let estimate = estimate_window_cap(spec.used_percent, observed);
-            let snap = RateWindowSnapshotInsert {
-                provider: &spec.provider,
-                window_type: &spec.window_type,
-                used_percent: spec.used_percent,
-                resets_at: spec.resets_at.as_deref(),
-                plan: spec.plan.as_deref(),
-                observed_tokens: Some(observed),
-                estimated_cap_tokens: estimate.map(|e| e.estimated_cap_tokens),
-                confidence: estimate.map(|e| e.confidence),
-                source_kind: "oauth",
+    tokio::spawn(async move {
+        let observations = tokio::task::spawn_blocking(move || {
+            use crate::live_providers::quota_estimator::smooth_with_history;
+            use crate::scanner::db::{
+                init_db, observed_tokens_for_window, open_db, recent_cap_observations,
             };
-            if let Err(err) = record_rate_window_snapshot(&conn, &snap) {
-                tracing::warn!(
-                    "subscription_quota: record snapshot {}/{} failed: {err}",
-                    spec.provider,
-                    spec.window_type
-                );
+            let mut observations = Vec::new();
+            let conn = match open_db(&db_path) {
+                Ok(c) => c,
+                Err(err) => {
+                    tracing::warn!("subscription_quota: open_db failed: {err}");
+                    return observations;
+                }
+            };
+            if let Err(err) = init_db(&conn) {
+                tracing::warn!("subscription_quota: init_db failed: {err}");
+                return observations;
             }
-        }
+            for spec in &owned {
+                let observed = observed_tokens_for_window(
+                    &conn,
+                    &spec.provider,
+                    spec.window_seconds,
+                    spec.model_pattern.as_deref(),
+                    spec.resets_at.as_deref(),
+                )
+                .unwrap_or(0);
+                let estimate = estimate_window_cap(spec.used_percent, observed);
+                let smoothed = estimate.map(|estimate| {
+                    let history =
+                        recent_cap_observations(&conn, &spec.provider, &spec.window_type, 24)
+                            .unwrap_or_default();
+                    smooth_with_history(estimate, &history)
+                });
+                observations.push(SubscriptionCapChangeObservation {
+                    provider: spec.provider.clone(),
+                    service_label: provider_service_label(&spec.provider).to_string(),
+                    window_type: spec.window_type.clone(),
+                    window_label: spec.window_label.clone(),
+                    cap_shift: smoothed
+                        .and_then(|estimate| estimate.cap_shift)
+                        .map(|shift| shift.as_str().to_string()),
+                    estimated_cap_tokens: smoothed
+                        .map(|estimate| estimate.current_cap_tokens)
+                        .unwrap_or(0),
+                    smoothed_cap_tokens: smoothed.map(|estimate| estimate.smoothed_cap_tokens),
+                    observed_tokens: observed,
+                    used_percent: spec.used_percent,
+                    confidence: smoothed.map(|estimate| estimate.confidence).unwrap_or(0.0),
+                    sample_count: smoothed.map(|estimate| estimate.sample_count),
+                    plan: spec.plan.clone(),
+                    source_used: spec.source_used.clone(),
+                });
+                let snap = RateWindowSnapshotInsert {
+                    provider: &spec.provider,
+                    window_type: &spec.window_type,
+                    used_percent: spec.used_percent,
+                    resets_at: spec.resets_at.as_deref(),
+                    plan: spec.plan.as_deref(),
+                    observed_tokens: Some(observed),
+                    estimated_cap_tokens: estimate.map(|e| e.estimated_cap_tokens),
+                    confidence: estimate.map(|e| e.confidence),
+                    source_kind: "oauth",
+                };
+                if let Err(err) = record_rate_window_snapshot(&conn, &snap) {
+                    tracing::warn!(
+                        "subscription_quota: record snapshot {}/{} failed: {err}",
+                        spec.provider,
+                        spec.window_type
+                    );
+                }
+            }
+            observations
+        })
+        .await
+        .unwrap_or_else(|err| {
+            tracing::warn!("subscription_quota: snapshot task join failed: {err}");
+            Vec::new()
+        });
+        send_subscription_cap_change_webhooks(&webhook_state, observations).await;
     });
 }
 

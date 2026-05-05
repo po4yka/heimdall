@@ -772,6 +772,168 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_subscription_quota_cap_shifts_update_webhook_state_for_claude_and_codex() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let mut raw_state = base_state(db_path.clone(), projects);
+        raw_state.webhook_config.cap_changes = true;
+        let state = Arc::new(raw_state);
+
+        let now = chrono::Utc::now();
+        let now_str = now.to_rfc3339();
+        {
+            let conn = crate::scanner::db::open_db(&db_path).unwrap();
+            crate::scanner::db::init_db(&conn).unwrap();
+            conn.execute(
+                "INSERT OR IGNORE INTO sessions
+                    (session_id, provider, first_timestamp, last_timestamp, turn_count)
+                 VALUES (?1, ?2, ?3, ?3, 1)",
+                rusqlite::params!["cap-claude", "claude", now_str.as_str()],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT OR IGNORE INTO sessions
+                    (session_id, provider, first_timestamp, last_timestamp, turn_count)
+                 VALUES (?1, ?2, ?3, ?3, 1)",
+                rusqlite::params!["cap-codex", "codex", now_str.as_str()],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO turns
+                    (session_id, provider, timestamp, model, input_tokens, output_tokens)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+                rusqlite::params![
+                    "cap-claude",
+                    "claude",
+                    now_str.as_str(),
+                    "claude-sonnet-4-6",
+                    650_000_i64,
+                ],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO turns
+                    (session_id, provider, timestamp, model, input_tokens, output_tokens)
+                 VALUES (?1, ?2, ?3, ?4, ?5, 0)",
+                rusqlite::params![
+                    "cap-codex",
+                    "codex",
+                    now_str.as_str(),
+                    "gpt-5-codex",
+                    75_000_i64,
+                ],
+            )
+            .unwrap();
+
+            for i in 1..=7 {
+                let timestamp = (now - chrono::Duration::hours(i)).to_rfc3339();
+                conn.execute(
+                    "INSERT INTO rate_window_history
+                        (timestamp, window_type, used_percent, resets_at,
+                         source_kind, source_path, provider, plan,
+                         observed_tokens, estimated_cap_tokens, confidence)
+                     VALUES (?1, ?2, 50.0, NULL, 'oauth', '', ?3, ?4, ?5, ?6, 1.0)",
+                    rusqlite::params![
+                        timestamp.as_str(),
+                        "five_hour",
+                        "claude",
+                        "pro",
+                        500_000_i64,
+                        1_000_000_i64,
+                    ],
+                )
+                .unwrap();
+                conn.execute(
+                    "INSERT INTO rate_window_history
+                        (timestamp, window_type, used_percent, resets_at,
+                         source_kind, source_path, provider, plan,
+                         observed_tokens, estimated_cap_tokens, confidence)
+                     VALUES (?1, ?2, 50.0, NULL, 'oauth', '', ?3, ?4, ?5, ?6, 1.0)",
+                    rusqlite::params![
+                        timestamp.as_str(),
+                        "codex_primary",
+                        "codex",
+                        "pro",
+                        100_000_i64,
+                        200_000_i64,
+                    ],
+                )
+                .unwrap();
+            }
+        }
+
+        let mut live = cached_live_provider_response(false);
+        let reset = (now + chrono::Duration::hours(1)).to_rfc3339();
+        let claude = live
+            .providers
+            .iter_mut()
+            .find(|provider| provider.provider == "claude")
+            .unwrap();
+        let claude_primary = claude.primary.as_mut().unwrap();
+        claude_primary.used_percent = 50.0;
+        claude_primary.resets_at = Some(reset.clone());
+        claude_primary.window_minutes = Some(300);
+        claude.identity = Some(crate::models::LiveProviderIdentity {
+            provider: "claude".into(),
+            account_email: None,
+            account_organization: None,
+            login_method: Some("oauth".into()),
+            plan: Some("pro".into()),
+        });
+        let codex = live
+            .providers
+            .iter_mut()
+            .find(|provider| provider.provider == "codex")
+            .unwrap();
+        let codex_primary = codex.primary.as_mut().unwrap();
+        codex_primary.used_percent = 50.0;
+        codex_primary.resets_at = Some(reset);
+        codex_primary.window_minutes = Some(60);
+        codex.identity = Some(crate::models::LiveProviderIdentity {
+            provider: "codex".into(),
+            account_email: None,
+            account_organization: None,
+            login_method: Some("chatgpt".into()),
+            plan: Some("pro".into()),
+        });
+
+        {
+            let mut cache = state.live_provider_cache.write().await;
+            *cache = Some((std::time::Instant::now(), live));
+        }
+
+        let section = crate::server::api::build_subscription_quota_section(&state)
+            .await
+            .expect("subscription quota section");
+        let claude_shift = section
+            .providers
+            .iter()
+            .find(|provider| provider.provider == "claude")
+            .and_then(|provider| provider.estimated.as_ref())
+            .and_then(|estimated| estimated.windows.iter().find(|w| w.kind == "five_hour"))
+            .and_then(|window| window.cap_shift.as_deref());
+        let codex_shift = section
+            .providers
+            .iter()
+            .find(|provider| provider.provider == "codex")
+            .and_then(|provider| provider.estimated.as_ref())
+            .and_then(|estimated| estimated.windows.iter().find(|w| w.kind == "codex_primary"))
+            .and_then(|window| window.cap_shift.as_deref());
+        assert_eq!(claude_shift, Some("increase"));
+        assert_eq!(codex_shift, Some("decrease"));
+
+        let webhook_state = state.webhook_state.lock().await;
+        assert_eq!(
+            webhook_state.cap_change_shifts.get("claude:five_hour"),
+            Some(&"increase".to_string())
+        );
+        assert_eq!(
+            webhook_state.cap_change_shifts.get("codex:codex_primary"),
+            Some(&"decrease".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn test_api_rescan_returns_json() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);

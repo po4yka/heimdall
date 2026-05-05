@@ -415,6 +415,10 @@ pub struct WebhookConfig {
     /// (default: true — fires only when the feature is enabled).
     #[serde(default = "default_true")]
     pub spike_webhook: bool,
+    /// Notify when estimated Claude Code or Codex subscription caps change
+    /// materially (default: true when the webhooks section is present).
+    #[serde(default = "default_true")]
+    pub cap_changes: bool,
 }
 
 fn default_true() -> bool {
@@ -921,13 +925,14 @@ output = 8.0
         let mut f = std::fs::File::create(&path).unwrap();
         write!(
             f,
-            "[webhooks]\nurl = \"https://hooks.example.com\"\ncost_threshold = 50.0\nsession_depleted = true\n"
+            "[webhooks]\nurl = \"https://hooks.example.com\"\ncost_threshold = 50.0\nsession_depleted = true\ncap_changes = false\n"
         )
         .unwrap();
         let config = load_config_from(&path);
         assert_eq!(config.webhooks.url.unwrap(), "https://hooks.example.com");
         assert!((config.webhooks.cost_threshold.unwrap() - 50.0).abs() < 0.01);
         assert!(config.webhooks.session_depleted);
+        assert!(!config.webhooks.cap_changes);
     }
 
     #[test]
@@ -939,6 +944,19 @@ output = 8.0
         assert!(config.webhooks.url.is_none());
         assert!(config.webhooks.cost_threshold.is_none());
         assert!(!config.webhooks.session_depleted);
+        assert!(!config.webhooks.cap_changes);
+    }
+
+    #[test]
+    fn test_webhook_config_section_defaults_cap_changes_true() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("config.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        write!(f, "[webhooks]\nurl = \"https://hooks.example.com\"\n").unwrap();
+        let config = load_config_from(&path);
+        assert!(config.webhooks.agent_status);
+        assert!(config.webhooks.spike_webhook);
+        assert!(config.webhooks.cap_changes);
     }
 
     #[test]

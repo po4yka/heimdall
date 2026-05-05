@@ -182,6 +182,7 @@
       "$ref": "#/$defs/WebhookConfig",
       "default": {
         "agent_status": false,
+        "cap_changes": false,
         "cost_threshold": null,
         "session_depleted": false,
         "spike_webhook": false,
@@ -623,6 +624,11 @@
       "properties": {
         "agent_status": {
           "description": "Notify on agent status transitions (default: true when URL is set).",
+          "type": "boolean",
+          "default": true
+        },
+        "cap_changes": {
+          "description": "Notify when estimated Claude Code or Codex subscription caps change\nmaterially (default: true when the webhooks section is present).",
           "type": "boolean",
           "default": true
         },

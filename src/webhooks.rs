@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::Serialize;
 use tracing::{debug, error, info};
 
@@ -26,6 +28,10 @@ pub struct WebhookState {
     /// Track whether OpenAI community signal was last seen as a spike while
     /// official status was below Major (leading-indicator dedup).
     pub openai_community_spike: Option<bool>,
+    /// Active subscription-cap shift state keyed by `provider:window_type`.
+    /// The value is `"increase"` or `"decrease"`; absence means no active
+    /// material cap change was last observed for that window.
+    pub cap_change_shifts: HashMap<String, String>,
 }
 
 /// POST a webhook event to the given URL. Fire-and-forget via `tokio::spawn`.
@@ -94,6 +100,7 @@ pub fn notify_if_configured(config: &WebhookConfig, event: WebhookEvent) {
         "cost_threshold" => config.cost_threshold.is_some(),
         "agent_status_degraded" | "agent_status_restored" => config.agent_status,
         "community_signal_spike" => config.spike_webhook,
+        "subscription_cap_changed" => config.cap_changes,
         _ => {
             debug!("Unknown webhook event type: {}", event.event_type);
             false
@@ -235,6 +242,91 @@ pub fn cost_threshold_event(
     })
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct CapChangeObservation<'a> {
+    pub provider: &'a str,
+    pub service_label: &'a str,
+    pub window_type: &'a str,
+    pub window_label: &'a str,
+    pub cap_shift: Option<&'a str>,
+    pub estimated_cap_tokens: i64,
+    pub smoothed_cap_tokens: Option<i64>,
+    pub observed_tokens: i64,
+    pub used_percent: f64,
+    pub confidence: f64,
+    pub sample_count: Option<u32>,
+    pub plan: Option<&'a str>,
+    pub source_used: &'a str,
+}
+
+/// Produce a webhook event when a subscription cap estimate enters or flips a
+/// material shift state for one provider/window. The state is cleared once the
+/// estimator no longer reports a shift, so future changes can notify again.
+pub fn cap_change_transition_event(
+    config: &WebhookConfig,
+    state: &mut WebhookState,
+    observation: CapChangeObservation<'_>,
+) -> Option<WebhookEvent> {
+    let state_key = format!("{}:{}", observation.provider, observation.window_type);
+    let cap_shift = observation.cap_shift.filter(|value| {
+        value.eq_ignore_ascii_case("increase") || value.eq_ignore_ascii_case("decrease")
+    });
+
+    if !config.cap_changes {
+        match cap_shift {
+            Some(shift) => {
+                state
+                    .cap_change_shifts
+                    .insert(state_key, shift.to_ascii_lowercase());
+            }
+            None => {
+                state.cap_change_shifts.remove(&state_key);
+            }
+        }
+        return None;
+    }
+
+    let Some(shift) = cap_shift else {
+        state.cap_change_shifts.remove(&state_key);
+        return None;
+    };
+    let shift = shift.to_ascii_lowercase();
+    let previous = state.cap_change_shifts.insert(state_key, shift.clone());
+    if previous.as_deref() == Some(shift.as_str()) {
+        return None;
+    }
+
+    let direction = if shift == "increase" {
+        "increased"
+    } else {
+        "decreased"
+    };
+
+    Some(WebhookEvent {
+        event_type: "subscription_cap_changed".to_string(),
+        message: format!(
+            "{} {} cap estimate {}.",
+            observation.service_label, observation.window_label, direction
+        ),
+        details: serde_json::json!({
+            "provider": observation.provider,
+            "service": observation.service_label,
+            "window_type": observation.window_type,
+            "window_label": observation.window_label,
+            "cap_shift": shift,
+            "estimated_cap_tokens": observation.estimated_cap_tokens,
+            "smoothed_cap_tokens": observation.smoothed_cap_tokens,
+            "observed_tokens": observation.observed_tokens,
+            "used_percent": observation.used_percent,
+            "confidence": observation.confidence,
+            "sample_count": observation.sample_count,
+            "plan": observation.plan,
+            "source_used": observation.source_used,
+        }),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    })
+}
+
 /// Produce a `community_signal_spike` webhook event when the crowd signal for a
 /// provider transitions to Spike AND the official indicator is below Major
 /// (i.e., the crowd sees something the official status page hasn't confirmed).
@@ -318,6 +410,7 @@ mod tests {
             session_depleted: true,
             agent_status: true,
             spike_webhook: true,
+            cap_changes: true,
         };
 
         let event = WebhookEvent {
@@ -339,6 +432,7 @@ mod tests {
             session_depleted: false, // session events disabled
             agent_status: true,
             spike_webhook: true,
+            cap_changes: true,
         };
 
         let event = WebhookEvent {
@@ -360,6 +454,7 @@ mod tests {
             session_depleted: true,
             agent_status: true,
             spike_webhook: true,
+            cap_changes: true,
         };
 
         let event = WebhookEvent {
@@ -381,6 +476,7 @@ mod tests {
             session_depleted: true,
             agent_status: true,
             spike_webhook: true,
+            cap_changes: true,
         };
 
         let event = WebhookEvent {
@@ -402,6 +498,7 @@ mod tests {
             session_depleted: true,
             agent_status: true,
             spike_webhook: true,
+            cap_changes: true,
         };
         let mut state = WebhookState::default();
 
@@ -424,6 +521,7 @@ mod tests {
             session_depleted: false,
             agent_status: true,
             spike_webhook: true,
+            cap_changes: true,
         };
         let mut state = WebhookState::default();
 
@@ -432,6 +530,131 @@ mod tests {
         assert_eq!(first.event_type, "cost_threshold");
         assert!(cost_threshold_event(&config, &mut state, "2026-04-10", 70.0).is_none());
         assert!(cost_threshold_event(&config, &mut state, "2026-04-11", 70.0).is_some());
+    }
+
+    fn cap_change_obs<'a>(
+        provider: &'a str,
+        service_label: &'a str,
+        window_type: &'a str,
+        cap_shift: Option<&'a str>,
+    ) -> CapChangeObservation<'a> {
+        CapChangeObservation {
+            provider,
+            service_label,
+            window_type,
+            window_label: "5-hour window",
+            cap_shift,
+            estimated_cap_tokens: 1_300_000,
+            smoothed_cap_tokens: Some(1_050_000),
+            observed_tokens: 650_000,
+            used_percent: 50.0,
+            confidence: 1.0,
+            sample_count: Some(7),
+            plan: Some("pro"),
+            source_used: "oauth",
+        }
+    }
+
+    #[test]
+    fn test_cap_change_event_fires_once_per_active_shift() {
+        let config = WebhookConfig {
+            url: Some("https://example.com/hook".to_string()),
+            cost_threshold: None,
+            session_depleted: false,
+            agent_status: true,
+            spike_webhook: true,
+            cap_changes: true,
+        };
+        let mut state = WebhookState::default();
+
+        let event = cap_change_transition_event(
+            &config,
+            &mut state,
+            cap_change_obs("claude", "Claude Code", "five_hour", Some("increase")),
+        )
+        .expect("first active shift should fire");
+        assert_eq!(event.event_type, "subscription_cap_changed");
+        assert_eq!(event.details["provider"], "claude");
+        assert_eq!(event.details["service"], "Claude Code");
+        assert_eq!(event.details["cap_shift"], "increase");
+
+        assert!(
+            cap_change_transition_event(
+                &config,
+                &mut state,
+                cap_change_obs("claude", "Claude Code", "five_hour", Some("increase")),
+            )
+            .is_none(),
+            "same active shift should be deduped"
+        );
+
+        assert!(
+            cap_change_transition_event(
+                &config,
+                &mut state,
+                cap_change_obs("claude", "Claude Code", "five_hour", None),
+            )
+            .is_none(),
+            "clearing the shift should not fire"
+        );
+
+        assert!(
+            cap_change_transition_event(
+                &config,
+                &mut state,
+                cap_change_obs("claude", "Claude Code", "five_hour", Some("increase")),
+            )
+            .is_some(),
+            "a later shift after clear should fire again"
+        );
+    }
+
+    #[test]
+    fn test_cap_change_event_tracks_windows_independently_and_honors_disable() {
+        let config = WebhookConfig {
+            url: Some("https://example.com/hook".to_string()),
+            cost_threshold: None,
+            session_depleted: false,
+            agent_status: true,
+            spike_webhook: true,
+            cap_changes: true,
+        };
+        let disabled = WebhookConfig {
+            cap_changes: false,
+            ..config.clone()
+        };
+        let mut state = WebhookState::default();
+
+        assert!(
+            cap_change_transition_event(
+                &config,
+                &mut state,
+                cap_change_obs("codex", "Codex", "codex_primary", Some("decrease")),
+            )
+            .is_some()
+        );
+        assert!(
+            cap_change_transition_event(
+                &config,
+                &mut state,
+                cap_change_obs("codex", "Codex", "codex_secondary", Some("decrease")),
+            )
+            .is_some(),
+            "a different window should notify independently"
+        );
+        assert!(
+            cap_change_transition_event(
+                &disabled,
+                &mut state,
+                cap_change_obs("codex", "Codex", "codex_primary", Some("increase")),
+            )
+            .is_none()
+        );
+        assert_eq!(
+            state.cap_change_shifts.get("codex:codex_primary"),
+            Some(&"increase".to_string()),
+            "disabled config should still update dedup state"
+        );
     }
 
     // ── Agent status webhook tests ───────────────────────────────────────────
@@ -443,6 +666,7 @@ mod tests {
             session_depleted: false,
             agent_status: true,
             spike_webhook: true,
+            cap_changes: true,
         }
     }
 
@@ -453,6 +677,7 @@ mod tests {
             session_depleted: false,
             agent_status: false,
             spike_webhook: true,
+            cap_changes: true,
         }
     }
 

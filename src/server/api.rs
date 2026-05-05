@@ -248,6 +248,7 @@ pub(crate) async fn build_subscription_quota_section(
             return None;
         }
     };
+    let emit_cap_webhooks_from_section = live.cache_hit;
 
     let db_path = state.db_path.clone();
     let history: Vec<RateWindowHistoryRow> =
@@ -434,6 +435,20 @@ pub(crate) async fn build_subscription_quota_section(
             .await
             .unwrap_or_default();
 
+        if emit_cap_webhooks_from_section {
+            let service_label = provider_service_label(&snapshot.provider);
+            maybe_send_cap_change_webhooks(
+                state,
+                snapshot.provider.as_str(),
+                service_label.as_str(),
+                snapshot.source_used.as_str(),
+                plan.as_deref(),
+                &windows,
+                &estimates,
+            )
+            .await;
+        }
+
         providers.push(ProviderQuotaSnapshot {
             provider: provider_str,
             plan: plan.clone(),
@@ -457,6 +472,83 @@ pub(crate) async fn build_subscription_quota_section(
         changelog: crate::subscription_changelog::load(),
         generated_at: chrono::Utc::now().to_rfc3339(),
     })
+}
+
+fn provider_service_label(provider: &str) -> String {
+    match provider {
+        "claude" => "Claude Code".into(),
+        "codex" => "Codex".into(),
+        other => other.to_string(),
+    }
+}
+
+async fn maybe_send_cap_change_webhooks(
+    state: &Arc<AppState>,
+    provider: &str,
+    service_label: &str,
+    source_used: &str,
+    plan: Option<&str>,
+    published_windows: &[crate::models::PublishedWindow],
+    estimates: &[crate::models::EstimatedWindow],
+) {
+    let mut webhook_state = state.webhook_state.lock().await;
+    for estimate in estimates {
+        let used_percent = published_windows
+            .iter()
+            .find(|window| window.kind == estimate.kind)
+            .map(|window| window.used_percent)
+            .unwrap_or(0.0);
+        let observation = webhooks::CapChangeObservation {
+            provider,
+            service_label,
+            window_type: estimate.kind.as_str(),
+            window_label: estimate.label.as_str(),
+            cap_shift: estimate.cap_shift.as_deref(),
+            estimated_cap_tokens: estimate.estimated_cap_tokens,
+            smoothed_cap_tokens: estimate.smoothed_cap_tokens,
+            observed_tokens: estimate.observed_tokens,
+            used_percent,
+            confidence: estimate.confidence,
+            sample_count: estimate.sample_count,
+            plan,
+            source_used,
+        };
+        if let Some(event) = webhooks::cap_change_transition_event(
+            &state.webhook_config,
+            &mut webhook_state,
+            observation,
+        ) {
+            webhooks::notify_if_configured(&state.webhook_config, event);
+        }
+    }
+    for window in published_windows {
+        if estimates
+            .iter()
+            .any(|estimate| estimate.kind.as_str() == window.kind.as_str())
+        {
+            continue;
+        }
+        let observation = webhooks::CapChangeObservation {
+            provider,
+            service_label,
+            window_type: window.kind.as_str(),
+            window_label: window.label.as_str(),
+            cap_shift: None,
+            estimated_cap_tokens: 0,
+            smoothed_cap_tokens: None,
+            observed_tokens: 0,
+            used_percent: window.used_percent,
+            confidence: 0.0,
+            sample_count: None,
+            plan,
+            source_used,
+        };
+        let _ = webhooks::cap_change_transition_event(
+            &state.webhook_config,
+            &mut webhook_state,
+            observation,
+        );
+    }
 }
 
 fn budget_from_snapshot(
