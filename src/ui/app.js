@@ -18514,9 +18514,12 @@ ${row.project}` : row.project;
       description: "Provider subscription utilization and history chart",
       category: "kpi",
       screens: ["overview"],
-      defaultSize: { w: 4, h: 3 },
+      // Renders six rate-window sub-cards (Session/Weekly/Weekly Sonnet/
+      // Weekly Opus/Claude/Codex). Natural content height ≈ 1300 px which at
+      // the 132 px GridStack cellHeight is exactly 10 rows.
+      defaultSize: { w: 4, h: 10 },
       minW: 2,
-      minH: 2,
+      minH: 8,
       render: mount("subscription-quota")
     },
     {
@@ -19076,7 +19079,7 @@ ${row.project}` : row.project;
   }
   var OVERVIEW_WIDGETS = stack([
     { id: "usage-windows", h: 2 },
-    { id: "subscription-quota", h: 3 },
+    { id: "subscription-quota", h: 10 },
     { id: "claude-usage", h: 2 },
     { id: "agent-status", h: 2 },
     { id: "estimation-meta", h: 1 },
@@ -19211,7 +19214,15 @@ ${row.project}` : row.project;
   function reconcileLayout(saved, screen) {
     const catalog = widgetsForScreen(screen);
     const catalogIds = new Set(catalog.map((w5) => w5.id));
-    const widgets = saved.widgets.filter((w5) => catalogIds.has(w5.i));
+    const catalogById = new Map(catalog.map((w5) => [w5.id, w5]));
+    const widgets = saved.widgets.filter((w5) => catalogIds.has(w5.i)).map((w5) => {
+      const def = catalogById.get(w5.i);
+      if (!def) return w5;
+      const next = { ...w5 };
+      if (def.minW !== void 0 && next.w < def.minW) next.w = def.minW;
+      if (def.minH !== void 0 && next.h < def.minH) next.h = def.minH;
+      return next;
+    });
     const hidden = saved.hidden.filter((id) => catalogIds.has(id));
     const placedIds = new Set(widgets.map((w5) => w5.i));
     const hiddenSet = new Set(hidden);

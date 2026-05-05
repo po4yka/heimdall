@@ -31,9 +31,13 @@ function stack(defs: StackEntry[]): PlacedWidget[] {
   return result;
 }
 
+// Heights below are tuned to fit each widget's natural content at the
+// 132px GridStack cellHeight without an overflow scrollbar. subscription-
+// quota in particular renders six rate-window sub-cards (Session/Weekly/
+// Weekly Sonnet/Weekly Opus/Claude/Codex) that need ~10 cells = 1320px.
 const OVERVIEW_WIDGETS = stack([
   { id: 'usage-windows',         h: 2 },
-  { id: 'subscription-quota',    h: 3 },
+  { id: 'subscription-quota',    h: 10 },
   { id: 'claude-usage',          h: 2 },
   { id: 'agent-status',          h: 2 },
   { id: 'estimation-meta',       h: 1 },

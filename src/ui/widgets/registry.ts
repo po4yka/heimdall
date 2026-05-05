@@ -94,9 +94,12 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     description: 'Provider subscription utilization and history chart',
     category: 'kpi',
     screens: ['overview'],
-    defaultSize: { w: 4, h: 3 },
+    // Renders six rate-window sub-cards (Session/Weekly/Weekly Sonnet/
+    // Weekly Opus/Claude/Codex). Natural content height ≈ 1300 px which at
+    // the 132 px GridStack cellHeight is exactly 10 rows.
+    defaultSize: { w: 4, h: 10 },
     minW: 2,
-    minH: 2,
+    minH: 8,
     render: mount('subscription-quota'),
   },
   {

@@ -38,13 +38,27 @@ function nextY(widgets: PlacedWidget[]): number {
 /**
  * Reconcile a saved layout against the current widget catalog for `screen`:
  * - Drop placed/hidden widgets whose id is no longer in the catalog.
+ * - Clamp placed widget sizes up to the catalog's current minW / minH.
+ *   This is how widget-size bumps (e.g. subscription-quota h:3 → h:10)
+ *   reach users who already have a saved layout — without forcing them
+ *   to manually `[EDIT LAYOUT]` and reset.
  * - Append catalog widgets that are neither placed nor hidden at the bottom.
  */
 export function reconcileLayout(saved: ScreenLayout, screen: DashboardScreen): ScreenLayout {
   const catalog = widgetsForScreen(screen);
   const catalogIds = new Set(catalog.map(w => w.id));
+  const catalogById = new Map(catalog.map(w => [w.id, w]));
 
-  const widgets = saved.widgets.filter(w => catalogIds.has(w.i));
+  const widgets = saved.widgets
+    .filter(w => catalogIds.has(w.i))
+    .map(w => {
+      const def = catalogById.get(w.i);
+      if (!def) return w;
+      const next: PlacedWidget = { ...w };
+      if (def.minW !== undefined && next.w < def.minW) next.w = def.minW;
+      if (def.minH !== undefined && next.h < def.minH) next.h = def.minH;
+      return next;
+    });
   const hidden = saved.hidden.filter(id => catalogIds.has(id));
 
   const placedIds = new Set(widgets.map(w => w.i));
