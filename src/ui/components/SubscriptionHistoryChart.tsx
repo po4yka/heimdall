@@ -22,9 +22,11 @@ const WINDOW_LABELS: Record<string, string> = {
   codex_secondary: 'Codex · secondary',
 };
 
-// Mono-monochrome opacity ladder per industrial-design skill: never colour-encode
-// categories. We rotate through 4 opacity stops on `--text-primary`.
-const OPACITY_LADDER = [1.0, 0.65, 0.35, 0.2];
+// Monochrome category differentiation per industrial-design skill: never
+// colour-encode series. ApexCharts can't accept rgba() expressions with CSS
+// vars at runtime, so we differentiate via `stroke.dashArray` patterns
+// instead — solid, short, medium, long — cycling through the 6 series.
+const DASH_LADDER = [0, 3, 6, 9, 12, 15];
 
 function inferProvider(windowType: string): 'claude' | 'codex' {
   return windowType.startsWith('codex_') ? 'codex' : 'claude';
@@ -58,17 +60,13 @@ function buildOptions(
   if (seriesMap.size === 0) return null;
 
   const seriesKeys = Array.from(seriesMap.keys()).sort();
-  const series = seriesKeys.map((key, i) => ({
+  const series = seriesKeys.map(key => ({
     name: WINDOW_LABELS[key] ?? key,
     data: (seriesMap.get(key) ?? []).sort((a, b) => a.x - b.x),
-    // The opacity ladder is applied via the per-series `colors` array below.
-    color: undefined,
-    _opacity: OPACITY_LADDER[i % OPACITY_LADDER.length],
-  })) as Array<{
-    name: string;
-    data: Array<{ x: number; y: number }>;
-    _opacity: number;
-  }>;
+  }));
+  const dashArray = seriesKeys.map(
+    (_, i) => DASH_LADDER[i % DASH_LADDER.length] ?? 0,
+  );
 
   // Build changelog points (markers on x-axis).
   const annotationPoints = changelog
@@ -100,13 +98,17 @@ function buildOptions(
       toolbar: { show: false },
       animations: { enabled: false },
       fontFamily: 'var(--font-mono)',
+      background: 'transparent',
     },
-    theme: { mode: 'dark' },
-    series: series.map(s => ({ name: s.name, data: s.data })),
+    // No `theme: { mode: 'dark' }` — the chart inherits the surrounding card
+    // via transparent background + CSS-variable colours, so it works in both
+    // light and dark dashboard themes.
+    series,
     colors: series.map(() => 'var(--text-primary)'),
     stroke: {
       width: 2,
       curve: 'smooth',
+      dashArray,
     },
     fill: { type: 'solid', opacity: 0.0 },
     grid: {
@@ -117,8 +119,9 @@ function buildOptions(
     },
     legend: {
       position: 'top',
-      labels: { colors: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' },
+      labels: { colors: 'var(--text-primary)', fontFamily: 'var(--font-mono)' },
       itemMargin: { horizontal: 12, vertical: 4 },
+      markers: { width: 12, height: 12 },
     },
     xaxis: {
       type: 'datetime',
@@ -141,7 +144,6 @@ function buildOptions(
       },
     },
     tooltip: {
-      theme: 'dark',
       style: { fontFamily: 'var(--font-mono)', fontSize: '11px' },
       y: {
         formatter: (val: number) =>

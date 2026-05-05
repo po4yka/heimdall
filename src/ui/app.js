@@ -9972,7 +9972,7 @@ ${row.project}` : row.project;
     codex_primary: "Codex \xB7 primary",
     codex_secondary: "Codex \xB7 secondary"
   };
-  var OPACITY_LADDER2 = [1, 0.65, 0.35, 0.2];
+  var DASH_LADDER = [0, 3, 6, 9, 12, 15];
   function inferProvider(windowType) {
     return windowType.startsWith("codex_") ? "codex" : "claude";
   }
@@ -9997,13 +9997,13 @@ ${row.project}` : row.project;
     }
     if (seriesMap.size === 0) return null;
     const seriesKeys = Array.from(seriesMap.keys()).sort();
-    const series = seriesKeys.map((key, i4) => ({
+    const series = seriesKeys.map((key) => ({
       name: WINDOW_LABELS[key] ?? key,
-      data: (seriesMap.get(key) ?? []).sort((a4, b4) => a4.x - b4.x),
-      // The opacity ladder is applied via the per-series `colors` array below.
-      color: void 0,
-      _opacity: OPACITY_LADDER2[i4 % OPACITY_LADDER2.length]
+      data: (seriesMap.get(key) ?? []).sort((a4, b4) => a4.x - b4.x)
     }));
+    const dashArray = seriesKeys.map(
+      (_4, i4) => DASH_LADDER[i4 % DASH_LADDER.length] ?? 0
+    );
     const annotationPoints = changelog.filter((entry) => provider === "all" || entry.provider === provider).map((entry) => ({
       x: Date.parse(`${entry.date}T12:00:00Z`),
       y: null,
@@ -10028,14 +10028,18 @@ ${row.project}` : row.project;
         type: "line",
         toolbar: { show: false },
         animations: { enabled: false },
-        fontFamily: "var(--font-mono)"
+        fontFamily: "var(--font-mono)",
+        background: "transparent"
       },
-      theme: { mode: "dark" },
-      series: series.map((s4) => ({ name: s4.name, data: s4.data })),
+      // No `theme: { mode: 'dark' }` — the chart inherits the surrounding card
+      // via transparent background + CSS-variable colours, so it works in both
+      // light and dark dashboard themes.
+      series,
       colors: series.map(() => "var(--text-primary)"),
       stroke: {
         width: 2,
-        curve: "smooth"
+        curve: "smooth",
+        dashArray
       },
       fill: { type: "solid", opacity: 0 },
       grid: {
@@ -10046,8 +10050,9 @@ ${row.project}` : row.project;
       },
       legend: {
         position: "top",
-        labels: { colors: "var(--text-secondary)", fontFamily: "var(--font-mono)" },
-        itemMargin: { horizontal: 12, vertical: 4 }
+        labels: { colors: "var(--text-primary)", fontFamily: "var(--font-mono)" },
+        itemMargin: { horizontal: 12, vertical: 4 },
+        markers: { width: 12, height: 12 }
       },
       xaxis: {
         type: "datetime",
@@ -10070,7 +10075,6 @@ ${row.project}` : row.project;
         }
       },
       tooltip: {
-        theme: "dark",
         style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
         y: {
           formatter: (val) => Number.isFinite(val) ? `${val.toLocaleString("en-US")} tokens` : "\u2014"
