@@ -28,6 +28,20 @@ const WINDOW_LABELS: Record<string, string> = {
 // instead — solid, short, medium, long — cycling through the 6 series.
 const DASH_LADDER = [0, 3, 6, 9, 12, 15];
 
+/**
+ * Resolve a CSS custom property to its computed value at render time.
+ * ApexCharts injects strings directly into SVG attributes; some attributes
+ * (legend marker fills, tooltip backgrounds) don't resolve `var(...)` so
+ * we have to feed them concrete values.
+ */
+function resolveCssVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+  return value || fallback;
+}
+
 function inferProvider(windowType: string): 'claude' | 'codex' {
   return windowType.startsWith('codex_') ? 'codex' : 'claude';
 }
@@ -68,6 +82,16 @@ function buildOptions(
     (_, i) => DASH_LADDER[i % DASH_LADDER.length] ?? 0,
   );
 
+  // Resolve CSS variables to concrete colours so ApexCharts can paint them
+  // into SVG attributes that don't accept `var(...)` expressions (legend
+  // marker fills, annotation markers, axis labels rendered to canvas).
+  const textPrimary = resolveCssVar('--text-primary', '#0a0a0a');
+  const textSecondary = resolveCssVar('--text-secondary', '#666666');
+  const borderColor = resolveCssVar('--border', '#e0e0e0');
+  const annotationFill = textPrimary;
+  const annotationStroke = resolveCssVar('--bg', '#ffffff');
+  const annotationLabelBg = resolveCssVar('--surface-elevated', '#ffffff');
+
   // Build changelog points (markers on x-axis).
   const annotationPoints = changelog
     .filter(entry => provider === 'all' || entry.provider === provider)
@@ -76,15 +100,15 @@ function buildOptions(
       y: null,
       marker: {
         size: 4,
-        fillColor: 'var(--text-primary)',
-        strokeColor: 'var(--bg)',
+        fillColor: annotationFill,
+        strokeColor: annotationStroke,
         radius: 0,
       },
       label: {
         text: entry.title,
         style: {
-          color: 'var(--text-primary)',
-          background: 'var(--surface-elevated)',
+          color: annotationFill,
+          background: annotationLabelBg,
           fontFamily: 'var(--font-mono)',
           fontSize: '10px',
         },
@@ -104,7 +128,7 @@ function buildOptions(
     // via transparent background + CSS-variable colours, so it works in both
     // light and dark dashboard themes.
     series,
-    colors: series.map(() => 'var(--text-primary)'),
+    colors: series.map(() => textPrimary),
     stroke: {
       width: 2,
       curve: 'smooth',
@@ -112,28 +136,28 @@ function buildOptions(
     },
     fill: { type: 'solid', opacity: 0.0 },
     grid: {
-      borderColor: 'var(--border)',
+      borderColor,
       strokeDashArray: 2,
       xaxis: { lines: { show: false } },
       yaxis: { lines: { show: true } },
     },
     legend: {
       position: 'top',
-      labels: { colors: 'var(--text-primary)', fontFamily: 'var(--font-mono)' },
+      labels: { colors: textPrimary, fontFamily: 'var(--font-mono)' },
       itemMargin: { horizontal: 12, vertical: 4 },
       markers: { width: 12, height: 12 },
     },
     xaxis: {
       type: 'datetime',
       labels: {
-        style: { colors: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '11px' },
+        style: { colors: textSecondary, fontFamily: 'var(--font-mono)', fontSize: '11px' },
       },
       axisBorder: { show: false },
       axisTicks: { show: false },
     },
     yaxis: {
       labels: {
-        style: { colors: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '11px' },
+        style: { colors: textSecondary, fontFamily: 'var(--font-mono)', fontSize: '11px' },
         formatter: (val: number) => {
           if (!Number.isFinite(val)) return '';
           if (val >= 1e9) return `${(val / 1e9).toFixed(2)}B`;

@@ -9973,6 +9973,11 @@ ${row.project}` : row.project;
     codex_secondary: "Codex \xB7 secondary"
   };
   var DASH_LADDER = [0, 3, 6, 9, 12, 15];
+  function resolveCssVar(name, fallback) {
+    if (typeof window === "undefined") return fallback;
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
   function inferProvider(windowType) {
     return windowType.startsWith("codex_") ? "codex" : "claude";
   }
@@ -10004,20 +10009,26 @@ ${row.project}` : row.project;
     const dashArray = seriesKeys.map(
       (_4, i4) => DASH_LADDER[i4 % DASH_LADDER.length] ?? 0
     );
+    const textPrimary = resolveCssVar("--text-primary", "#0a0a0a");
+    const textSecondary = resolveCssVar("--text-secondary", "#666666");
+    const borderColor = resolveCssVar("--border", "#e0e0e0");
+    const annotationFill = textPrimary;
+    const annotationStroke = resolveCssVar("--bg", "#ffffff");
+    const annotationLabelBg = resolveCssVar("--surface-elevated", "#ffffff");
     const annotationPoints = changelog.filter((entry) => provider === "all" || entry.provider === provider).map((entry) => ({
       x: Date.parse(`${entry.date}T12:00:00Z`),
       y: null,
       marker: {
         size: 4,
-        fillColor: "var(--text-primary)",
-        strokeColor: "var(--bg)",
+        fillColor: annotationFill,
+        strokeColor: annotationStroke,
         radius: 0
       },
       label: {
         text: entry.title,
         style: {
-          color: "var(--text-primary)",
-          background: "var(--surface-elevated)",
+          color: annotationFill,
+          background: annotationLabelBg,
           fontFamily: "var(--font-mono)",
           fontSize: "10px"
         }
@@ -10035,7 +10046,7 @@ ${row.project}` : row.project;
       // via transparent background + CSS-variable colours, so it works in both
       // light and dark dashboard themes.
       series,
-      colors: series.map(() => "var(--text-primary)"),
+      colors: series.map(() => textPrimary),
       stroke: {
         width: 2,
         curve: "smooth",
@@ -10043,28 +10054,28 @@ ${row.project}` : row.project;
       },
       fill: { type: "solid", opacity: 0 },
       grid: {
-        borderColor: "var(--border)",
+        borderColor,
         strokeDashArray: 2,
         xaxis: { lines: { show: false } },
         yaxis: { lines: { show: true } }
       },
       legend: {
         position: "top",
-        labels: { colors: "var(--text-primary)", fontFamily: "var(--font-mono)" },
+        labels: { colors: textPrimary, fontFamily: "var(--font-mono)" },
         itemMargin: { horizontal: 12, vertical: 4 },
         markers: { width: 12, height: 12 }
       },
       xaxis: {
         type: "datetime",
         labels: {
-          style: { colors: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "11px" }
+          style: { colors: textSecondary, fontFamily: "var(--font-mono)", fontSize: "11px" }
         },
         axisBorder: { show: false },
         axisTicks: { show: false }
       },
       yaxis: {
         labels: {
-          style: { colors: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "11px" },
+          style: { colors: textSecondary, fontFamily: "var(--font-mono)", fontSize: "11px" },
           formatter: (val) => {
             if (!Number.isFinite(val)) return "";
             if (val >= 1e9) return `${(val / 1e9).toFixed(2)}B`;
