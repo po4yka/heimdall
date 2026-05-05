@@ -30,6 +30,7 @@ import { ProjectChart } from '../components/charts/ProjectChart';
 import { ProjectCostTable } from '../components/tables/ProjectCostTable';
 import { RateWindowCard, BudgetCard, ClaudeAdminFallbackGrid, RateWindowUnavailable } from '../components/RateWindowCard';
 import { ReconciliationBlock } from '../components/ReconciliationBlock';
+import { SubagentReconciliationBlock } from '../components/SubagentReconciliationBlock';
 import { ServiceTiersTable } from '../components/tables/ServiceTiers';
 import { SessionsTable } from '../components/tables/SessionsTable';
 import { StatsCards } from '../components/StatsCards';
@@ -82,6 +83,7 @@ const SECTION_TAB_MAP: Record<string, DashboardTab> = {
   'estimation-meta': 'overview',
   'official-sync': 'overview',
   'openai-reconciliation': 'overview',
+  'subagent-reconciliation': 'overview',
   'stats-row': 'overview',
   'codex-plan-kpi-mount': 'overview',
   'codex-plan-history-mount': 'activity',
@@ -211,6 +213,16 @@ function renderOpenAiReconciliation(reconciliation: DashboardData['openai_reconc
     'openai-reconciliation',
     !!reconciliation,
     <ReconciliationBlock reconciliation={reconciliation!} />,
+  );
+}
+
+function renderSubagentReconciliation(
+  reconciliation: DashboardData['subagent_reconciliation'],
+): void {
+  renderSection(
+    'subagent-reconciliation',
+    !!reconciliation,
+    <SubagentReconciliationBlock reconciliation={reconciliation!} />,
   );
 }
 
@@ -718,6 +730,7 @@ export function renderDashboardView(
   renderCodexPlan(data.codex_plan);
   renderOfficialSync(data.official_sync);
   renderOpenAiReconciliation(data.openai_reconciliation);
+  renderSubagentReconciliation(data.subagent_reconciliation ?? null);
 
   if (bucketIsWeek) {
     const weekly = buildWeeklyAgg(data.weekly_by_model, selectedModels.value, selectedRange.value);

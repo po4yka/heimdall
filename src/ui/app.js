@@ -8521,6 +8521,99 @@
     ] });
   }
 
+  // src/ui/components/SubagentReconciliationBlock.tsx
+  function SubagentReconciliationBlock({ reconciliation }) {
+    const deltaMatch = Math.abs(reconciliation.delta_cost) < 0.01;
+    if (!reconciliation.available) {
+      return /* @__PURE__ */ u4("div", { class: "card card-flat bento-full", style: { padding: "12px 20px" }, children: /* @__PURE__ */ u4("div", { style: {
+        display: "flex",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px",
+        fontFamily: "var(--font-mono)",
+        fontSize: "12px",
+        letterSpacing: "0.04em",
+        color: "var(--text-secondary)"
+      }, children: [
+        /* @__PURE__ */ u4("span", { style: {
+          fontSize: "10px",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          color: "var(--text-disabled)"
+        }, children: "Subagent Reconciliation" }),
+        /* @__PURE__ */ u4("span", { style: { color: "var(--text-disabled)" }, children: "\xB7" }),
+        /* @__PURE__ */ u4("span", { children: reconciliation.error ?? "Unavailable" })
+      ] }) });
+    }
+    return /* @__PURE__ */ u4("div", { class: "card card-flat bento-full", children: [
+      /* @__PURE__ */ u4("h2", { children: "Subagent Cost Reconciliation" }),
+      /* @__PURE__ */ u4("div", { class: "muted", style: { marginBottom: "12px" }, children: [
+        "Compares the child agent JSONL view (",
+        /* @__PURE__ */ u4("code", { children: "agent_sessions" }),
+        ") against the parent sidechain view (",
+        /* @__PURE__ */ u4("code", { children: "turns WHERE is_subagent = 1" }),
+        ") over the last",
+        " ",
+        reconciliation.lookback_days,
+        " days. Drift signals parser divergence."
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Period" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.start_date,
+            " - ",
+            reconciliation.end_date
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Rolling comparison window" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent-Sessions Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
+            "$",
+            reconciliation.agent_sessions_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Child JSONL view" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Sidechain Turns Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
+            "$",
+            reconciliation.turns_subagent_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Parent JSONL view" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Delta" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px", color: deltaMatch ? "var(--text-primary)" : "var(--accent)" }, children: [
+            reconciliation.delta_cost >= 0 ? "+" : "",
+            "$",
+            reconciliation.delta_cost.toFixed(4)
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Agent-sessions minus sidechain" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Spawns / Sidechain Turns" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.agent_session_rows.toLocaleString(),
+            " / ",
+            reconciliation.subagent_turn_rows.toLocaleString()
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Row counts per view" })
+        ] }) }),
+        /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Distinct Agents" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
+            reconciliation.distinct_agents_in_agent_sessions.toLocaleString(),
+            " / ",
+            reconciliation.distinct_agents_in_turns.toLocaleString()
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Child / parent" })
+        ] }) })
+      ] })
+    ] });
+  }
+
   // src/ui/components/tables/ServiceTiers.tsx
   var columns5 = [
     {
@@ -8704,6 +8797,36 @@ ${row.project}` : row.project;
               ] }),
               /* @__PURE__ */ u4("div", { title: pricing, style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "140px" }, children: shortPricing })
             ] });
+          }
+        },
+        {
+          id: "subagent_delta_cost",
+          accessorFn: (row) => {
+            const ag = row.agent_sessions_cost_nanos ?? 0;
+            const tc = row.subagent_turns_cost_nanos ?? 0;
+            if (ag === 0 && tc === 0) return null;
+            return (ag - tc) / 1e9;
+          },
+          header: "Subagent \u0394",
+          sortUndefined: "last",
+          cell: (info) => {
+            const v4 = info.getValue();
+            if (v4 == null) return /* @__PURE__ */ u4("span", { class: "muted", children: "--" });
+            const drift = Math.abs(v4) >= 0.01;
+            const sign = v4 >= 0 ? "+" : "";
+            return /* @__PURE__ */ u4(
+              "span",
+              {
+                class: "num",
+                style: drift ? { color: "var(--accent)" } : void 0,
+                title: "agent_sessions cost minus turns(is_subagent=1) cost",
+                children: [
+                  sign,
+                  "$",
+                  v4.toFixed(4)
+                ]
+              }
+            );
           }
         },
         {
@@ -10426,6 +10549,7 @@ ${row.project}` : row.project;
     "estimation-meta": "overview",
     "official-sync": "overview",
     "openai-reconciliation": "overview",
+    "subagent-reconciliation": "overview",
     "stats-row": "overview",
     "codex-plan-kpi-mount": "overview",
     "codex-plan-history-mount": "activity",
@@ -10533,6 +10657,13 @@ ${row.project}` : row.project;
       "openai-reconciliation",
       !!reconciliation,
       /* @__PURE__ */ u4(ReconciliationBlock, { reconciliation })
+    );
+  }
+  function renderSubagentReconciliation(reconciliation) {
+    renderSection(
+      "subagent-reconciliation",
+      !!reconciliation,
+      /* @__PURE__ */ u4(SubagentReconciliationBlock, { reconciliation })
     );
   }
   function renderOfficialSync(summary) {
@@ -10944,6 +11075,7 @@ ${row.project}` : row.project;
     renderCodexPlan(data.codex_plan);
     renderOfficialSync(data.official_sync);
     renderOpenAiReconciliation(data.openai_reconciliation);
+    renderSubagentReconciliation(data.subagent_reconciliation ?? null);
     if (bucketIsWeek) {
       const weekly = buildWeeklyAgg(data.weekly_by_model, selectedModels.value, selectedRange.value);
       R(/* @__PURE__ */ u4(WeeklyChart, { weekly }), $2("chart-daily"));
@@ -18283,6 +18415,17 @@ ${row.project}` : row.project;
       render: mount("openai-reconciliation")
     },
     {
+      id: "subagent-reconciliation",
+      title: "Subagent reconciliation",
+      description: "agent_sessions vs turns(is_subagent=1) cost diff",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("subagent-reconciliation")
+    },
+    {
       id: "codex-plan-kpi-mount",
       title: "Codex plan",
       description: "Codex plan utilization KPI tile",
@@ -18794,6 +18937,7 @@ ${row.project}` : row.project;
     { id: "estimation-meta", h: 1 },
     { id: "official-sync", h: 2 },
     { id: "openai-reconciliation", h: 2 },
+    { id: "subagent-reconciliation", h: 2 },
     { id: "codex-plan-kpi-mount", h: 1 },
     { id: "stats-row", h: 1 }
   ]);

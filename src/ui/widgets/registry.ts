@@ -157,6 +157,17 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     render: mount('openai-reconciliation'),
   },
   {
+    id: 'subagent-reconciliation',
+    title: 'Subagent reconciliation',
+    description: 'agent_sessions vs turns(is_subagent=1) cost diff',
+    category: 'system',
+    screens: ['overview'],
+    defaultSize: { w: 4, h: 2 },
+    minW: 2,
+    minH: 1,
+    render: mount('subagent-reconciliation'),
+  },
+  {
     id: 'codex-plan-kpi-mount',
     title: 'Codex plan',
     description: 'Codex plan utilization KPI tile',

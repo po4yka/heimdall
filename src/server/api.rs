@@ -44,6 +44,7 @@ use crate::models::LiveQuotaSuggestionLevel;
 use crate::models::LiveQuotaSuggestions;
 use crate::models::MobileSnapshotEnvelope;
 use crate::models::OpenAiReconciliation;
+use crate::models::SubagentReconciliation;
 use crate::models::TokenBreakdown;
 use crate::models::ToolErrorsResponse;
 use crate::oauth;
@@ -185,14 +186,17 @@ pub async fn api_data(
     let openai_start_date = (chrono::Utc::now().date_naive()
         - chrono::Duration::days(openai_lookback_days.saturating_sub(1)))
     .to_string();
-    let (mut result, openai_local_cost_nanos) =
+    let subagent_start_date = openai_start_date.clone();
+    let subagent_end_date = chrono::Utc::now().date_naive().to_string();
+    let (mut result, openai_local_cost_nanos, subagent_recon_totals) =
         tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
             let conn = db::open_db(&db_path)?;
             db::init_db(&conn)?;
             let data = db::get_dashboard_data(&conn, tz)?;
             let local_cost_nanos =
                 db::get_provider_estimated_cost_nanos_since(&conn, "codex", &openai_start_date)?;
-            Ok((data, local_cost_nanos))
+            let subagent_totals = db::query_subagent_reconciliation(&conn, &openai_start_date)?;
+            Ok((data, local_cost_nanos, subagent_totals))
         })
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -202,6 +206,13 @@ pub async fn api_data(
         result.openai_reconciliation =
             Some(refresh_openai_reconciliation(&state, Some(openai_local_cost_nanos)).await);
     }
+
+    result.subagent_reconciliation = Some(build_subagent_reconciliation(
+        openai_lookback_days,
+        subagent_start_date,
+        subagent_end_date,
+        subagent_recon_totals,
+    ));
 
     maybe_send_cost_threshold_webhook(&state, &result).await;
 
@@ -568,6 +579,40 @@ fn budget_from_snapshot(
     // LiveProviderSnapshot contract — out of scope for Phase 22.
     let _ = snapshot;
     None
+}
+
+/// Build the diagnostic subagent-cost reconciliation payload from raw DB
+/// totals. Pure function — no I/O, just nanos→USD conversion + delta math.
+/// `available = false` when there's no subagent activity in the window
+/// (nothing to reconcile).
+pub(crate) fn build_subagent_reconciliation(
+    lookback_days: i64,
+    start_date: String,
+    end_date: String,
+    totals: db::SubagentReconciliationTotals,
+) -> SubagentReconciliation {
+    let agent_sessions_cost = totals.agent_sessions_cost_nanos as f64 / 1_000_000_000.0;
+    let turns_subagent_cost = totals.turns_subagent_cost_nanos as f64 / 1_000_000_000.0;
+    let delta_cost = agent_sessions_cost - turns_subagent_cost;
+    let available = totals.agent_session_rows > 0 || totals.turn_rows > 0;
+    SubagentReconciliation {
+        available,
+        lookback_days,
+        start_date,
+        end_date,
+        agent_sessions_cost,
+        turns_subagent_cost,
+        delta_cost,
+        agent_session_rows: totals.agent_session_rows,
+        subagent_turn_rows: totals.turn_rows,
+        distinct_agents_in_agent_sessions: totals.distinct_agents_in_agent_sessions,
+        distinct_agents_in_turns: totals.distinct_agents_in_turns,
+        error: if available {
+            None
+        } else {
+            Some("No subagent activity in window".to_string())
+        },
+    }
 }
 
 pub(crate) async fn refresh_openai_reconciliation(

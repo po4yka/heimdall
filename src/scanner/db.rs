@@ -1640,7 +1640,13 @@ pub(crate) fn query_dashboard_sessions(conn: &Connection) -> Result<Vec<SessionR
                 COALESCE((SELECT COUNT(*) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_turns,
                 s.title, s.total_credits,
                 ps.custom_label,
-                COALESCE(ps.pinned, 0) AS pinned
+                COALESCE(ps.pinned, 0) AS pinned,
+                COALESCE((SELECT SUM(cost_nanos) FROM agent_sessions
+                          WHERE agent_sessions.session_id = s.session_id), 0)
+                    AS agent_sessions_cost_nanos,
+                COALESCE((SELECT SUM(estimated_cost_nanos) FROM turns t
+                          WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0)
+                    AS subagent_turns_cost_nanos
          FROM sessions s
          LEFT JOIN project_settings ps ON ps.project_slug = s.project_name
          ORDER BY s.last_timestamp DESC",
@@ -1713,6 +1719,8 @@ pub(crate) fn query_dashboard_sessions(conn: &Connection) -> Result<Vec<SessionR
                 credits: row.get::<_, Option<f64>>(19)?,
                 custom_label: row.get::<_, Option<String>>(20)?,
                 pinned: row.get::<_, i64>(21)? != 0,
+                agent_sessions_cost_nanos: row.get::<_, i64>(22)?,
+                subagent_turns_cost_nanos: row.get::<_, i64>(23)?,
             })
         })?,
         "dashboard sessions",
@@ -2365,6 +2373,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         version_summary,
         daily_by_project,
         openai_reconciliation: None,
+        subagent_reconciliation: None,
         official_sync,
         generated_at,
         cache_efficiency,
@@ -3779,6 +3788,69 @@ pub fn get_provider_subagent_breakdown(
         session_count: session_count as u64,
         agent_count: agent_count as u64,
     }))
+}
+
+/// Raw totals returned by [`query_subagent_reconciliation`]. Caller converts
+/// nanos → USD and computes the delta.
+#[derive(Debug, Clone, Default)]
+pub struct SubagentReconciliationTotals {
+    pub agent_sessions_cost_nanos: i64,
+    pub turns_subagent_cost_nanos: i64,
+    pub agent_session_rows: i64,
+    pub turn_rows: i64,
+    pub distinct_agents_in_agent_sessions: i64,
+    pub distinct_agents_in_turns: i64,
+}
+
+/// Compute SUMs over both subagent-cost views (agent_sessions vs
+/// turns where is_subagent=1) for rows whose UTC date is `>= start_date_utc`.
+/// `start_date_utc` is `"YYYY-MM-DD"`. Both tables store RFC3339 timestamps;
+/// we slice with `substr(*, 1, 10)` to get the UTC day. No TZ shift —
+/// day-edge drift is acceptable for a diagnostic over a multi-day window.
+pub fn query_subagent_reconciliation(
+    conn: &Connection,
+    start_date_utc: &str,
+) -> Result<SubagentReconciliationTotals> {
+    let (agent_sessions_cost_nanos, agent_session_rows, distinct_agents_in_agent_sessions) = conn
+        .query_row(
+        "SELECT COALESCE(SUM(cost_nanos), 0),
+                    COUNT(*),
+                    COUNT(DISTINCT agent_id)
+             FROM agent_sessions
+             WHERE substr(ts_start, 1, 10) >= ?1",
+        rusqlite::params![start_date_utc],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        },
+    )?;
+    let (turns_subagent_cost_nanos, turn_rows, distinct_agents_in_turns) = conn.query_row(
+        "SELECT COALESCE(SUM(estimated_cost_nanos), 0),
+                COUNT(*),
+                COUNT(DISTINCT agent_id)
+         FROM turns
+         WHERE is_subagent = 1
+           AND substr(timestamp, 1, 10) >= ?1",
+        rusqlite::params![start_date_utc],
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        },
+    )?;
+    Ok(SubagentReconciliationTotals {
+        agent_sessions_cost_nanos,
+        turns_subagent_cost_nanos,
+        agent_session_rows,
+        turn_rows,
+        distinct_agents_in_agent_sessions,
+        distinct_agents_in_turns,
+    })
 }
 
 pub fn get_provider_version_rows(
@@ -9431,6 +9503,223 @@ mod tests {
         assert!(
             tables.contains(&"webhook_emitted".to_string()),
             "webhook_emitted table must exist",
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Subagent cost reconciliation (agent_sessions vs turns where is_subagent=1)
+    // -----------------------------------------------------------------------
+
+    fn insert_subagent_turn(
+        conn: &Connection,
+        session_id: &str,
+        agent_id: &str,
+        ts: &str,
+        cost_nanos: i64,
+    ) {
+        conn.execute(
+            "INSERT INTO sessions (session_id, project_name, provider)
+             VALUES (?1, 'my-project', 'claude') ON CONFLICT DO NOTHING",
+            rusqlite::params![session_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, timestamp, input_tokens, output_tokens,
+                                estimated_cost_nanos, model, is_subagent, agent_id)
+             VALUES (?1, ?2, 100, 50, ?3, 'claude-sonnet-4-5', 1, ?4)",
+            rusqlite::params![session_id, ts, cost_nanos, agent_id],
+        )
+        .unwrap();
+    }
+
+    fn agent_session_with(agent_id: &str, ts_start: &str, cost_nanos: i64) -> AgentSessionRecord {
+        let mut rec = sample_agent_session(agent_id, "executor", "/p");
+        rec.ts_start = ts_start.into();
+        rec.cost_nanos = cost_nanos;
+        rec
+    }
+
+    #[test]
+    fn query_subagent_reconciliation_zero_rows() {
+        let conn = test_conn();
+        let totals = query_subagent_reconciliation(&conn, "2026-01-01").unwrap();
+        assert_eq!(totals.agent_sessions_cost_nanos, 0);
+        assert_eq!(totals.turns_subagent_cost_nanos, 0);
+        assert_eq!(totals.agent_session_rows, 0);
+        assert_eq!(totals.turn_rows, 0);
+        assert_eq!(totals.distinct_agents_in_agent_sessions, 0);
+        assert_eq!(totals.distinct_agents_in_turns, 0);
+    }
+
+    #[test]
+    fn query_subagent_reconciliation_matched_costs() {
+        let conn = test_conn();
+        insert_agent_session(
+            &conn,
+            &agent_session_with("ag1", "2026-05-01T10:00:00Z", 50_000_000),
+        )
+        .unwrap();
+        insert_subagent_turn(&conn, "ses1", "ag1", "2026-05-01T10:01:00Z", 50_000_000);
+        let totals = query_subagent_reconciliation(&conn, "2026-04-01").unwrap();
+        assert_eq!(totals.agent_sessions_cost_nanos, 50_000_000);
+        assert_eq!(totals.turns_subagent_cost_nanos, 50_000_000);
+        assert_eq!(
+            totals.agent_sessions_cost_nanos - totals.turns_subagent_cost_nanos,
+            0,
+            "matched costs must yield zero delta"
+        );
+    }
+
+    #[test]
+    fn query_subagent_reconciliation_drift_positive() {
+        let conn = test_conn();
+        insert_agent_session(
+            &conn,
+            &agent_session_with("ag1", "2026-05-01T10:00:00Z", 75_000_000),
+        )
+        .unwrap();
+        insert_subagent_turn(&conn, "ses1", "ag1", "2026-05-01T10:01:00Z", 50_000_000);
+        let totals = query_subagent_reconciliation(&conn, "2026-04-01").unwrap();
+        assert!(totals.agent_sessions_cost_nanos > totals.turns_subagent_cost_nanos);
+        assert_eq!(
+            totals.agent_sessions_cost_nanos - totals.turns_subagent_cost_nanos,
+            25_000_000
+        );
+    }
+
+    #[test]
+    fn query_subagent_reconciliation_drift_negative() {
+        let conn = test_conn();
+        insert_agent_session(
+            &conn,
+            &agent_session_with("ag1", "2026-05-01T10:00:00Z", 30_000_000),
+        )
+        .unwrap();
+        insert_subagent_turn(&conn, "ses1", "ag1", "2026-05-01T10:01:00Z", 50_000_000);
+        let totals = query_subagent_reconciliation(&conn, "2026-04-01").unwrap();
+        assert!(totals.turns_subagent_cost_nanos > totals.agent_sessions_cost_nanos);
+        assert_eq!(
+            totals.turns_subagent_cost_nanos - totals.agent_sessions_cost_nanos,
+            20_000_000
+        );
+    }
+
+    #[test]
+    fn query_subagent_reconciliation_respects_lookback_window() {
+        let conn = test_conn();
+        // Inside window
+        insert_agent_session(
+            &conn,
+            &agent_session_with("ag1", "2026-05-01T10:00:00Z", 10_000_000),
+        )
+        .unwrap();
+        insert_subagent_turn(&conn, "ses1", "ag1", "2026-05-01T10:00:00Z", 10_000_000);
+        // Outside window (older than start_date)
+        insert_agent_session(
+            &conn,
+            &agent_session_with("ag2", "2026-01-01T10:00:00Z", 99_000_000),
+        )
+        .unwrap();
+        insert_subagent_turn(&conn, "ses2", "ag2", "2026-01-01T10:00:00Z", 99_000_000);
+
+        let totals = query_subagent_reconciliation(&conn, "2026-04-01").unwrap();
+        assert_eq!(
+            totals.agent_sessions_cost_nanos, 10_000_000,
+            "rows older than start_date must be excluded"
+        );
+        assert_eq!(totals.turns_subagent_cost_nanos, 10_000_000);
+        assert_eq!(totals.agent_session_rows, 1);
+        assert_eq!(totals.turn_rows, 1);
+    }
+
+    #[test]
+    fn query_dashboard_sessions_emits_subagent_cost_columns() {
+        let conn = test_conn();
+        insert_test_session(&conn, "ses1", "my-project", "2026-05-01T10:00:00Z", 0, 0);
+        insert_agent_session(
+            &conn,
+            &agent_session_with("ag1", "2026-05-01T10:00:00Z", 12_000_000),
+        )
+        .unwrap();
+        insert_subagent_turn(&conn, "ses1", "ag1", "2026-05-01T10:00:00Z", 7_000_000);
+
+        let rows = query_dashboard_sessions(&conn).unwrap();
+        let row = rows
+            .iter()
+            .find(|r| r.session_id.starts_with("ses1"))
+            .unwrap();
+        assert_eq!(row.agent_sessions_cost_nanos, 12_000_000);
+        assert_eq!(row.subagent_turns_cost_nanos, 7_000_000);
+    }
+
+    #[test]
+    fn query_dashboard_sessions_subagent_columns_default_zero_when_no_agents() {
+        let conn = test_conn();
+        insert_test_session(
+            &conn,
+            "ses-noagents",
+            "my-project",
+            "2026-05-01T10:00:00Z",
+            0,
+            0,
+        );
+        let rows = query_dashboard_sessions(&conn).unwrap();
+        let row = rows
+            .iter()
+            .find(|r| r.session_id.starts_with("ses-noag"))
+            .unwrap();
+        assert_eq!(row.agent_sessions_cost_nanos, 0);
+        assert_eq!(row.subagent_turns_cost_nanos, 0);
+    }
+
+    /// Regression guard: existing aggregate fields in DashboardData must NOT
+    /// add `agent_sessions.cost_nanos` and `turns.cost_nanos WHERE is_subagent=1`
+    /// together (they represent the same dollars, just from different parsers).
+    /// Only `subagent_reconciliation` is allowed to expose both views side by
+    /// side. If a future change pulls agent_sessions into one of the existing
+    /// SUMs, this test will fail.
+    #[test]
+    fn dashboard_data_does_not_double_count_subagent_cost() {
+        let conn = test_conn();
+        // Set up: one session with one is_subagent=1 turn (cost N) and one
+        // matching agent_sessions row (cost N for same agent_id).
+        const N: i64 = 50_000_000; // 0.05 USD
+        insert_subagent_turn(&conn, "ses1", "ag1", "2026-05-01T10:00:00Z", N);
+        insert_agent_session(&conn, &agent_session_with("ag1", "2026-05-01T10:00:00Z", N)).unwrap();
+        recompute_session_totals(&conn).unwrap();
+
+        let tz = TzParams::default();
+        let data = get_dashboard_data(&conn, tz).unwrap();
+
+        // Each cost-bearing aggregate must equal N (not 2N).
+        let session_cost_total: f64 = data.sessions_all.iter().map(|s| s.cost).sum();
+        assert!(
+            (session_cost_total - (N as f64 / 1e9)).abs() < 1e-9,
+            "sessions_all must not double-count subagent cost (got {session_cost_total})",
+        );
+
+        let provider_cost_total: f64 = data.provider_breakdown.iter().map(|p| p.cost).sum();
+        assert!(
+            (provider_cost_total - (N as f64 / 1e9)).abs() < 1e-9,
+            "provider_breakdown must not double-count subagent cost (got {provider_cost_total})",
+        );
+
+        let confidence_cost_total: f64 = data.confidence_breakdown.iter().map(|c| c.cost).sum();
+        assert!(
+            (confidence_cost_total - (N as f64 / 1e9)).abs() < 1e-9,
+            "confidence_breakdown must not double-count subagent cost",
+        );
+
+        let daily_model_cost_total: f64 = data.daily_by_model.iter().map(|d| d.cost).sum();
+        assert!(
+            (daily_model_cost_total - (N as f64 / 1e9)).abs() < 1e-9,
+            "daily_by_model must not double-count subagent cost",
+        );
+
+        let daily_project_cost_total: f64 = data.daily_by_project.iter().map(|d| d.cost).sum();
+        assert!(
+            (daily_project_cost_total - (N as f64 / 1e9)).abs() < 1e-9,
+            "daily_by_project must not double-count subagent cost",
         );
     }
 }

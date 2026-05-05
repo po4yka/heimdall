@@ -39,6 +39,7 @@ const OVERVIEW_WIDGETS = stack([
   { id: 'estimation-meta',       h: 1 },
   { id: 'official-sync',         h: 2 },
   { id: 'openai-reconciliation', h: 2 },
+  { id: 'subagent-reconciliation', h: 2 },
   { id: 'codex-plan-kpi-mount',  h: 1 },
   { id: 'stats-row',             h: 1 },
 ]);

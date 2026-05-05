@@ -72,6 +72,16 @@ export interface SessionRow {
   pinned?: boolean;
   /** Project-management: user-supplied label override from project_settings. */
   custom_label?: string | null;
+  /**
+   * Subagent-reconciliation: SUM of `agent_sessions.cost_nanos` for this
+   * session's spawned agents (child JSONL view). 0 when none.
+   */
+  agent_sessions_cost_nanos?: number;
+  /**
+   * Subagent-reconciliation: SUM of `turns.estimated_cost_nanos` for this
+   * session's sidechain (`is_subagent = 1`) turns. 0 when none.
+   */
+  subagent_turns_cost_nanos?: number;
 }
 
 export interface ToolSummary {
@@ -372,6 +382,32 @@ export interface OpenAiReconciliation {
   error: string | null;
 }
 
+/**
+ * Diagnostic comparison of two independent subagent-cost views over the
+ * lookback window:
+ * - `agent_sessions_cost`: SUM of `agent_sessions.cost_nanos` parsed from each
+ *   spawned agent's own JSONL (child view).
+ * - `turns_subagent_cost`: SUM of `turns.estimated_cost_nanos` where
+ *   `is_subagent = 1`, parsed from the parent session's sidechain rows.
+ *
+ * `delta_cost = agent_sessions_cost - turns_subagent_cost`. Within ±$0.01 is a
+ * match. Otherwise the parsers are diverging.
+ */
+export interface SubagentReconciliation {
+  available: boolean;
+  lookback_days: number;
+  start_date: string;
+  end_date: string;
+  agent_sessions_cost: number;
+  turns_subagent_cost: number;
+  delta_cost: number;
+  agent_session_rows: number;
+  subagent_turn_rows: number;
+  distinct_agents_in_agent_sessions: number;
+  distinct_agents_in_turns: number;
+  error: string | null;
+}
+
 export interface HeatmapCell {
   dow: number;
   hour: number;
@@ -568,6 +604,7 @@ export interface DashboardData {
   daily_by_project: DailyProjectRow[];
   weekly_by_model: WeeklyModelRow[];
   openai_reconciliation: OpenAiReconciliation | null;
+  subagent_reconciliation?: SubagentReconciliation | null;
   official_sync: OfficialSyncSummary;
   generated_at: string;
   cache_efficiency: CacheEfficiency;

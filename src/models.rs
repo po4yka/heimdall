@@ -287,6 +287,11 @@ pub struct DashboardData {
     pub version_summary: Vec<VersionSummary>,
     pub daily_by_project: Vec<DailyProjectRow>,
     pub openai_reconciliation: Option<OpenAiReconciliation>,
+    /// Diagnostic comparison of subagent cost from `agent_sessions` (child
+    /// JSONL view) vs `turns` where `is_subagent = 1` (parent sidechain view).
+    /// `None` from the pure-DB path; populated by the API handler.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subagent_reconciliation: Option<SubagentReconciliation>,
     pub official_sync: OfficialSyncSummary,
     pub generated_at: String,
     /// Phase 21: cache-token breakdown and derived hit-rate metric.
@@ -371,6 +376,34 @@ pub struct OpenAiReconciliation {
     pub api_cached_input_tokens: i64,
     pub api_requests: i64,
     pub delta_cost: f64,
+    pub error: Option<String>,
+}
+
+/// Diagnostic comparison of two independent subagent-cost views over a
+/// rolling lookback window:
+///
+/// - `agent_sessions_cost`: SUM of `agent_sessions.cost_nanos` parsed from each
+///   spawned agent's own JSONL (child view).
+/// - `turns_subagent_cost`: SUM of `turns.estimated_cost_nanos` where
+///   `is_subagent = 1`, parsed from sidechain rows in the parent session JSONL
+///   (parent view).
+///
+/// `delta_cost = agent_sessions_cost - turns_subagent_cost`. Positive means the
+/// child JSONL captured tokens the parent view missed; negative means the
+/// reverse. Within `±$0.01` is treated as a match.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct SubagentReconciliation {
+    pub available: bool,
+    pub lookback_days: i64,
+    pub start_date: String,
+    pub end_date: String,
+    pub agent_sessions_cost: f64,
+    pub turns_subagent_cost: f64,
+    pub delta_cost: f64,
+    pub agent_session_rows: i64,
+    pub subagent_turn_rows: i64,
+    pub distinct_agents_in_agent_sessions: i64,
+    pub distinct_agents_in_turns: i64,
     pub error: Option<String>,
 }
 
@@ -1345,6 +1378,14 @@ pub struct SessionRow {
     /// Project-management: user-supplied label override from `project_settings`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_label: Option<String>,
+    /// Subagent-reconciliation: SUM of `agent_sessions.cost_nanos` for this
+    /// session's spawned agents (child JSONL view). `0` when none.
+    #[serde(default)]
+    pub agent_sessions_cost_nanos: i64,
+    /// Subagent-reconciliation: SUM of `turns.estimated_cost_nanos` for this
+    /// session's sidechain (`is_subagent = 1`) turns. `0` when none.
+    #[serde(default)]
+    pub subagent_turns_cost_nanos: i64,
 }
 
 // ---------------------------------------------------------------------------
