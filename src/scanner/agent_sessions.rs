@@ -450,11 +450,23 @@ fn task_output_roots() -> Vec<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
-// Main discovery entry point
+// File-level discovery metadata (for incremental ingest)
 // ---------------------------------------------------------------------------
 
-pub fn discover_and_parse(cfg: &DiscoveryConfig) -> Vec<AgentSessionRecord> {
-    let mut records = Vec::new();
+#[derive(Debug, Clone)]
+pub struct DiscoveredAgentFile {
+    pub path: PathBuf,
+    pub source: AgentSource,
+    pub project: String,
+    pub session_id: Option<String>,
+    pub meta_path: Option<PathBuf>,
+}
+
+/// Discover all agent JSONL / task-output files without parsing their contents.
+/// Callers can then do mtime checks against `processed_files` and only call
+/// `parse_one` for files that have changed.
+pub fn discover_files(cfg: &DiscoveryConfig) -> Vec<DiscoveredAgentFile> {
+    let mut files = Vec::new();
 
     // --- Subagent JSONL files ---
     for root in &cfg.projects_dirs {
@@ -513,45 +525,22 @@ pub fn discover_and_parse(cfg: &DiscoveryConfig) -> Vec<AgentSessionRecord> {
                 .unwrap_or("")
                 .to_string();
 
-            // Load sibling meta.json
+            // Sibling meta.json path (may not exist yet)
             let agent_stem = file_name.strip_suffix(".jsonl").unwrap_or(file_name);
-            let meta_path = parent.join(format!("{}.meta.json", agent_stem));
-            let meta: Option<MetaJson> = if meta_path.exists() {
-                match std::fs::read_to_string(&meta_path) {
-                    Ok(s) => match serde_json::from_str::<MetaJson>(&s) {
-                        Ok(m) => Some(m),
-                        Err(e) => {
-                            warn!(
-                                path = %meta_path.display(),
-                                "failed to parse meta.json: {}",
-                                e
-                            );
-                            None
-                        }
-                    },
-                    Err(e) => {
-                        warn!(path = %meta_path.display(), "failed to read meta.json: {}", e);
-                        None
-                    }
-                }
+            let meta_candidate = parent.join(format!("{}.meta.json", agent_stem));
+            let meta_path = if meta_candidate.exists() {
+                Some(meta_candidate)
             } else {
                 None
             };
 
-            debug!(path = %path.display(), "parsing subagent file");
-            match parse_agent_file(
-                path,
-                AgentSource::Subagent,
-                &project,
-                Some(&session_id),
-                meta.as_ref(),
-            ) {
-                Ok(Some(record)) => records.push(record),
-                Ok(None) => {}
-                Err(e) => {
-                    warn!(path = %path.display(), "failed to parse agent file: {}", e);
-                }
-            }
+            files.push(DiscoveredAgentFile {
+                path: path.to_path_buf(),
+                source: AgentSource::Subagent,
+                project,
+                session_id: Some(session_id),
+                meta_path,
+            });
         }
     }
 
@@ -613,19 +602,58 @@ pub fn discover_and_parse(cfg: &DiscoveryConfig) -> Vec<AgentSessionRecord> {
                     .unwrap_or("")
                     .to_string();
 
-                debug!(path = %path.display(), "parsing task output file");
-                match parse_agent_file(path, AgentSource::Task, &project, Some(&session_id), None) {
-                    Ok(Some(record)) => records.push(record),
-                    Ok(None) => {}
-                    Err(e) => {
-                        warn!(path = %path.display(), "failed to parse task output file: {}", e);
-                    }
-                }
+                files.push(DiscoveredAgentFile {
+                    path: path.to_path_buf(),
+                    source: AgentSource::Task,
+                    project,
+                    session_id: Some(session_id),
+                    meta_path: None,
+                });
             }
         }
     }
 
-    records
+    files
+}
+
+/// Parse a single discovered agent file, loading its sibling meta.json if present.
+pub fn parse_one(file: &DiscoveredAgentFile) -> Result<Option<AgentSessionRecord>> {
+    let meta: Option<MetaJson> = file.meta_path.as_ref().and_then(|p| {
+        std::fs::read_to_string(p)
+            .ok()
+            .and_then(|s| match serde_json::from_str::<MetaJson>(&s) {
+                Ok(m) => Some(m),
+                Err(e) => {
+                    warn!(path = %p.display(), "failed to parse meta.json: {}", e);
+                    None
+                }
+            })
+    });
+    parse_agent_file(
+        &file.path,
+        file.source.clone(),
+        &file.project,
+        file.session_id.as_deref(),
+        meta.as_ref(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Main discovery entry point
+// ---------------------------------------------------------------------------
+
+pub fn discover_and_parse(cfg: &DiscoveryConfig) -> Vec<AgentSessionRecord> {
+    discover_files(cfg)
+        .iter()
+        .filter_map(|f| match parse_one(f) {
+            Ok(Some(rec)) => Some(rec),
+            Ok(None) => None,
+            Err(e) => {
+                warn!("agent_sessions: parse failed for {:?}: {:#}", f.path, e);
+                None
+            }
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

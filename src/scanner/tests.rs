@@ -1479,4 +1479,183 @@ mod tests {
         assert_eq!(count, 1);
         assert_eq!(status, "operational", "first sample wins on PK conflict");
     }
+
+    // -----------------------------------------------------------------------
+    // Agent-sessions incremental ingest tests
+    // -----------------------------------------------------------------------
+
+    fn make_agent_event(ts: &str, request_id: &str, input: i64, output: i64) -> String {
+        serde_json::json!({
+            "timestamp": ts,
+            "requestId": request_id,
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": input,
+                    "output_tokens": output,
+                    "cache_creation_input_tokens": 0i64,
+                    "cache_read_input_tokens": 0i64
+                },
+                "content": []
+            }
+        })
+        .to_string()
+    }
+
+    fn write_agent_jsonl(
+        subagents_dir: &std::path::Path,
+        agent_name: &str,
+        lines: &[String],
+    ) -> std::path::PathBuf {
+        std::fs::create_dir_all(subagents_dir).unwrap();
+        let path = subagents_dir.join(format!("{}.jsonl", agent_name));
+        let mut f = std::fs::File::create(&path).unwrap();
+        for line in lines {
+            writeln!(f, "{}", line).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn scan_ingests_agent_sessions_end_to_end() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects");
+        let db_path = tmp.path().join("usage.db");
+
+        // Create a minimal session JSONL so the main scanner has something to do.
+        write_project_jsonl(
+            &projects,
+            "myproj/sessXYZ",
+            "sess-1.jsonl",
+            &[
+                make_user("sXYZ", "2024-06-01T10:00:00Z"),
+                make_assistant("sXYZ", "2024-06-01T10:01:00Z", 100, 50, "msg-1"),
+            ],
+        );
+
+        // Create the subagent JSONL at the expected path.
+        let subagents_dir = projects.join("myproj").join("sessXYZ").join("subagents");
+        write_agent_jsonl(
+            &subagents_dir,
+            "agent-aaa111",
+            &[
+                make_agent_event("2024-06-01T10:00:00Z", "req-1", 5000, 2000),
+                make_agent_event("2024-06-01T10:01:00Z", "req-2", 3000, 1000),
+            ],
+        );
+
+        // Write sibling meta.json with agentType="explorer".
+        std::fs::write(
+            subagents_dir.join("agent-aaa111.meta.json"),
+            r#"{"agentType": "explorer", "description": "exploration agent"}"#,
+        )
+        .unwrap();
+
+        scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+
+        let conn = db::open_db(&db_path).unwrap();
+        let (count, role, confidence, total_tokens): (i64, String, String, i64) = conn
+            .query_row(
+                "SELECT COUNT(*), role, role_confidence, total_tokens FROM agent_sessions",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+
+        assert_eq!(count, 1, "exactly one agent_sessions row");
+        assert_eq!(role, "explorer");
+        assert_eq!(confidence, "meta");
+        assert!(total_tokens > 0, "total_tokens must be non-zero");
+    }
+
+    #[test]
+    fn scan_skips_unchanged_agent_files() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects");
+        let db_path = tmp.path().join("usage.db");
+
+        let subagents_dir = projects.join("proj").join("sess1").join("subagents");
+        write_agent_jsonl(
+            &subagents_dir,
+            "agent-bbb222",
+            &[make_agent_event(
+                "2024-06-01T10:00:00Z",
+                "req-1",
+                5000,
+                2000,
+            )],
+        );
+
+        // First scan: file is new, should be inserted.
+        scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+
+        let conn = db::open_db(&db_path).unwrap();
+        let count1: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_sessions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count1, 1);
+
+        // Second scan without file modification: should be skipped (no double-insert).
+        scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+
+        let count2: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_sessions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count2, 1, "skipped file must not produce duplicate rows");
+
+        // processed_files row must still exist for this agent path (with prefix).
+        let agent_path = subagents_dir
+            .join("agent-bbb222.jsonl")
+            .to_string_lossy()
+            .to_string();
+        let pf_key = format!("agent_session:{}", agent_path);
+        let pf_exists: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM processed_files WHERE path = ?1",
+                [&pf_key],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pf_exists, 1);
+    }
+
+    #[test]
+    fn scan_removes_stale_agent_sessions() {
+        let tmp = TempDir::new().unwrap();
+        let projects = tmp.path().join("projects");
+        let db_path = tmp.path().join("usage.db");
+
+        let subagents_dir = projects.join("proj").join("sess1").join("subagents");
+        let agent_path = write_agent_jsonl(
+            &subagents_dir,
+            "agent-ccc333",
+            &[make_agent_event(
+                "2024-06-01T10:00:00Z",
+                "req-1",
+                5000,
+                2000,
+            )],
+        );
+
+        // First scan: ingest the file.
+        scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+
+        let conn = db::open_db(&db_path).unwrap();
+        let count1: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_sessions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count1, 1, "one row after first scan");
+
+        // Remove the file and scan again.
+        std::fs::remove_file(&agent_path).unwrap();
+        scanner::scan(Some(vec![projects.clone()]), &db_path, false).unwrap();
+
+        let count2: i64 = conn
+            .query_row("SELECT COUNT(*) FROM agent_sessions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count2, 0, "stale agent_sessions row must be removed");
+    }
 }
