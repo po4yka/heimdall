@@ -106,7 +106,11 @@ enum Commands {
         projects_dir: Option<PathBuf>,
         #[arg(long)]
         db_path: Option<PathBuf>,
-        #[arg(long, default_value = "localhost")]
+        /// Bind address. Defaults to 127.0.0.1 (IPv4 loopback) so that
+        /// `http://localhost:PORT` works regardless of whether the system
+        /// resolves `localhost` to IPv4 or IPv6. Use `--host ::1` to force
+        /// IPv6, or `--host 0.0.0.0` to bind all interfaces.
+        #[arg(long, default_value = "127.0.0.1")]
         host: String,
         #[arg(long, default_value = "8080")]
         port: u16,
