@@ -563,7 +563,7 @@ mod tests {
         );
     }
 
-    /// Seeded DB with two turns produces a title with '$' and non-zero cost.
+    // Seeded DB with two turns produces a title with '$' and non-zero cost.
     // -----------------------------------------------------------------------
     // Char-budget tests (see module docblock § "Char budgets")
     // -----------------------------------------------------------------------

@@ -1394,7 +1394,7 @@ mod tests {
         // Build a ~4 KiB JSON string.
         let payload: String = {
             let entry = r#"{"key":"value","number":12345678,"flag":true}"#;
-            let entries: Vec<&str> = std::iter::repeat(entry).take(90).collect();
+            let entries: Vec<&str> = std::iter::repeat_n(entry, 90).collect();
             format!("[{}]", entries.join(","))
         };
         assert!(

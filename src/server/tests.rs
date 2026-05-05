@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(clippy::module_inception)] // file is `tests.rs`; inner `tests` module is intentional
 mod tests {
     use std::io::Write;
     use std::net::SocketAddr;
@@ -2748,11 +2749,13 @@ mod tests {
         let projects = tmp.path().join("projects");
         std::fs::create_dir_all(&projects).unwrap();
 
-        let mut cfg = AgentStatusConfig::default();
-        cfg.enabled = true;
-        cfg.claude_enabled = false;
-        cfg.openai_enabled = false;
-        cfg.refresh_interval = 3600; // long TTL — cache never expires during test
+        let cfg = AgentStatusConfig {
+            enabled: true,
+            claude_enabled: false,
+            openai_enabled: false,
+            refresh_interval: 3600, // long TTL — cache never expires during test
+            ..AgentStatusConfig::default()
+        };
 
         let state = Arc::new(AppState {
             db_path,
@@ -2855,8 +2858,10 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
 
-        let mut cfg = AgentStatusConfig::default();
-        cfg.enabled = false;
+        let cfg = AgentStatusConfig {
+            enabled: false,
+            ..AgentStatusConfig::default()
+        };
 
         let app = test_app_with_agent_status(db_path, projects, cfg);
 
@@ -2895,10 +2900,12 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
 
-        let mut cfg = AgentStatusConfig::default();
-        cfg.enabled = true;
-        cfg.claude_enabled = false;
-        cfg.openai_enabled = false;
+        let cfg = AgentStatusConfig {
+            enabled: true,
+            claude_enabled: false,
+            openai_enabled: false,
+            ..AgentStatusConfig::default()
+        };
 
         let app = test_app_with_agent_status(db_path, projects, cfg);
 
@@ -2928,9 +2935,11 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
 
-        let mut cfg = AgentStatusConfig::default();
-        cfg.enabled = true;
-        cfg.refresh_interval = 3600;
+        let cfg = AgentStatusConfig {
+            enabled: true,
+            refresh_interval: 3600,
+            ..AgentStatusConfig::default()
+        };
 
         let state = Arc::new(AppState {
             db_path: db_path.clone(),
@@ -3022,9 +3031,11 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
 
-        let mut cfg = AgentStatusConfig::default();
-        cfg.enabled = true;
-        cfg.refresh_interval = 3600;
+        let cfg = AgentStatusConfig {
+            enabled: true,
+            refresh_interval: 3600,
+            ..AgentStatusConfig::default()
+        };
 
         let state = Arc::new(AppState {
             db_path,
@@ -3252,10 +3263,12 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
 
-        let mut agg_cfg = AggregatorConfig::default();
-        agg_cfg.enabled = true;
-        // key_env_var points at a var that is definitely not set in CI.
-        agg_cfg.key_env_var = "HEIMDALL_TEST_NONEXISTENT_SG_KEY".into();
+        let agg_cfg = AggregatorConfig {
+            enabled: true,
+            // key_env_var points at a var that is definitely not set in CI.
+            key_env_var: "HEIMDALL_TEST_NONEXISTENT_SG_KEY".into(),
+            ..AggregatorConfig::default()
+        };
 
         let state = Arc::new(crate::server::api::AppState {
             db_path,
@@ -3344,9 +3357,11 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
 
-        let mut agg_cfg = AggregatorConfig::default();
-        agg_cfg.enabled = true;
-        agg_cfg.refresh_interval = 3600; // long TTL — cache never expires
+        let agg_cfg = AggregatorConfig {
+            enabled: true,
+            refresh_interval: 3600, // long TTL — cache never expires
+            ..AggregatorConfig::default()
+        };
 
         let cached_signal = CommunitySignal {
             fetched_at: chrono::Utc::now().to_rfc3339(),
@@ -4261,6 +4276,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // HOME_LOCK serializes process-global $HOME mutations across the HTTP request;
+    // releasing it before .await would let parallel tests race on $HOME.
+    #[allow(clippy::await_holding_lock)]
     async fn api_archive_imports_returns_empty_array_when_no_imports() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
@@ -4295,6 +4313,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // HOME_LOCK serializes process-global $HOME mutations across the HTTP request;
+    // releasing it before .await would let parallel tests race on $HOME.
+    #[allow(clippy::await_holding_lock)]
     async fn api_archive_list_returns_empty_array_when_no_snapshots() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
@@ -4329,6 +4350,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // HOME_LOCK serializes process-global $HOME mutations across the HTTP request;
+    // releasing it before .await would let parallel tests race on $HOME.
+    #[allow(clippy::await_holding_lock)]
     async fn web_conversation_returns_401_without_bearer() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
@@ -4359,6 +4383,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // HOME_LOCK serializes process-global $HOME mutations across the HTTP request;
+    // releasing it before .await would let parallel tests race on $HOME.
+    #[allow(clippy::await_holding_lock)]
     async fn web_conversation_saves_with_valid_bearer() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
@@ -4420,6 +4447,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // HOME_LOCK serializes process-global $HOME mutations across the HTTP request;
+    // releasing it before .await would let parallel tests race on $HOME.
+    #[allow(clippy::await_holding_lock)]
     async fn web_conversation_returns_unchanged_for_byte_identical_payload() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
@@ -4484,6 +4514,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // HOME_LOCK serializes process-global $HOME mutations across the HTTP request;
+    // releasing it before .await would let parallel tests race on $HOME.
+    #[allow(clippy::await_holding_lock)]
     async fn web_conversations_returns_empty_listing_when_no_captures() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
@@ -4516,6 +4549,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // HOME_LOCK serializes process-global $HOME mutations across the HTTP request;
+    // releasing it before .await would let parallel tests race on $HOME.
+    #[allow(clippy::await_holding_lock)]
     async fn companion_heartbeat_requires_bearer() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);
@@ -4546,6 +4582,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // HOME_LOCK serializes process-global $HOME mutations across the HTTP request;
+    // releasing it before .await would let parallel tests race on $HOME.
+    #[allow(clippy::await_holding_lock)]
     async fn companion_heartbeat_persists_to_disk() {
         let tmp = TempDir::new().unwrap();
         let (db_path, projects) = setup_test_db(&tmp);

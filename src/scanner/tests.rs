@@ -1,6 +1,7 @@
 //! Integration tests for the scan pipeline.
 
 #[cfg(test)]
+#[allow(clippy::module_inception)] // file is `tests.rs`; inner `tests` module is intentional
 mod tests {
     use std::io::Write;
     use tempfile::TempDir;

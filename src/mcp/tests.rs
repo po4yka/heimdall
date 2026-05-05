@@ -59,6 +59,8 @@ mod mcp_tests {
         (dir, db_path)
     }
 
+    // Test helper: argument count mirrors the `sessions` table column set.
+    #[allow(clippy::too_many_arguments)]
     fn insert_session(
         conn: &rusqlite::Connection,
         session_id: &str,

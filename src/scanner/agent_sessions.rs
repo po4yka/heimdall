@@ -675,6 +675,9 @@ mod tests {
         path
     }
 
+    // Test helper: builds a single agent-session JSONL event line; argument count
+    // mirrors the JSONL schema fields rather than business-logic boundaries.
+    #[allow(clippy::too_many_arguments)]
     fn make_event(
         ts: &str,
         request_id: &str,

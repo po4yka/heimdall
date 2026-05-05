@@ -821,7 +821,7 @@ output = 8.0
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.toml");
         let mut f = std::fs::File::create(&path).unwrap();
-        write!(f, "port = 3000\n").unwrap();
+        writeln!(f, "port = 3000").unwrap();
 
         let config = load_config_from(&path);
         assert!(config.projects_dirs.is_empty());
@@ -1025,7 +1025,7 @@ output = 8.0
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.toml");
         let mut f = std::fs::File::create(&path).unwrap();
-        write!(f, "port = \"not_a_number\"\n").unwrap();
+        writeln!(f, "port = \"not_a_number\"").unwrap();
         let config = load_config_from(&path);
         // Should return defaults since the file fails to parse
         assert!(config.port.is_none());
@@ -1068,7 +1068,7 @@ output = 8.0
         let path = tmp.path().join("config.toml");
         // Omit the display section entirely
         let mut f = std::fs::File::create(&path).unwrap();
-        write!(f, "port = 3000\n").unwrap();
+        writeln!(f, "port = 3000").unwrap();
         let config = load_config_from(&path);
         // Default kicks in; currency = Some("USD")
         assert_eq!(config.display.currency.as_deref(), Some("USD"));
@@ -1230,7 +1230,7 @@ spike_webhook = false
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("resolved.toml");
         let mut f = std::fs::File::create(&path).unwrap();
-        write!(f, "port = 7777\n").unwrap();
+        writeln!(f, "port = 7777").unwrap();
 
         // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
         unsafe { std::env::set_var("HEIMDALL_CONFIG", &path) };
@@ -1298,7 +1298,7 @@ spike_webhook = false
         // TOML config: port 2222
         let toml_path = tmp.path().join("config.toml");
         let mut f = std::fs::File::create(&toml_path).unwrap();
-        write!(f, "port = 2222\n").unwrap();
+        writeln!(f, "port = 2222").unwrap();
 
         // Point HEIMDALL_CONFIG at the JSON file explicitly
         unsafe { std::env::set_var("HEIMDALL_CONFIG", &json_path) };
@@ -1451,7 +1451,7 @@ spike_webhook = false
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("config.toml");
         let mut f = std::fs::File::create(&path).unwrap();
-        write!(f, "port = 3000\n").unwrap();
+        writeln!(f, "port = 3000").unwrap();
         let config = load_config_from(&path);
         assert!(config.project_aliases.is_empty());
     }

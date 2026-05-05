@@ -6218,7 +6218,7 @@ mod tests {
             input_tokens: 100,
             ..Default::default()
         };
-        insert_turns(&conn, &[turn.clone()]).unwrap();
+        insert_turns(&conn, std::slice::from_ref(&turn)).unwrap();
         insert_turns(&conn, &[turn]).unwrap();
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM turns", [], |row| row.get(0))
