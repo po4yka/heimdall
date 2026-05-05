@@ -4824,4 +4824,131 @@ mod tests {
         let registry = list["registry"].as_array().unwrap();
         assert_eq!(registry.len(), 2, "both roles should have stub entries");
     }
+
+    // ── Layout API tests ─────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn api_layout_get_returns_404_when_no_row() {
+        let tmp = TempDir::new().unwrap();
+        let app = empty_db_app(&tmp);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/layouts/overview")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn api_layout_upsert_persists_and_get_returns_it() {
+        let tmp = TempDir::new().unwrap();
+        let app = empty_db_app(&tmp);
+
+        let layout = serde_json::json!({
+            "widgets": [{"i": "usage-windows", "x": 0, "y": 0, "w": 4, "h": 2}],
+            "hidden": ["claude-usage"]
+        });
+
+        let put_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/layouts/overview")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&layout).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(put_resp.status(), StatusCode::OK);
+
+        let get_resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/layouts/overview")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let bytes = get_resp.into_body().collect().await.unwrap().to_bytes();
+        let returned: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(returned["hidden"][0], "claude-usage");
+        assert_eq!(returned["widgets"][0]["i"], "usage-windows");
+    }
+
+    #[tokio::test]
+    async fn api_layout_delete_clears_row_so_get_returns_404() {
+        let tmp = TempDir::new().unwrap();
+        let app = empty_db_app(&tmp);
+
+        let layout = serde_json::json!({
+            "widgets": [{"i": "usage-windows", "x": 0, "y": 0, "w": 4, "h": 2}],
+            "hidden": []
+        });
+
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/layouts/overview")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&layout).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let del_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/layouts/overview")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(del_resp.status(), StatusCode::OK);
+
+        let get_resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/layouts/overview")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(get_resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn api_layout_rejects_unknown_screen() {
+        let tmp = TempDir::new().unwrap();
+        let app = empty_db_app(&tmp);
+
+        let layout = serde_json::json!({"widgets": [], "hidden": []});
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri("/api/layouts/bogus")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&layout).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
 }

@@ -112,7 +112,7 @@ export const rescanDisabled = signal<boolean>(false);
 export const themeMode = signal<'dark' | 'light'>('dark');
 
 // ── Inline status (replaces toasts) ──────────────────────────────────
-export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal' | 'snapshot' | 'agent-registry';
+export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal' | 'snapshot' | 'agent-registry' | 'layout-save';
 export type StatusKind = 'success' | 'error' | 'loading' | 'info';
 
 export interface StatusEntry {
@@ -129,11 +129,17 @@ export const statusByPlacement = signal<Record<StatusPlacement, StatusEntry | nu
   'community-signal': null,
   'snapshot': null,
   'agent-registry': null,
+  'layout-save': null,
 });
 
 // ── Agent telemetry UI state ─────────────────────────────────────────
 export const registryModalOpen = signal<{ project: string } | null>(null);
 export const setupBannerDismissed = signal(false);
+
+// ── Feature 2: Widget layout edit mode ────────────────────────────────
+/// When true the dashboard shows drag handles, resize affordances, and
+/// the [×] remove / [+] add-widget controls on every grid.
+export const editMode = signal<boolean>(false);
 
 // ── Pagination page size (used by SessionsTable via DataTable) ───────
 export const SESSIONS_PAGE_SIZE = 25;

@@ -15,7 +15,21 @@ import { hydrateLiveMonitorPreferences } from './monitor/store';
 import { startToolErrorsPage } from './tool_errors/runtime';
 import { applyTheme, getTheme } from './lib/theme';
 import { startVersionPoll } from './lib/version-poll';
-import { backupSnapshots, backupLoadState, archiveImports, webConversations, companionHeartbeat, rawData, registryModalOpen, syncDashboardUrl, type WebConversationSummary, type CompanionHeartbeat } from './state/store';
+import {
+  activeDashboardTab,
+  backupSnapshots,
+  backupLoadState,
+  archiveImports,
+  webConversations,
+  companionHeartbeat,
+  rawData,
+  registryModalOpen,
+  syncDashboardUrl,
+  type WebConversationSummary,
+  type CompanionHeartbeat,
+} from './state/store';
+import { ScreenGridManager } from './widgets/ScreenGridManager';
+import { registerMountCallback } from './widgets/mount-registry';
 
 async function loadBackupSnapshots(): Promise<void> {
   backupLoadState.value = 'loading';
@@ -105,15 +119,32 @@ if (globalStatusMount && dashboardRuntime) {
   render(<InlineStatus placement="global" />, globalStatusMount);
 }
 
-const backupPanelMount = document.getElementById('backup-panel');
-if (backupPanelMount && dashboardRuntime) {
-  render(
-    <BackupPanel onSnapshot={triggerSnapshot} onReload={loadBackupSnapshots} />,
-    backupPanelMount,
-  );
-  void loadBackupSnapshots();
+// ── Feature 2: Widget grid mount ────────────────────────────────────────────
+// Register mount callbacks for components that require Preact render + callbacks.
+// These are called by the WidgetGrid when it mounts the respective widget elements.
+if (dashboardRuntime) {
+  registerMountCallback('backup-panel', (el) => {
+    render(
+      <BackupPanel onSnapshot={triggerSnapshot} onReload={loadBackupSnapshots} />,
+      el,
+    );
+    void loadBackupSnapshots();
+  });
 }
 
+// Mount all screen grids into #widget-grid-mount.
+// The ScreenGridManager shows only the active screen's grid; others are hidden.
+const widgetGridMount = document.getElementById('widget-grid-mount');
+if (widgetGridMount && dashboardRuntime) {
+  function renderGridManager() {
+    render(<ScreenGridManager />, widgetGridMount!);
+  }
+  renderGridManager();
+  // Re-render on tab change so the active screen updates.
+  activeDashboardTab.subscribe(() => renderGridManager());
+}
+
+// ── Imports and web captures (not in grid — they have their own static divs) ─
 async function loadArchiveImports(): Promise<void> {
   try {
     const r = await fetch('/api/archive/imports');
@@ -159,7 +190,6 @@ if (isToolErrorsRoute) {
 }
 
 // Agent registry modal — reactive: re-renders whenever registryModalOpen signal changes.
-// Uses a preact effect-free signal-subscribe pattern via a thin wrapper component.
 const registryModalMount = document.getElementById('agent-registry-modal-mount');
 if (registryModalMount && dashboardRuntime) {
   function RegistryModalRoot() {
@@ -174,7 +204,6 @@ if (registryModalMount && dashboardRuntime) {
       />
     );
   }
-  // Re-render whenever signal changes
   registryModalOpen.subscribe(() => {
     render(<RegistryModalRoot />, registryModalMount);
   });

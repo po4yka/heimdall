@@ -17,6 +17,7 @@
   "dependencies": {
     "@preact/signals": "^2.9.0",
     "@tanstack/table-core": "^8.21.3",
+    "gridstack": "^12.6.0",
     "preact": "^10.29.1"
   }
 }

@@ -1782,3 +1782,295 @@
   padding: 0 12px 12px;
 }
 
+/* ── Feature 2: Widget grid (GridStack) ─────────────────────────────────── */
+
+/* Root container for all per-screen grids */
+#widget-grid-mount {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.widget-grid-root {
+  width: 100%;
+}
+
+/* GridStack overrides — match the dashboard card aesthetic */
+.grid-stack {
+  background: transparent;
+}
+
+.grid-stack-item-content {
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+/* Each widget card */
+.widget-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+/* Widget body fills remaining space */
+.widget-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Chrome row: drag handle + remove button — hidden unless in edit mode */
+.widget-chrome {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+  min-height: 28px;
+  flex-shrink: 0;
+}
+
+/* Show chrome when the grid root has .editing */
+.widget-grid-root.editing .widget-chrome {
+  display: flex;
+}
+
+.widget-drag-handle {
+  cursor: grab;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  user-select: none;
+  padding: 2px 4px;
+}
+
+.widget-drag-handle:active {
+  cursor: grabbing;
+}
+
+.widget-remove-button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: color 0.1s;
+}
+
+.widget-remove-button:hover {
+  color: var(--accent);
+}
+
+/* Grid controls bar (add + reset buttons) — only shown in edit mode */
+.widget-grid-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* header-button shared style (used by Edit Layout / Done / Add Widget / Reset) */
+.header-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-visible);
+  color: var(--text-secondary);
+  padding: 4px 12px;
+  min-height: 32px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.header-button:hover {
+  color: var(--text-display);
+  border-color: var(--text-display);
+}
+
+.header-button--active {
+  color: var(--accent-interactive);
+  border-color: var(--accent-interactive);
+}
+
+.header-button--active:hover {
+  color: var(--accent-interactive);
+  border-color: var(--accent-interactive);
+}
+
+/* Editing state: highlight the active grid border */
+.widget-grid-root.editing .grid-stack {
+  border: 1px dashed var(--border-visible);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+/* Mobile: single-column read-only stack */
+.widget-mobile-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.widget-mobile-card {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Widget picker modal — matches agent-registry-overlay pattern */
+.widget-picker-mount {
+  position: relative;
+  z-index: 201;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px 16px;
+  overflow-y: auto;
+}
+
+.modal-panel {
+  background: var(--surface);
+  border: 1px solid var(--border-visible);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.modal-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.modal-close-button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.1s;
+}
+
+.modal-close-button:hover {
+  color: var(--text-display);
+}
+
+.modal-empty {
+  padding: 24px 20px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+/* Widget picker list */
+.widget-picker-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.widget-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+
+.widget-picker-item:last-child {
+  border-bottom: none;
+}
+
+.widget-picker-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.widget-picker-title {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.widget-picker-desc {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+}
+
+.widget-picker-add-btn {
+  background: transparent;
+  border: 1px solid var(--accent-interactive);
+  color: var(--accent-interactive);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.widget-picker-add-btn:hover {
+  background: var(--accent-interactive);
+  color: var(--text-display);
+}
+
+@media (max-width: 720px) {
+  .widget-grid-root {
+    display: none;
+  }
+  .widget-mobile-stack {
+    display: flex;
+  }
+}
+

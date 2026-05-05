@@ -3,7 +3,7 @@ import { createTriggerRescan } from '../lib/rescan';
 import { setStatus } from '../lib/status';
 import { InlineStatus } from './InlineStatus';
 import { VersionPill } from './VersionPill';
-import { metaText, planBadge, rescanLabel, rescanDisabled, themeMode } from '../state/store';
+import { metaText, planBadge, rescanLabel, rescanDisabled, themeMode, editMode } from '../state/store';
 
 interface HeaderProps {
   onDataReload: (force?: boolean) => Promise<void>;
@@ -64,6 +64,9 @@ export function Header({
       logError: (e) => console.error(e),
     });
   }, [onDataReload]);
+
+  const isEditing = editMode.value;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 720;
 
   const mode = themeMode.value;
   const icon = mode === 'dark'
@@ -136,6 +139,17 @@ export function Header({
         >
           {icon}
         </button>
+        {!isMobile && (
+          <button
+            type="button"
+            class={`header-button${isEditing ? ' header-button--active' : ''}`}
+            onClick={() => { editMode.value = !editMode.value; }}
+            aria-pressed={isEditing}
+            aria-label={isEditing ? 'Done editing layout' : 'Edit layout'}
+          >
+            {isEditing ? '[DONE]' : '[EDIT LAYOUT]'}
+          </button>
+        )}
         <button
           id="rescan-btn"
           ref={btnRef}

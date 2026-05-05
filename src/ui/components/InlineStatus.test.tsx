@@ -19,6 +19,7 @@ const EMPTY_STATUS = {
   'community-signal': null,
   snapshot: null,
   'agent-registry': null,
+  'layout-save': null,
 };
 
 function collectText(node: unknown): string[] {

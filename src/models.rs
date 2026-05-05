@@ -1458,6 +1458,28 @@ pub struct AgentRoleAggregate {
     pub tool_uses: i64,
 }
 
+/// One widget placed in a screen layout grid.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PlacedWidget {
+    /// Stable widget id matching the WidgetDef registry (e.g. `"kpi-stats-row"`).
+    pub i: String,
+    pub x: i64,
+    pub y: i64,
+    pub w: i64,
+    pub h: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_w: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_h: Option<i64>,
+}
+
+/// Full layout for one dashboard screen: placed widgets + hidden widget ids.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ScreenLayout {
+    pub widgets: Vec<PlacedWidget>,
+    pub hidden: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentSessionRow {
     pub agent_id: String,

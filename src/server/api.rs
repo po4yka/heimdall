@@ -2911,6 +2911,99 @@ pub async fn agent_registry_acknowledge_all(
     }))
 }
 
+// ---------------------------------------------------------------------------
+// Feature 2: Screen layout persistence endpoints
+// ---------------------------------------------------------------------------
+
+/// `GET /api/layouts/{screen}` — retrieve the saved layout, or the embedded
+/// default (via the client's DEFAULT_LAYOUTS) when no row exists.
+/// Returns 400 when `screen` is not a known screen identifier.
+pub async fn api_layout_get(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(screen): axum::extract::Path<String>,
+    request: Request,
+) -> Result<Json<crate::models::ScreenLayout>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    if !db::is_known_screen(&screen) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let db_path = state.db_path.clone();
+    let layout_opt = tokio::task::spawn_blocking(
+        move || -> anyhow::Result<Option<crate::models::ScreenLayout>> {
+            let conn = db::open_db(&db_path)?;
+            db::init_db(&conn)?;
+            Ok(db::get_screen_layout(&conn, &screen)?)
+        },
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Return 404 so the client falls back to its embedded DEFAULT_LAYOUTS.
+    layout_opt.map(Json).ok_or(StatusCode::NOT_FOUND)
+}
+
+/// `PUT /api/layouts/{screen}` — upsert the layout for the given screen.
+/// Returns 400 when `screen` is not a known screen identifier.
+pub async fn api_layout_upsert(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(screen): axum::extract::Path<String>,
+    request: Request,
+) -> Result<Json<crate::models::ScreenLayout>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    if !db::is_known_screen(&screen) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let _db_guard = state.db_lock.lock().await;
+    let body_bytes = axum::body::to_bytes(request.into_body(), 256 * 1024)
+        .await
+        .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
+    let layout: crate::models::ScreenLayout =
+        serde_json::from_slice(&body_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let db_path = state.db_path.clone();
+    let screen_clone = screen.clone();
+    let layout_clone = layout.clone();
+    tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        Ok(db::upsert_screen_layout(
+            &conn,
+            &screen_clone,
+            &layout_clone,
+        )?)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(layout))
+}
+
+/// `DELETE /api/layouts/{screen}` — remove the saved layout so the client
+/// reverts to DEFAULT_LAYOUTS. Returns 400 for unknown screen identifiers.
+pub async fn api_layout_delete(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(screen): axum::extract::Path<String>,
+    request: Request,
+) -> Result<Json<DeleteResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    if !db::is_known_screen(&screen) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let _db_guard = state.db_lock.lock().await;
+    let db_path = state.db_path.clone();
+    let deleted_count = tokio::task::spawn_blocking(move || -> anyhow::Result<usize> {
+        let conn = db::open_db(&db_path)?;
+        db::init_db(&conn)?;
+        Ok(db::delete_screen_layout(&conn, &screen)?)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(DeleteResponse {
+        deleted: deleted_count > 0,
+    }))
+}
+
 // ── Feature 3: Today view ─────────────────────────────────────────────────────
 
 /// Query-string parameters for `GET /api/today`.

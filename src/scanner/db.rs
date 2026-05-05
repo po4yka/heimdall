@@ -337,6 +337,15 @@ fn create_schema(conn: &Connection) -> Result<()> {
         );",
     )?;
 
+    // Feature 2: Per-screen dashboard layout persistence.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS screen_layouts (
+            screen      TEXT PRIMARY KEY,
+            layout_json TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        );",
+    )?;
+
     // Feature 1: Codex plan utilisation per-day aggregates.
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS codex_plan_daily (
@@ -5359,6 +5368,64 @@ pub fn query_days_hours_window(
     Ok(cells)
 }
 
+// ---------------------------------------------------------------------------
+// Feature 2: screen_layouts CRUD
+// ---------------------------------------------------------------------------
+
+const KNOWN_SCREENS: &[&str] = &[
+    "overview",
+    "activity",
+    "breakdowns",
+    "tables",
+    "today",
+    "backup",
+];
+
+/// Returns `true` if `screen` is one of the known dashboard screen identifiers.
+pub fn is_known_screen(screen: &str) -> bool {
+    KNOWN_SCREENS.contains(&screen)
+}
+
+/// Retrieve the saved layout for `screen`. Returns `None` when no row exists.
+pub fn get_screen_layout(
+    conn: &Connection,
+    screen: &str,
+) -> rusqlite::Result<Option<crate::models::ScreenLayout>> {
+    conn.query_row(
+        "SELECT layout_json FROM screen_layouts WHERE screen = ?1",
+        rusqlite::params![screen],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map(|opt| opt.and_then(|json| serde_json::from_str::<crate::models::ScreenLayout>(&json).ok()))
+}
+
+/// Insert or replace the layout for `screen`.
+pub fn upsert_screen_layout(
+    conn: &Connection,
+    screen: &str,
+    layout: &crate::models::ScreenLayout,
+) -> rusqlite::Result<()> {
+    let json = serde_json::to_string(layout).unwrap_or_default();
+    conn.execute(
+        "INSERT INTO screen_layouts (screen, layout_json, updated_at)
+         VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+         ON CONFLICT(screen) DO UPDATE SET
+             layout_json = excluded.layout_json,
+             updated_at  = excluded.updated_at",
+        rusqlite::params![screen, json],
+    )?;
+    Ok(())
+}
+
+/// Delete the saved layout for `screen`. Returns the number of rows deleted (0 or 1).
+pub fn delete_screen_layout(conn: &Connection, screen: &str) -> rusqlite::Result<usize> {
+    conn.execute(
+        "DELETE FROM screen_layouts WHERE screen = ?1",
+        rusqlite::params![screen],
+    )
+}
+
 /// Query the 7×24 weekday-hour pattern aggregated over the last `days_back`
 /// days (relative to now, in UTC — suitable as a behavioral pattern).
 ///
@@ -8523,5 +8590,79 @@ mod tests {
             wed_10.cost_nanos, 3_000_000,
             "Wednesday 10:00 should sum costs"
         );
+    }
+
+    // --- screen_layouts CRUD tests ---
+
+    fn make_layout() -> crate::models::ScreenLayout {
+        crate::models::ScreenLayout {
+            widgets: vec![
+                crate::models::PlacedWidget {
+                    i: "kpi-stats-row".into(),
+                    x: 0,
+                    y: 0,
+                    w: 4,
+                    h: 1,
+                    min_w: None,
+                    min_h: None,
+                },
+                crate::models::PlacedWidget {
+                    i: "daily-chart".into(),
+                    x: 0,
+                    y: 1,
+                    w: 2,
+                    h: 3,
+                    min_w: Some(2),
+                    min_h: Some(2),
+                },
+            ],
+            hidden: vec!["version-summary".into()],
+        }
+    }
+
+    #[test]
+    fn screen_layouts_round_trip() {
+        let conn = test_conn();
+        let layout = make_layout();
+        upsert_screen_layout(&conn, "overview", &layout).unwrap();
+        let got = get_screen_layout(&conn, "overview").unwrap();
+        assert_eq!(
+            got,
+            Some(layout),
+            "retrieved layout must equal what was stored"
+        );
+    }
+
+    #[test]
+    fn screen_layouts_get_returns_none_when_absent() {
+        let conn = test_conn();
+        let got = get_screen_layout(&conn, "overview").unwrap();
+        assert_eq!(got, None, "absent layout must return None");
+    }
+
+    #[test]
+    fn screen_layouts_delete_returns_count() {
+        let conn = test_conn();
+        let layout = make_layout();
+        upsert_screen_layout(&conn, "overview", &layout).unwrap();
+        let count = delete_screen_layout(&conn, "overview").unwrap();
+        assert_eq!(count, 1, "delete must report 1 deleted row");
+        let got = get_screen_layout(&conn, "overview").unwrap();
+        assert_eq!(got, None, "layout must be absent after delete");
+    }
+
+    #[test]
+    fn screen_layouts_upsert_is_idempotent() {
+        let conn = test_conn();
+        let layout = make_layout();
+        upsert_screen_layout(&conn, "activity", &layout).unwrap();
+        // Upsert again with different content — should overwrite.
+        let layout2 = crate::models::ScreenLayout {
+            widgets: vec![],
+            hidden: vec!["daily-chart".into()],
+        };
+        upsert_screen_layout(&conn, "activity", &layout2).unwrap();
+        let got = get_screen_layout(&conn, "activity").unwrap();
+        assert_eq!(got, Some(layout2), "second upsert must overwrite first");
     }
 }

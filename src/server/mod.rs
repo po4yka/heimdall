@@ -192,6 +192,12 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             "/api/agents/{project_id}/registry/acknowledge-all",
             post(api::agent_registry_acknowledge_all),
         )
+        .route(
+            "/api/layouts/{screen}",
+            get(api::api_layout_get)
+                .put(api::api_layout_upsert)
+                .delete(api::api_layout_delete),
+        )
         .with_state(state)
 }
 

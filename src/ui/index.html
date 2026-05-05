@@ -21,93 +21,18 @@
 <div id="dashboard-tabs-mount" style="max-width:1400px;margin:12px auto 0;padding:0 24px"></div>
 <div id="inline-status-global" style="max-width:1400px;margin:12px auto 0;padding:0 24px"></div>
 
-<main id="main-content" class="bento" tabindex="-1">
-  <!-- Rate windows (conditional) -->
-  <div id="usage-windows" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px"></div>
-  <!-- Phase 22: subscription-quota widget (Claude + Codex). -->
-  <div id="subscription-quota" class="bento-full" style="display:none"></div>
-  <div id="claude-usage" class="bento-full" style="display:none"></div>
-  <!-- Agent status (upstream provider health) -->
-  <div id="agent-status" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px"></div>
-  <div id="estimation-meta" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px"></div>
-  <div id="official-sync" class="bento-full" style="display:none"></div>
-  <div id="openai-reconciliation" class="bento-full" style="display:none"></div>
-
-  <!-- Feature 1: Codex plan KPI tile (alongside stat cards). -->
-  <div id="codex-plan-kpi-mount" class="bento-full" style="display:none;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px"></div>
-
-  <!-- Stat cards -->
-  <div id="stats-row" class="bento-full" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px"></div>
-
-  <!-- Charts row -->
-  <div class="card bento-2 chart-card" id="daily-chart-card">
-    <h2 id="daily-chart-title">Daily Token Usage</h2>
-    <div class="chart-wrap tall"><div id="chart-daily"></div></div>
-  </div>
-  <div class="card chart-card" id="model-chart-card">
-    <h2>By Model</h2>
-    <div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>
-  </div>
-  <div class="card chart-card" id="project-chart-card">
-    <h2>Top Projects</h2>
-    <div class="chart-wrap"><div id="chart-project"></div></div>
-  </div>
-
-  <!-- Feature 1: Codex plan history chart (30-day stacked bar). -->
-  <div id="codex-plan-history-mount" class="bento-full" style="display:none"></div>
-
-  <!-- Agent telemetry setup banner -->
-  <div class="bento-full" id="agent-setup-banner" style="display:none"></div>
-
-  <!-- Data sections -->
-  <div class="card card-flat bento-full table-card" id="subagent-summary" style="display:none"></div>
-
-  <!-- Agent telemetry section -->
-  <div class="bento-full" id="agent-kpis-row" style="display:none;grid-template-columns:repeat(3,1fr);gap:16px"></div>
-  <div class="card card-flat bento-full table-card" id="agent-timeline" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="agent-distribution" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="agent-top-sessions" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="agent-spawn-batches" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="agent-tool-spectrum" style="display:none"></div>
+<main id="main-content" tabindex="-1">
+  <!-- Feature 2: GridStack-managed widget grids, one per tab -->
+  <div id="widget-grid-mount"></div>
 
   <!-- Agent registry modal mount (always present, renders nothing when closed) -->
   <div id="agent-registry-modal-mount"></div>
-  <div class="card card-flat bento-full table-card" id="entrypoint-breakdown" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="service-tiers" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="tool-summary" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="mcp-summary" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="branch-summary" style="display:none"></div>
-  <div class="card card-flat bento-2 table-card" id="version-summary" style="display:none"></div>
-  <div class="card card-flat bento-2" id="hourly-chart" style="display:none"></div>
-  <div class="card card-flat bento-full table-card" id="activity-heatmap" style="display:none"></div>
-
-  <!-- Phase 8: Cost reconciliation panel (hidden when no hook costs recorded) -->
-  <div class="bento-full" id="cost-reconciliation" style="display:none"></div>
-
-  <!-- Tables -->
-  <div class="bento-full" id="model-cost-mount"></div>
-  <div class="bento-full" id="sessions-mount"></div>
-  <div class="bento-full" id="project-cost-mount"></div>
-
-  <!-- Today tab -->
-  <div class="bento-full" id="today-date-picker-mount" style="display:none"></div>
-  <div class="bento-full" id="today-kpis-mount" style="display:none;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px"></div>
-  <div class="card card-flat bento-full" id="today-hour-timeline-mount" style="display:none"></div>
-  <div class="card card-flat bento-full" id="today-hour-heatstrip-mount" style="display:none"></div>
-  <div class="card card-flat bento-full" id="today-days-hours-30-mount" style="display:none"></div>
-  <div class="card card-flat bento-full" id="today-days-hours-7-mount" style="display:none"></div>
-  <div class="card card-flat bento-full" id="today-weekday-hour-mount" style="display:none"></div>
-
-  <!-- Backup tab -->
-  <div class="bento-full" id="backup-panel" style="display:none"></div>
 
   <!-- Imports tab -->
   <div class="bento-full" id="imports-panel" style="display:none"></div>
 
   <!-- Web captures tab -->
   <div class="bento-full" id="web-captures-panel" style="display:none"></div>
-
-  <!-- Codex is now expressed via the Provider segmented filter in the top filter bar. -->
 </main>
 
 <footer role="contentinfo">

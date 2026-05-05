@@ -1073,10 +1073,12 @@
     "agent-status": null,
     "community-signal": null,
     "snapshot": null,
-    "agent-registry": null
+    "agent-registry": null,
+    "layout-save": null
   });
   var registryModalOpen = y3(null);
   var setupBannerDismissed = y3(false);
+  var editMode = y3(false);
   var SESSIONS_PAGE_SIZE = 25;
   function readSearchParam(name) {
     return new URLSearchParams(window.location.search).get(name);
@@ -2170,6 +2172,8 @@
         logError: (e4) => console.error(e4)
       });
     }, [onDataReload]);
+    const isEditing = editMode.value;
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 720;
     const mode = themeMode.value;
     const icon = mode === "dark" ? /* @__PURE__ */ u4("svg", { "aria-hidden": "true", focusable: "false", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: /* @__PURE__ */ u4("path", { d: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" }) }) : /* @__PURE__ */ u4("svg", { "aria-hidden": "true", focusable: "false", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: [
       /* @__PURE__ */ u4("circle", { cx: "12", cy: "12", r: "5" }),
@@ -2235,6 +2239,19 @@
             onClick: onThemeToggle,
             "aria-label": "Toggle theme",
             children: icon
+          }
+        ),
+        !isMobile && /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: `header-button${isEditing ? " header-button--active" : ""}`,
+            onClick: () => {
+              editMode.value = !editMode.value;
+            },
+            "aria-pressed": isEditing,
+            "aria-label": isEditing ? "Done editing layout" : "Edit layout",
+            children: isEditing ? "[DONE]" : "[EDIT LAYOUT]"
           }
         ),
         /* @__PURE__ */ u4(
@@ -10020,6 +10037,7 @@ ${row.project}` : row.project;
     const container = $2(sectionId);
     if (!container) return;
     container.dataset["hasContent"] = hasContent ? "1" : "0";
+    if (container.closest(".widget-body")) return;
     const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
     container.style.display = hasContent && visibleInTab ? displayMode : "none";
   }
@@ -10033,6 +10051,7 @@ ${row.project}` : row.project;
     for (const [sectionId, tab] of Object.entries(SECTION_TAB_MAP)) {
       const container = $2(sectionId);
       if (!container) continue;
+      if (container.closest(".widget-body")) continue;
       const hasContent = container.dataset["hasContent"] !== "0";
       const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? "";
       container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : "none";
@@ -11488,9 +11507,9 @@ ${row.project}` : row.project;
     let intervalId = null;
     let eventSource = null;
     let visibilityHandler = null;
-    const mount = $2("main-content");
+    const mount2 = $2("main-content");
     function renderView() {
-      R(renderLiveMonitorView(), mount);
+      R(renderLiveMonitorView(), mount2);
     }
     async function loadData2() {
       liveMonitorRefreshing.value = true;
@@ -11826,8 +11845,8 @@ ${row.project}` : row.project;
     return { start: fmt2(start), end: fmt2(end) };
   }
   function renderPage() {
-    const mount = document.getElementById("main-content");
-    if (mount) R(/* @__PURE__ */ u4(ToolErrorsPage, { onLoad: loadData }), mount);
+    const mount2 = document.getElementById("main-content");
+    if (mount2) R(/* @__PURE__ */ u4(ToolErrorsPage, { onLoad: loadData }), mount2);
   }
   async function loadData() {
     loadState2.value = "loading";
@@ -11961,6 +11980,6823 @@ ${row.project}` : row.project;
     });
   }
 
+  // node_modules/gridstack/dist/utils.js
+  var Utils = class _Utils {
+    /**
+     * Convert a potential selector into an actual list of HTML elements.
+     * Supports CSS selectors, element references, and special ID handling.
+     *
+     * @param els selector string, HTMLElement, or array of elements
+     * @param root optional root element to search within (defaults to document, useful for shadow DOM)
+     * @returns array of HTML elements matching the selector
+     *
+     * @example
+     * const elements = Utils.getElements('.grid-item');
+     * const byId = Utils.getElements('#myWidget');
+     * const fromShadow = Utils.getElements('.item', shadowRoot);
+     */
+    static getElements(els, root = document) {
+      if (typeof els === "string") {
+        const doc = "getElementById" in root ? root : void 0;
+        if (doc && !isNaN(+els[0])) {
+          const el = doc.getElementById(els);
+          return el ? [el] : [];
+        }
+        let list = root.querySelectorAll(els);
+        if (!list.length && els[0] !== "." && els[0] !== "#") {
+          list = root.querySelectorAll("." + els);
+          if (!list.length)
+            list = root.querySelectorAll("#" + els);
+          if (!list.length) {
+            const el = root.querySelector(`[gs-id="${els}"]`);
+            return el ? [el] : [];
+          }
+        }
+        return Array.from(list);
+      }
+      return [els];
+    }
+    /**
+     * Convert a potential selector into a single HTML element.
+     * Similar to getElements() but returns only the first match.
+     *
+     * @param els selector string or HTMLElement
+     * @param root optional root element to search within (defaults to document)
+     * @returns the first HTML element matching the selector, or null if not found
+     *
+     * @example
+     * const element = Utils.getElement('#myWidget');
+     * const first = Utils.getElement('.grid-item');
+     */
+    static getElement(els, root = document) {
+      if (typeof els === "string") {
+        const doc = "getElementById" in root ? root : void 0;
+        if (!els.length)
+          return null;
+        if (doc && els[0] === "#") {
+          return doc.getElementById(els.substring(1));
+        }
+        if (els[0] === "#" || els[0] === "." || els[0] === "[") {
+          return root.querySelector(els);
+        }
+        if (doc && !isNaN(+els[0])) {
+          return doc.getElementById(els);
+        }
+        let el = root.querySelector(els);
+        if (doc && !el) {
+          el = doc.getElementById(els);
+        }
+        if (!el) {
+          el = root.querySelector("." + els);
+        }
+        return el;
+      }
+      return els;
+    }
+    /**
+     * Check if a widget should be lazy loaded based on node or grid settings.
+     *
+     * @param n the grid node to check
+     * @returns true if the item should be lazy loaded
+     *
+     * @example
+     * if (Utils.lazyLoad(node)) {
+     *   // Set up intersection observer for lazy loading
+     * }
+     */
+    static lazyLoad(n3) {
+      return n3.lazyLoad || n3.grid?.opts?.lazyLoad && n3.lazyLoad !== false;
+    }
+    /**
+     * Create a div element with the specified CSS classes.
+     *
+     * @param classes array of CSS class names to add
+     * @param parent optional parent element to append the div to
+     * @returns the created div element
+     *
+     * @example
+     * const div = Utils.createDiv(['grid-item', 'draggable']);
+     * const nested = Utils.createDiv(['content'], parentDiv);
+     */
+    static createDiv(classes, parent) {
+      const el = document.createElement("div");
+      classes.forEach((c4) => {
+        if (c4)
+          el.classList.add(c4);
+      });
+      parent?.appendChild(el);
+      return el;
+    }
+    /**
+     * Check if a widget should resize to fit its content.
+     *
+     * @param n the grid node to check (can be undefined)
+     * @param strict if true, only returns true for explicit sizeToContent:true (not numbers)
+     * @returns true if the widget should resize to content
+     *
+     * @example
+     * if (Utils.shouldSizeToContent(node)) {
+     *   // Trigger content-based resizing
+     * }
+     */
+    static shouldSizeToContent(n3, strict = false) {
+      return n3?.grid && (strict ? n3.sizeToContent === true || n3.grid.opts.sizeToContent === true && n3.sizeToContent === void 0 : !!n3.sizeToContent || n3.grid.opts.sizeToContent && n3.sizeToContent !== false);
+    }
+    /**
+     * Check if two grid positions overlap/intersect.
+     *
+     * @param a first position with x, y, w, h properties
+     * @param b second position with x, y, w, h properties
+     * @returns true if the positions overlap
+     *
+     * @example
+     * const overlaps = Utils.isIntercepted(
+     *   {x: 0, y: 0, w: 2, h: 1},
+     *   {x: 1, y: 0, w: 2, h: 1}
+     * ); // true - they overlap
+     */
+    static isIntercepted(a4, b4) {
+      return !(a4.y >= b4.y + b4.h || a4.y + a4.h <= b4.y || a4.x + a4.w <= b4.x || a4.x >= b4.x + b4.w);
+    }
+    /**
+     * Check if two grid positions are touching (edges or corners).
+     *
+     * @param a first position
+     * @param b second position
+     * @returns true if the positions are touching
+     *
+     * @example
+     * const touching = Utils.isTouching(
+     *   {x: 0, y: 0, w: 2, h: 1},
+     *   {x: 2, y: 0, w: 1, h: 1}
+     * ); // true - they share an edge
+     */
+    static isTouching(a4, b4) {
+      return _Utils.isIntercepted(a4, { x: b4.x - 0.5, y: b4.y - 0.5, w: b4.w + 1, h: b4.h + 1 });
+    }
+    /**
+     * Calculate the overlapping area between two grid positions.
+     *
+     * @param a first position
+     * @param b second position
+     * @returns the area of overlap (0 if no overlap)
+     *
+     * @example
+     * const overlap = Utils.areaIntercept(
+     *   {x: 0, y: 0, w: 3, h: 2},
+     *   {x: 1, y: 0, w: 3, h: 2}
+     * ); // returns 4 (2x2 overlap)
+     */
+    static areaIntercept(a4, b4) {
+      const x0 = a4.x > b4.x ? a4.x : b4.x;
+      const x1 = a4.x + a4.w < b4.x + b4.w ? a4.x + a4.w : b4.x + b4.w;
+      if (x1 <= x0)
+        return 0;
+      const y0 = a4.y > b4.y ? a4.y : b4.y;
+      const y1 = a4.y + a4.h < b4.y + b4.h ? a4.y + a4.h : b4.y + b4.h;
+      if (y1 <= y0)
+        return 0;
+      return (x1 - x0) * (y1 - y0);
+    }
+    /**
+     * Calculate the total area of a grid position.
+     *
+     * @param a position with width and height
+     * @returns the total area (width * height)
+     *
+     * @example
+     * const area = Utils.area({x: 0, y: 0, w: 3, h: 2}); // returns 6
+     */
+    static area(a4) {
+      return a4.w * a4.h;
+    }
+    /**
+     * Sort an array of grid nodes by position (y first, then x).
+     *
+     * @param nodes array of nodes to sort
+     * @param dir sort direction: 1 for ascending (top-left first), -1 for descending
+     * @returns the sorted array (modifies original)
+     *
+     * @example
+     * const sorted = Utils.sort(nodes); // Sort top-left to bottom-right
+     * const reverse = Utils.sort(nodes, -1); // Sort bottom-right to top-left
+     */
+    static sort(nodes, dir = 1) {
+      const und = 1e4;
+      return nodes.sort((a4, b4) => {
+        const diffY = dir * ((a4.y ?? und) - (b4.y ?? und));
+        if (diffY === 0)
+          return dir * ((a4.x ?? und) - (b4.x ?? und));
+        return diffY;
+      });
+    }
+    /**
+     * Find a grid node by its ID.
+     *
+     * @param nodes array of nodes to search
+     * @param id the ID to search for
+     * @returns the node with matching ID, or undefined if not found
+     *
+     * @example
+     * const node = Utils.find(nodes, 'widget-1');
+     * if (node) console.log('Found node at:', node.x, node.y);
+     */
+    static find(nodes, id) {
+      return id ? nodes.find((n3) => n3.id === id) : void 0;
+    }
+    /**
+     * Convert various value types to boolean.
+     * Handles strings like 'false', 'no', '0' as false.
+     *
+     * @param v value to convert
+     * @returns boolean representation
+     *
+     * @example
+     * Utils.toBool('true');  // true
+     * Utils.toBool('false'); // false
+     * Utils.toBool('no');    // false
+     * Utils.toBool('1');     // true
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    static toBool(v4) {
+      if (typeof v4 === "boolean") {
+        return v4;
+      }
+      if (typeof v4 === "string") {
+        v4 = v4.toLowerCase();
+        return !(v4 === "" || v4 === "no" || v4 === "false" || v4 === "0");
+      }
+      return Boolean(v4);
+    }
+    /**
+     * Convert a string value to a number, handling null and empty strings.
+     *
+     * @param value string or null value to convert
+     * @returns number value, or undefined for null/empty strings
+     *
+     * @example
+     * Utils.toNumber('42');  // 42
+     * Utils.toNumber('');    // undefined
+     * Utils.toNumber(null);  // undefined
+     */
+    static toNumber(value) {
+      return value === null || value.length === 0 ? void 0 : Number(value);
+    }
+    /**
+     * Parse a height value with units into numeric value and unit string.
+     * Supports px, em, rem, vh, vw, %, cm, mm units.
+     *
+     * @param val height value as number or string with units
+     * @returns object with h (height) and unit properties
+     *
+     * @example
+     * Utils.parseHeight('100px');  // {h: 100, unit: 'px'}
+     * Utils.parseHeight('2rem');   // {h: 2, unit: 'rem'}
+     * Utils.parseHeight(50);       // {h: 50, unit: 'px'}
+     */
+    static parseHeight(val) {
+      let h5;
+      let unit = "px";
+      if (typeof val === "string") {
+        if (val === "auto" || val === "")
+          h5 = 0;
+        else {
+          const match = val.match(/^(-[0-9]+\.[0-9]+|[0-9]*\.[0-9]+|-[0-9]+|[0-9]+)(px|em|rem|vh|vw|%|cm|mm)?$/);
+          if (!match) {
+            throw new Error(`Invalid height val = ${val}`);
+          }
+          unit = match[2] || "px";
+          h5 = parseFloat(match[1]);
+        }
+      } else {
+        h5 = val;
+      }
+      return { h: h5, unit };
+    }
+    /**
+     * Copy unset fields from source objects to target object (shallow merge with defaults).
+     * Similar to Object.assign but only sets undefined/null fields.
+     *
+     * @param target the object to copy defaults into
+     * @param sources one or more source objects to copy defaults from
+     * @returns the modified target object
+     *
+     * @example
+     * const config = { width: 100 };
+     * Utils.defaults(config, { width: 200, height: 50 });
+     * // config is now { width: 100, height: 50 }
+     */
+    // eslint-disable-next-line
+    static defaults(target, ...sources) {
+      sources.forEach((source) => {
+        for (const key in source) {
+          if (!source.hasOwnProperty(key))
+            return;
+          if (target[key] === null || target[key] === void 0) {
+            target[key] = source[key];
+          } else if (typeof source[key] === "object" && typeof target[key] === "object") {
+            _Utils.defaults(target[key], source[key]);
+          }
+        }
+      });
+      return target;
+    }
+    /**
+     * Compare two objects for equality (shallow comparison).
+     * Checks if objects have the same fields and values at one level deep.
+     *
+     * @param a first object to compare
+     * @param b second object to compare
+     * @returns true if objects have the same values
+     *
+     * @example
+     * Utils.same({x: 1, y: 2}, {x: 1, y: 2}); // true
+     * Utils.same({x: 1}, {x: 1, y: 2}); // false
+     */
+    static same(a4, b4) {
+      if (typeof a4 !== "object")
+        return a4 == b4;
+      if (typeof a4 !== typeof b4)
+        return false;
+      if (Object.keys(a4).length !== Object.keys(b4).length)
+        return false;
+      for (const key in a4) {
+        if (a4[key] !== b4[key])
+          return false;
+      }
+      return true;
+    }
+    /**
+     * Copy position and size properties from one widget to another.
+     * Copies x, y, w, h and optionally min/max constraints.
+     *
+     * @param a target widget to copy to
+     * @param b source widget to copy from
+     * @param doMinMax if true, also copy min/max width/height constraints
+     * @returns the target widget (a)
+     *
+     * @example
+     * Utils.copyPos(widget1, widget2); // Copy position/size
+     * Utils.copyPos(widget1, widget2, true); // Also copy constraints
+     */
+    static copyPos(a4, b4, doMinMax = false) {
+      if (b4.x !== void 0)
+        a4.x = b4.x;
+      if (b4.y !== void 0)
+        a4.y = b4.y;
+      if (b4.w !== void 0)
+        a4.w = b4.w;
+      if (b4.h !== void 0)
+        a4.h = b4.h;
+      if (doMinMax) {
+        if (b4.minW)
+          a4.minW = b4.minW;
+        if (b4.minH)
+          a4.minH = b4.minH;
+        if (b4.maxW)
+          a4.maxW = b4.maxW;
+        if (b4.maxH)
+          a4.maxH = b4.maxH;
+      }
+      return a4;
+    }
+    /** true if a and b has same size & position */
+    static samePos(a4, b4) {
+      return a4 && b4 && a4.x === b4.x && a4.y === b4.y && (a4.w || 1) === (b4.w || 1) && (a4.h || 1) === (b4.h || 1);
+    }
+    /** given a node, makes sure it's min/max are valid */
+    static sanitizeMinMax(node) {
+      if (!node.minW) {
+        delete node.minW;
+      }
+      if (!node.minH) {
+        delete node.minH;
+      }
+      if (!node.maxW) {
+        delete node.maxW;
+      }
+      if (!node.maxH) {
+        delete node.maxH;
+      }
+    }
+    /** removes field from the first object if same as the second objects (like diffing) and internal '_' for saving */
+    static removeInternalAndSame(a4, b4) {
+      if (typeof a4 !== "object" || typeof b4 !== "object")
+        return;
+      if (Array.isArray(a4) || Array.isArray(b4))
+        return;
+      for (let key in a4) {
+        const aVal = a4[key];
+        const bVal = b4[key];
+        if (key[0] === "_" || aVal === bVal) {
+          delete a4[key];
+        } else if (aVal && typeof aVal === "object" && bVal !== void 0) {
+          _Utils.removeInternalAndSame(aVal, bVal);
+          if (!Object.keys(aVal).length) {
+            delete a4[key];
+          }
+        }
+      }
+    }
+    /** removes internal fields '_' and default values for saving */
+    static removeInternalForSave(n3, removeEl = true) {
+      for (let key in n3) {
+        if (key[0] === "_" || n3[key] === null || n3[key] === void 0)
+          delete n3[key];
+      }
+      delete n3.grid;
+      if (removeEl)
+        delete n3.el;
+      if (!n3.autoPosition)
+        delete n3.autoPosition;
+      if (!n3.noResize)
+        delete n3.noResize;
+      if (!n3.noMove)
+        delete n3.noMove;
+      if (!n3.locked)
+        delete n3.locked;
+      if (n3.w === 1 || n3.w === n3.minW)
+        delete n3.w;
+      if (n3.h === 1 || n3.h === n3.minH)
+        delete n3.h;
+    }
+    /** return the closest parent (or itself) matching the given class */
+    // static closestUpByClass(el: HTMLElement, name: string): HTMLElement {
+    //   while (el) {
+    //     if (el.classList.contains(name)) return el;
+    //     el = el.parentElement
+    //   }
+    //   return null;
+    // }
+    /** delay calling the given function for given delay, preventing new calls from happening while waiting */
+    static throttle(func, delay) {
+      let isWaiting = false;
+      return (...args) => {
+        if (!isWaiting) {
+          isWaiting = true;
+          setTimeout(() => {
+            func(...args);
+            isWaiting = false;
+          }, delay);
+        }
+      };
+    }
+    static removePositioningStyles(el) {
+      const style = el.style;
+      if (style.position) {
+        style.removeProperty("position");
+      }
+      if (style.left) {
+        style.removeProperty("left");
+      }
+      if (style.top) {
+        style.removeProperty("top");
+      }
+      if (style.width) {
+        style.removeProperty("width");
+      }
+      if (style.height) {
+        style.removeProperty("height");
+      }
+    }
+    /** @internal returns the passed element if vertically scrollable, else the closest parent that will, up to the entire document scrolling element */
+    static getScrollElement(el) {
+      if (!el)
+        return document.scrollingElement || document.documentElement;
+      const overflowY = getComputedStyle(el).overflowY;
+      if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight) {
+        return el;
+      } else {
+        return _Utils.getScrollElement(el.parentElement);
+      }
+    }
+    /**
+     * @internal Function used to scroll the page.
+     *
+     * @param event `MouseEvent` that triggers the resize
+     * @param el `HTMLElement` that's being resized
+     * @param distance Distance from the V edges to start scrolling
+     */
+    static updateScrollResize(event, el, distance) {
+      const scrollEl = _Utils.getScrollElement(el);
+      const height = scrollEl.clientHeight;
+      const offsetTop = scrollEl === _Utils.getScrollElement() ? 0 : scrollEl.getBoundingClientRect().top;
+      const pointerPosY = event.clientY - offsetTop;
+      const top = pointerPosY < distance;
+      const bottom = pointerPosY > height - distance;
+      if (top) {
+        scrollEl.scrollBy({ behavior: "smooth", top: pointerPosY - distance });
+      } else if (bottom) {
+        scrollEl.scrollBy({ behavior: "smooth", top: distance - (height - pointerPosY) });
+      }
+    }
+    /** single level clone, returning a new object with same top fields. This will share sub objects and arrays */
+    static clone(obj) {
+      if (obj === null || obj === void 0 || typeof obj !== "object") {
+        return obj;
+      }
+      if (obj instanceof Array) {
+        return [...obj];
+      }
+      return { ...obj };
+    }
+    /**
+     * Recursive clone version that returns a full copy, checking for nested objects and arrays ONLY.
+     * Note: this will use as-is any key starting with double __ (and not copy inside) some lib have circular dependencies.
+     */
+    static cloneDeep(obj) {
+      const skipFields = ["parentGrid", "el", "grid", "subGrid", "engine"];
+      const ret = _Utils.clone(obj);
+      for (const key in ret) {
+        if (ret.hasOwnProperty(key) && typeof ret[key] === "object" && key.substring(0, 2) !== "__" && !skipFields.find((k3) => k3 === key)) {
+          ret[key] = _Utils.cloneDeep(obj[key]);
+        }
+      }
+      return ret;
+    }
+    /** deep clone the given HTML node, removing teh unique id field */
+    static cloneNode(el) {
+      const node = el.cloneNode(true);
+      node.removeAttribute("id");
+      return node;
+    }
+    static appendTo(el, parent) {
+      let parentNode;
+      if (typeof parent === "string") {
+        parentNode = _Utils.getElement(parent);
+      } else {
+        parentNode = parent;
+      }
+      if (parentNode) {
+        parentNode.appendChild(el);
+      }
+    }
+    // public static setPositionRelative(el: HTMLElement): void {
+    //   if (!(/^(?:r|a|f)/).test(getComputedStyle(el).position)) {
+    //     el.style.position = "relative";
+    //   }
+    // }
+    static addElStyles(el, styles) {
+      if (styles instanceof Object) {
+        for (const s4 in styles) {
+          if (styles.hasOwnProperty(s4)) {
+            if (Array.isArray(styles[s4])) {
+              styles[s4].forEach((val) => {
+                el.style[s4] = val;
+              });
+            } else {
+              el.style[s4] = styles[s4];
+            }
+          }
+        }
+      }
+    }
+    static initEvent(e4, info) {
+      const evt = { type: info.type };
+      const obj = {
+        button: 0,
+        which: 0,
+        buttons: 1,
+        bubbles: true,
+        cancelable: true,
+        target: info.target ? info.target : e4.target
+      };
+      ["altKey", "ctrlKey", "metaKey", "shiftKey"].forEach((p5) => evt[p5] = e4[p5]);
+      ["pageX", "pageY", "clientX", "clientY", "screenX", "screenY"].forEach((p5) => evt[p5] = e4[p5]);
+      return { ...evt, ...obj };
+    }
+    /** copies the MouseEvent (or convert Touch) properties and sends it as another event to the given target */
+    static simulateMouseEvent(e4, simulatedType, target) {
+      const me = e4;
+      const simulatedEvent = new MouseEvent(simulatedType, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        view: window,
+        detail: 1,
+        screenX: e4.screenX,
+        screenY: e4.screenY,
+        clientX: e4.clientX,
+        clientY: e4.clientY,
+        ctrlKey: me.ctrlKey ?? false,
+        altKey: me.altKey ?? false,
+        shiftKey: me.shiftKey ?? false,
+        metaKey: me.metaKey ?? false,
+        button: 0,
+        relatedTarget: e4.target
+      });
+      (target || e4.target).dispatchEvent(simulatedEvent);
+    }
+    /**
+     * defines an element that is used to get the offset and scale from grid transforms
+     * returns the scale and offsets from said element
+    */
+    static getValuesFromTransformedElement(parent) {
+      const transformReference = document.createElement("div");
+      _Utils.addElStyles(transformReference, {
+        opacity: "0",
+        position: "fixed",
+        top: "0px",
+        left: "0px",
+        width: "1px",
+        height: "1px",
+        zIndex: "-999999"
+      });
+      parent.appendChild(transformReference);
+      const transformValues = transformReference.getBoundingClientRect();
+      parent.removeChild(transformReference);
+      transformReference.remove();
+      return {
+        xScale: 1 / transformValues.width,
+        yScale: 1 / transformValues.height,
+        xOffset: transformValues.left,
+        yOffset: transformValues.top
+      };
+    }
+    /** swap the given object 2 field values */
+    static swap(o4, a4, b4) {
+      if (!o4)
+        return;
+      const tmp = o4[a4];
+      o4[a4] = o4[b4];
+      o4[b4] = tmp;
+    }
+    /** returns true if event is inside the given element rectangle */
+    // Note: Safari Mac has null event.relatedTarget which causes #1684 so check if DragEvent is inside the coordinates instead
+    //    Utils.el.contains(event.relatedTarget as HTMLElement)
+    // public static inside(e: MouseEvent, el: HTMLElement): boolean {
+    //   // srcElement, toElement, target: all set to placeholder when leaving simple grid, so we can't use that (Chrome)
+    //   const target: HTMLElement = e.relatedTarget || (e as any).fromElement;
+    //   if (!target) {
+    //     const { bottom, left, right, top } = el.getBoundingClientRect();
+    //     return (e.x < right && e.x > left && e.y < bottom && e.y > top);
+    //   }
+    //   return el.contains(target);
+    // }
+    /** true if the item can be rotated (checking for prop, not space available) */
+    static canBeRotated(n3) {
+      return !(!n3 || n3.w === n3.h || n3.locked || n3.noResize || n3.grid?.opts.disableResize || n3.minW && n3.minW === n3.maxW || n3.minH && n3.minH === n3.maxH);
+    }
+  };
+
+  // node_modules/gridstack/dist/gridstack-engine.js
+  var GridStackEngine = class _GridStackEngine {
+    constructor(opts = {}) {
+      this.addedNodes = [];
+      this.removedNodes = [];
+      this.defaultColumn = 12;
+      this.column = opts.column || this.defaultColumn;
+      if (this.column > this.defaultColumn)
+        this.defaultColumn = this.column;
+      this.maxRow = opts.maxRow;
+      this._float = opts.float;
+      this.nodes = opts.nodes || [];
+      this.onChange = opts.onChange;
+    }
+    /**
+     * Enable/disable batch mode for multiple operations to optimize performance.
+     * When enabled, layout updates are deferred until batch mode is disabled.
+     *
+     * @param flag true to enable batch mode, false to disable and apply changes
+     * @param doPack if true (default), pack/compact nodes when disabling batch mode
+     * @returns the engine instance for chaining
+     *
+     * @example
+     * // Start batch mode for multiple operations
+     * engine.batchUpdate(true);
+     * engine.addNode(node1);
+     * engine.addNode(node2);
+     * engine.batchUpdate(false); // Apply all changes at once
+     */
+    batchUpdate(flag = true, doPack = true) {
+      if (!!this.batchMode === flag)
+        return this;
+      this.batchMode = flag;
+      if (flag) {
+        this._prevFloat = this._float;
+        this._float = true;
+        this.cleanNodes();
+        this.saveInitial();
+      } else {
+        this._float = this._prevFloat;
+        delete this._prevFloat;
+        if (doPack)
+          this._packNodes();
+        this._notify();
+      }
+      return this;
+    }
+    // use entire row for hitting area (will use bottom reverse sorted first) if we not actively moving DOWN and didn't already skip
+    _useEntireRowArea(node, nn) {
+      return (!this.float || this.batchMode && !this._prevFloat) && !this._hasLocked && (!node._moving || node._skipDown || nn.y <= node.y);
+    }
+    /** @internal fix collision on given 'node', going to given new location 'nn', with optional 'collide' node already found.
+     * return true if we moved. */
+    _fixCollisions(node, nn = node, collide, opt = {}) {
+      this.sortNodes(-1);
+      collide = collide || this.collide(node, nn);
+      if (!collide)
+        return false;
+      if (node._moving && !opt.nested && !this.float) {
+        if (this.swap(node, collide))
+          return true;
+      }
+      let area = nn;
+      if (!this._loading && this._useEntireRowArea(node, nn)) {
+        area = { x: 0, w: this.column, y: nn.y, h: nn.h };
+        collide = this.collide(node, area, opt.skip);
+      }
+      let didMove = false;
+      const newOpt = { nested: true, pack: false };
+      let counter = 0;
+      while (collide = collide || this.collide(node, area, opt.skip)) {
+        if (counter++ > this.nodes.length * 2) {
+          throw new Error("Infinite collide check");
+        }
+        let moved;
+        if (collide.locked || this._loading || node._moving && !node._skipDown && nn.y > node.y && !this.float && // can take space we had, or before where we're going
+        (!this.collide(collide, { ...collide, y: node.y }, node) || !this.collide(collide, { ...collide, y: nn.y - collide.h }, node))) {
+          node._skipDown = node._skipDown || nn.y > node.y;
+          const newNN = { ...nn, y: collide.y + collide.h, ...newOpt };
+          moved = this._loading && Utils.samePos(node, newNN) ? true : this.moveNode(node, newNN);
+          if ((collide.locked || this._loading) && moved) {
+            Utils.copyPos(nn, node);
+          } else if (!collide.locked && moved && opt.pack) {
+            this._packNodes();
+            nn.y = collide.y + collide.h;
+            Utils.copyPos(node, nn);
+          }
+          didMove = didMove || moved;
+        } else {
+          moved = this.moveNode(collide, { ...collide, y: nn.y + nn.h, skip: node, ...newOpt });
+        }
+        if (!moved)
+          return didMove;
+        collide = void 0;
+      }
+      return didMove;
+    }
+    /**
+     * Return the first node that intercepts/collides with the given node or area.
+     * Used for collision detection during drag and drop operations.
+     *
+     * @param skip the node to skip in collision detection (usually the node being moved)
+     * @param area the area to check for collisions (defaults to skip node's area)
+     * @param skip2 optional second node to skip in collision detection
+     * @returns the first colliding node, or undefined if no collision
+     *
+     * @example
+     * const colliding = engine.collide(draggedNode, {x: 2, y: 1, w: 2, h: 1});
+     * if (colliding) {
+     *   console.log('Would collide with:', colliding.id);
+     * }
+     */
+    collide(skip, area = skip, skip2) {
+      const skipId = skip._id;
+      const skip2Id = skip2?._id;
+      return this.nodes.find((n3) => n3._id !== skipId && n3._id !== skip2Id && Utils.isIntercepted(n3, area));
+    }
+    /**
+     * Return all nodes that intercept/collide with the given node or area.
+     * Similar to collide() but returns all colliding nodes instead of just the first.
+     *
+     * @param skip the node to skip in collision detection
+     * @param area the area to check for collisions (defaults to skip node's area)
+     * @param skip2 optional second node to skip in collision detection
+     * @returns array of all colliding nodes
+     *
+     * @example
+     * const allCollisions = engine.collideAll(draggedNode);
+     * console.log('Colliding with', allCollisions.length, 'nodes');
+     */
+    collideAll(skip, area = skip, skip2) {
+      const skipId = skip._id;
+      const skip2Id = skip2?._id;
+      return this.nodes.filter((n3) => n3._id !== skipId && n3._id !== skip2Id && Utils.isIntercepted(n3, area));
+    }
+    /** does a pixel coverage collision based on where we started, returning the node that has the most coverage that is >50% mid line */
+    directionCollideCoverage(node, o4, collides) {
+      if (!o4.rect || !node._rect)
+        return;
+      const r0 = node._rect;
+      const r4 = { ...o4.rect };
+      if (r4.y > r0.y) {
+        r4.h += r4.y - r0.y;
+        r4.y = r0.y;
+      } else {
+        r4.h += r0.y - r4.y;
+      }
+      if (r4.x > r0.x) {
+        r4.w += r4.x - r0.x;
+        r4.x = r0.x;
+      } else {
+        r4.w += r0.x - r4.x;
+      }
+      let collide;
+      let overMax = 0.5;
+      for (let n3 of collides) {
+        if (n3.locked || !n3._rect) {
+          break;
+        }
+        const r22 = n3._rect;
+        let yOver = Number.MAX_VALUE, xOver = Number.MAX_VALUE;
+        if (r0.y < r22.y) {
+          yOver = (r4.y + r4.h - r22.y) / r22.h;
+        } else if (r0.y + r0.h > r22.y + r22.h) {
+          yOver = (r22.y + r22.h - r4.y) / r22.h;
+        }
+        if (r0.x < r22.x) {
+          xOver = (r4.x + r4.w - r22.x) / r22.w;
+        } else if (r0.x + r0.w > r22.x + r22.w) {
+          xOver = (r22.x + r22.w - r4.x) / r22.w;
+        }
+        const over = Math.min(xOver, yOver);
+        if (over > overMax) {
+          overMax = over;
+          collide = n3;
+        }
+      }
+      o4.collide = collide;
+      return collide;
+    }
+    /** does a pixel coverage returning the node that has the most coverage by area */
+    /*
+    protected collideCoverage(r: GridStackPosition, collides: GridStackNode[]): {collide: GridStackNode, over: number} {
+      const collide: GridStackNode;
+      const overMax = 0;
+      collides.forEach(n => {
+        if (n.locked || !n._rect) return;
+        const over = Utils.areaIntercept(r, n._rect);
+        if (over > overMax) {
+          overMax = over;
+          collide = n;
+        }
+      });
+      return {collide, over: overMax};
+    }
+    */
+    /**
+     * Cache the pixel rectangles for all nodes used for collision detection during drag operations.
+     * This optimization converts grid coordinates to pixel coordinates for faster collision detection.
+     *
+     * @param w width of a single grid cell in pixels
+     * @param h height of a single grid cell in pixels
+     * @param top top margin/padding in pixels
+     * @param right right margin/padding in pixels
+     * @param bottom bottom margin/padding in pixels
+     * @param left left margin/padding in pixels
+     * @returns the engine instance for chaining
+     *
+     * @internal This is typically called by GridStack during resize events
+     */
+    cacheRects(w5, h5, top, right, bottom, left) {
+      this.nodes.forEach((n3) => n3._rect = {
+        y: n3.y * h5 + top,
+        x: n3.x * w5 + left,
+        w: n3.w * w5 - left - right,
+        h: n3.h * h5 - top - bottom
+      });
+      return this;
+    }
+    /**
+     * Attempt to swap the positions of two nodes if they meet swapping criteria.
+     * Nodes can swap if they are the same size or in the same column/row, not locked, and touching.
+     *
+     * @param a first node to swap
+     * @param b second node to swap
+     * @returns true if swap was successful, false if not possible, undefined if not applicable
+     *
+     * @example
+     * const swapped = engine.swap(nodeA, nodeB);
+     * if (swapped) {
+     *   console.log('Nodes swapped successfully');
+     * }
+     */
+    swap(a4, b4) {
+      if (!b4 || b4.locked || !a4 || a4.locked)
+        return false;
+      function _doSwap() {
+        const x4 = b4.x, y5 = b4.y;
+        b4.x = a4.x;
+        b4.y = a4.y;
+        if (a4.h != b4.h) {
+          a4.x = x4;
+          a4.y = b4.y + b4.h;
+        } else if (a4.w != b4.w) {
+          a4.x = b4.x + b4.w;
+          a4.y = y5;
+        } else {
+          a4.x = x4;
+          a4.y = y5;
+        }
+        a4._dirty = b4._dirty = true;
+        return true;
+      }
+      let touching;
+      if (a4.w === b4.w && a4.h === b4.h && (a4.x === b4.x || a4.y === b4.y) && (touching = Utils.isTouching(a4, b4)))
+        return _doSwap();
+      if (touching === false)
+        return;
+      if (a4.w === b4.w && a4.x === b4.x && (touching || (touching = Utils.isTouching(a4, b4)))) {
+        if (b4.y < a4.y) {
+          const t4 = a4;
+          a4 = b4;
+          b4 = t4;
+        }
+        return _doSwap();
+      }
+      if (touching === false)
+        return;
+      if (a4.h === b4.h && a4.y === b4.y && (touching || (touching = Utils.isTouching(a4, b4)))) {
+        if (b4.x < a4.x) {
+          const t4 = a4;
+          a4 = b4;
+          b4 = t4;
+        }
+        return _doSwap();
+      }
+      return false;
+    }
+    /**
+     * Check if the specified rectangular area is empty (no nodes occupy any part of it).
+     *
+     * @param x the x coordinate (column) of the area to check
+     * @param y the y coordinate (row) of the area to check
+     * @param w the width in columns of the area to check
+     * @param h the height in rows of the area to check
+     * @returns true if the area is completely empty, false if any node overlaps
+     *
+     * @example
+     * if (engine.isAreaEmpty(2, 1, 3, 2)) {
+     *   console.log('Area is available for placement');
+     * }
+     */
+    isAreaEmpty(x4, y5, w5, h5) {
+      const nn = { x: x4 || 0, y: y5 || 0, w: w5 || 1, h: h5 || 1 };
+      return !this.collide(nn);
+    }
+    /**
+     * Re-layout grid items to reclaim any empty space.
+     * This optimizes the grid layout by moving items to fill gaps.
+     *
+     * @param layout layout algorithm to use:
+     *   - 'compact' (default): find truly empty spaces, may reorder items
+     *   - 'list': keep the sort order exactly the same, move items up sequentially
+     * @param doSort if true (default), sort nodes by position before compacting
+     * @returns the engine instance for chaining
+     *
+     * @example
+     * // Compact to fill empty spaces
+     * engine.compact();
+     *
+     * // Compact preserving item order
+     * engine.compact('list');
+     */
+    compact(layout = "compact", doSort = true) {
+      if (this.nodes.length === 0)
+        return this;
+      if (doSort)
+        this.sortNodes();
+      const wasBatch = this.batchMode;
+      if (!wasBatch)
+        this.batchUpdate();
+      const wasColumnResize = this._inColumnResize;
+      if (!wasColumnResize)
+        this._inColumnResize = true;
+      const copyNodes = this.nodes;
+      this.nodes = [];
+      copyNodes.forEach((n3, index, list) => {
+        let after;
+        if (!n3.locked) {
+          n3.autoPosition = true;
+          if (layout === "list" && index)
+            after = list[index - 1];
+        }
+        this.addNode(n3, false, after);
+      });
+      if (!wasColumnResize)
+        delete this._inColumnResize;
+      if (!wasBatch)
+        this.batchUpdate(false);
+      return this;
+    }
+    /**
+     * Enable/disable floating widgets (default: `false`).
+     * When floating is enabled, widgets can move up to fill empty spaces.
+     * See [example](http://gridstackjs.com/demo/float.html)
+     *
+     * @param val true to enable floating, false to disable
+     *
+     * @example
+     * engine.float = true;  // Enable floating
+     * engine.float = false; // Disable floating (default)
+     */
+    set float(val) {
+      if (this._float === val)
+        return;
+      this._float = val || false;
+      if (!val) {
+        this._packNodes()._notify();
+      }
+    }
+    /**
+     * Get the current floating mode setting.
+     *
+     * @returns true if floating is enabled, false otherwise
+     *
+     * @example
+     * const isFloating = engine.float;
+     * console.log('Floating enabled:', isFloating);
+     */
+    get float() {
+      return this._float || false;
+    }
+    /**
+     * Sort the nodes array from first to last, or reverse.
+     * This is called during collision/placement operations to enforce a specific order.
+     *
+     * @param dir sort direction: 1 for ascending (first to last), -1 for descending (last to first)
+     * @returns the engine instance for chaining
+     *
+     * @example
+     * engine.sortNodes();    // Sort ascending (default)
+     * engine.sortNodes(-1);  // Sort descending
+     */
+    sortNodes(dir = 1) {
+      this.nodes = Utils.sort(this.nodes, dir);
+      return this;
+    }
+    /** @internal called to top gravity pack the items back OR revert back to original Y positions when floating */
+    _packNodes() {
+      if (this.batchMode) {
+        return this;
+      }
+      this.sortNodes();
+      if (this.float) {
+        this.nodes.forEach((n3) => {
+          if (n3._updating || n3._orig === void 0 || n3.y === n3._orig.y)
+            return;
+          let newY = n3.y;
+          while (newY > n3._orig.y) {
+            --newY;
+            const collide = this.collide(n3, { x: n3.x, y: newY, w: n3.w, h: n3.h });
+            if (!collide) {
+              n3._dirty = true;
+              n3.y = newY;
+            }
+          }
+        });
+      } else {
+        this.nodes.forEach((n3, i4) => {
+          if (n3.locked)
+            return;
+          while (n3.y > 0) {
+            const newY = i4 === 0 ? 0 : n3.y - 1;
+            const canBeMoved = i4 === 0 || !this.collide(n3, { x: n3.x, y: newY, w: n3.w, h: n3.h });
+            if (!canBeMoved)
+              break;
+            n3._dirty = n3.y !== newY;
+            n3.y = newY;
+          }
+        });
+      }
+      return this;
+    }
+    /**
+     * Prepare and validate a node's coordinates and values for the current grid.
+     * This ensures the node has valid position, size, and properties before being added to the grid.
+     *
+     * @param node the node to prepare and validate
+     * @param resizing if true, resize the node down if it's out of bounds; if false, move it to fit
+     * @returns the prepared node with valid coordinates
+     *
+     * @example
+     * const node = { w: 3, h: 2, content: 'Hello' };
+     * const prepared = engine.prepareNode(node);
+     * console.log('Node prepared at:', prepared.x, prepared.y);
+     */
+    prepareNode(node, resizing) {
+      node._id = node._id ?? _GridStackEngine._idSeq++;
+      const id = node.id;
+      if (id) {
+        let count2 = 1;
+        while (this.nodes.find((n3) => n3.id === node.id && n3 !== node)) {
+          node.id = id + "_" + count2++;
+        }
+      }
+      if (node.x === void 0 || node.y === void 0 || node.x === null || node.y === null) {
+        node.autoPosition = true;
+      }
+      const defaults = { x: 0, y: 0, w: 1, h: 1 };
+      Utils.defaults(node, defaults);
+      if (!node.autoPosition) {
+        delete node.autoPosition;
+      }
+      if (!node.noResize) {
+        delete node.noResize;
+      }
+      if (!node.noMove) {
+        delete node.noMove;
+      }
+      Utils.sanitizeMinMax(node);
+      if (typeof node.x == "string") {
+        node.x = Number(node.x);
+      }
+      if (typeof node.y == "string") {
+        node.y = Number(node.y);
+      }
+      if (typeof node.w == "string") {
+        node.w = Number(node.w);
+      }
+      if (typeof node.h == "string") {
+        node.h = Number(node.h);
+      }
+      if (isNaN(node.x)) {
+        node.x = defaults.x;
+        node.autoPosition = true;
+      }
+      if (isNaN(node.y)) {
+        node.y = defaults.y;
+        node.autoPosition = true;
+      }
+      if (isNaN(node.w)) {
+        node.w = defaults.w;
+      }
+      if (isNaN(node.h)) {
+        node.h = defaults.h;
+      }
+      this.nodeBoundFix(node, resizing);
+      return node;
+    }
+    /**
+     * Part 2 of preparing a node to fit inside the grid - validates and fixes coordinates and dimensions.
+     * This ensures the node fits within grid boundaries and respects min/max constraints.
+     *
+     * @param node the node to validate and fix
+     * @param resizing if true, resize the node to fit; if false, move the node to fit
+     * @returns the engine instance for chaining
+     *
+     * @example
+     * // Fix a node that might be out of bounds
+     * engine.nodeBoundFix(node, true); // Resize to fit
+     * engine.nodeBoundFix(node, false); // Move to fit
+     */
+    nodeBoundFix(node, resizing) {
+      const before = node._orig || Utils.copyPos({}, node);
+      if (node.maxW) {
+        node.w = Math.min(node.w || 1, node.maxW);
+      }
+      if (node.maxH) {
+        node.h = Math.min(node.h || 1, node.maxH);
+      }
+      if (node.minW) {
+        node.w = Math.max(node.w || 1, node.minW);
+      }
+      if (node.minH) {
+        node.h = Math.max(node.h || 1, node.minH);
+      }
+      const saveOrig = (node.x || 0) + (node.w || 1) > this.column;
+      if (saveOrig && this.column < this.defaultColumn && !this._inColumnResize && !this.skipCacheUpdate && node._id != null && this.findCacheLayout(node, this.defaultColumn) === -1) {
+        const copy = { ...node };
+        if (copy.autoPosition || copy.x === void 0) {
+          delete copy.x;
+          delete copy.y;
+        } else
+          copy.x = Math.min(this.defaultColumn - 1, copy.x);
+        copy.w = Math.min(this.defaultColumn, copy.w || 1);
+        this.cacheOneLayout(copy, this.defaultColumn);
+      }
+      if (node.w > this.column) {
+        node.w = this.column;
+      } else if (node.w < 1) {
+        node.w = 1;
+      }
+      if (this.maxRow && node.h > this.maxRow) {
+        node.h = this.maxRow;
+      } else if (node.h < 1) {
+        node.h = 1;
+      }
+      if (node.x < 0) {
+        node.x = 0;
+      }
+      if (node.y < 0) {
+        node.y = 0;
+      }
+      if (node.x + node.w > this.column) {
+        if (resizing) {
+          node.w = this.column - node.x;
+        } else {
+          node.x = this.column - node.w;
+        }
+      }
+      if (this.maxRow && node.y + node.h > this.maxRow) {
+        if (resizing) {
+          node.h = this.maxRow - node.y;
+        } else {
+          node.y = this.maxRow - node.h;
+        }
+      }
+      if (!Utils.samePos(node, before)) {
+        node._dirty = true;
+      }
+      return this;
+    }
+    /**
+     * Returns a list of nodes that have been modified from their original values.
+     * This is used to track which nodes need DOM updates.
+     *
+     * @param verify if true, performs additional verification by comparing current vs original positions
+     * @returns array of nodes that have been modified
+     *
+     * @example
+     * const changed = engine.getDirtyNodes();
+     * console.log('Modified nodes:', changed.length);
+     *
+     * // Get verified dirty nodes
+     * const verified = engine.getDirtyNodes(true);
+     */
+    getDirtyNodes(verify) {
+      if (verify) {
+        return this.nodes.filter((n3) => n3._dirty && !Utils.samePos(n3, n3._orig));
+      }
+      return this.nodes.filter((n3) => n3._dirty);
+    }
+    /** @internal call this to call onChange callback with dirty nodes so DOM can be updated */
+    _notify(removedNodes) {
+      if (this.batchMode || !this.onChange)
+        return this;
+      const dirtyNodes = (removedNodes || []).concat(this.getDirtyNodes());
+      this.onChange(dirtyNodes);
+      return this;
+    }
+    /**
+     * Clean all dirty and last tried information from nodes.
+     * This resets the dirty state tracking for all nodes.
+     *
+     * @returns the engine instance for chaining
+     *
+     * @internal
+     */
+    cleanNodes() {
+      if (this.batchMode)
+        return this;
+      this.nodes.forEach((n3) => {
+        delete n3._dirty;
+        delete n3._lastTried;
+      });
+      return this;
+    }
+    /**
+     * Save the initial position/size of all nodes to track real dirty state.
+     * This creates a snapshot of current positions that can be restored later.
+     *
+     * Note: Should be called right after change events and before move/resize operations.
+     *
+     * @returns the engine instance for chaining
+     *
+     * @internal
+     */
+    saveInitial() {
+      this.nodes.forEach((n3) => {
+        n3._orig = Utils.copyPos({}, n3);
+        delete n3._dirty;
+      });
+      this._hasLocked = this.nodes.some((n3) => n3.locked);
+      return this;
+    }
+    /**
+     * Restore all nodes back to their initial values.
+     * This is typically called when canceling an operation (e.g., Esc key during drag).
+     *
+     * @returns the engine instance for chaining
+     *
+     * @internal
+     */
+    restoreInitial() {
+      this.nodes.forEach((n3) => {
+        if (!n3._orig || Utils.samePos(n3, n3._orig))
+          return;
+        Utils.copyPos(n3, n3._orig);
+        n3._dirty = true;
+      });
+      this._notify();
+      return this;
+    }
+    /**
+     * Find the first available empty spot for the given node dimensions.
+     * Updates the node's x,y attributes with the found position.
+     *
+     * @param node the node to find a position for (w,h must be set)
+     * @param nodeList optional list of nodes to check against (defaults to engine nodes)
+     * @param column optional column count (defaults to engine column count)
+     * @param after optional node to start search after (maintains order)
+     * @returns true if an empty position was found and node was updated
+     *
+     * @example
+     * const node = { w: 2, h: 1 };
+     * if (engine.findEmptyPosition(node)) {
+     *   console.log('Found position at:', node.x, node.y);
+     * }
+     */
+    findEmptyPosition(node, nodeList = this.nodes, column = this.column, after) {
+      const start = after ? after.y * column + (after.x + after.w) : 0;
+      let found = false;
+      for (let i4 = start; !found; ++i4) {
+        const x4 = i4 % column;
+        const y5 = Math.floor(i4 / column);
+        if (x4 + node.w > column) {
+          continue;
+        }
+        const box = { x: x4, y: y5, w: node.w, h: node.h };
+        if (!nodeList.find((n3) => Utils.isIntercepted(box, n3))) {
+          if (node.x !== x4 || node.y !== y5)
+            node._dirty = true;
+          node.x = x4;
+          node.y = y5;
+          delete node.autoPosition;
+          found = true;
+        }
+      }
+      return found;
+    }
+    /**
+     * Add the given node to the grid, handling collision detection and re-packing.
+     * This is the main method for adding new widgets to the engine.
+     *
+     * @param node the node to add to the grid
+     * @param triggerAddEvent if true, adds node to addedNodes list for event triggering
+     * @param after optional node to place this node after (for ordering)
+     * @returns the added node (or existing node if duplicate)
+     *
+     * @example
+     * const node = { x: 0, y: 0, w: 2, h: 1, content: 'Hello' };
+     * const added = engine.addNode(node, true);
+     */
+    addNode(node, triggerAddEvent = false, after) {
+      const dup = this.nodes.find((n3) => n3._id === node._id);
+      if (dup)
+        return dup;
+      this._inColumnResize ? this.nodeBoundFix(node) : this.prepareNode(node);
+      delete node._temporaryRemoved;
+      delete node._removeDOM;
+      let skipCollision;
+      if (node.autoPosition && this.findEmptyPosition(node, this.nodes, this.column, after)) {
+        delete node.autoPosition;
+        skipCollision = true;
+      }
+      this.nodes.push(node);
+      if (triggerAddEvent) {
+        this.addedNodes.push(node);
+      }
+      if (!skipCollision)
+        this._fixCollisions(node);
+      if (!this.batchMode) {
+        this._packNodes()._notify();
+      }
+      return node;
+    }
+    /**
+     * Remove the given node from the grid.
+     *
+     * @param node the node to remove
+     * @param removeDOM if true (default), marks node for DOM removal
+     * @param triggerEvent if true, adds node to removedNodes list for event triggering
+     * @returns the engine instance for chaining
+     *
+     * @example
+     * engine.removeNode(node, true, true);
+     */
+    removeNode(node, removeDOM = true, triggerEvent = false) {
+      if (!this.nodes.find((n3) => n3._id === node._id)) {
+        return this;
+      }
+      if (triggerEvent) {
+        this.removedNodes.push(node);
+      }
+      if (removeDOM)
+        node._removeDOM = true;
+      this.nodes = this.nodes.filter((n3) => n3._id !== node._id);
+      if (!node._isAboutToRemove)
+        this._packNodes();
+      this._notify([node]);
+      return this;
+    }
+    /**
+     * Remove all nodes from the grid.
+     *
+     * @param removeDOM if true (default), marks all nodes for DOM removal
+     * @param triggerEvent if true (default), triggers removal events
+     * @returns the engine instance for chaining
+     *
+     * @example
+     * engine.removeAll(); // Remove all nodes
+     */
+    removeAll(removeDOM = true, triggerEvent = true) {
+      delete this._layouts;
+      if (!this.nodes.length)
+        return this;
+      removeDOM && this.nodes.forEach((n3) => n3._removeDOM = true);
+      const removedNodes = this.nodes;
+      this.removedNodes = triggerEvent ? removedNodes : [];
+      this.nodes = [];
+      return this._notify(removedNodes);
+    }
+    /**
+     * Check if a node can be moved to a new position, considering layout constraints.
+     * This is a safer version of moveNode() that validates the move first.
+     *
+     * For complex cases (like maxRow constraints), it simulates the move in a clone first,
+     * then applies the changes only if they meet all specifications.
+     *
+     * @param node the node to move
+     * @param o move options including target position
+     * @returns true if the node was successfully moved
+     *
+     * @example
+     * const canMove = engine.moveNodeCheck(node, { x: 2, y: 1 });
+     * if (canMove) {
+     *   console.log('Node moved successfully');
+     * }
+     */
+    moveNodeCheck(node, o4) {
+      if (!this.changedPosConstrain(node, o4))
+        return false;
+      o4.pack = true;
+      if (!this.maxRow) {
+        return this.moveNode(node, o4);
+      }
+      let clonedNode;
+      const clone = new _GridStackEngine({
+        column: this.column,
+        float: this.float,
+        nodes: this.nodes.map((n3) => {
+          if (n3._id === node._id) {
+            clonedNode = { ...n3 };
+            return clonedNode;
+          }
+          return { ...n3 };
+        })
+      });
+      if (!clonedNode)
+        return false;
+      const canMove = clone.moveNode(clonedNode, o4) && clone.getRow() <= Math.max(this.getRow(), this.maxRow);
+      if (!canMove && !o4.resizing && o4.collide) {
+        const collide = o4.collide.el.gridstackNode;
+        if (this.swap(node, collide)) {
+          this._notify();
+          return true;
+        }
+      }
+      if (!canMove)
+        return false;
+      clone.nodes.filter((n3) => n3._dirty).forEach((c4) => {
+        const n3 = this.nodes.find((a4) => a4._id === c4._id);
+        if (!n3)
+          return;
+        Utils.copyPos(n3, c4);
+        n3._dirty = true;
+      });
+      this._notify();
+      return true;
+    }
+    /** return true if can fit in grid height constrain only (always true if no maxRow) */
+    willItFit(node) {
+      delete node._willFitPos;
+      if (!this.maxRow)
+        return true;
+      const clone = new _GridStackEngine({
+        column: this.column,
+        float: this.float,
+        nodes: this.nodes.map((n4) => {
+          return { ...n4 };
+        })
+      });
+      const n3 = { ...node };
+      this.cleanupNode(n3);
+      delete n3.el;
+      delete n3._id;
+      delete n3.content;
+      delete n3.grid;
+      clone.addNode(n3);
+      if (clone.getRow() <= this.maxRow) {
+        node._willFitPos = Utils.copyPos({}, n3);
+        return true;
+      }
+      return false;
+    }
+    /** true if x,y or w,h are different after clamping to min/max */
+    changedPosConstrain(node, p5) {
+      p5.w = p5.w || node.w;
+      p5.h = p5.h || node.h;
+      if (node.x !== p5.x || node.y !== p5.y)
+        return true;
+      if (node.maxW) {
+        p5.w = Math.min(p5.w, node.maxW);
+      }
+      if (node.maxH) {
+        p5.h = Math.min(p5.h, node.maxH);
+      }
+      if (node.minW) {
+        p5.w = Math.max(p5.w, node.minW);
+      }
+      if (node.minH) {
+        p5.h = Math.max(p5.h, node.minH);
+      }
+      return node.w !== p5.w || node.h !== p5.h;
+    }
+    /** return true if the passed in node was actually moved (checks for no-op and locked) */
+    moveNode(node, o4) {
+      if (!node || /*node.locked ||*/
+      !o4)
+        return false;
+      let wasUndefinedPack;
+      if (o4.pack === void 0 && !this.batchMode) {
+        wasUndefinedPack = o4.pack = true;
+      }
+      if (typeof o4.x !== "number") {
+        o4.x = node.x;
+      }
+      if (typeof o4.y !== "number") {
+        o4.y = node.y;
+      }
+      if (typeof o4.w !== "number") {
+        o4.w = node.w;
+      }
+      if (typeof o4.h !== "number") {
+        o4.h = node.h;
+      }
+      const resizing = node.w !== o4.w || node.h !== o4.h;
+      const nn = Utils.copyPos({}, node, true);
+      Utils.copyPos(nn, o4);
+      this.nodeBoundFix(nn, resizing);
+      Utils.copyPos(o4, nn);
+      if (!o4.forceCollide && Utils.samePos(node, o4))
+        return false;
+      const prevPos = Utils.copyPos({}, node);
+      const collides = this.collideAll(node, nn, o4.skip);
+      let needToMove = true;
+      if (collides.length) {
+        const activeDrag = node._moving && !o4.nested;
+        let collide = activeDrag ? this.directionCollideCoverage(node, o4, collides) : collides[0];
+        if (activeDrag && collide && node.grid?.opts?.subGridDynamic && !node.grid._isTemp) {
+          const over = Utils.areaIntercept(o4.rect, collide._rect);
+          const a1 = Utils.area(o4.rect);
+          const a22 = Utils.area(collide._rect);
+          const perc = over / (a1 < a22 ? a1 : a22);
+          if (perc > 0.8) {
+            collide.grid.makeSubGrid(collide.el, void 0, node);
+            collide = void 0;
+          }
+        }
+        if (collide) {
+          needToMove = !this._fixCollisions(node, nn, collide, o4);
+        } else {
+          needToMove = false;
+          if (wasUndefinedPack)
+            delete o4.pack;
+        }
+      }
+      if (needToMove && !Utils.samePos(node, nn)) {
+        node._dirty = true;
+        Utils.copyPos(node, nn);
+      }
+      if (o4.pack) {
+        this._packNodes()._notify();
+      }
+      return !Utils.samePos(node, prevPos);
+    }
+    getRow() {
+      return this.nodes.reduce((row, n3) => Math.max(row, n3.y + n3.h), 0);
+    }
+    beginUpdate(node) {
+      if (!node._updating) {
+        node._updating = true;
+        delete node._skipDown;
+        if (!this.batchMode)
+          this.saveInitial();
+      }
+      return this;
+    }
+    endUpdate() {
+      const n3 = this.nodes.find((n4) => n4._updating);
+      if (n3) {
+        delete n3._updating;
+        delete n3._skipDown;
+      }
+      return this;
+    }
+    /** saves a copy of the largest column layout (eg 12 even when rendering 1 column) so we don't loose orig layout, unless explicity column
+     * count to use is given. returning a list of widgets for serialization
+     * @param saveElement if true (default), the element will be saved to GridStackWidget.el field, else it will be removed.
+     * @param saveCB callback for each node -> widget, so application can insert additional data to be saved into the widget data structure.
+     * @param column if provided, the grid will be saved for the given column count (IFF we have matching internal saved layout, or current layout).
+     * Note: nested grids will ALWAYS save the container w to match overall layouts (parent + child) to be consistent.
+    */
+    save(saveElement = true, saveCB, column) {
+      const len = this._layouts?.length || 0;
+      let layout;
+      if (len) {
+        if (column) {
+          if (column !== this.column)
+            layout = this._layouts[column];
+        } else if (this.column !== len - 1) {
+          layout = this._layouts[len - 1];
+        }
+      }
+      const list = [];
+      this.sortNodes();
+      this.nodes.forEach((n3) => {
+        const wl = layout?.find((l5) => l5._id === n3._id);
+        const w5 = { ...n3, ...wl || {} };
+        Utils.removeInternalForSave(w5, !saveElement);
+        if (saveCB)
+          saveCB(n3, w5);
+        list.push(w5);
+      });
+      return list;
+    }
+    /** @internal called whenever a node is added or moved - updates the cached layouts */
+    layoutsNodesChange(nodes) {
+      if (!this._layouts || this._inColumnResize)
+        return this;
+      this._layouts.forEach((layout, column) => {
+        if (!layout || column === this.column)
+          return this;
+        if (column < this.column) {
+          this._layouts[column] = void 0;
+        } else {
+          const ratio = column / this.column;
+          nodes.forEach((node) => {
+            if (!node._orig)
+              return;
+            const n3 = layout.find((l5) => l5._id === node._id);
+            if (!n3)
+              return;
+            if (n3.y >= 0 && node.y !== node._orig.y) {
+              n3.y += node.y - node._orig.y;
+              if (n3.y < 0)
+                n3.y = 0;
+            }
+            if (node.x !== node._orig.x) {
+              n3.x = Math.round(node.x * ratio);
+              if (n3.x < 0)
+                n3.x = 0;
+            }
+            if (node.w !== node._orig.w) {
+              n3.w = Math.round(node.w * ratio);
+              if (n3.w < 1)
+                n3.w = 1;
+            }
+          });
+        }
+      });
+      return this;
+    }
+    /**
+     * @internal Called to scale the widget width & position up/down based on the column change.
+     * Note we store previous layouts (especially original ones) to make it possible to go
+     * from say 12 -> 1 -> 12 and get back to where we were.
+     *
+     * @param prevColumn previous number of columns
+     * @param column  new column number
+     * @param layout specify the type of re-layout that will happen (position, size, etc...).
+     * Note: items will never be outside of the current column boundaries. default (moveScale). Ignored for 1 column
+     */
+    columnChanged(prevColumn, column, layout = "moveScale") {
+      if (!this.nodes.length || !column || prevColumn === column)
+        return this;
+      const doCompact = layout === "compact" || layout === "list";
+      if (doCompact) {
+        this.sortNodes(1);
+      }
+      if (column < prevColumn)
+        this.cacheLayout(this.nodes, prevColumn);
+      this.batchUpdate();
+      let newNodes = [];
+      let nodes = doCompact ? this.nodes : Utils.sort(this.nodes, -1);
+      if (column > prevColumn && this._layouts) {
+        const cacheNodes = this._layouts[column] || [];
+        const lastIndex = this._layouts.length - 1;
+        if (!cacheNodes.length && prevColumn !== lastIndex && this._layouts[lastIndex]?.length) {
+          prevColumn = lastIndex;
+          this._layouts[lastIndex].forEach((cacheNode) => {
+            const n3 = nodes.find((n4) => n4._id === cacheNode._id);
+            if (n3) {
+              if (!doCompact && !cacheNode.autoPosition) {
+                n3.x = cacheNode.x ?? n3.x;
+                n3.y = cacheNode.y ?? n3.y;
+              }
+              n3.w = cacheNode.w ?? n3.w;
+              if (cacheNode.x == void 0 || cacheNode.y === void 0)
+                n3.autoPosition = true;
+            }
+          });
+        }
+        cacheNodes.forEach((cacheNode) => {
+          const j4 = nodes.findIndex((n3) => n3._id === cacheNode._id);
+          if (j4 !== -1) {
+            const n3 = nodes[j4];
+            if (doCompact) {
+              n3.w = cacheNode.w;
+              return;
+            }
+            if (cacheNode.autoPosition || isNaN(cacheNode.x) || isNaN(cacheNode.y)) {
+              this.findEmptyPosition(cacheNode, newNodes);
+            }
+            if (!cacheNode.autoPosition) {
+              n3.x = cacheNode.x ?? n3.x;
+              n3.y = cacheNode.y ?? n3.y;
+              n3.w = cacheNode.w ?? n3.w;
+              newNodes.push(n3);
+            }
+            nodes.splice(j4, 1);
+          }
+        });
+      }
+      if (doCompact) {
+        this.compact(layout, false);
+      } else {
+        if (nodes.length) {
+          if (typeof layout === "function") {
+            layout(column, prevColumn, newNodes, nodes);
+          } else {
+            const ratio = doCompact || layout === "none" ? 1 : column / prevColumn;
+            const move = layout === "move" || layout === "moveScale";
+            const scale = layout === "scale" || layout === "moveScale";
+            nodes.forEach((node) => {
+              node.x = column === 1 ? 0 : move ? Math.round(node.x * ratio) : Math.min(node.x, column - 1);
+              node.w = column === 1 || prevColumn === 1 ? 1 : scale ? Math.round(node.w * ratio) || 1 : Math.min(node.w, column);
+              newNodes.push(node);
+            });
+            nodes = [];
+          }
+        }
+        newNodes = Utils.sort(newNodes, -1);
+        this._inColumnResize = true;
+        this.nodes = [];
+        newNodes.forEach((node) => {
+          this.addNode(node, false);
+          delete node._orig;
+        });
+      }
+      this.nodes.forEach((n3) => delete n3._orig);
+      this.batchUpdate(false, !doCompact);
+      delete this._inColumnResize;
+      return this;
+    }
+    /**
+     * call to cache the given layout internally to the given location so we can restore back when column changes size
+     * @param nodes list of nodes
+     * @param column corresponding column index to save it under
+     * @param clear if true, will force other caches to be removed (default false)
+     */
+    cacheLayout(nodes, column, clear = false) {
+      const copy = [];
+      nodes.forEach((n3, i4) => {
+        if (n3._id === void 0) {
+          const existing = n3.id ? this.nodes.find((n22) => n22.id === n3.id) : void 0;
+          n3._id = existing?._id ?? _GridStackEngine._idSeq++;
+        }
+        copy[i4] = { x: n3.x, y: n3.y, w: n3.w, _id: n3._id };
+      });
+      this._layouts = clear ? [] : this._layouts || [];
+      this._layouts[column] = copy;
+      return this;
+    }
+    /**
+     * call to cache the given node layout internally to the given location so we can restore back when column changes size
+     * @param node single node to cache
+     * @param column corresponding column index to save it under
+     */
+    cacheOneLayout(n3, column) {
+      n3._id = n3._id ?? _GridStackEngine._idSeq++;
+      const l5 = { x: n3.x, y: n3.y, w: n3.w, _id: n3._id };
+      if (n3.autoPosition || n3.x === void 0) {
+        delete l5.x;
+        delete l5.y;
+        if (n3.autoPosition)
+          l5.autoPosition = true;
+      }
+      this._layouts = this._layouts || [];
+      this._layouts[column] = this._layouts[column] || [];
+      const index = this.findCacheLayout(n3, column);
+      if (index === -1)
+        this._layouts[column].push(l5);
+      else
+        this._layouts[column][index] = l5;
+      return this;
+    }
+    findCacheLayout(n3, column) {
+      return this._layouts?.[column]?.findIndex((l5) => l5._id === n3._id) ?? -1;
+    }
+    removeNodeFromLayoutCache(n3) {
+      if (!this._layouts) {
+        return;
+      }
+      for (let i4 = 0; i4 < this._layouts.length; i4++) {
+        const index = this.findCacheLayout(n3, i4);
+        if (index !== -1) {
+          this._layouts[i4].splice(index, 1);
+        }
+      }
+    }
+    /** called to remove all internal values but the _id */
+    cleanupNode(node) {
+      for (const prop in node) {
+        if (prop[0] === "_" && prop !== "_id")
+          delete node[prop];
+      }
+      return this;
+    }
+  };
+  GridStackEngine._idSeq = 0;
+
+  // node_modules/gridstack/dist/types.js
+  var gridDefaults = {
+    alwaysShowResizeHandle: "mobile",
+    animate: true,
+    auto: true,
+    cellHeight: "auto",
+    cellHeightThrottle: 100,
+    cellHeightUnit: "px",
+    column: 12,
+    draggable: { handle: ".grid-stack-item-content", appendTo: "body", scroll: true },
+    handle: ".grid-stack-item-content",
+    itemClass: "grid-stack-item",
+    margin: 10,
+    marginUnit: "px",
+    maxRow: 0,
+    minRow: 0,
+    placeholderClass: "grid-stack-placeholder",
+    placeholderText: "",
+    removableOptions: { accept: "grid-stack-item", decline: "grid-stack-non-removable" },
+    resizable: { handles: "se" },
+    rtl: "auto"
+    // **** same as not being set ****
+    // disableDrag: false,
+    // disableResize: false,
+    // float: false,
+    // handleClass: null,
+    // removable: false,
+    // staticGrid: false,
+    //removable
+  };
+
+  // node_modules/gridstack/dist/dd-manager.js
+  var DDManager = class {
+  };
+
+  // node_modules/gridstack/dist/dd-touch.js
+  var isTouch = typeof window !== "undefined" && typeof document !== "undefined" && ("ontouchstart" in document || "ontouchstart" in window || window.DocumentTouch && document instanceof window.DocumentTouch || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0);
+  var DDTouch = class {
+  };
+  function simulateMouseEvent(e4, simulatedType) {
+    if (e4.touches.length > 1)
+      return;
+    if (e4.cancelable)
+      e4.preventDefault();
+    Utils.simulateMouseEvent(e4.changedTouches[0], simulatedType);
+  }
+  function simulatePointerMouseEvent(e4, simulatedType) {
+    if (e4.cancelable)
+      e4.preventDefault();
+    Utils.simulateMouseEvent(e4, simulatedType);
+  }
+  function touchstart(e4) {
+    if (DDTouch.touchHandled)
+      return;
+    DDTouch.touchHandled = true;
+    simulateMouseEvent(e4, "mousedown");
+  }
+  function touchmove(e4) {
+    if (!DDTouch.touchHandled)
+      return;
+    simulateMouseEvent(e4, "mousemove");
+  }
+  function touchend(e4) {
+    if (!DDTouch.touchHandled)
+      return;
+    if (DDTouch.pointerLeaveTimeout) {
+      window.clearTimeout(DDTouch.pointerLeaveTimeout);
+      delete DDTouch.pointerLeaveTimeout;
+    }
+    const wasDragging = !!DDManager.dragElement;
+    simulateMouseEvent(e4, "mouseup");
+    if (!wasDragging) {
+      simulateMouseEvent(e4, "click");
+    }
+    DDTouch.touchHandled = false;
+  }
+  function pointerdown(e4) {
+    if (e4.pointerType === "mouse")
+      return;
+    e4.target.releasePointerCapture(e4.pointerId);
+  }
+  function pointerenter(e4) {
+    if (!DDManager.dragElement) {
+      return;
+    }
+    if (e4.pointerType === "mouse")
+      return;
+    simulatePointerMouseEvent(e4, "mouseenter");
+  }
+  function pointerleave(e4) {
+    if (!DDManager.dragElement) {
+      return;
+    }
+    if (e4.pointerType === "mouse")
+      return;
+    DDTouch.pointerLeaveTimeout = window.setTimeout(() => {
+      delete DDTouch.pointerLeaveTimeout;
+      simulatePointerMouseEvent(e4, "mouseleave");
+    }, 10);
+  }
+
+  // node_modules/gridstack/dist/dd-resizable-handle.js
+  var DDResizableHandle = class _DDResizableHandle {
+    constructor(host, dir, option) {
+      this.host = host;
+      this.dir = dir;
+      this.option = option;
+      this.moving = false;
+      this._mouseDown = this._mouseDown.bind(this);
+      this._mouseMove = this._mouseMove.bind(this);
+      this._mouseUp = this._mouseUp.bind(this);
+      this._keyEvent = this._keyEvent.bind(this);
+      this._init();
+    }
+    /** @internal */
+    _init() {
+      if (this.option.element) {
+        try {
+          this.el = this.option.element instanceof HTMLElement ? this.option.element : this.host.querySelector(this.option.element);
+        } catch (error) {
+          this.option.element = void 0;
+          console.error("Query for resizeable handle failed, falling back", error);
+        }
+      }
+      if (!this.el) {
+        this.el = document.createElement("div");
+        this.host.appendChild(this.el);
+      }
+      this.el.classList.add("ui-resizable-handle");
+      this.el.classList.add(`${_DDResizableHandle.prefix}${this.dir}`);
+      this.el.style.zIndex = "100";
+      this.el.style.userSelect = "none";
+      this.el.addEventListener("mousedown", this._mouseDown);
+      if (isTouch) {
+        this.el.addEventListener("touchstart", touchstart);
+        this.el.addEventListener("pointerdown", pointerdown);
+      }
+      return this;
+    }
+    /** call this when resize handle needs to be removed and cleaned up */
+    destroy() {
+      if (this.moving)
+        this._mouseUp(this.mouseDownEvent);
+      this.el.removeEventListener("mousedown", this._mouseDown);
+      if (isTouch) {
+        this.el.removeEventListener("touchstart", touchstart);
+        this.el.removeEventListener("pointerdown", pointerdown);
+      }
+      if (!this.option.element) {
+        this.host.removeChild(this.el);
+      }
+      delete this.el;
+      delete this.host;
+      return this;
+    }
+    /** @internal called on mouse down on us: capture move on the entire document (mouse might not stay on us) until we release the mouse */
+    _mouseDown(e4) {
+      this.mouseDownEvent = e4;
+      document.addEventListener("mousemove", this._mouseMove, { capture: true, passive: true });
+      document.addEventListener("mouseup", this._mouseUp, true);
+      if (isTouch) {
+        this.el.addEventListener("touchmove", touchmove);
+        this.el.addEventListener("touchend", touchend);
+      }
+      e4.stopPropagation();
+      e4.preventDefault();
+    }
+    /** @internal */
+    _mouseMove(e4) {
+      const s4 = this.mouseDownEvent;
+      if (this.moving) {
+        this._triggerEvent("move", e4);
+      } else if (Math.abs(e4.x - s4.x) + Math.abs(e4.y - s4.y) > 2) {
+        this.moving = true;
+        this._triggerEvent("start", this.mouseDownEvent);
+        this._triggerEvent("move", e4);
+        document.addEventListener("keydown", this._keyEvent);
+      }
+      e4.stopPropagation();
+    }
+    /** @internal */
+    _mouseUp(e4) {
+      if (this.moving) {
+        this._triggerEvent("stop", e4);
+        document.removeEventListener("keydown", this._keyEvent);
+      }
+      document.removeEventListener("mousemove", this._mouseMove, true);
+      document.removeEventListener("mouseup", this._mouseUp, true);
+      if (isTouch) {
+        this.el.removeEventListener("touchmove", touchmove);
+        this.el.removeEventListener("touchend", touchend);
+      }
+      delete this.moving;
+      delete this.mouseDownEvent;
+      e4.stopPropagation();
+      e4.preventDefault();
+    }
+    /** @internal call when keys are being pressed - use Esc to cancel */
+    _keyEvent(e4) {
+      if (e4.key === "Escape") {
+        this.host.gridstackNode?.grid?.engine.restoreInitial();
+        this._mouseUp(this.mouseDownEvent);
+      }
+    }
+    /** @internal */
+    _triggerEvent(name, event) {
+      if (this.option[name])
+        this.option[name](event);
+      return this;
+    }
+  };
+  DDResizableHandle.prefix = "ui-resizable-";
+
+  // node_modules/gridstack/dist/dd-base-impl.js
+  var DDBaseImplement = class {
+    constructor() {
+      this._eventRegister = {};
+    }
+    /**
+     * Returns the current disabled state.
+     * Note: Use enable()/disable() methods to change state as other operations need to happen.
+     */
+    get disabled() {
+      return this._disabled;
+    }
+    /**
+     * Register an event callback for the specified event.
+     *
+     * @param event - Event name to listen for
+     * @param callback - Function to call when event occurs
+     */
+    on(event, callback) {
+      this._eventRegister[event] = callback;
+    }
+    /**
+     * Unregister an event callback for the specified event.
+     *
+     * @param event - Event name to stop listening for
+     */
+    off(event) {
+      delete this._eventRegister[event];
+    }
+    /**
+     * Enable this drag & drop implementation.
+     * Subclasses should override to perform additional setup.
+     */
+    enable() {
+      this._disabled = false;
+    }
+    /**
+     * Disable this drag & drop implementation.
+     * Subclasses should override to perform additional cleanup.
+     */
+    disable() {
+      this._disabled = true;
+    }
+    /**
+     * Destroy this drag & drop implementation and clean up resources.
+     * Removes all event handlers and clears internal state.
+     */
+    destroy() {
+      delete this._eventRegister;
+    }
+    /**
+     * Trigger a registered event callback if one exists and the implementation is enabled.
+     *
+     * @param eventName - Name of the event to trigger
+     * @param event - DOM event object to pass to the callback
+     * @returns Result from the callback function, if any
+     */
+    triggerEvent(eventName, event) {
+      if (!this.disabled && this._eventRegister && this._eventRegister[eventName])
+        return this._eventRegister[eventName](event);
+    }
+  };
+
+  // node_modules/gridstack/dist/dd-resizable.js
+  var DDResizable = class _DDResizable extends DDBaseImplement {
+    // have to be public else complains for HTMLElementExtendOpt ?
+    constructor(el, option = {}) {
+      super();
+      this.el = el;
+      this.option = option;
+      this.rectScale = { x: 1, y: 1 };
+      this._ui = () => {
+        const containmentEl = this.el.parentElement;
+        const containmentRect = containmentEl.getBoundingClientRect();
+        const newRect = {
+          width: this.originalRect.width,
+          height: this.originalRect.height + this.scrolled,
+          left: this.originalRect.left,
+          right: this.originalRect.right,
+          top: this.originalRect.top - this.scrolled
+        };
+        const rect = this.temporalRect || newRect;
+        const leftPos = this.option.rtl ? (containmentRect.right - rect.right) * this.rectScale.x : (rect.left - containmentRect.left) * this.rectScale.x;
+        return {
+          position: {
+            left: leftPos,
+            top: (rect.top - containmentRect.top) * this.rectScale.y
+          },
+          size: {
+            width: rect.width * this.rectScale.x,
+            height: rect.height * this.rectScale.y
+          }
+          /* Gridstack ONLY needs position set above... keep around in case.
+          element: [this.el], // The object representing the element to be resized
+          helper: [], // TODO: not support yet - The object representing the helper that's being resized
+          originalElement: [this.el],// we don't wrap here, so simplify as this.el //The object representing the original element before it is wrapped
+          originalPosition: { // The position represented as { left, top } before the resizable is resized
+            left: this.originalRect.left - containmentRect.left,
+            top: this.originalRect.top - containmentRect.top
+          },
+          originalSize: { // The size represented as { width, height } before the resizable is resized
+            width: this.originalRect.width,
+            height: this.originalRect.height
+          }
+          */
+        };
+      };
+      this._mouseOver = this._mouseOver.bind(this);
+      this._mouseOut = this._mouseOut.bind(this);
+      this.enable();
+      this._setupAutoHide(this.option.autoHide);
+      this._setupHandlers();
+    }
+    on(event, callback) {
+      super.on(event, callback);
+    }
+    off(event) {
+      super.off(event);
+    }
+    enable() {
+      super.enable();
+      this.el.classList.remove("ui-resizable-disabled");
+      this._setupAutoHide(this.option.autoHide);
+    }
+    disable() {
+      super.disable();
+      this.el.classList.add("ui-resizable-disabled");
+      this._setupAutoHide(false);
+    }
+    destroy() {
+      this._removeHandlers();
+      this._setupAutoHide(false);
+      delete this.el;
+      super.destroy();
+    }
+    updateOption(opts) {
+      const updateHandles = opts.handles && opts.handles !== this.option.handles;
+      const updateAutoHide = opts.autoHide && opts.autoHide !== this.option.autoHide;
+      Object.keys(opts).forEach((key) => this.option[key] = opts[key]);
+      if (updateHandles) {
+        this._removeHandlers();
+        this._setupHandlers();
+      }
+      if (updateAutoHide) {
+        this._setupAutoHide(this.option.autoHide);
+      }
+      return this;
+    }
+    /** @internal turns auto hide on/off */
+    _setupAutoHide(auto) {
+      if (auto) {
+        this.el.classList.add("ui-resizable-autohide");
+        this.el.addEventListener("mouseover", this._mouseOver);
+        this.el.addEventListener("mouseout", this._mouseOut);
+      } else {
+        this.el.classList.remove("ui-resizable-autohide");
+        this.el.removeEventListener("mouseover", this._mouseOver);
+        this.el.removeEventListener("mouseout", this._mouseOut);
+        if (DDManager.overResizeElement === this) {
+          delete DDManager.overResizeElement;
+        }
+      }
+      return this;
+    }
+    /** @internal */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _mouseOver(e4) {
+      if (DDManager.overResizeElement || DDManager.dragElement)
+        return;
+      DDManager.overResizeElement = this;
+      this.el.classList.remove("ui-resizable-autohide");
+    }
+    /** @internal */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _mouseOut(e4) {
+      if (DDManager.overResizeElement !== this)
+        return;
+      delete DDManager.overResizeElement;
+      this.el.classList.add("ui-resizable-autohide");
+    }
+    /** @internal */
+    _setupHandlers() {
+      this.handlers = this.option.handles.split(",").map((dir) => dir.trim()).map((dir) => new DDResizableHandle(this.el, dir, {
+        element: this.option.element,
+        start: (event) => this._resizeStart(event),
+        stop: (event) => this._resizeStop(event),
+        move: (event) => this._resizing(event, dir)
+      }));
+      return this;
+    }
+    /** @internal */
+    _resizeStart(event) {
+      this.sizeToContent = Utils.shouldSizeToContent(this.el.gridstackNode, true);
+      this.originalRect = this.el.getBoundingClientRect();
+      this.scrollEl = Utils.getScrollElement(this.el);
+      this.scrollY = this.scrollEl.scrollTop;
+      this.scrolled = 0;
+      this.startEvent = event;
+      this._setupHelper();
+      this._applyChange();
+      const ev = Utils.initEvent(event, { type: "resizestart", target: this.el });
+      if (this.option.start) {
+        this.option.start(ev, this._ui());
+      }
+      this.el.classList.add("ui-resizable-resizing");
+      this.triggerEvent("resizestart", ev);
+      return this;
+    }
+    /** @internal */
+    _resizing(event, dir) {
+      this.scrolled = this.scrollEl.scrollTop - this.scrollY;
+      this.temporalRect = this._getChange(event, dir);
+      this._applyChange();
+      const ev = Utils.initEvent(event, { type: "resize", target: this.el });
+      ev.resizeDir = dir;
+      ev.hasMovedX = this.option.rtl ? dir.includes("e") : dir.includes("w");
+      ev.hasMovedY = dir.includes("n");
+      if (this.option.resize) {
+        this.option.resize(ev, this._ui());
+      }
+      this.triggerEvent("resize", ev);
+      return this;
+    }
+    /** @internal */
+    _resizeStop(event) {
+      const ev = Utils.initEvent(event, { type: "resizestop", target: this.el });
+      this._cleanHelper();
+      if (this.option.stop) {
+        this.option.stop(ev);
+      }
+      this.el.classList.remove("ui-resizable-resizing");
+      this.triggerEvent("resizestop", ev);
+      delete this.startEvent;
+      delete this.originalRect;
+      delete this.temporalRect;
+      delete this.scrollY;
+      delete this.scrolled;
+      return this;
+    }
+    /** @internal */
+    _setupHelper() {
+      this.elOriginStyleVal = _DDResizable._originStyleProp.map((prop) => this.el.style[prop]);
+      this.parentOriginStylePosition = this.el.parentElement.style.position;
+      const parent = this.el.parentElement;
+      const dragTransform = Utils.getValuesFromTransformedElement(parent);
+      this.rectScale = {
+        x: dragTransform.xScale,
+        y: dragTransform.yScale
+      };
+      if (getComputedStyle(this.el.parentElement).position.match(/static/)) {
+        this.el.parentElement.style.position = "relative";
+      }
+      this.el.style.position = "absolute";
+      this.el.style.opacity = "0.8";
+      return this;
+    }
+    /** @internal */
+    _cleanHelper() {
+      _DDResizable._originStyleProp.forEach((prop, i4) => {
+        this.el.style[prop] = this.elOriginStyleVal[i4] || null;
+      });
+      this.el.parentElement.style.position = this.parentOriginStylePosition || null;
+      return this;
+    }
+    /** @internal */
+    _getChange(event, dir) {
+      const oEvent = this.startEvent;
+      const newRect = {
+        width: this.originalRect.width,
+        height: this.originalRect.height + this.scrolled,
+        left: this.originalRect.left,
+        right: this.originalRect.right,
+        top: this.originalRect.top - this.scrolled
+      };
+      const offsetX = event.clientX - oEvent.clientX;
+      const offsetY = this.sizeToContent ? 0 : event.clientY - oEvent.clientY;
+      let moveLeft;
+      let moveUp;
+      const isRtl = this.option.rtl;
+      if (!isRtl && dir.indexOf("e") > -1) {
+        newRect.width += offsetX;
+      } else if (isRtl && dir.indexOf("w") > -1) {
+        newRect.width -= offsetX;
+      } else if (!isRtl && dir.indexOf("w") > -1) {
+        newRect.width -= offsetX;
+        newRect.left += offsetX;
+        moveLeft = true;
+      } else if (isRtl && dir.indexOf("e") > -1) {
+        newRect.width += offsetX;
+        newRect.right += offsetX;
+        moveLeft = true;
+      }
+      if (dir.indexOf("s") > -1) {
+        newRect.height += offsetY;
+      } else if (dir.indexOf("n") > -1) {
+        newRect.height -= offsetY;
+        newRect.top += offsetY;
+        moveUp = true;
+      }
+      const constrain = this._constrainSize(newRect.width, newRect.height, moveLeft, moveUp);
+      if (Math.round(newRect.width) !== Math.round(constrain.width)) {
+        if (!isRtl && dir.indexOf("w") > -1) {
+          newRect.left += newRect.width - constrain.width;
+        } else if (isRtl && dir.indexOf("e") > -1) {
+          newRect.right -= newRect.width - constrain.width;
+        }
+        newRect.width = constrain.width;
+      }
+      if (Math.round(newRect.height) !== Math.round(constrain.height)) {
+        if (dir.indexOf("n") > -1) {
+          newRect.top += newRect.height - constrain.height;
+        }
+        newRect.height = constrain.height;
+      }
+      return newRect;
+    }
+    /** @internal constrain the size to the set min/max values */
+    _constrainSize(oWidth, oHeight, moveLeft, moveUp) {
+      const o4 = this.option;
+      const maxWidth = (moveLeft ? o4.maxWidthMoveLeft : o4.maxWidth) || Number.MAX_SAFE_INTEGER;
+      const minWidth = o4.minWidth / this.rectScale.x || oWidth;
+      const maxHeight = (moveUp ? o4.maxHeightMoveUp : o4.maxHeight) || Number.MAX_SAFE_INTEGER;
+      const minHeight = o4.minHeight / this.rectScale.y || oHeight;
+      const width = Math.min(maxWidth, Math.max(minWidth, oWidth));
+      const height = Math.min(maxHeight, Math.max(minHeight, oHeight));
+      return { width, height };
+    }
+    /** @internal */
+    _applyChange() {
+      let containmentRect = { left: 0, right: 0, top: 0, width: 0, height: 0 };
+      if (this.el.style.position === "absolute") {
+        const containmentEl = this.el.parentElement;
+        const { left, right, top } = containmentEl.getBoundingClientRect();
+        containmentRect = { left, right, top, width: 0, height: 0 };
+      }
+      if (!this.temporalRect)
+        return this;
+      Object.entries(this.temporalRect).forEach(([key, value]) => {
+        if (this.option.rtl ? key === "left" : key === "right")
+          return;
+        const scaleReciprocal = key === "width" || key === "left" || key === "right" ? this.rectScale.x : key === "height" || key === "top" ? this.rectScale.y : 1;
+        let finalValue;
+        if (key === "right") {
+          finalValue = (containmentRect.right - value) * this.rectScale.x + "px";
+        } else {
+          finalValue = (value - containmentRect[key]) * scaleReciprocal + "px";
+        }
+        this.el.style[key] = finalValue;
+      });
+      return this;
+    }
+    /** @internal */
+    _removeHandlers() {
+      this.handlers.forEach((handle) => handle.destroy());
+      delete this.handlers;
+      return this;
+    }
+  };
+  DDResizable._originStyleProp = ["width", "height", "position", "left", "right", "top", "opacity", "zIndex"];
+
+  // node_modules/gridstack/dist/dd-draggable.js
+  var skipMouseDown = 'input,textarea,button,select,option,[contenteditable="true"],.ui-resizable-handle';
+  var DDDraggable = class _DDDraggable extends DDBaseImplement {
+    constructor(el, option = {}) {
+      super();
+      this.el = el;
+      this.option = option;
+      this.dragTransform = {
+        xScale: 1,
+        yScale: 1,
+        xOffset: 0,
+        yOffset: 0
+      };
+      this._autoScrollTick = () => {
+        const el2 = this.helper;
+        const scrollCont = this._autoScrollContainer;
+        if (!el2 || !scrollCont) {
+          this._stopScrolling();
+          return;
+        }
+        const clipping = this._getClipping(el2, scrollCont);
+        if (clipping === 0) {
+          this._stopScrolling();
+          return;
+        }
+        if (!this._autoScrollMaxSpeed) {
+          const viewportH = window.innerHeight || document.documentElement.clientHeight;
+          this._autoScrollMaxSpeed = Math.max(viewportH / 150, 4);
+        }
+        const absPx = Math.abs(clipping);
+        const speed = Math.min(absPx * 0.5, this._autoScrollMaxSpeed);
+        const scrollAmount = clipping > 0 ? speed : -speed;
+        const prevScroll = scrollCont.scrollTop;
+        scrollCont.scrollTop += scrollAmount;
+        if (scrollCont.scrollTop === prevScroll) {
+          this._stopScrolling();
+          return;
+        }
+        if (this.dragging && this.lastDrag) {
+          this._dragFollow(this.lastDrag);
+          this._callDrag(this.lastDrag);
+        }
+        this._autoScrollAnimId = requestAnimationFrame(this._autoScrollTick);
+      };
+      const handleName = option?.handle?.substring(1);
+      const n3 = el.gridstackNode;
+      this.dragEls = !handleName || el.classList.contains(handleName) ? [el] : n3?.subGrid ? [el.querySelector(option.handle) || el] : this.getAllHandles();
+      if (this.dragEls.length === 0) {
+        this.dragEls = [el];
+      }
+      this._mouseDown = this._mouseDown.bind(this);
+      this._mouseMove = this._mouseMove.bind(this);
+      this._mouseUp = this._mouseUp.bind(this);
+      this._keyEvent = this._keyEvent.bind(this);
+      this.enable();
+    }
+    /** return all handles omitting other nested `.grid-stack-item` children (in case node.subGrid isn't set for some reason) */
+    getAllHandles() {
+      return Array.from(this.el.querySelectorAll(this.option.handle)).filter((node) => {
+        if (!(node instanceof HTMLElement))
+          return false;
+        const owner = node.closest(".grid-stack-item");
+        return owner === this.el || !owner;
+      });
+    }
+    on(event, callback) {
+      super.on(event, callback);
+    }
+    off(event) {
+      super.off(event);
+    }
+    enable() {
+      if (this.disabled === false)
+        return;
+      super.enable();
+      this.dragEls.forEach((dragEl) => {
+        dragEl.addEventListener("mousedown", this._mouseDown);
+        if (isTouch) {
+          dragEl.addEventListener("touchstart", touchstart);
+          dragEl.addEventListener("pointerdown", pointerdown);
+        }
+      });
+      this.el.classList.remove("ui-draggable-disabled");
+    }
+    disable(forDestroy = false) {
+      if (this.disabled === true)
+        return;
+      super.disable();
+      this.dragEls.forEach((dragEl) => {
+        dragEl.removeEventListener("mousedown", this._mouseDown);
+        if (isTouch) {
+          dragEl.removeEventListener("touchstart", touchstart);
+          dragEl.removeEventListener("pointerdown", pointerdown);
+        }
+      });
+      if (!forDestroy)
+        this.el.classList.add("ui-draggable-disabled");
+    }
+    destroy() {
+      if (this.dragTimeout)
+        window.clearTimeout(this.dragTimeout);
+      delete this.dragTimeout;
+      if (this.mouseDownEvent)
+        this._mouseUp(this.mouseDownEvent);
+      this.disable(true);
+      delete this.el;
+      delete this.helper;
+      delete this.option;
+      super.destroy();
+    }
+    updateOption(opts) {
+      Object.keys(opts).forEach((key) => this.option[key] = opts[key]);
+      return this;
+    }
+    /** @internal call when mouse goes down before a dragstart happens */
+    _mouseDown(e4) {
+      if (DDTouch.touchHandled && e4.isTrusted)
+        DDTouch.touchHandled = false;
+      if (DDManager.mouseHandled)
+        return;
+      if (e4.button !== 0)
+        return true;
+      if (!this.dragEls.find((el) => el === e4.target) && e4.target.closest(skipMouseDown))
+        return true;
+      if (this.option.cancel) {
+        if (e4.target.closest(this.option.cancel))
+          return true;
+      }
+      this.mouseDownEvent = e4;
+      delete this.dragging;
+      delete DDManager.dragElement;
+      delete DDManager.dropElement;
+      delete this._autoScrollMaxSpeed;
+      delete this._autoScrollContainer;
+      document.addEventListener("mousemove", this._mouseMove, { capture: true, passive: true });
+      document.addEventListener("mouseup", this._mouseUp, true);
+      if (isTouch) {
+        e4.currentTarget.addEventListener("touchmove", touchmove);
+        e4.currentTarget.addEventListener("touchend", touchend);
+      }
+      e4.preventDefault();
+      if (document.activeElement)
+        document.activeElement.blur();
+      DDManager.mouseHandled = true;
+      return true;
+    }
+    /** @internal method to call actual drag event */
+    _callDrag(e4) {
+      if (!this.dragging)
+        return;
+      const ev = Utils.initEvent(e4, { target: this.el, type: "drag" });
+      if (this.option.drag) {
+        this.option.drag(ev, this.ui());
+      }
+      this.triggerEvent("drag", ev);
+    }
+    /** @internal called when the main page (after successful mousedown) receives a move event to drag the item around the screen */
+    _mouseMove(e4) {
+      const s4 = this.mouseDownEvent;
+      this.lastDrag = e4;
+      if (this.dragging) {
+        this._dragFollow(e4);
+        if (DDManager.pauseDrag) {
+          const pause = Number.isInteger(DDManager.pauseDrag) ? DDManager.pauseDrag : 100;
+          if (this.dragTimeout)
+            window.clearTimeout(this.dragTimeout);
+          this.dragTimeout = window.setTimeout(() => this._callDrag(e4), pause);
+        } else {
+          this._callDrag(e4);
+        }
+      } else if (Math.abs(e4.x - s4.x) + Math.abs(e4.y - s4.y) > 3) {
+        this.dragging = true;
+        DDManager.dragElement = this;
+        const grid = this.el.gridstackNode?.grid;
+        if (grid) {
+          DDManager.dropElement = grid.el.ddElement.ddDroppable;
+        } else {
+          delete DDManager.dropElement;
+        }
+        this.helper = this._createHelper();
+        this._setupHelperContainmentStyle();
+        this.dragTransform = Utils.getValuesFromTransformedElement(this.helperContainment);
+        this.dragOffset = this._getDragOffset(e4, this.el, this.helperContainment);
+        this._setupHelperStyle(e4);
+        const ev = Utils.initEvent(e4, { target: this.el, type: "dragstart" });
+        if (this.option.start) {
+          this.option.start(ev, this.ui());
+        }
+        this.triggerEvent("dragstart", ev);
+        document.addEventListener("keydown", this._keyEvent);
+      }
+      return true;
+    }
+    /** @internal call when the mouse gets released to drop the item at current location */
+    _mouseUp(e4) {
+      this._stopScrolling();
+      document.removeEventListener("mousemove", this._mouseMove, true);
+      document.removeEventListener("mouseup", this._mouseUp, true);
+      if (isTouch && e4.currentTarget) {
+        e4.currentTarget.removeEventListener("touchmove", touchmove, true);
+        e4.currentTarget.removeEventListener("touchend", touchend, true);
+      }
+      if (this.dragging) {
+        delete this.dragging;
+        delete this.el.gridstackNode?._origRotate;
+        document.removeEventListener("keydown", this._keyEvent);
+        if (DDManager.dropElement?.el === this.el.parentElement) {
+          delete DDManager.dropElement;
+        }
+        this.helperContainment.style.position = this.parentOriginStylePosition || null;
+        if (this.helper !== this.el)
+          this.helper.remove();
+        this._removeHelperStyle();
+        const ev = Utils.initEvent(e4, { target: this.el, type: "dragstop" });
+        if (this.option.stop) {
+          this.option.stop(ev);
+        }
+        this.triggerEvent("dragstop", ev);
+        if (DDManager.dropElement) {
+          DDManager.dropElement.drop(e4);
+        }
+      }
+      delete this.helper;
+      delete this.mouseDownEvent;
+      delete DDManager.dragElement;
+      delete DDManager.dropElement;
+      delete DDManager.mouseHandled;
+      e4.preventDefault();
+    }
+    /** @internal call when keys are being pressed - use Esc to cancel, R to rotate */
+    _keyEvent(e4) {
+      const n3 = this.el.gridstackNode;
+      const grid = n3?.grid || DDManager.dropElement?.el?.gridstack;
+      if (e4.key === "Escape") {
+        if (n3 && n3._origRotate) {
+          n3._orig = n3._origRotate;
+          delete n3._origRotate;
+        }
+        grid?.cancelDrag();
+        this._mouseUp(this.mouseDownEvent);
+      } else if (n3 && grid && (e4.key === "r" || e4.key === "R")) {
+        if (!Utils.canBeRotated(n3))
+          return;
+        n3._origRotate = n3._origRotate || { ...n3._orig };
+        delete n3._moving;
+        grid.setAnimation(false).rotate(n3.el, {
+          top: -this.dragOffset.offsetTop,
+          left: -this.dragOffset.offsetX
+        }).setAnimation();
+        n3._moving = true;
+        this.dragOffset = this._getDragOffset(this.lastDrag, n3.el, this.helperContainment);
+        this.helper.style.width = this.dragOffset.width + "px";
+        this.helper.style.height = this.dragOffset.height + "px";
+        Utils.swap(n3._orig, "w", "h");
+        delete n3._rect;
+        this._mouseMove(this.lastDrag);
+      }
+    }
+    /** @internal create a clone copy (or user defined method) of the original drag item if set */
+    _createHelper() {
+      let helper = this.el;
+      if (typeof this.option.helper === "function") {
+        helper = this.option.helper(this.el);
+      } else if (this.option.helper === "clone") {
+        helper = Utils.cloneNode(this.el);
+      }
+      if (!helper.parentElement) {
+        Utils.appendTo(helper, this.option.appendTo === "parent" ? this.el.parentElement : this.option.appendTo);
+      }
+      this.dragElementOriginStyle = _DDDraggable.originStyleProp.map((prop) => this.el.style[prop]);
+      return helper;
+    }
+    /** @internal set the fix position of the dragged item */
+    _setupHelperStyle(e4) {
+      this.helper.classList.add("ui-draggable-dragging");
+      this.el.gridstackNode?.grid?.el.classList.add("grid-stack-dragging");
+      const style = this.helper.style;
+      style.pointerEvents = "none";
+      style.width = this.dragOffset.width + "px";
+      style.height = this.dragOffset.height + "px";
+      style.willChange = "left, right, top";
+      style.position = "fixed";
+      this._dragFollow(e4);
+      style.transition = "none";
+      setTimeout(() => {
+        if (this.helper) {
+          style.transition = null;
+        }
+      }, 0);
+      return this;
+    }
+    /** @internal restore back the original style before dragging */
+    _removeHelperStyle() {
+      this.helper.classList.remove("ui-draggable-dragging");
+      this.el.gridstackNode?.grid?.el.classList.remove("grid-stack-dragging");
+      const node = this.helper?.gridstackNode;
+      if (!node?._isAboutToRemove && this.dragElementOriginStyle) {
+        const helper = this.helper;
+        const transition = this.dragElementOriginStyle["transition"] || null;
+        helper.style.transition = this.dragElementOriginStyle["transition"] = "none";
+        _DDDraggable.originStyleProp.forEach((prop) => helper.style[prop] = this.dragElementOriginStyle[prop] || null);
+        setTimeout(() => helper.style.transition = transition, 50);
+      }
+      delete this.dragElementOriginStyle;
+      return this;
+    }
+    /** @internal updates the top/left position to follow the mouse */
+    _dragFollow(e4) {
+      const style = this.helper.style;
+      const offset = this.dragOffset;
+      if (this.option.rtl) {
+        style.right = (window.innerWidth - e4.clientX + offset.offsetX) * this.dragTransform.xScale + "px";
+        if (style.left)
+          style.left = "";
+      } else {
+        style.left = (e4.clientX + offset.offsetX) * this.dragTransform.xScale + "px";
+        if (style.right)
+          style.right = "";
+      }
+      style.top = (e4.clientY + offset.offsetTop) * this.dragTransform.yScale + "px";
+    }
+    /** @internal */
+    _setupHelperContainmentStyle() {
+      this.helperContainment = this.helper.parentElement;
+      if (this.helper.style.position !== "fixed") {
+        this.parentOriginStylePosition = this.helperContainment.style.position;
+        if (getComputedStyle(this.helperContainment).position.match(/static/)) {
+          this.helperContainment.style.position = "relative";
+        }
+      }
+      return this;
+    }
+    /** @internal */
+    _getDragOffset(event, el, parent) {
+      let xformOffsetX = 0;
+      let xformOffsetY = 0;
+      if (parent) {
+        xformOffsetX = this.dragTransform.xOffset;
+        xformOffsetY = this.dragTransform.yOffset;
+      }
+      const targetOffset = el.getBoundingClientRect();
+      let x4 = this.option.rtl ? targetOffset.right : targetOffset.left;
+      let offsetX = this.option.rtl ? event.clientX - targetOffset.right + xformOffsetX : -event.clientX + targetOffset.left - xformOffsetX;
+      return {
+        x: x4,
+        top: targetOffset.top,
+        offsetX,
+        offsetTop: -event.clientY + targetOffset.top - xformOffsetY,
+        width: targetOffset.width * this.dragTransform.xScale,
+        height: targetOffset.height * this.dragTransform.yScale
+      };
+    }
+    /** @internal starts or continues auto-scroll when the dragged helper is clipped by the scroll container.
+     * Takes the grid's own element to find the scroll container so external/sidebar drags work too (#2074). */
+    updateScrollPosition(gridEl) {
+      this._autoScrollContainer = Utils.getScrollElement(gridEl);
+      const clipping = this._getClipping(this.helper, this._autoScrollContainer);
+      if (clipping === 0) {
+        this._stopScrolling();
+      } else if (!this._autoScrollAnimId) {
+        this._autoScrollAnimId = requestAnimationFrame(this._autoScrollTick);
+      }
+    }
+    /** @internal compute how many pixels the element is clipped: negative = above, positive = below, 0 = fully inside OR outside (stop scrolling) */
+    _getClipping(el, scrollEl) {
+      const elRect = el.getBoundingClientRect();
+      const scrollRect = scrollEl.getBoundingClientRect();
+      const viewportH = window.innerHeight || document.documentElement.clientHeight;
+      if (elRect.bottom < scrollRect.top || elRect.top > scrollRect.bottom)
+        return 0;
+      const clippedBelow = elRect.bottom - Math.min(scrollRect.bottom, viewportH);
+      const clippedAbove = elRect.top - Math.max(scrollRect.top, 0);
+      if (clippedAbove < 0)
+        return clippedAbove;
+      if (clippedBelow > 0)
+        return clippedBelow;
+      return 0;
+    }
+    /** @internal stop any active auto-scroll animation */
+    _stopScrolling() {
+      if (this._autoScrollAnimId) {
+        cancelAnimationFrame(this._autoScrollAnimId);
+        delete this._autoScrollAnimId;
+      }
+    }
+    /** @internal TODO: set to public as called by DDDroppable! */
+    ui() {
+      const containmentEl = this.el.parentElement;
+      const containmentRect = containmentEl.getBoundingClientRect();
+      const offset = this.helper.getBoundingClientRect();
+      const leftPos = this.option.rtl ? (containmentRect.right - offset.right) * this.dragTransform.xScale : (offset.left - containmentRect.left) * this.dragTransform.xScale;
+      return {
+        position: {
+          top: (offset.top - containmentRect.top) * this.dragTransform.yScale,
+          left: leftPos
+        }
+        /* not used by GridStack for now...
+        helper: [this.helper], //The object arr representing the helper that's being dragged.
+        offset: { top: offset.top, left: offset.left } // Current offset position of the helper as { top, left } object.
+        */
+      };
+    }
+  };
+  DDDraggable.originStyleProp = ["width", "height", "transform", "transform-origin", "transition", "pointerEvents", "position", "left", "right", "top", "minWidth", "willChange"];
+
+  // node_modules/gridstack/dist/dd-droppable.js
+  var DDDroppable = class extends DDBaseImplement {
+    constructor(el, option = {}) {
+      super();
+      this.el = el;
+      this.option = option;
+      this._mouseEnter = this._mouseEnter.bind(this);
+      this._mouseLeave = this._mouseLeave.bind(this);
+      this.enable();
+      this._setupAccept();
+    }
+    on(event, callback) {
+      super.on(event, callback);
+    }
+    off(event) {
+      super.off(event);
+    }
+    enable() {
+      if (this.disabled === false)
+        return;
+      super.enable();
+      this.el.classList.add("ui-droppable");
+      this.el.classList.remove("ui-droppable-disabled");
+      this.el.addEventListener("mouseenter", this._mouseEnter);
+      this.el.addEventListener("mouseleave", this._mouseLeave);
+      if (isTouch) {
+        this.el.addEventListener("pointerenter", pointerenter);
+        this.el.addEventListener("pointerleave", pointerleave);
+      }
+    }
+    disable(forDestroy = false) {
+      if (this.disabled === true)
+        return;
+      super.disable();
+      this.el.classList.remove("ui-droppable");
+      if (!forDestroy)
+        this.el.classList.add("ui-droppable-disabled");
+      this.el.removeEventListener("mouseenter", this._mouseEnter);
+      this.el.removeEventListener("mouseleave", this._mouseLeave);
+      if (isTouch) {
+        this.el.removeEventListener("pointerenter", pointerenter);
+        this.el.removeEventListener("pointerleave", pointerleave);
+      }
+    }
+    destroy() {
+      this.disable(true);
+      this.el.classList.remove("ui-droppable");
+      this.el.classList.remove("ui-droppable-disabled");
+      super.destroy();
+    }
+    updateOption(opts) {
+      Object.keys(opts).forEach((key) => this.option[key] = opts[key]);
+      this._setupAccept();
+      return this;
+    }
+    /** @internal called when the cursor enters our area - prepare for a possible drop and track leaving */
+    _mouseEnter(e4) {
+      if (!DDManager.dragElement)
+        return;
+      if (DDTouch.touchHandled && e4.isTrusted)
+        return;
+      if (!this._canDrop(DDManager.dragElement.el))
+        return;
+      e4.preventDefault();
+      e4.stopPropagation();
+      DDManager.dragElement._stopScrolling();
+      if (DDManager.dropElement && DDManager.dropElement !== this) {
+        DDManager.dropElement._mouseLeave(e4, true);
+      }
+      DDManager.dropElement = this;
+      const ev = Utils.initEvent(e4, { target: this.el, type: "dropover" });
+      if (this.option.over) {
+        this.option.over(ev, this._ui(DDManager.dragElement));
+      }
+      this.triggerEvent("dropover", ev);
+      this.el.classList.add("ui-droppable-over");
+    }
+    /** @internal called when the item is leaving our area, stop tracking if we had moving item */
+    _mouseLeave(e4, calledByEnter = false) {
+      if (!DDManager.dragElement || DDManager.dropElement !== this)
+        return;
+      e4.preventDefault();
+      e4.stopPropagation();
+      if (calledByEnter)
+        DDManager.dragElement._stopScrolling();
+      const ev = Utils.initEvent(e4, { target: this.el, type: "dropout" });
+      if (this.option.out) {
+        this.option.out(ev, this._ui(DDManager.dragElement));
+      }
+      this.triggerEvent("dropout", ev);
+      if (DDManager.dropElement === this) {
+        delete DDManager.dropElement;
+        if (!calledByEnter) {
+          let parentDrop;
+          let parent = this.el.parentElement;
+          while (!parentDrop && parent) {
+            parentDrop = parent.ddElement?.ddDroppable;
+            parent = parent.parentElement;
+          }
+          if (parentDrop) {
+            parentDrop._mouseEnter(e4);
+          }
+        }
+      }
+    }
+    /** item is being dropped on us - called by the drag mouseup handler - this calls the client drop event */
+    drop(e4) {
+      e4.preventDefault();
+      const ev = Utils.initEvent(e4, { target: this.el, type: "drop" });
+      if (this.option.drop) {
+        this.option.drop(ev, this._ui(DDManager.dragElement));
+      }
+      this.triggerEvent("drop", ev);
+    }
+    /** @internal true if element matches the string/method accept option */
+    _canDrop(el) {
+      return el && (!this.accept || this.accept(el));
+    }
+    /** @internal */
+    _setupAccept() {
+      if (!this.option.accept)
+        return this;
+      if (typeof this.option.accept === "string") {
+        this.accept = (el) => el.classList.contains(this.option.accept) || el.matches(this.option.accept);
+      } else {
+        this.accept = this.option.accept;
+      }
+      return this;
+    }
+    /** @internal */
+    _ui(drag) {
+      return {
+        draggable: drag.el,
+        ...drag.ui()
+      };
+    }
+  };
+
+  // node_modules/gridstack/dist/dd-element.js
+  var DDElement = class _DDElement {
+    static init(el) {
+      if (!el.ddElement) {
+        el.ddElement = new _DDElement(el);
+      }
+      return el.ddElement;
+    }
+    constructor(el) {
+      this.el = el;
+    }
+    on(eventName, callback) {
+      if (this.ddDraggable && ["drag", "dragstart", "dragstop"].indexOf(eventName) > -1) {
+        this.ddDraggable.on(eventName, callback);
+      } else if (this.ddDroppable && ["drop", "dropover", "dropout"].indexOf(eventName) > -1) {
+        this.ddDroppable.on(eventName, callback);
+      } else if (this.ddResizable && ["resizestart", "resize", "resizestop"].indexOf(eventName) > -1) {
+        this.ddResizable.on(eventName, callback);
+      }
+      return this;
+    }
+    off(eventName) {
+      if (this.ddDraggable && ["drag", "dragstart", "dragstop"].indexOf(eventName) > -1) {
+        this.ddDraggable.off(eventName);
+      } else if (this.ddDroppable && ["drop", "dropover", "dropout"].indexOf(eventName) > -1) {
+        this.ddDroppable.off(eventName);
+      } else if (this.ddResizable && ["resizestart", "resize", "resizestop"].indexOf(eventName) > -1) {
+        this.ddResizable.off(eventName);
+      }
+      return this;
+    }
+    setupDraggable(opts) {
+      if (!this.ddDraggable) {
+        this.ddDraggable = new DDDraggable(this.el, opts);
+      } else {
+        this.ddDraggable.updateOption(opts);
+      }
+      return this;
+    }
+    cleanDraggable() {
+      if (this.ddDraggable) {
+        this.ddDraggable.destroy();
+        delete this.ddDraggable;
+      }
+      return this;
+    }
+    setupResizable(opts) {
+      if (!this.ddResizable) {
+        this.ddResizable = new DDResizable(this.el, opts);
+      } else {
+        this.ddResizable.updateOption(opts);
+      }
+      return this;
+    }
+    cleanResizable() {
+      if (this.ddResizable) {
+        this.ddResizable.destroy();
+        delete this.ddResizable;
+      }
+      return this;
+    }
+    setupDroppable(opts) {
+      if (!this.ddDroppable) {
+        this.ddDroppable = new DDDroppable(this.el, opts);
+      } else {
+        this.ddDroppable.updateOption(opts);
+      }
+      return this;
+    }
+    cleanDroppable() {
+      if (this.ddDroppable) {
+        this.ddDroppable.destroy();
+        delete this.ddDroppable;
+      }
+      return this;
+    }
+  };
+
+  // node_modules/gridstack/dist/dd-gridstack.js
+  var DDGridStack = class {
+    /**
+     * Enable/disable/configure resizing for grid elements.
+     *
+     * @param el - Grid item element(s) to configure
+     * @param opts - Resize options or command ('enable', 'disable', 'destroy', 'option', or config object)
+     * @param key - Option key when using 'option' command
+     * @param value - Option value when using 'option' command
+     * @returns this instance for chaining
+     *
+     * @example
+     * dd.resizable(element, 'enable');  // Enable resizing
+     * dd.resizable(element, 'option', 'minWidth', 100);  // Set minimum width
+     */
+    resizable(el, opts, key, value) {
+      this._getDDElements(el, opts).forEach((dEl) => {
+        if (opts === "disable" || opts === "enable") {
+          dEl.ddResizable && dEl.ddResizable[opts]();
+        } else if (opts === "destroy") {
+          dEl.ddResizable && dEl.cleanResizable();
+        } else if (opts === "option") {
+          dEl.setupResizable({ [key]: value });
+        } else {
+          const n3 = dEl.el.gridstackNode;
+          const grid = n3.grid;
+          let handles = dEl.el.getAttribute("gs-resize-handles") || grid.opts.resizable.handles || "e,s,se";
+          if (handles === "all")
+            handles = "n,e,s,w,se,sw,ne,nw";
+          const autoHide = !grid.opts.alwaysShowResizeHandle;
+          dEl.setupResizable({
+            ...grid.opts.resizable,
+            ...{ handles, autoHide },
+            ...{
+              start: opts.start,
+              stop: opts.stop,
+              resize: opts.resize,
+              rtl: opts.rtl
+            }
+          });
+        }
+      });
+      return this;
+    }
+    /**
+     * Enable/disable/configure dragging for grid elements.
+     *
+     * @param el - Grid item element(s) to configure
+     * @param opts - Drag options or command ('enable', 'disable', 'destroy', 'option', or config object)
+     * @param key - Option key when using 'option' command
+     * @param value - Option value when using 'option' command
+     * @param rtl - Are we in rtl mode?
+     * @returns this instance for chaining
+     *
+     * @example
+     * dd.draggable(element, 'enable');  // Enable dragging
+     * dd.draggable(element, {handle: '.drag-handle'});  // Configure drag handle
+     */
+    draggable(el, opts, key, value) {
+      this._getDDElements(el, opts).forEach((dEl) => {
+        if (opts === "disable" || opts === "enable") {
+          dEl.ddDraggable && dEl.ddDraggable[opts]();
+        } else if (opts === "destroy") {
+          dEl.ddDraggable && dEl.cleanDraggable();
+        } else if (opts === "option") {
+          dEl.setupDraggable({ [key]: value });
+        } else {
+          const grid = dEl.el.gridstackNode.grid;
+          dEl.setupDraggable({
+            ...grid.opts.draggable,
+            ...{
+              // containment: (grid.parentGridNode && grid.opts.dragOut === false) ? grid.el.parentElement : (grid.opts.draggable.containment || null),
+              start: opts.start,
+              stop: opts.stop,
+              drag: opts.drag,
+              rtl: opts.rtl
+            }
+          });
+        }
+      });
+      return this;
+    }
+    dragIn(el, opts) {
+      this._getDDElements(el).forEach((dEl) => dEl.setupDraggable(opts));
+      return this;
+    }
+    droppable(el, opts, key, value) {
+      if (typeof opts.accept === "function" && !opts._accept) {
+        opts._accept = opts.accept;
+        opts.accept = (el2) => opts._accept(el2);
+      }
+      this._getDDElements(el, opts).forEach((dEl) => {
+        if (opts === "disable" || opts === "enable") {
+          dEl.ddDroppable && dEl.ddDroppable[opts]();
+        } else if (opts === "destroy") {
+          dEl.ddDroppable && dEl.cleanDroppable();
+        } else if (opts === "option") {
+          dEl.setupDroppable({ [key]: value });
+        } else {
+          dEl.setupDroppable(opts);
+        }
+      });
+      return this;
+    }
+    /** true if element is droppable */
+    isDroppable(el) {
+      return !!(el?.ddElement?.ddDroppable && !el.ddElement.ddDroppable.disabled);
+    }
+    /** true if element is draggable */
+    isDraggable(el) {
+      return !!(el?.ddElement?.ddDraggable && !el.ddElement.ddDraggable.disabled);
+    }
+    /** true if element is draggable */
+    isResizable(el) {
+      return !!(el?.ddElement?.ddResizable && !el.ddElement.ddResizable.disabled);
+    }
+    on(el, name, callback) {
+      this._getDDElements(el).forEach((dEl) => dEl.on(name, (event) => {
+        callback(event, DDManager.dragElement ? DDManager.dragElement.el : event.target, DDManager.dragElement ? DDManager.dragElement.helper : null);
+      }));
+      return this;
+    }
+    off(el, name) {
+      this._getDDElements(el).forEach((dEl) => dEl.off(name));
+      return this;
+    }
+    /** @internal returns a list of DD elements, creating them on the fly by default unless option is to destroy or disable */
+    _getDDElements(els, opts) {
+      const create = els.gridstack || opts !== "destroy" && opts !== "disable";
+      const hosts = Utils.getElements(els);
+      if (!hosts.length)
+        return [];
+      const list = hosts.map((e4) => e4.ddElement || (create ? DDElement.init(e4) : null)).filter((d5) => d5);
+      return list;
+    }
+  };
+
+  // node_modules/gridstack/dist/gridstack.js
+  var dd = new DDGridStack();
+  var GridStack = class _GridStack {
+    /**
+     * initializing the HTML element, or selector string, into a grid will return the grid. Calling it again will
+     * simply return the existing instance (ignore any passed options). There is also an initAll() version that support
+     * multiple grids initialization at once. Or you can use addGrid() to create the entire grid from JSON.
+     * @param options grid options (optional)
+     * @param elOrString element or CSS selector (first one used) to convert to a grid (default to '.grid-stack' class selector)
+     *
+     * @example
+     * const grid = GridStack.init();
+     *
+     * Note: the HTMLElement (of type GridHTMLElement) will store a `gridstack: GridStack` value that can be retrieve later
+     * const grid = document.querySelector('.grid-stack').gridstack;
+     */
+    static init(options = {}, elOrString = ".grid-stack") {
+      if (typeof document === "undefined")
+        return null;
+      const el = _GridStack.getGridElement(elOrString);
+      if (!el) {
+        if (typeof elOrString === "string") {
+          console.error('GridStack.initAll() no grid was found with selector "' + elOrString + '" - element missing or wrong selector ?\nNote: ".grid-stack" is required for proper CSS styling and drag/drop, and is the default selector.');
+        } else {
+          console.error("GridStack.init() no grid element was passed.");
+        }
+        return null;
+      }
+      if (!el.gridstack) {
+        el.gridstack = new _GridStack(el, Utils.cloneDeep(options));
+      }
+      return el.gridstack;
+    }
+    /**
+     * Will initialize a list of elements (given a selector) and return an array of grids.
+     * @param options grid options (optional)
+     * @param selector elements selector to convert to grids (default to '.grid-stack' class selector)
+     *
+     * @example
+     * const grids = GridStack.initAll();
+     * grids.forEach(...)
+     */
+    static initAll(options = {}, selector = ".grid-stack") {
+      const grids = [];
+      if (typeof document === "undefined")
+        return grids;
+      _GridStack.getGridElements(selector).forEach((el) => {
+        if (!el.gridstack) {
+          el.gridstack = new _GridStack(el, Utils.cloneDeep(options));
+        }
+        grids.push(el.gridstack);
+      });
+      if (grids.length === 0) {
+        console.error('GridStack.initAll() no grid was found with selector "' + selector + '" - element missing or wrong selector ?\nNote: ".grid-stack" is required for proper CSS styling and drag/drop, and is the default selector.');
+      }
+      return grids;
+    }
+    /**
+     * call to create a grid with the given options, including loading any children from JSON structure. This will call GridStack.init(), then
+     * grid.load() on any passed children (recursively). Great alternative to calling init() if you want entire grid to come from
+     * JSON serialized data, including options.
+     * @param parent HTML element parent to the grid
+     * @param opt grids options used to initialize the grid, and list of children
+     */
+    static addGrid(parent, opt = {}) {
+      if (!parent)
+        return null;
+      let el = parent;
+      if (el.gridstack) {
+        const grid2 = el.gridstack;
+        if (opt)
+          grid2.opts = { ...grid2.opts, ...opt };
+        if (opt.children !== void 0)
+          grid2.load(opt.children);
+        return grid2;
+      }
+      const parentIsGrid = parent.classList.contains("grid-stack");
+      if (!parentIsGrid || _GridStack.addRemoveCB) {
+        if (_GridStack.addRemoveCB) {
+          el = _GridStack.addRemoveCB(parent, opt, true, true);
+        } else {
+          el = Utils.createDiv(["grid-stack", opt.class], parent);
+        }
+      }
+      const grid = _GridStack.init(opt, el);
+      return grid;
+    }
+    /** call this method to register your engine instead of the default one.
+     * See instead `GridStackOptions.engineClass` if you only need to
+     * replace just one instance.
+     */
+    static registerEngine(engineClass) {
+      _GridStack.engineClass = engineClass;
+    }
+    /**
+     * @internal create placeholder DIV as needed
+     * @returns the placeholder element for indicating drop zones during drag operations
+     */
+    get placeholder() {
+      if (!this._placeholder) {
+        this._placeholder = Utils.createDiv([this.opts.placeholderClass, gridDefaults.itemClass, this.opts.itemClass]);
+        const placeholderChild = Utils.createDiv(["placeholder-content"], this._placeholder);
+        if (this.opts.placeholderText) {
+          placeholderChild.textContent = this.opts.placeholderText;
+        }
+      }
+      return this._placeholder;
+    }
+    /**
+     * Construct a grid item from the given element and options
+     * @param el the HTML element tied to this grid after it's been initialized
+     * @param opts grid options - public for classes to access, but use methods to modify!
+     */
+    constructor(el, opts = {}) {
+      this.el = el;
+      this.opts = opts;
+      this.animationDelay = 300 + 10;
+      this._gsEventHandler = {};
+      this._extraDragRow = 0;
+      this.dragTransform = { xScale: 1, yScale: 1, xOffset: 0, yOffset: 0 };
+      el.gridstack = this;
+      this.opts = opts = opts || {};
+      if (!el.classList.contains("grid-stack")) {
+        this.el.classList.add("grid-stack");
+      }
+      if (opts.row) {
+        opts.minRow = opts.maxRow = opts.row;
+        delete opts.row;
+      }
+      const rowAttr = Utils.toNumber(el.getAttribute("gs-row"));
+      if (opts.column === "auto") {
+        delete opts.column;
+      }
+      if (opts.alwaysShowResizeHandle !== void 0) {
+        opts._alwaysShowResizeHandle = opts.alwaysShowResizeHandle;
+      }
+      const resp = opts.columnOpts;
+      if (resp) {
+        const bk = resp.breakpoints;
+        if (!resp.columnWidth && !bk?.length) {
+          delete opts.columnOpts;
+        } else {
+          resp.columnMax = resp.columnMax || 12;
+          if (bk?.length > 1)
+            bk.sort((a4, b4) => (b4.w || 0) - (a4.w || 0));
+        }
+      }
+      const defaults = {
+        ...Utils.cloneDeep(gridDefaults),
+        column: Utils.toNumber(el.getAttribute("gs-column")) || gridDefaults.column,
+        minRow: rowAttr ? rowAttr : Utils.toNumber(el.getAttribute("gs-min-row")) || gridDefaults.minRow,
+        maxRow: rowAttr ? rowAttr : Utils.toNumber(el.getAttribute("gs-max-row")) || gridDefaults.maxRow,
+        staticGrid: Utils.toBool(el.getAttribute("gs-static")) || gridDefaults.staticGrid,
+        sizeToContent: Utils.toBool(el.getAttribute("gs-size-to-content")) || void 0,
+        draggable: {
+          handle: (opts.handleClass ? "." + opts.handleClass : opts.handle ? opts.handle : "") || gridDefaults.draggable.handle
+        },
+        removableOptions: {
+          accept: opts.itemClass || gridDefaults.removableOptions.accept,
+          decline: gridDefaults.removableOptions.decline
+        }
+      };
+      if (el.getAttribute("gs-animate")) {
+        defaults.animate = Utils.toBool(el.getAttribute("gs-animate"));
+      }
+      opts = Utils.defaults(opts, defaults);
+      this._initMargin();
+      this.checkDynamicColumn();
+      this._updateColumnVar(opts);
+      if (opts.rtl === "auto") {
+        opts.rtl = el.style.direction === "rtl";
+      }
+      if (opts.rtl) {
+        this.el.classList.add("grid-stack-rtl");
+      }
+      const parentGridItem = this.el.closest("." + gridDefaults.itemClass);
+      const parentNode = parentGridItem?.gridstackNode;
+      if (parentNode) {
+        parentNode.subGrid = this;
+        this.parentGridNode = parentNode;
+        this.el.classList.add("grid-stack-nested");
+        parentNode.el.classList.add("grid-stack-sub-grid");
+      }
+      this._isAutoCellHeight = opts.cellHeight === "auto";
+      if (this._isAutoCellHeight || opts.cellHeight === "initial") {
+        this.cellHeight(void 0);
+      } else {
+        if (typeof opts.cellHeight == "number" && opts.cellHeightUnit && opts.cellHeightUnit !== gridDefaults.cellHeightUnit) {
+          opts.cellHeight = opts.cellHeight + opts.cellHeightUnit;
+          delete opts.cellHeightUnit;
+        }
+        const val = opts.cellHeight;
+        delete opts.cellHeight;
+        this.cellHeight(val);
+      }
+      if (opts.alwaysShowResizeHandle === "mobile") {
+        opts.alwaysShowResizeHandle = isTouch;
+      }
+      this._setStaticClass();
+      const engineClass = opts.engineClass || _GridStack.engineClass || GridStackEngine;
+      this.engine = new engineClass({
+        column: this.getColumn(),
+        float: opts.float,
+        maxRow: opts.maxRow,
+        onChange: (cbNodes) => {
+          cbNodes.forEach((n3) => {
+            const el2 = n3.el;
+            if (!el2)
+              return;
+            if (n3._removeDOM) {
+              if (el2)
+                el2.remove();
+              delete n3._removeDOM;
+            } else {
+              this._writePosAttr(el2, n3);
+            }
+          });
+          this._updateContainerHeight();
+        }
+      });
+      if (opts.auto) {
+        this.batchUpdate();
+        this.engine._loading = true;
+        this.getGridItems().forEach((el2) => this._prepareElement(el2));
+        delete this.engine._loading;
+        this.batchUpdate(false);
+      }
+      if (opts.children) {
+        const children = opts.children;
+        delete opts.children;
+        if (children.length)
+          this.load(children);
+      }
+      this.setAnimation();
+      if (opts.subGridDynamic && !DDManager.pauseDrag)
+        DDManager.pauseDrag = true;
+      if (opts.draggable?.pause !== void 0)
+        DDManager.pauseDrag = opts.draggable.pause;
+      this._setupRemoveDrop();
+      this._setupAcceptWidget();
+      this._updateResizeEvent();
+    }
+    _updateColumnVar(opts = this.opts) {
+      this.el.classList.add("gs-" + opts.column);
+      if (typeof opts.column === "number")
+        this.el.style.setProperty("--gs-column-width", `${100 / opts.column}%`);
+    }
+    /**
+     * add a new widget and returns it.
+     *
+     * Widget will be always placed even if result height is more than actual grid height.
+     * You need to use `willItFit()` before calling addWidget for additional check.
+     * See also `makeWidget(el)` for DOM element.
+     *
+     * @example
+     * const grid = GridStack.init();
+     * grid.addWidget({w: 3, content: 'hello'});
+     *
+     * @param w GridStackWidget definition. used MakeWidget(el) if you have dom element instead.
+     */
+    addWidget(w5) {
+      if (!w5)
+        return;
+      if (typeof w5 === "string") {
+        console.error("V11: GridStack.addWidget() does not support string anymore. see #2736");
+        return;
+      }
+      if (w5.ELEMENT_NODE) {
+        console.error("V11: GridStack.addWidget() does not support HTMLElement anymore. use makeWidget()");
+        return this.makeWidget(w5);
+      }
+      let el;
+      let node = w5;
+      node.grid = this;
+      if (node.el) {
+        el = node.el;
+      } else if (_GridStack.addRemoveCB) {
+        el = _GridStack.addRemoveCB(this.el, w5, true, false);
+      } else {
+        el = this.createWidgetDivs(node);
+      }
+      if (!el)
+        return;
+      node = el.gridstackNode;
+      if (node && el.parentElement === this.el && this.engine.nodes.find((n3) => n3._id === node._id))
+        return el;
+      const domAttr = this._readAttr(el);
+      Utils.defaults(w5, domAttr);
+      this.engine.prepareNode(w5);
+      this.el.appendChild(el);
+      this.makeWidget(el, w5);
+      return el;
+    }
+    /**
+     * Create the default grid item divs and content (possibly lazy loaded) by using GridStack.renderCB().
+     *
+     * @param n GridStackNode definition containing widget configuration
+     * @returns the created HTML element with proper grid item structure
+     *
+     * @example
+     * const element = grid.createWidgetDivs({ w: 2, h: 1, content: 'Hello World' });
+     */
+    createWidgetDivs(n3) {
+      const el = Utils.createDiv(["grid-stack-item", this.opts.itemClass]);
+      const cont = Utils.createDiv(["grid-stack-item-content"], el);
+      if (Utils.lazyLoad(n3)) {
+        if (!n3.visibleObservable) {
+          n3.visibleObservable = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) {
+              n3.visibleObservable?.disconnect();
+              delete n3.visibleObservable;
+              _GridStack.renderCB(cont, n3);
+              n3.grid?.prepareDragDrop(n3.el);
+            }
+          });
+          window.setTimeout(() => n3.visibleObservable?.observe(el));
+        }
+      } else
+        _GridStack.renderCB(cont, n3);
+      return el;
+    }
+    /**
+     * Convert an existing gridItem element into a sub-grid with the given (optional) options, else inherit them
+     * from the parent's subGrid options.
+     * @param el gridItem element to convert
+     * @param ops (optional) sub-grid options, else default to node, then parent settings, else defaults
+     * @param nodeToAdd (optional) node to add to the newly created sub grid (used when dragging over existing regular item)
+     * @param saveContent if true (default) the html inside .grid-stack-content will be saved to child widget
+     * @returns newly created grid
+     */
+    makeSubGrid(el, ops, nodeToAdd, saveContent = true) {
+      let node = el.gridstackNode;
+      if (!node) {
+        node = this.makeWidget(el).gridstackNode;
+      }
+      if (node.subGrid?.el)
+        return node.subGrid;
+      let subGridTemplate;
+      let grid = this;
+      while (grid && !subGridTemplate) {
+        subGridTemplate = grid.opts?.subGridOpts;
+        grid = grid.parentGridNode?.grid;
+      }
+      ops = Utils.cloneDeep({
+        // by default sub-grid inherit from us | parent, other than id, children, etc...
+        ...this.opts,
+        id: void 0,
+        children: void 0,
+        column: "auto",
+        columnOpts: void 0,
+        layout: "list",
+        subGridOpts: void 0,
+        ...subGridTemplate || {},
+        ...ops || node.subGridOpts || {}
+      });
+      node.subGridOpts = ops;
+      let autoColumn;
+      if (ops.column === "auto") {
+        autoColumn = true;
+        ops.column = Math.max(node.w || 1, nodeToAdd?.w || 1);
+        delete ops.columnOpts;
+      }
+      let content = node.el.querySelector(".grid-stack-item-content");
+      let newItem;
+      let newItemOpt;
+      if (saveContent) {
+        this._removeDD(node.el);
+        newItemOpt = { ...node, x: 0, y: 0 };
+        Utils.removeInternalForSave(newItemOpt);
+        delete newItemOpt.subGridOpts;
+        if (node.content) {
+          newItemOpt.content = node.content;
+          delete node.content;
+        }
+        if (_GridStack.addRemoveCB) {
+          newItem = _GridStack.addRemoveCB(this.el, newItemOpt, true, false);
+        } else {
+          newItem = Utils.createDiv(["grid-stack-item"]);
+          newItem.appendChild(content);
+          content = Utils.createDiv(["grid-stack-item-content"], node.el);
+        }
+        this.prepareDragDrop(node.el);
+      }
+      if (nodeToAdd) {
+        const w5 = autoColumn ? ops.column : node.w;
+        const h5 = node.h + nodeToAdd.h;
+        const style = node.el.style;
+        style.transition = "none";
+        this.update(node.el, { w: w5, h: h5 });
+        setTimeout(() => style.transition = null);
+      }
+      const subGrid = node.subGrid = _GridStack.addGrid(content, ops);
+      if (nodeToAdd?._moving)
+        subGrid._isTemp = true;
+      if (autoColumn)
+        subGrid._autoColumn = true;
+      if (saveContent) {
+        subGrid.makeWidget(newItem, newItemOpt);
+      }
+      if (nodeToAdd) {
+        if (nodeToAdd._moving) {
+          window.setTimeout(() => Utils.simulateMouseEvent(nodeToAdd._event, "mouseenter", subGrid.el), 0);
+        } else {
+          subGrid.makeWidget(node.el, node);
+        }
+      }
+      this.resizeToContentCheck(false, node);
+      return subGrid;
+    }
+    /**
+     * called when an item was converted into a nested grid to accommodate a dragged over item, but then item leaves - return back
+     * to the original grid-item. Also called to remove empty sub-grids when last item is dragged out (since re-creating is simple)
+     */
+    removeAsSubGrid(nodeThatRemoved) {
+      const pGrid = this.parentGridNode?.grid;
+      if (!pGrid)
+        return;
+      pGrid.batchUpdate();
+      pGrid.removeWidget(this.parentGridNode.el, true, true);
+      this.engine.nodes.forEach((n3) => {
+        n3.x += this.parentGridNode.x;
+        n3.y += this.parentGridNode.y;
+        pGrid.makeWidget(n3.el, n3);
+      });
+      pGrid.batchUpdate(false);
+      if (this.parentGridNode)
+        delete this.parentGridNode.subGrid;
+      delete this.parentGridNode;
+      if (nodeThatRemoved) {
+        window.setTimeout(() => Utils.simulateMouseEvent(nodeThatRemoved._event, "mouseenter", pGrid.el), 0);
+      }
+    }
+    /**
+     * saves the current layout returning a list of widgets for serialization which might include any nested grids.
+     * @param saveContent if true (default) the latest html inside .grid-stack-content will be saved to GridStackWidget.content field, else it will
+     * be removed.
+     * @param saveGridOpt if true (default false), save the grid options itself, so you can call the new GridStack.addGrid()
+     * to recreate everything from scratch. GridStackOptions.children would then contain the widget list instead.
+     * @param saveCB callback for each node -> widget, so application can insert additional data to be saved into the widget data structure.
+     * @param column if provided, the grid will be saved for the given column size (IFF we have matching internal saved layout, or current layout).
+     * Otherwise it will use the largest possible layout (say 12 even if rendering at 1 column) so we can restore to all layouts.
+     * NOTE: if you want to save to currently display layout, pass this.getColumn() as column.
+     * NOTE2: nested grids will ALWAYS save to the container size to be in sync with parent.
+     * @returns list of widgets or full grid option, including .children list of widgets
+     */
+    save(saveContent = true, saveGridOpt = false, saveCB = _GridStack.saveCB, column) {
+      const list = this.engine.save(saveContent, saveCB, column);
+      list.forEach((n3) => {
+        if (saveContent && n3.el && !n3.subGrid && !saveCB) {
+          const itemContent = n3.el.querySelector(".grid-stack-item-content");
+          n3.content = itemContent?.innerHTML;
+          if (!n3.content)
+            delete n3.content;
+        } else {
+          if (!saveContent && !saveCB) {
+            delete n3.content;
+          }
+          if (n3.subGrid?.el) {
+            const column2 = n3.w || n3.subGrid.getColumn();
+            const listOrOpt = n3.subGrid.save(saveContent, saveGridOpt, saveCB, column2);
+            n3.subGridOpts = saveGridOpt ? listOrOpt : { children: listOrOpt };
+            delete n3.subGrid;
+          }
+        }
+        delete n3.el;
+      });
+      if (saveGridOpt) {
+        const o4 = Utils.cloneDeep(this.opts);
+        if (o4.marginBottom === o4.marginTop && o4.marginRight === o4.marginLeft && o4.marginTop === o4.marginRight) {
+          o4.margin = o4.marginTop;
+          delete o4.marginTop;
+          delete o4.marginRight;
+          delete o4.marginBottom;
+          delete o4.marginLeft;
+        }
+        if (o4.rtl === (this.el.style.direction === "rtl")) {
+          o4.rtl = "auto";
+        }
+        if (this._isAutoCellHeight) {
+          o4.cellHeight = "auto";
+        }
+        if (this._autoColumn) {
+          o4.column = "auto";
+        }
+        const origShow = o4._alwaysShowResizeHandle;
+        delete o4._alwaysShowResizeHandle;
+        if (origShow !== void 0) {
+          o4.alwaysShowResizeHandle = origShow;
+        } else {
+          delete o4.alwaysShowResizeHandle;
+        }
+        Utils.removeInternalAndSame(o4, gridDefaults);
+        o4.children = list;
+        return o4;
+      }
+      return list;
+    }
+    /**
+     * Load widgets from a list. This will call update() on each (matching by id) or add/remove widgets that are not there.
+     * Used to restore a grid layout for a saved layout list (see `save()`).
+     *
+     * @param items list of widgets definition to update/create
+     * @param addRemove boolean (default true) or callback method can be passed to control if and how missing widgets can be added/removed, giving
+     * the user control of insertion.
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Basic usage with saved layout
+     * const savedLayout = grid.save(); // Save current layout
+     * // ... later restore it
+     * grid.load(savedLayout);
+     *
+     * // Load with custom add/remove callback
+     * grid.load(layout, (items, grid, add) => {
+     *   if (add) {
+     *     // Custom logic for adding new widgets
+     *     items.forEach(item => {
+     *       const el = document.createElement('div');
+     *       el.innerHTML = item.content || '';
+     *       grid.addWidget(el, item);
+     *     });
+     *   } else {
+     *     // Custom logic for removing widgets
+     *     items.forEach(item => grid.removeWidget(item.el));
+     *   }
+     * });
+     *
+     * // Load without adding/removing missing widgets
+     * grid.load(layout, false);
+     *
+     * @see {@link http://gridstackjs.com/demo/serialization.html} for complete example
+     */
+    load(items, addRemove = _GridStack.addRemoveCB || true) {
+      items.forEach((n3) => {
+        n3.w = n3.w || n3.minW || 1;
+        n3.h = n3.h || n3.minH || 1;
+      });
+      items = Utils.sort(items);
+      this.engine.skipCacheUpdate = this._ignoreLayoutsNodeChange = true;
+      let maxColumn = 0;
+      items.forEach((n3) => {
+        maxColumn = Math.max(maxColumn, (n3.x || 0) + n3.w);
+      });
+      if (maxColumn > this.engine.defaultColumn)
+        this.engine.defaultColumn = maxColumn;
+      const column = this.getColumn();
+      if (maxColumn > column) {
+        if (this.engine.nodes.length === 0 && this.responseLayout) {
+          this.engine.nodes = items;
+          this.engine.columnChanged(maxColumn, column, this.responseLayout);
+          items = this.engine.nodes;
+          this.engine.nodes = [];
+          delete this.responseLayout;
+        } else
+          this.engine.cacheLayout(items, maxColumn, true);
+      }
+      const prevCB = _GridStack.addRemoveCB;
+      if (typeof addRemove === "function")
+        _GridStack.addRemoveCB = addRemove;
+      const removed = [];
+      this.batchUpdate();
+      const blank = !this.engine.nodes.length;
+      const noAnim = blank && this.opts.animate;
+      if (noAnim)
+        this.setAnimation(false);
+      if (!blank && addRemove) {
+        const copyNodes = [...this.engine.nodes];
+        copyNodes.forEach((n3) => {
+          if (!n3.id)
+            return;
+          const item = Utils.find(items, n3.id);
+          if (!item) {
+            if (_GridStack.addRemoveCB)
+              _GridStack.addRemoveCB(this.el, n3, false, false);
+            removed.push(n3);
+            this.removeWidget(n3.el, true, false);
+          }
+        });
+      }
+      this.engine._loading = true;
+      const updateNodes = [];
+      this.engine.nodes = this.engine.nodes.filter((n3) => {
+        if (Utils.find(items, n3.id)) {
+          updateNodes.push(n3);
+          return false;
+        }
+        return true;
+      });
+      items.forEach((w5) => {
+        const item = Utils.find(updateNodes, w5.id);
+        if (item) {
+          if (Utils.shouldSizeToContent(item))
+            w5.h = item.h;
+          this.engine.nodeBoundFix(w5);
+          if (w5.autoPosition || w5.x === void 0 || w5.y === void 0) {
+            w5.w = w5.w || item.w;
+            w5.h = w5.h || item.h;
+            this.engine.findEmptyPosition(w5);
+          }
+          this.engine.nodes.push(item);
+          if (Utils.samePos(item, w5) && this.engine.nodes.length > 1) {
+            this.moveNode(item, { ...w5, forceCollide: true });
+            Utils.copyPos(w5, item);
+          }
+          this.update(item.el, w5);
+          if (w5.subGridOpts?.children) {
+            const sub = item.el.querySelector(".grid-stack");
+            if (sub && sub.gridstack) {
+              sub.gridstack.load(w5.subGridOpts.children);
+            }
+          }
+        } else if (addRemove) {
+          this.addWidget(w5);
+        }
+      });
+      delete this.engine._loading;
+      this.engine.removedNodes = removed;
+      this.batchUpdate(false);
+      delete this._ignoreLayoutsNodeChange;
+      delete this.engine.skipCacheUpdate;
+      prevCB ? _GridStack.addRemoveCB = prevCB : delete _GridStack.addRemoveCB;
+      if (noAnim)
+        this.setAnimation(true, true);
+      return this;
+    }
+    /**
+     * use before calling a bunch of `addWidget()` to prevent un-necessary relayouts in between (more efficient)
+     * and get a single event callback. You will see no changes until `batchUpdate(false)` is called.
+     */
+    batchUpdate(flag = true) {
+      this.engine.batchUpdate(flag);
+      if (!flag) {
+        this._updateContainerHeight();
+        this._triggerRemoveEvent();
+        this._triggerAddEvent();
+        this._triggerChangeEvent();
+      }
+      return this;
+    }
+    /**
+     * Gets the current cell height in pixels. This takes into account the unit type and converts to pixels if necessary.
+     *
+     * @param forcePixel if true, forces conversion to pixels even when cellHeight is specified in other units
+     * @returns the cell height in pixels
+     *
+     * @example
+     * const height = grid.getCellHeight();
+     * console.log('Cell height:', height, 'px');
+     *
+     * // Force pixel conversion
+     * const pixelHeight = grid.getCellHeight(true);
+     */
+    getCellHeight(forcePixel = false) {
+      if (this.opts.cellHeight && this.opts.cellHeight !== "auto" && (!forcePixel || !this.opts.cellHeightUnit || this.opts.cellHeightUnit === "px")) {
+        return this.opts.cellHeight;
+      }
+      if (this.opts.cellHeightUnit === "rem") {
+        return this.opts.cellHeight * parseFloat(getComputedStyle(document.documentElement).fontSize);
+      }
+      if (this.opts.cellHeightUnit === "em") {
+        return this.opts.cellHeight * parseFloat(getComputedStyle(this.el).fontSize);
+      }
+      if (this.opts.cellHeightUnit === "cm") {
+        return this.opts.cellHeight * (96 / 2.54);
+      }
+      if (this.opts.cellHeightUnit === "mm") {
+        return this.opts.cellHeight * (96 / 2.54) / 10;
+      }
+      const el = this.el.querySelector("." + this.opts.itemClass);
+      if (el) {
+        const h5 = Utils.toNumber(el.getAttribute("gs-h")) || 1;
+        return Math.round(el.offsetHeight / h5);
+      }
+      const rows2 = parseInt(this.el.getAttribute("gs-current-row"));
+      return rows2 ? Math.round(this.el.getBoundingClientRect().height / rows2) : this.opts.cellHeight;
+    }
+    /**
+     * Update current cell height - see `GridStackOptions.cellHeight` for format by updating eh Browser CSS variable.
+     *
+     * @param val the cell height. Options:
+     *   - `undefined`: cells content will be made square (match width minus margin)
+     *   - `0`: the CSS will be generated by the application instead
+     *   - number: height in pixels
+     *   - string: height with units (e.g., '70px', '5rem', '2em')
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * grid.cellHeight(100);     // 100px height
+     * grid.cellHeight('70px');  // explicit pixel height
+     * grid.cellHeight('5rem');  // relative to root font size
+     * grid.cellHeight(grid.cellWidth() * 1.2); // aspect ratio
+     * grid.cellHeight('auto');  // auto-size based on content
+     */
+    cellHeight(val) {
+      if (val !== void 0) {
+        if (this._isAutoCellHeight !== (val === "auto")) {
+          this._isAutoCellHeight = val === "auto";
+          this._updateResizeEvent();
+        }
+      }
+      if (val === "initial" || val === "auto") {
+        val = void 0;
+      }
+      if (val === void 0) {
+        const marginDiff = -this.opts.marginRight - this.opts.marginLeft + this.opts.marginTop + this.opts.marginBottom;
+        val = this.cellWidth() + marginDiff;
+      }
+      const data = Utils.parseHeight(val);
+      if (this.opts.cellHeightUnit === data.unit && this.opts.cellHeight === data.h) {
+        return this;
+      }
+      this.opts.cellHeightUnit = data.unit;
+      this.opts.cellHeight = data.h;
+      this.el.style.setProperty("--gs-cell-height", `${this.opts.cellHeight}${this.opts.cellHeightUnit}`);
+      this._updateContainerHeight();
+      this.resizeToContentCheck();
+      return this;
+    }
+    /** Gets current cell width. */
+    /**
+     * Gets the current cell width in pixels. This is calculated based on the grid container width divided by the number of columns.
+     *
+     * @returns the cell width in pixels
+     *
+     * @example
+     * const width = grid.cellWidth();
+     * console.log('Cell width:', width, 'px');
+     *
+     * // Use cell width to calculate widget dimensions
+     * const widgetWidth = width * 3; // For a 3-column wide widget
+     */
+    cellWidth() {
+      return this._widthOrContainer() / this.getColumn();
+    }
+    /** return our expected width (or parent) , and optionally of window for dynamic column check */
+    _widthOrContainer(forBreakpoint = false) {
+      return forBreakpoint && this.opts.columnOpts?.breakpointForWindow ? window.innerWidth : this.el.clientWidth || this.el.parentElement.clientWidth || window.innerWidth;
+    }
+    /** checks for dynamic column count for our current size, returning true if changed */
+    checkDynamicColumn() {
+      const resp = this.opts.columnOpts;
+      if (!resp || !resp.columnWidth && !resp.breakpoints?.length)
+        return false;
+      const column = this.getColumn();
+      let newColumn = column;
+      const w5 = this._widthOrContainer(true);
+      if (resp.columnWidth) {
+        newColumn = Math.min(Math.round(w5 / resp.columnWidth) || 1, resp.columnMax);
+      } else {
+        newColumn = resp.columnMax;
+        let i4 = 0;
+        while (i4 < resp.breakpoints.length && w5 <= resp.breakpoints[i4].w) {
+          newColumn = resp.breakpoints[i4++].c || column;
+        }
+      }
+      if (newColumn !== column) {
+        const bk = resp.breakpoints?.find((b4) => b4.c === newColumn);
+        this.column(newColumn, bk?.layout || resp.layout);
+        return true;
+      }
+      return false;
+    }
+    /**
+     * Re-layout grid items to reclaim any empty space. This is useful after removing widgets
+     * or when you want to optimize the layout.
+     *
+     * @param layout layout type. Options:
+     *   - 'compact' (default): might re-order items to fill any empty space
+     *   - 'list': keep the widget left->right order the same, even if that means leaving an empty slot if things don't fit
+     * @param doSort re-sort items first based on x,y position. Set to false to do your own sorting ahead (default: true)
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Compact layout after removing widgets
+     * grid.removeWidget('.widget-to-remove');
+     * grid.compact();
+     *
+     * // Use list layout (preserve order)
+     * grid.compact('list');
+     *
+     * // Compact without sorting first
+     * grid.compact('compact', false);
+     */
+    compact(layout = "compact", doSort = true) {
+      this.engine.compact(layout, doSort);
+      this._triggerChangeEvent();
+      return this;
+    }
+    /**
+     * Set the number of columns in the grid. Will update existing widgets to conform to new number of columns,
+     * as well as cache the original layout so you can revert back to previous positions without loss.
+     *
+     * Requires `gridstack-extra.css` or `gridstack-extra.min.css` for [2-11] columns,
+     * else you will need to generate correct CSS.
+     * See: https://github.com/gridstack/gridstack.js#change-grid-columns
+     *
+     * @param column Integer > 0 (default 12)
+     * @param layout specify the type of re-layout that will happen. Options:
+     *   - 'moveScale' (default): scale widget positions and sizes
+     *   - 'move': keep widget sizes, only move positions
+     *   - 'scale': keep widget positions, only scale sizes
+     *   - 'none': don't change widget positions or sizes
+     *   Note: items will never be outside of the current column boundaries.
+     *   Ignored for `column=1` as we always want to vertically stack.
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Change to 6 columns with default scaling
+     * grid.column(6);
+     *
+     * // Change to 4 columns, only move positions
+     * grid.column(4, 'move');
+     *
+     * // Single column layout (vertical stack)
+     * grid.column(1);
+     */
+    column(column, layout = "moveScale") {
+      if (!column || column < 1 || this.opts.column === column)
+        return this;
+      const oldColumn = this.getColumn();
+      this.opts.column = column;
+      if (!this.engine) {
+        this.responseLayout = layout;
+        return this;
+      }
+      this.engine.column = column;
+      this.el.classList.remove("gs-" + oldColumn);
+      this._updateColumnVar();
+      this.engine.columnChanged(oldColumn, column, layout);
+      if (this._isAutoCellHeight)
+        this.cellHeight();
+      this.resizeToContentCheck(true);
+      this._ignoreLayoutsNodeChange = true;
+      this._triggerChangeEvent();
+      delete this._ignoreLayoutsNodeChange;
+      return this;
+    }
+    /**
+     * Get the number of columns in the grid (default 12).
+     *
+     * @returns the current number of columns in the grid
+     *
+     * @example
+     * const columnCount = grid.getColumn(); // returns 12 by default
+     */
+    getColumn() {
+      return this.opts.column;
+    }
+    /**
+     * Returns an array of grid HTML elements (no placeholder) - used to iterate through our children in DOM order.
+     * This method excludes placeholder elements and returns only actual grid items.
+     *
+     * @returns array of GridItemHTMLElement instances representing all grid items
+     *
+     * @example
+     * const items = grid.getGridItems();
+     * items.forEach(item => {
+     *   console.log('Item ID:', item.gridstackNode.id);
+     * });
+     */
+    getGridItems() {
+      return Array.from(this.el.children).filter((el) => el.matches("." + this.opts.itemClass) && !el.matches("." + this.opts.placeholderClass));
+    }
+    /**
+     * Returns true if change callbacks should be ignored due to column change, sizeToContent, loading, etc.
+     * This is useful for callers who want to implement dirty flag functionality.
+     *
+     * @returns true if change callbacks are currently being ignored
+     *
+     * @example
+     * if (!grid.isIgnoreChangeCB()) {
+     *   // Process the change event
+     *   console.log('Grid layout changed');
+     * }
+     */
+    isIgnoreChangeCB() {
+      return this._ignoreLayoutsNodeChange;
+    }
+    /**
+     * Destroys a grid instance. DO NOT CALL any methods or access any vars after this as it will free up members.
+     * @param removeDOM if `false` grid and items HTML elements will not be removed from the DOM (Optional. Default `true`).
+     */
+    destroy(removeDOM = true) {
+      if (!this.el)
+        return;
+      this.offAll();
+      this._updateResizeEvent(true);
+      this.setStatic(true, false);
+      this.setAnimation(false);
+      if (!removeDOM) {
+        this.removeAll(removeDOM);
+        this.el.removeAttribute("gs-current-row");
+      } else {
+        this.el.parentNode.removeChild(this.el);
+      }
+      if (this.parentGridNode)
+        delete this.parentGridNode.subGrid;
+      delete this.parentGridNode;
+      delete this.opts;
+      delete this._placeholder?.gridstackNode;
+      delete this._placeholder;
+      delete this.engine;
+      delete this.el.gridstack;
+      delete this.el;
+      return this;
+    }
+    /**
+     * Enable/disable floating widgets (default: `false`). When enabled, widgets can float up to fill empty spaces.
+     * See [example](http://gridstackjs.com/demo/float.html)
+     *
+     * @param val true to enable floating, false to disable
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * grid.float(true);  // Enable floating
+     * grid.float(false); // Disable floating (default)
+     */
+    float(val) {
+      if (this.opts.float !== val) {
+        this.opts.float = this.engine.float = val;
+        this._triggerChangeEvent();
+      }
+      return this;
+    }
+    /**
+     * Get the current float mode setting.
+     *
+     * @returns true if floating is enabled, false otherwise
+     *
+     * @example
+     * const isFloating = grid.getFloat();
+     * console.log('Floating enabled:', isFloating);
+     */
+    getFloat() {
+      return this.engine.float;
+    }
+    /**
+     * Get the position of the cell under a pixel on screen.
+     * @param position the position of the pixel to resolve in
+     * absolute coordinates, as an object with top and left properties
+     * @param useDocRelative if true, value will be based on document position vs parent position (Optional. Default false).
+     * Useful when grid is within `position: relative` element
+     *
+     * Returns an object with properties `x` and `y` i.e. the column and row in the grid.
+     */
+    getCellFromPixel(position, useDocRelative = false) {
+      const box = this.el.getBoundingClientRect();
+      let containerPos;
+      if (useDocRelative) {
+        containerPos = { top: box.top + document.documentElement.scrollTop, left: box.left };
+      } else {
+        containerPos = { top: this.el.offsetTop, left: this.el.offsetLeft };
+      }
+      const relativeLeft = position.left - containerPos.left;
+      const relativeTop = position.top - containerPos.top;
+      const columnWidth = box.width / this.getColumn();
+      const rowHeight = box.height / parseInt(this.el.getAttribute("gs-current-row"));
+      return { x: Math.floor(relativeLeft / columnWidth), y: Math.floor(relativeTop / rowHeight) };
+    }
+    /**
+     * Returns the current number of rows, which will be at least `minRow` if set.
+     * The row count is based on the highest positioned widget in the grid.
+     *
+     * @returns the current number of rows in the grid
+     *
+     * @example
+     * const rowCount = grid.getRow();
+     * console.log('Grid has', rowCount, 'rows');
+     */
+    getRow() {
+      return Math.max(this.engine.getRow(), this.opts.minRow || 0);
+    }
+    /**
+     * Checks if the specified rectangular area is empty (no widgets occupy any part of it).
+     *
+     * @param x the x coordinate (column) of the area to check
+     * @param y the y coordinate (row) of the area to check
+     * @param w the width in columns of the area to check
+     * @param h the height in rows of the area to check
+     * @returns true if the area is completely empty, false if any widget overlaps
+     *
+     * @example
+     * // Check if a 2x2 area at position (1,1) is empty
+     * if (grid.isAreaEmpty(1, 1, 2, 2)) {
+     *   console.log('Area is available for placement');
+     * }
+     */
+    isAreaEmpty(x4, y5, w5, h5) {
+      return this.engine.isAreaEmpty(x4, y5, w5, h5);
+    }
+    /**
+     * If you add elements to your grid by hand (or have some framework creating DOM), you have to tell gridstack afterwards to make them widgets.
+     * If you want gridstack to add the elements for you, use `addWidget()` instead.
+     * Makes the given element a widget and returns it.
+     *
+     * @param els widget or single selector to convert.
+     * @param options widget definition to use instead of reading attributes or using default sizing values
+     * @returns the converted GridItemHTMLElement
+     *
+     * @example
+     * const grid = GridStack.init();
+     *
+     * // Create HTML content manually, possibly looking like:
+     * // <div id="item-1" gs-x="0" gs-y="0" gs-w="3" gs-h="2"></div>
+     * grid.el.innerHTML = '<div id="item-1" gs-w="3"></div><div id="item-2"></div>';
+     *
+     * // Convert existing elements to widgets
+     * grid.makeWidget('#item-1'); // Uses gs-* attributes from DOM
+     * grid.makeWidget('#item-2', {w: 2, h: 1, content: 'Hello World'});
+     *
+     * // Or pass DOM element directly
+     * const element = document.getElementById('item-3');
+     * grid.makeWidget(element, {x: 0, y: 1, w: 4, h: 2});
+     */
+    makeWidget(els, options) {
+      const el = _GridStack.getElement(els);
+      if (!el || el.gridstackNode)
+        return el;
+      if (!el.parentElement)
+        this.el.appendChild(el);
+      this._prepareElement(el, true, options);
+      const node = el.gridstackNode;
+      this._updateContainerHeight();
+      if (node.subGridOpts) {
+        this.makeSubGrid(el, node.subGridOpts, void 0, false);
+      }
+      let resetIgnoreLayoutsNodeChange;
+      if (this.opts.column === 1 && !this._ignoreLayoutsNodeChange) {
+        resetIgnoreLayoutsNodeChange = this._ignoreLayoutsNodeChange = true;
+      }
+      this._triggerAddEvent();
+      this._triggerChangeEvent();
+      if (resetIgnoreLayoutsNodeChange)
+        delete this._ignoreLayoutsNodeChange;
+      return el;
+    }
+    on(name, callback) {
+      if (name.indexOf(" ") !== -1) {
+        const names = name.split(" ");
+        names.forEach((name2) => this.on(name2, callback));
+        return this;
+      }
+      if (name === "change" || name === "added" || name === "removed" || name === "enable" || name === "disable") {
+        const noData = name === "enable" || name === "disable";
+        if (noData) {
+          this._gsEventHandler[name] = (event) => callback(event);
+        } else {
+          this._gsEventHandler[name] = (event) => {
+            if (event.detail)
+              callback(event, event.detail);
+          };
+        }
+        this.el.addEventListener(name, this._gsEventHandler[name]);
+      } else if (name === "drag" || name === "dragstart" || name === "dragstop" || name === "resizestart" || name === "resize" || name === "resizestop" || name === "dropped" || name === "resizecontent") {
+        this._gsEventHandler[name] = callback;
+      } else {
+        console.error("GridStack.on(" + name + ") event not supported");
+      }
+      return this;
+    }
+    /**
+     * unsubscribe from the 'on' event GridStackEvent
+     * @param name of the event (see possible values) or list of names space separated
+     */
+    off(name) {
+      if (name.indexOf(" ") !== -1) {
+        const names = name.split(" ");
+        names.forEach((name2) => this.off(name2));
+        return this;
+      }
+      if (name === "change" || name === "added" || name === "removed" || name === "enable" || name === "disable") {
+        if (this._gsEventHandler[name]) {
+          this.el.removeEventListener(name, this._gsEventHandler[name]);
+        }
+      }
+      delete this._gsEventHandler[name];
+      return this;
+    }
+    /**
+     * Remove all event handlers from the grid. This is useful for cleanup when destroying a grid.
+     *
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * grid.offAll(); // Remove all event listeners
+     */
+    offAll() {
+      Object.keys(this._gsEventHandler).forEach((key) => this.off(key));
+      return this;
+    }
+    /**
+     * Removes widget from the grid.
+     * @param el  widget or selector to modify
+     * @param removeDOM if `false` DOM element won't be removed from the tree (Default? true).
+     * @param triggerEvent if `false` (quiet mode) element will not be added to removed list and no 'removed' callbacks will be called (Default? true).
+     */
+    removeWidget(els, removeDOM = true, triggerEvent = true) {
+      if (!els) {
+        console.error("Error: GridStack.removeWidget(undefined) called");
+        return this;
+      }
+      _GridStack.getElements(els).forEach((el) => {
+        if (el.parentElement && el.parentElement !== this.el)
+          return;
+        let node = el.gridstackNode;
+        if (!node) {
+          node = this.engine.nodes.find((n3) => el === n3.el);
+        }
+        if (!node)
+          return;
+        if (removeDOM && _GridStack.addRemoveCB) {
+          _GridStack.addRemoveCB(this.el, node, false, false);
+        }
+        delete el.gridstackNode;
+        this._removeDD(el);
+        this.engine.removeNode(node, removeDOM, triggerEvent);
+        if (removeDOM && el.parentElement) {
+          el.remove();
+        }
+      });
+      if (triggerEvent) {
+        this._triggerRemoveEvent();
+        this._triggerChangeEvent();
+      }
+      return this;
+    }
+    /**
+     * Removes all widgets from the grid.
+     * @param removeDOM if `false` DOM elements won't be removed from the tree (Default? `true`).
+     * @param triggerEvent if `false` (quiet mode) element will not be added to removed list and no 'removed' callbacks will be called (Default? true).
+     */
+    removeAll(removeDOM = true, triggerEvent = true) {
+      this.engine.nodes.forEach((n3) => {
+        if (removeDOM && _GridStack.addRemoveCB) {
+          _GridStack.addRemoveCB(this.el, n3, false, false);
+        }
+        delete n3.el.gridstackNode;
+        if (!this.opts.staticGrid)
+          this._removeDD(n3.el);
+      });
+      this.engine.removeAll(removeDOM, triggerEvent);
+      if (triggerEvent)
+        this._triggerRemoveEvent();
+      return this;
+    }
+    /**
+     * Toggle the grid animation state.  Toggles the `grid-stack-animate` class.
+     * @param doAnimate if true the grid will animate.
+     * @param delay if true setting will be set on next event loop.
+     */
+    setAnimation(doAnimate = this.opts.animate, delay) {
+      if (delay) {
+        setTimeout(() => {
+          if (this.opts)
+            this.setAnimation(doAnimate);
+        });
+      } else if (doAnimate) {
+        this.el.classList.add("grid-stack-animate");
+      } else {
+        this.el.classList.remove("grid-stack-animate");
+      }
+      this.opts.animate = doAnimate;
+      return this;
+    }
+    /** @internal */
+    hasAnimationCSS() {
+      return this.el.classList.contains("grid-stack-animate");
+    }
+    /**
+     * Toggle the grid static state, which permanently removes/add Drag&Drop support, unlike disable()/enable() that just turns it off/on.
+     * Also toggle the grid-stack-static class.
+     * @param val if true the grid become static.
+     * @param updateClass true (default) if css class gets updated
+     * @param recurse true (default) if sub-grids also get updated
+     */
+    setStatic(val, updateClass = true, recurse = true) {
+      if (!!this.opts.staticGrid === val)
+        return this;
+      val ? this.opts.staticGrid = true : delete this.opts.staticGrid;
+      this._setupRemoveDrop();
+      this._setupAcceptWidget();
+      this.engine.nodes.forEach((n3) => {
+        this.prepareDragDrop(n3.el);
+        if (n3.subGrid && recurse)
+          n3.subGrid.setStatic(val, updateClass, recurse);
+      });
+      if (updateClass) {
+        this._setStaticClass();
+      }
+      return this;
+    }
+    /**
+     * Updates the passed in options on the grid (similar to update(widget) for for the grid options).
+     * @param options PARTIAL grid options to update - only items specified will be updated.
+     * NOTE: not all options updating are currently supported (lot of code, unlikely to change)
+     */
+    updateOptions(o4) {
+      const opts = this.opts;
+      if (o4 === opts)
+        return this;
+      if (o4.acceptWidgets !== void 0) {
+        opts.acceptWidgets = o4.acceptWidgets;
+        this._setupAcceptWidget();
+      }
+      if (o4.animate !== void 0)
+        this.setAnimation(o4.animate);
+      if (o4.cellHeight)
+        this.cellHeight(o4.cellHeight);
+      if (o4.class !== void 0 && o4.class !== opts.class) {
+        if (opts.class)
+          this.el.classList.remove(opts.class);
+        if (o4.class)
+          this.el.classList.add(o4.class);
+      }
+      if (o4.columnOpts) {
+        const hadColumnOpts = !!this.opts.columnOpts;
+        this.opts.columnOpts = o4.columnOpts;
+        if (hadColumnOpts !== !!this.opts.columnOpts)
+          this._updateResizeEvent();
+        this.checkDynamicColumn();
+      } else if (o4.columnOpts === null && this.opts.columnOpts) {
+        delete this.opts.columnOpts;
+        this._updateResizeEvent();
+      } else if (typeof o4.column === "number")
+        this.column(o4.column);
+      if (o4.margin !== void 0)
+        this.margin(o4.margin);
+      if (o4.staticGrid !== void 0)
+        this.setStatic(o4.staticGrid);
+      if (o4.disableDrag !== void 0 && !o4.staticGrid)
+        this.enableMove(!o4.disableDrag);
+      if (o4.disableResize !== void 0 && !o4.staticGrid)
+        this.enableResize(!o4.disableResize);
+      if (o4.float !== void 0)
+        this.float(o4.float);
+      if (o4.row !== void 0) {
+        opts.minRow = opts.maxRow = opts.row = o4.row;
+        this._updateContainerHeight();
+      } else {
+        if (o4.minRow !== void 0) {
+          opts.minRow = o4.minRow;
+          this._updateContainerHeight();
+        }
+        if (o4.maxRow !== void 0)
+          opts.maxRow = this.engine.maxRow = o4.maxRow;
+      }
+      if (o4.lazyLoad !== void 0)
+        opts.lazyLoad = o4.lazyLoad;
+      if (o4.children?.length)
+        this.load(o4.children);
+      return this;
+    }
+    /**
+     * Updates widget position/size and other info. This is used to change widget properties after creation.
+     * Can update position, size, content, and other widget properties.
+     *
+     * Note: If you need to call this on all nodes, use load() instead which will update what changed.
+     * Setting the same x,y for multiple items will be indeterministic and likely unwanted.
+     *
+     * @param els widget element(s) or selector to modify
+     * @param opt new widget options (x,y,w,h, etc.). Only those set will be updated.
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Update widget size and position
+     * grid.update('.my-widget', { x: 2, y: 1, w: 3, h: 2 });
+     *
+     * // Update widget content
+     * grid.update(widget, { content: '<p>New content</p>' });
+     *
+     * // Update multiple properties
+     * grid.update('#my-widget', {
+     *   w: 4,
+     *   h: 3,
+     *   noResize: true,
+     *   locked: true
+     * });
+     */
+    update(els, opt) {
+      _GridStack.getElements(els).forEach((el) => {
+        const n3 = el?.gridstackNode;
+        if (!n3)
+          return;
+        const w5 = { ...Utils.copyPos({}, n3), ...Utils.cloneDeep(opt) };
+        this.engine.nodeBoundFix(w5);
+        delete w5.autoPosition;
+        const keys = ["x", "y", "w", "h"];
+        let m4;
+        if (keys.some((k3) => w5[k3] !== void 0 && w5[k3] !== n3[k3])) {
+          m4 = {};
+          keys.forEach((k3) => {
+            m4[k3] = w5[k3] !== void 0 ? w5[k3] : n3[k3];
+            delete w5[k3];
+          });
+        }
+        if (!m4 && (w5.minW || w5.minH || w5.maxW || w5.maxH)) {
+          m4 = {};
+        }
+        if (w5.content !== void 0) {
+          const itemContent = el.querySelector(".grid-stack-item-content");
+          if (itemContent && itemContent.textContent !== w5.content) {
+            n3.content = w5.content;
+            _GridStack.renderCB(itemContent, w5);
+            if (n3.subGrid?.el) {
+              itemContent.appendChild(n3.subGrid.el);
+              n3.subGrid._updateContainerHeight();
+            }
+          }
+          delete w5.content;
+        }
+        let changed = false;
+        let ddChanged = false;
+        for (const key in w5) {
+          if (key[0] !== "_" && n3[key] !== w5[key]) {
+            n3[key] = w5[key];
+            changed = true;
+            ddChanged = ddChanged || !this.opts.staticGrid && (key === "noResize" || key === "noMove" || key === "locked");
+          }
+        }
+        Utils.sanitizeMinMax(n3);
+        if (m4) {
+          const widthChanged = m4.w !== void 0 && m4.w !== n3.w;
+          this.moveNode(n3, m4);
+          if (widthChanged && n3.subGrid) {
+            n3.subGrid.onResize(this.hasAnimationCSS() ? n3.w : void 0);
+          } else {
+            this.resizeToContentCheck(widthChanged, n3);
+          }
+          delete n3._orig;
+        }
+        if (m4 || changed) {
+          this._writeAttr(el, n3);
+        }
+        if (ddChanged) {
+          this.prepareDragDrop(n3.el);
+        }
+        if (_GridStack.updateCB)
+          _GridStack.updateCB(n3);
+      });
+      return this;
+    }
+    moveNode(n3, m4) {
+      const wasUpdating = n3._updating;
+      if (!wasUpdating)
+        this.engine.cleanNodes().beginUpdate(n3);
+      this.engine.moveNode(n3, m4);
+      this._updateContainerHeight();
+      if (!wasUpdating) {
+        this._triggerChangeEvent();
+        this.engine.endUpdate();
+      }
+    }
+    /**
+     * Updates widget height to match the content height to avoid vertical scrollbars or dead space.
+     * This automatically adjusts the widget height based on its content size.
+     *
+     * Note: This assumes only 1 child under resizeToContentParent='.grid-stack-item-content'
+     * (sized to gridItem minus padding) that represents the entire content size.
+     *
+     * @param el the grid item element to resize
+     *
+     * @example
+     * // Resize a widget to fit its content
+     * const widget = document.querySelector('.grid-stack-item');
+     * grid.resizeToContent(widget);
+     *
+     * // This is commonly used with dynamic content:
+     * widget.querySelector('.content').innerHTML = 'New longer content...';
+     * grid.resizeToContent(widget);
+     */
+    resizeToContent(el) {
+      if (!el)
+        return;
+      el.classList.remove("size-to-content-max");
+      if (!el.clientHeight)
+        return;
+      const n3 = el.gridstackNode;
+      if (!n3)
+        return;
+      const grid = n3.grid;
+      if (!grid || el.parentElement !== grid.el)
+        return;
+      const cell = grid.getCellHeight(true);
+      if (!cell)
+        return;
+      let height = n3.h ? n3.h * cell : el.clientHeight;
+      let item;
+      if (n3.resizeToContentParent)
+        item = el.querySelector(n3.resizeToContentParent);
+      if (!item)
+        item = el.querySelector(_GridStack.resizeToContentParent);
+      if (!item)
+        return;
+      const padding = el.clientHeight - item.clientHeight;
+      const itemH = n3.h ? n3.h * cell - padding : item.clientHeight;
+      let wantedH;
+      if (n3.subGrid) {
+        wantedH = n3.subGrid.getRow() * n3.subGrid.getCellHeight(true);
+        const subRec = n3.subGrid.el.getBoundingClientRect();
+        const parentRec = el.getBoundingClientRect();
+        wantedH += subRec.top - parentRec.top;
+      } else if (n3.subGridOpts?.children?.length) {
+        return;
+      } else {
+        const child = item.firstElementChild;
+        if (!child) {
+          console.error(`Error: GridStack.resizeToContent() widget id:${n3.id} '${_GridStack.resizeToContentParent}'.firstElementChild is null, make sure to have a div like container. Skipping sizing.`);
+          return;
+        }
+        wantedH = child.getBoundingClientRect().height || itemH;
+      }
+      if (itemH === wantedH)
+        return;
+      height += wantedH - itemH;
+      let h5 = Math.ceil(height / cell);
+      const softMax = Number.isInteger(n3.sizeToContent) ? n3.sizeToContent : 0;
+      if (softMax && h5 > softMax) {
+        h5 = softMax;
+        el.classList.add("size-to-content-max");
+      }
+      if (n3.minH && h5 < n3.minH)
+        h5 = n3.minH;
+      else if (n3.maxH && h5 > n3.maxH)
+        h5 = n3.maxH;
+      if (h5 !== n3.h) {
+        grid._ignoreLayoutsNodeChange = true;
+        grid.moveNode(n3, { h: h5 });
+        delete grid._ignoreLayoutsNodeChange;
+      }
+    }
+    /** call the user resize (so they can do extra work) else our build in version */
+    resizeToContentCBCheck(el) {
+      if (_GridStack.resizeToContentCB)
+        _GridStack.resizeToContentCB(el);
+      else
+        this.resizeToContent(el);
+    }
+    /**
+     * Rotate widgets by swapping their width and height. This is typically called when the user presses 'r' during dragging.
+     * The rotation swaps the w/h dimensions and adjusts min/max constraints accordingly.
+     *
+     * @param els widget element(s) or selector to rotate
+     * @param relative optional pixel coordinate relative to upper/left corner to rotate around (keeps that cell under cursor)
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Rotate a specific widget
+     * grid.rotate('.my-widget');
+     *
+     * // Rotate with relative positioning during drag
+     * grid.rotate(widget, { left: 50, top: 30 });
+     */
+    rotate(els, relative) {
+      _GridStack.getElements(els).forEach((el) => {
+        const n3 = el.gridstackNode;
+        if (!Utils.canBeRotated(n3))
+          return;
+        const rot = { w: n3.h, h: n3.w, minH: n3.minW, minW: n3.minH, maxH: n3.maxW, maxW: n3.maxH };
+        if (relative) {
+          const pivotX = relative.left > 0 ? Math.floor(relative.left / this.cellWidth()) : 0;
+          const pivotY = relative.top > 0 ? Math.floor(relative.top / this.opts.cellHeight) : 0;
+          rot.x = n3.x + pivotX - (n3.h - (pivotY + 1));
+          rot.y = n3.y + pivotY - pivotX;
+        }
+        Object.keys(rot).forEach((k3) => {
+          if (rot[k3] === void 0)
+            delete rot[k3];
+        });
+        const _orig = n3._orig;
+        this.update(el, rot);
+        n3._orig = _orig;
+      });
+      return this;
+    }
+    /**
+     * Updates the margins which will set all 4 sides at once - see `GridStackOptions.margin` for format options.
+     * Supports CSS string format of 1, 2, or 4 values or a single number.
+     *
+     * @param value margin value - can be:
+     *   - Single number: `10` (applies to all sides)
+     *   - Two values: `'10px 20px'` (top/bottom, left/right)
+     *   - Four values: `'10px 20px 5px 15px'` (top, right, bottom, left)
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * grid.margin(10);           // 10px all sides
+     * grid.margin('10px 20px');  // 10px top/bottom, 20px left/right
+     * grid.margin('5px 10px 15px 20px'); // Different for each side
+     */
+    margin(value) {
+      const isMultiValue = typeof value === "string" && value.split(" ").length > 1;
+      if (!isMultiValue) {
+        const data = Utils.parseHeight(value);
+        if (this.opts.marginUnit === data.unit && this.opts.margin === data.h)
+          return;
+      }
+      this.opts.margin = value;
+      this.opts.marginTop = this.opts.marginBottom = this.opts.marginLeft = this.opts.marginRight = void 0;
+      this._initMargin();
+      return this;
+    }
+    /**
+     * Returns the current margin value as a number (undefined if the 4 sides don't match).
+     * This only returns a number if all sides have the same margin value.
+     *
+     * @returns the margin value in pixels, or undefined if sides have different values
+     *
+     * @example
+     * const margin = grid.getMargin();
+     * if (margin !== undefined) {
+     *   console.log('Uniform margin:', margin, 'px');
+     * } else {
+     *   console.log('Margins are different on different sides');
+     * }
+     */
+    getMargin() {
+      return this.opts.margin;
+    }
+    /**
+     * Returns true if the height of the grid will be less than the vertical
+     * constraint. Always returns true if grid doesn't have height constraint.
+     * @param node contains x,y,w,h,auto-position options
+     *
+     * @example
+     * if (grid.willItFit(newWidget)) {
+     *   grid.addWidget(newWidget);
+     * } else {
+     *   alert('Not enough free space to place the widget');
+     * }
+     */
+    willItFit(node) {
+      return this.engine.willItFit(node);
+    }
+    /** @internal */
+    _triggerChangeEvent() {
+      if (this.engine.batchMode)
+        return this;
+      const elements = this.engine.getDirtyNodes(true);
+      if (elements && elements.length) {
+        if (!this._ignoreLayoutsNodeChange) {
+          this.engine.layoutsNodesChange(elements);
+        }
+        this._triggerEvent("change", elements);
+      }
+      this.engine.saveInitial();
+      return this;
+    }
+    /** @internal */
+    _triggerAddEvent() {
+      if (this.engine.batchMode)
+        return this;
+      if (this.engine.addedNodes?.length) {
+        if (!this._ignoreLayoutsNodeChange) {
+          this.engine.layoutsNodesChange(this.engine.addedNodes);
+        }
+        this.engine.addedNodes.forEach((n3) => {
+          delete n3._dirty;
+        });
+        const addedNodes = [...this.engine.addedNodes];
+        this.engine.addedNodes = [];
+        this._triggerEvent("added", addedNodes);
+      }
+      return this;
+    }
+    /** @internal */
+    _triggerRemoveEvent() {
+      if (this.engine.batchMode)
+        return this;
+      if (this.engine.removedNodes?.length) {
+        const removedNodes = [...this.engine.removedNodes];
+        this.engine.removedNodes = [];
+        this._triggerEvent("removed", removedNodes);
+      }
+      return this;
+    }
+    /** @internal */
+    _triggerEvent(type, data) {
+      const event = data ? new CustomEvent(type, { bubbles: false, detail: data }) : new Event(type);
+      let grid = this;
+      while (grid.parentGridNode)
+        grid = grid.parentGridNode.grid;
+      grid.el.dispatchEvent(event);
+      return this;
+    }
+    /** @internal */
+    _updateContainerHeight() {
+      if (!this.engine || this.engine.batchMode)
+        return this;
+      const parent = this.parentGridNode;
+      let row = this.getRow() + this._extraDragRow;
+      const cellHeight = this.opts.cellHeight;
+      const unit = this.opts.cellHeightUnit;
+      if (!cellHeight)
+        return this;
+      if (!parent && !this.opts.minRow) {
+        const cssMinHeight = Utils.parseHeight(getComputedStyle(this.el)["minHeight"]);
+        if (cssMinHeight.h > 0 && cssMinHeight.unit === unit) {
+          const minRow = Math.floor(cssMinHeight.h / cellHeight);
+          if (row < minRow) {
+            row = minRow;
+          }
+        }
+      }
+      this.el.setAttribute("gs-current-row", String(row));
+      this.el.style.removeProperty("min-height");
+      this.el.style.removeProperty("height");
+      if (row) {
+        this.el.style[parent ? "minHeight" : "height"] = row * cellHeight + unit;
+      }
+      if (parent && Utils.shouldSizeToContent(parent)) {
+        parent.grid.resizeToContentCBCheck(parent.el);
+      }
+      return this;
+    }
+    /** @internal */
+    _prepareElement(el, triggerAddEvent = false, node) {
+      node = node || this._readAttr(el);
+      el.gridstackNode = node;
+      node.el = el;
+      node.grid = this;
+      node = this.engine.addNode(node, triggerAddEvent);
+      this._writeAttr(el, node);
+      el.classList.add(gridDefaults.itemClass, this.opts.itemClass);
+      const sizeToContent = Utils.shouldSizeToContent(node);
+      sizeToContent ? el.classList.add("size-to-content") : el.classList.remove("size-to-content");
+      if (sizeToContent)
+        this.resizeToContentCheck(false, node);
+      if (!Utils.lazyLoad(node))
+        this.prepareDragDrop(node.el);
+      return this;
+    }
+    /** @internal write position CSS vars and x,y,w,h attributes (not used for CSS but by users) back to element */
+    _writePosAttr(el, n3) {
+      if (!n3._moving && !n3._resizing || this._placeholder === el) {
+        const xProp = this.opts.rtl ? "right" : "left";
+        el.style.top = n3.y ? n3.y === 1 ? `var(--gs-cell-height)` : `calc(${n3.y} * var(--gs-cell-height))` : null;
+        el.style[xProp] = n3.x ? n3.x === 1 ? `var(--gs-column-width)` : `calc(${n3.x} * var(--gs-column-width))` : null;
+        el.style.width = n3.w > 1 ? `calc(${n3.w} * var(--gs-column-width))` : null;
+        el.style.height = n3.h > 1 ? `calc(${n3.h} * var(--gs-cell-height))` : null;
+      }
+      el.setAttribute("gs-x", String(n3.x));
+      el.setAttribute("gs-y", String(n3.y));
+      n3.w > 1 ? el.setAttribute("gs-w", String(n3.w)) : el.removeAttribute("gs-w");
+      n3.h > 1 ? el.setAttribute("gs-h", String(n3.h)) : el.removeAttribute("gs-h");
+      return this;
+    }
+    /** @internal call to write any default attributes back to element */
+    _writeAttr(el, node) {
+      if (!node)
+        return this;
+      this._writePosAttr(el, node);
+      const attrs = {
+        // autoPosition: 'gs-auto-position', // no need to write out as already in node and doesn't affect CSS
+        noResize: "gs-no-resize",
+        noMove: "gs-no-move",
+        locked: "gs-locked",
+        id: "gs-id",
+        sizeToContent: "gs-size-to-content"
+      };
+      for (const key in attrs) {
+        if (node[key]) {
+          el.setAttribute(attrs[key], String(node[key]));
+        } else {
+          el.removeAttribute(attrs[key]);
+        }
+      }
+      return this;
+    }
+    /** @internal call to read any default attributes from element */
+    _readAttr(el, clearDefaultAttr = true) {
+      const n3 = {};
+      n3.x = Utils.toNumber(el.getAttribute("gs-x"));
+      n3.y = Utils.toNumber(el.getAttribute("gs-y"));
+      n3.w = Utils.toNumber(el.getAttribute("gs-w"));
+      n3.h = Utils.toNumber(el.getAttribute("gs-h"));
+      n3.autoPosition = Utils.toBool(el.getAttribute("gs-auto-position"));
+      n3.noResize = Utils.toBool(el.getAttribute("gs-no-resize"));
+      n3.noMove = Utils.toBool(el.getAttribute("gs-no-move"));
+      n3.locked = Utils.toBool(el.getAttribute("gs-locked"));
+      const attr = el.getAttribute("gs-size-to-content");
+      if (attr) {
+        if (attr === "true" || attr === "false")
+          n3.sizeToContent = Utils.toBool(attr);
+        else
+          n3.sizeToContent = parseInt(attr, 10);
+      }
+      n3.id = el.getAttribute("gs-id");
+      n3.maxW = Utils.toNumber(el.getAttribute("gs-max-w"));
+      n3.minW = Utils.toNumber(el.getAttribute("gs-min-w"));
+      n3.maxH = Utils.toNumber(el.getAttribute("gs-max-h"));
+      n3.minH = Utils.toNumber(el.getAttribute("gs-min-h"));
+      if (clearDefaultAttr) {
+        if (n3.w === 1)
+          el.removeAttribute("gs-w");
+        if (n3.h === 1)
+          el.removeAttribute("gs-h");
+        if (n3.maxW)
+          el.removeAttribute("gs-max-w");
+        if (n3.minW)
+          el.removeAttribute("gs-min-w");
+        if (n3.maxH)
+          el.removeAttribute("gs-max-h");
+        if (n3.minH)
+          el.removeAttribute("gs-min-h");
+      }
+      for (const key in n3) {
+        if (!n3.hasOwnProperty(key))
+          return;
+        if (!n3[key] && n3[key] !== 0 && key !== "sizeToContent") {
+          delete n3[key];
+        }
+      }
+      return n3;
+    }
+    /** @internal */
+    _setStaticClass() {
+      const classes = ["grid-stack-static"];
+      if (this.opts.staticGrid) {
+        this.el.classList.add(...classes);
+        this.el.setAttribute("gs-static", "true");
+      } else {
+        this.el.classList.remove(...classes);
+        this.el.removeAttribute("gs-static");
+      }
+      return this;
+    }
+    /**
+     * called when we are being resized - check if the one Column Mode needs to be turned on/off
+     * and remember the prev columns we used, or get our count from parent, as well as check for cellHeight==='auto' (square)
+     * or `sizeToContent` gridItem options.
+     */
+    onResize(clientWidth = this.el?.clientWidth) {
+      if (!clientWidth)
+        return;
+      if (this.prevWidth === clientWidth)
+        return;
+      this.prevWidth = clientWidth;
+      this.batchUpdate();
+      let columnChanged = false;
+      if (this._autoColumn && this.parentGridNode) {
+        if (this.opts.column !== this.parentGridNode.w) {
+          this.column(this.parentGridNode.w, this.opts.layout || "list");
+          columnChanged = true;
+        }
+      } else {
+        columnChanged = this.checkDynamicColumn();
+      }
+      if (this._isAutoCellHeight)
+        this.cellHeight();
+      this.engine.nodes.forEach((n3) => {
+        if (n3.subGrid)
+          n3.subGrid.onResize();
+      });
+      if (!this._skipInitialResize)
+        this.resizeToContentCheck(columnChanged);
+      delete this._skipInitialResize;
+      this.batchUpdate(false);
+      return this;
+    }
+    /** resizes content for given node (or all) if shouldSizeToContent() is true */
+    resizeToContentCheck(delay = false, n3 = void 0) {
+      if (!this.engine)
+        return;
+      if (delay && this.hasAnimationCSS())
+        return setTimeout(() => this.resizeToContentCheck(false, n3), this.animationDelay);
+      if (n3) {
+        if (Utils.shouldSizeToContent(n3))
+          this.resizeToContentCBCheck(n3.el);
+      } else if (this.engine.nodes.some((n4) => Utils.shouldSizeToContent(n4))) {
+        const nodes = [...this.engine.nodes];
+        this.batchUpdate();
+        nodes.forEach((n4) => {
+          if (Utils.shouldSizeToContent(n4))
+            this.resizeToContentCBCheck(n4.el);
+        });
+        this._ignoreLayoutsNodeChange = true;
+        this.batchUpdate(false);
+        this._ignoreLayoutsNodeChange = false;
+      }
+      if (this._gsEventHandler["resizecontent"])
+        this._gsEventHandler["resizecontent"](null, n3 ? [n3] : this.engine.nodes);
+    }
+    /** add or remove the grid element size event handler */
+    _updateResizeEvent(forceRemove = false) {
+      const trackSize = !this.parentGridNode && (this._isAutoCellHeight || this.opts.sizeToContent || this.opts.columnOpts || this.engine.nodes.find((n3) => n3.sizeToContent));
+      if (!forceRemove && trackSize && !this.resizeObserver) {
+        this._sizeThrottle = Utils.throttle(() => this.onResize(), this.opts.cellHeightThrottle);
+        this.resizeObserver = new ResizeObserver(() => this._sizeThrottle());
+        this.resizeObserver.observe(this.el);
+        this._skipInitialResize = true;
+      } else if ((forceRemove || !trackSize) && this.resizeObserver) {
+        this.resizeObserver.disconnect();
+        delete this.resizeObserver;
+        delete this._sizeThrottle;
+      }
+      return this;
+    }
+    /** @internal convert a potential selector into actual element */
+    static getElement(els = ".grid-stack-item") {
+      return Utils.getElement(els);
+    }
+    /** @internal */
+    static getElements(els = ".grid-stack-item") {
+      return Utils.getElements(els);
+    }
+    /** @internal */
+    static getGridElement(els) {
+      return _GridStack.getElement(els);
+    }
+    /** @internal */
+    static getGridElements(els) {
+      return Utils.getElements(els);
+    }
+    /** @internal initialize margin top/bottom/left/right and units */
+    _initMargin() {
+      let data;
+      let margin = 0;
+      let margins = [];
+      if (typeof this.opts.margin === "string") {
+        margins = this.opts.margin.split(" ");
+      }
+      if (margins.length === 2) {
+        this.opts.marginTop = this.opts.marginBottom = margins[0];
+        this.opts.marginLeft = this.opts.marginRight = margins[1];
+      } else if (margins.length === 4) {
+        this.opts.marginTop = margins[0];
+        this.opts.marginRight = margins[1];
+        this.opts.marginBottom = margins[2];
+        this.opts.marginLeft = margins[3];
+      } else {
+        data = Utils.parseHeight(this.opts.margin);
+        this.opts.marginUnit = data.unit;
+        margin = this.opts.margin = data.h;
+      }
+      const keys = ["marginTop", "marginRight", "marginBottom", "marginLeft"];
+      keys.forEach((k3) => {
+        if (this.opts[k3] === void 0) {
+          this.opts[k3] = margin;
+        } else {
+          data = Utils.parseHeight(this.opts[k3]);
+          this.opts[k3] = data.h;
+          delete this.opts.margin;
+        }
+      });
+      this.opts.marginUnit = data.unit;
+      if (this.opts.marginTop === this.opts.marginBottom && this.opts.marginLeft === this.opts.marginRight && this.opts.marginTop === this.opts.marginRight) {
+        this.opts.margin = this.opts.marginTop;
+      }
+      const style = this.el.style;
+      style.setProperty("--gs-item-margin-top", `${this.opts.marginTop}${this.opts.marginUnit}`);
+      style.setProperty("--gs-item-margin-bottom", `${this.opts.marginBottom}${this.opts.marginUnit}`);
+      style.setProperty("--gs-item-margin-right", `${this.opts.marginRight}${this.opts.marginUnit}`);
+      style.setProperty("--gs-item-margin-left", `${this.opts.marginLeft}${this.opts.marginUnit}`);
+      return this;
+    }
+    /* ===========================================================================================
+     * drag&drop methods that used to be stubbed out and implemented in dd-gridstack.ts
+     * but caused loading issues in prod - see https://github.com/gridstack/gridstack.js/issues/2039
+     * ===========================================================================================
+     */
+    /**
+     * Get the global drag & drop implementation instance.
+     * This provides access to the underlying drag & drop functionality.
+     *
+     * @returns the DDGridStack instance used for drag & drop operations
+     *
+     * @example
+     * const dd = GridStack.getDD();
+     * // Access drag & drop functionality
+     */
+    static getDD() {
+      return dd;
+    }
+    /**
+     * call to setup dragging in from the outside (say toolbar), by specifying the class selection and options.
+     * Called during GridStack.init() as options, but can also be called directly (last param are used) in case the toolbar
+     * is dynamically create and needs to be set later.
+     * @param dragIn string selector (ex: '.sidebar-item') or list of dom elements
+     * @param dragInOptions options - see DDDragOpt. (default: {handle: '.grid-stack-item-content', appendTo: 'body'}
+     * @param widgets GridStackWidget def to assign to each element which defines what to create on drop
+     * @param root optional root which defaults to document (for shadow dom pass the parent HTMLDocument)
+     */
+    static setupDragIn(dragIn, dragInOptions, widgets, root = document) {
+      if (dragInOptions?.pause !== void 0) {
+        DDManager.pauseDrag = dragInOptions.pause;
+      }
+      dragInOptions = { appendTo: "body", helper: "clone", ...dragInOptions || {} };
+      const els = typeof dragIn === "string" ? Utils.getElements(dragIn, root) : dragIn;
+      els.forEach((el, i4) => {
+        if (!dd.isDraggable(el))
+          dd.dragIn(el, dragInOptions);
+        if (widgets?.[i4])
+          el.gridstackNode = widgets[i4];
+      });
+    }
+    /**
+     * Enables/Disables dragging by the user for specific grid elements.
+     * For all items and future items, use enableMove() instead. No-op for static grids.
+     *
+     * Note: If you want to prevent an item from moving due to being pushed around by another
+     * during collision, use the 'locked' property instead.
+     *
+     * @param els widget element(s) or selector to modify
+     * @param val if true widget will be draggable, assuming the parent grid isn't noMove or static
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Make specific widgets draggable
+     * grid.movable('.my-widget', true);
+     *
+     * // Disable dragging for specific widgets
+     * grid.movable('#fixed-widget', false);
+     */
+    movable(els, val) {
+      if (this.opts.staticGrid)
+        return this;
+      _GridStack.getElements(els).forEach((el) => {
+        const n3 = el.gridstackNode;
+        if (!n3)
+          return;
+        val ? delete n3.noMove : n3.noMove = true;
+        this.prepareDragDrop(n3.el);
+      });
+      return this;
+    }
+    /**
+     * Enables/Disables user resizing for specific grid elements.
+     * For all items and future items, use enableResize() instead. No-op for static grids.
+     *
+     * @param els widget element(s) or selector to modify
+     * @param val if true widget will be resizable, assuming the parent grid isn't noResize or static
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Make specific widgets resizable
+     * grid.resizable('.my-widget', true);
+     *
+     * // Disable resizing for specific widgets
+     * grid.resizable('#fixed-size-widget', false);
+     */
+    resizable(els, val) {
+      if (this.opts.staticGrid)
+        return this;
+      _GridStack.getElements(els).forEach((el) => {
+        const n3 = el.gridstackNode;
+        if (!n3)
+          return;
+        val ? delete n3.noResize : n3.noResize = true;
+        this.prepareDragDrop(n3.el);
+      });
+      return this;
+    }
+    /**
+     * Temporarily disables widgets moving/resizing.
+     * If you want a more permanent way (which freezes up resources) use `setStatic(true)` instead.
+     *
+     * Note: This is a no-op for static grids.
+     *
+     * This is a shortcut for:
+     * ```typescript
+     * grid.enableMove(false);
+     * grid.enableResize(false);
+     * ```
+     *
+     * @param recurse if true (default), sub-grids also get updated
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Disable all interactions
+     * grid.disable();
+     *
+     * // Disable only this grid, not sub-grids
+     * grid.disable(false);
+     */
+    disable(recurse = true) {
+      if (this.opts.staticGrid)
+        return;
+      this.enableMove(false, recurse);
+      this.enableResize(false, recurse);
+      this._triggerEvent("disable");
+      return this;
+    }
+    /**
+     * Re-enables widgets moving/resizing - see disable().
+     * Note: This is a no-op for static grids.
+     *
+     * This is a shortcut for:
+     * ```typescript
+     * grid.enableMove(true);
+     * grid.enableResize(true);
+     * ```
+     *
+     * @param recurse if true (default), sub-grids also get updated
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Re-enable all interactions
+     * grid.enable();
+     *
+     * // Enable only this grid, not sub-grids
+     * grid.enable(false);
+     */
+    enable(recurse = true) {
+      if (this.opts.staticGrid)
+        return;
+      this.enableMove(true, recurse);
+      this.enableResize(true, recurse);
+      this._triggerEvent("enable");
+      return this;
+    }
+    /**
+     * Enables/disables widget moving for all widgets. No-op for static grids.
+     * Note: locally defined items (with noMove property) still override this setting.
+     *
+     * @param doEnable if true widgets will be movable, if false moving is disabled
+     * @param recurse if true (default), sub-grids also get updated
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Enable moving for all widgets
+     * grid.enableMove(true);
+     *
+     * // Disable moving for all widgets
+     * grid.enableMove(false);
+     *
+     * // Enable only this grid, not sub-grids
+     * grid.enableMove(true, false);
+     */
+    enableMove(doEnable, recurse = true) {
+      if (this.opts.staticGrid)
+        return this;
+      doEnable ? delete this.opts.disableDrag : this.opts.disableDrag = true;
+      this.engine.nodes.forEach((n3) => {
+        this.prepareDragDrop(n3.el);
+        if (n3.subGrid && recurse)
+          n3.subGrid.enableMove(doEnable, recurse);
+      });
+      return this;
+    }
+    /**
+     * Enables/disables widget resizing for all widgets. No-op for static grids.
+     * Note: locally defined items (with noResize property) still override this setting.
+     *
+     * @param doEnable if true widgets will be resizable, if false resizing is disabled
+     * @param recurse if true (default), sub-grids also get updated
+     * @returns the grid instance for chaining
+     *
+     * @example
+     * // Enable resizing for all widgets
+     * grid.enableResize(true);
+     *
+     * // Disable resizing for all widgets
+     * grid.enableResize(false);
+     *
+     * // Enable only this grid, not sub-grids
+     * grid.enableResize(true, false);
+     */
+    enableResize(doEnable, recurse = true) {
+      if (this.opts.staticGrid)
+        return this;
+      doEnable ? delete this.opts.disableResize : this.opts.disableResize = true;
+      this.engine.nodes.forEach((n3) => {
+        this.prepareDragDrop(n3.el);
+        if (n3.subGrid && recurse)
+          n3.subGrid.enableResize(doEnable, recurse);
+      });
+      return this;
+    }
+    /** @internal call when drag (and drop) needs to be cancelled (Esc key) */
+    cancelDrag() {
+      const n3 = this._placeholder?.gridstackNode;
+      if (!n3)
+        return;
+      if (n3._isExternal) {
+        n3._isAboutToRemove = true;
+        this.engine.removeNode(n3);
+      } else if (n3._isAboutToRemove) {
+        _GridStack._itemRemoving(n3.el, false);
+      }
+      this.engine.restoreInitial();
+    }
+    /** @internal removes any drag&drop present (called during destroy) */
+    _removeDD(el) {
+      dd.draggable(el, "destroy").resizable(el, "destroy");
+      if (el.gridstackNode) {
+        delete el.gridstackNode._initDD;
+      }
+      delete el.ddElement;
+      return this;
+    }
+    /** @internal called to add drag over to support widgets being added externally */
+    _setupAcceptWidget() {
+      if (this.opts.staticGrid || !this.opts.acceptWidgets && !this.opts.removable) {
+        dd.droppable(this.el, "destroy");
+        return this;
+      }
+      let cellHeight, cellWidth;
+      const onDrag = (event, el, helper) => {
+        helper = helper || el;
+        const node = helper.gridstackNode;
+        if (!node)
+          return;
+        if (!node.grid?.el) {
+          helper.style.transform = `scale(${1 / this.dragTransform.xScale},${1 / this.dragTransform.yScale})`;
+          const helperRect = helper.getBoundingClientRect();
+          helper.style.left = helperRect.x + (this.dragTransform.xScale - 1) * (event.clientX - helperRect.x) / this.dragTransform.xScale + "px";
+          helper.style.top = helperRect.y + (this.dragTransform.yScale - 1) * (event.clientY - helperRect.y) / this.dragTransform.yScale + "px";
+          helper.style.transformOrigin = `0px 0px`;
+        }
+        let { top, left } = helper.getBoundingClientRect();
+        const rect = this.el.getBoundingClientRect();
+        left -= rect.left;
+        top -= rect.top;
+        const ui = {
+          position: {
+            top: top * this.dragTransform.xScale,
+            left: left * this.dragTransform.yScale
+          }
+        };
+        if (node._temporaryRemoved) {
+          node.x = Math.max(0, Math.round(left / cellWidth));
+          node.y = Math.max(0, Math.round(top / cellHeight));
+          delete node.autoPosition;
+          this.engine.nodeBoundFix(node);
+          if (!this.engine.willItFit(node)) {
+            node.autoPosition = true;
+            if (!this.engine.willItFit(node)) {
+              dd.off(el, "drag");
+              return;
+            }
+            if (node._willFitPos) {
+              Utils.copyPos(node, node._willFitPos);
+              delete node._willFitPos;
+            }
+          }
+          this._onStartMoving(helper, event, ui, node, cellWidth, cellHeight);
+        } else {
+          this._dragOrResize(helper, event, ui, node, cellWidth, cellHeight);
+        }
+      };
+      dd.droppable(this.el, {
+        accept: (el) => {
+          const node = el.gridstackNode || this._readAttr(el, false);
+          if (node?.grid === this)
+            return true;
+          if (!this.opts.acceptWidgets)
+            return false;
+          let canAccept = true;
+          if (typeof this.opts.acceptWidgets === "function") {
+            canAccept = this.opts.acceptWidgets(el);
+          } else {
+            const selector = this.opts.acceptWidgets === true ? ".grid-stack-item" : this.opts.acceptWidgets;
+            canAccept = el.matches(selector);
+          }
+          if (canAccept && node && this.opts.maxRow) {
+            const n3 = { w: node.w, h: node.h, minW: node.minW, minH: node.minH };
+            canAccept = this.engine.willItFit(n3);
+          }
+          return canAccept;
+        }
+      }).on(this.el, "dropover", (event, el, helper) => {
+        let node = helper?.gridstackNode || el.gridstackNode;
+        if (node?.grid === this && !node._temporaryRemoved) {
+          return false;
+        }
+        if (node?._sidebarOrig) {
+          node.w = node._sidebarOrig.w;
+          node.h = node._sidebarOrig.h;
+        }
+        if (node?.grid && node.grid !== this && !node._temporaryRemoved) {
+          const otherGrid = node.grid;
+          otherGrid._leave(el, helper);
+        }
+        helper = helper || el;
+        cellWidth = this.cellWidth();
+        cellHeight = this.getCellHeight(true);
+        if (!node) {
+          const attr = helper.getAttribute("data-gs-widget") || helper.getAttribute("gridstacknode");
+          if (attr) {
+            try {
+              node = JSON.parse(attr);
+            } catch (error) {
+              console.error("Gridstack dropover: Bad JSON format: ", attr);
+            }
+            helper.removeAttribute("data-gs-widget");
+            helper.removeAttribute("gridstacknode");
+          }
+          if (!node)
+            node = this._readAttr(helper);
+          node._sidebarOrig = { w: node.w, h: node.h };
+        }
+        if (!node.grid) {
+          if (!node.el)
+            node = { ...node };
+          node._isExternal = true;
+          helper.gridstackNode = node;
+        }
+        const w5 = node.w || Math.round(helper.offsetWidth / cellWidth) || 1;
+        const h5 = node.h || Math.round(helper.offsetHeight / cellHeight) || 1;
+        if (node.grid && node.grid !== this) {
+          if (!el._gridstackNodeOrig)
+            el._gridstackNodeOrig = node;
+          el.gridstackNode = node = { ...node, w: w5, h: h5, grid: this };
+          delete node.x;
+          delete node.y;
+          this.engine.cleanupNode(node).nodeBoundFix(node);
+          node._initDD = node._isExternal = // DOM needs to be re-parented on a drop
+          node._temporaryRemoved = true;
+        } else {
+          node.w = w5;
+          node.h = h5;
+          node._temporaryRemoved = true;
+        }
+        _GridStack._itemRemoving(node.el, false);
+        dd.on(el, "drag", onDrag);
+        onDrag(event, el, helper);
+        return false;
+      }).on(this.el, "dropout", (event, el, helper) => {
+        const node = helper?.gridstackNode || el.gridstackNode;
+        if (!node)
+          return false;
+        if (!node.grid || node.grid === this) {
+          this._leave(el, helper);
+          if (this._isTemp) {
+            this.removeAsSubGrid(node);
+          }
+        }
+        return false;
+      }).on(this.el, "drop", (event, el, helper) => {
+        const node = helper?.gridstackNode || el.gridstackNode;
+        if (node?.grid === this && !node._isExternal)
+          return false;
+        const wasAdded = !!this.placeholder.parentElement;
+        const wasSidebar = el !== helper;
+        this.placeholder.remove();
+        delete this.placeholder.gridstackNode;
+        if (wasAdded && this.opts.animate) {
+          this.setAnimation(false);
+          this.setAnimation(true, true);
+        }
+        const origNode = el._gridstackNodeOrig;
+        delete el._gridstackNodeOrig;
+        if (wasAdded && origNode?.grid && origNode.grid !== this) {
+          const oGrid = origNode.grid;
+          oGrid.engine.removeNodeFromLayoutCache(origNode);
+          oGrid.engine.removedNodes.push(origNode);
+          oGrid._triggerRemoveEvent()._triggerChangeEvent();
+          if (oGrid.parentGridNode && !oGrid.engine.nodes.length && oGrid.opts.subGridDynamic) {
+            oGrid.removeAsSubGrid();
+          }
+        }
+        if (!node)
+          return false;
+        if (wasAdded) {
+          this.engine.cleanupNode(node);
+          node.grid = this;
+        }
+        delete node.grid?._isTemp;
+        dd.off(el, "drag");
+        if (helper !== el) {
+          helper.remove();
+          el = helper;
+        } else {
+          el.remove();
+        }
+        this._removeDD(el);
+        if (!wasAdded)
+          return false;
+        const subGrid = node.subGrid?.el?.gridstack;
+        Utils.copyPos(node, this._readAttr(this.placeholder));
+        Utils.removePositioningStyles(el);
+        if (wasSidebar && (node.content || node.subGridOpts || _GridStack.addRemoveCB)) {
+          delete node.el;
+          el = this.addWidget(node);
+        } else {
+          this._prepareElement(el, true, node);
+          this.el.appendChild(el);
+          this.resizeToContentCheck(false, node);
+          if (subGrid) {
+            subGrid.parentGridNode = node;
+          }
+          this._updateContainerHeight();
+        }
+        this.engine.addedNodes.push(node);
+        this._triggerAddEvent();
+        this._triggerChangeEvent();
+        this.engine.endUpdate();
+        if (this._gsEventHandler["dropped"]) {
+          this._gsEventHandler["dropped"]({ ...event, type: "dropped" }, origNode && origNode.grid ? origNode : void 0, node);
+        }
+        return false;
+      });
+      return this;
+    }
+    /** @internal mark item for removal */
+    static _itemRemoving(el, remove) {
+      if (!el)
+        return;
+      const node = el ? el.gridstackNode : void 0;
+      if (!node?.grid || el.classList.contains(node.grid.opts.removableOptions.decline))
+        return;
+      remove ? node._isAboutToRemove = true : delete node._isAboutToRemove;
+      remove ? el.classList.add("grid-stack-item-removing") : el.classList.remove("grid-stack-item-removing");
+    }
+    /** @internal called to setup a trash drop zone if the user specifies it */
+    _setupRemoveDrop() {
+      if (typeof this.opts.removable !== "string")
+        return this;
+      const trashEl = document.querySelector(this.opts.removable);
+      if (!trashEl)
+        return this;
+      if (!this.opts.staticGrid && !dd.isDroppable(trashEl)) {
+        dd.droppable(trashEl, this.opts.removableOptions).on(trashEl, "dropover", (event, el) => _GridStack._itemRemoving(el, true)).on(trashEl, "dropout", (event, el) => _GridStack._itemRemoving(el, false));
+      }
+      return this;
+    }
+    /**
+     * prepares the element for drag&drop - this is normally called by makeWidget() unless are are delay loading
+     * @param el GridItemHTMLElement of the widget
+     * @param [force=false]
+     * */
+    prepareDragDrop(el, force = false) {
+      const node = el?.gridstackNode;
+      if (!node)
+        return;
+      const noMove = node.noMove || this.opts.disableDrag;
+      const noResize = node.noResize || this.opts.disableResize;
+      const disable = this.opts.staticGrid || noMove && noResize;
+      if (force || disable) {
+        if (node._initDD) {
+          this._removeDD(el);
+          delete node._initDD;
+        }
+        if (disable) {
+          el.classList.add("ui-draggable-disabled", "ui-resizable-disabled");
+          return this;
+        }
+      }
+      if (!node._initDD) {
+        let cellWidth;
+        let cellHeight;
+        const onStartMoving = (event, ui) => {
+          this.triggerEvent(event, event.target);
+          cellWidth = this.cellWidth();
+          cellHeight = this.getCellHeight(true);
+          this._onStartMoving(el, event, ui, node, cellWidth, cellHeight);
+        };
+        const dragOrResize = (event, ui) => {
+          this._dragOrResize(el, event, ui, node, cellWidth, cellHeight);
+        };
+        const onEndMoving = (event) => {
+          this.placeholder.remove();
+          delete this.placeholder.gridstackNode;
+          delete node._moving;
+          delete node._resizing;
+          delete node._event;
+          delete node._lastTried;
+          const widthChanged = node.w !== node._orig.w;
+          const target = event.target;
+          if (!target.gridstackNode || target.gridstackNode.grid !== this)
+            return;
+          node.el = target;
+          if (node._isAboutToRemove) {
+            const grid = el.gridstackNode.grid;
+            if (grid._gsEventHandler[event.type]) {
+              grid._gsEventHandler[event.type](event, target);
+            }
+            grid.engine.nodes.push(node);
+            grid.removeWidget(el, true, true);
+          } else {
+            Utils.removePositioningStyles(target);
+            if (node._temporaryRemoved) {
+              this._writePosAttr(target, node);
+              this.engine.addNode(node);
+            } else {
+              this._writePosAttr(target, node);
+            }
+            this.triggerEvent(event, target);
+          }
+          this._extraDragRow = 0;
+          this._updateContainerHeight();
+          this._triggerChangeEvent();
+          this.engine.endUpdate();
+          if (event.type === "resizestop") {
+            if (Number.isInteger(node.sizeToContent))
+              node.sizeToContent = node.h;
+            this.resizeToContentCheck(widthChanged, node);
+          }
+        };
+        dd.draggable(el, {
+          start: onStartMoving,
+          stop: onEndMoving,
+          drag: dragOrResize,
+          rtl: this.opts.rtl
+        }).resizable(el, {
+          start: onStartMoving,
+          stop: onEndMoving,
+          resize: dragOrResize,
+          rtl: this.opts.rtl
+        });
+        node._initDD = true;
+      }
+      dd.draggable(el, noMove ? "disable" : "enable").resizable(el, noResize ? "disable" : "enable");
+      return this;
+    }
+    /** @internal handles actual drag/resize start */
+    _onStartMoving(el, event, ui, node, cellWidth, cellHeight) {
+      this.engine.cleanNodes().beginUpdate(node);
+      this._writePosAttr(this.placeholder, node);
+      this.el.appendChild(this.placeholder);
+      this.placeholder.gridstackNode = node;
+      if (node.grid?.el) {
+        this.dragTransform = Utils.getValuesFromTransformedElement(el);
+      } else if (this.placeholder && this.placeholder.closest(".grid-stack")) {
+        const gridEl = this.placeholder.closest(".grid-stack");
+        this.dragTransform = Utils.getValuesFromTransformedElement(gridEl);
+      } else {
+        this.dragTransform = {
+          xScale: 1,
+          xOffset: 0,
+          yScale: 1,
+          yOffset: 0
+        };
+      }
+      node.el = this.placeholder;
+      node._lastUiPosition = ui.position;
+      node._prevYPix = ui.position.top;
+      node._moving = event.type === "dragstart";
+      node._resizing = event.type === "resizestart";
+      delete node._lastTried;
+      if (event.type === "dropover" && node._temporaryRemoved) {
+        this.engine.addNode(node);
+        node._moving = true;
+      }
+      this.engine.cacheRects(cellWidth, cellHeight, this.opts.marginTop, this.opts.marginRight, this.opts.marginBottom, this.opts.marginLeft);
+      if (event.type === "resizestart") {
+        const colLeft = this.getColumn() - node.x;
+        const rowLeft = (this.opts.maxRow || Number.MAX_SAFE_INTEGER) - node.y;
+        dd.resizable(el, "option", "minWidth", cellWidth * Math.min(node.minW || 1, colLeft)).resizable(el, "option", "minHeight", cellHeight * Math.min(node.minH || 1, rowLeft)).resizable(el, "option", "maxWidth", cellWidth * Math.min(node.maxW || Number.MAX_SAFE_INTEGER, colLeft)).resizable(el, "option", "maxWidthMoveLeft", cellWidth * Math.min(node.maxW || Number.MAX_SAFE_INTEGER, node.x + node.w)).resizable(el, "option", "maxHeight", cellHeight * Math.min(node.maxH || Number.MAX_SAFE_INTEGER, rowLeft)).resizable(el, "option", "maxHeightMoveUp", cellHeight * Math.min(node.maxH || Number.MAX_SAFE_INTEGER, node.y + node.h));
+      }
+    }
+    /** @internal handles actual drag/resize */
+    _dragOrResize(el, event, ui, node, cellWidth, cellHeight) {
+      const p5 = { ...node._orig };
+      let resizing;
+      let mLeft = this.opts.marginLeft, mRight = this.opts.marginRight, mTop = this.opts.marginTop, mBottom = this.opts.marginBottom;
+      const mHeight = Math.round(cellHeight * 0.1), mWidth = Math.round(cellWidth * 0.1);
+      mLeft = Math.min(mLeft, mWidth);
+      mRight = Math.min(mRight, mWidth);
+      mTop = Math.min(mTop, mHeight);
+      mBottom = Math.min(mBottom, mHeight);
+      if (event.type === "drag") {
+        if (node._temporaryRemoved)
+          return;
+        node._prevYPix = ui.position.top;
+        if (this.opts.draggable.scroll !== false) {
+          DDManager.dragElement?.updateScrollPosition(this.el);
+        }
+        const left = ui.position.left + (ui.position.left > node._lastUiPosition.left ? -mRight : mLeft);
+        const top = ui.position.top + (ui.position.top > node._lastUiPosition.top ? -mBottom : mTop);
+        p5.x = Math.round(left / cellWidth);
+        p5.y = Math.round(top / cellHeight);
+        const prev = this._extraDragRow;
+        if (this.engine.collide(node, p5)) {
+          const row = this.getRow();
+          let extra = Math.max(0, p5.y + node.h - row);
+          if (this.opts.maxRow && row + extra > this.opts.maxRow) {
+            extra = Math.max(0, this.opts.maxRow - row);
+          }
+          this._extraDragRow = extra;
+        } else
+          this._extraDragRow = 0;
+        if (this._extraDragRow !== prev)
+          this._updateContainerHeight();
+        if (node.x === p5.x && node.y === p5.y)
+          return;
+      } else if (event.type === "resize") {
+        if (p5.x < 0)
+          return;
+        Utils.updateScrollResize(event, el, cellHeight);
+        p5.w = Math.round((ui.size.width - mLeft) / cellWidth);
+        p5.h = Math.round((ui.size.height - mTop) / cellHeight);
+        if (node.w === p5.w && node.h === p5.h)
+          return;
+        if (node._lastTried && node._lastTried.w === p5.w && node._lastTried.h === p5.h)
+          return;
+        if (event.hasMovedX) {
+          const left = ui.position.left + mLeft;
+          p5.x = Math.round(left / cellWidth);
+        }
+        if (event.hasMovedY) {
+          const top = ui.position.top + mTop;
+          p5.y = Math.round(top / cellHeight);
+        }
+        resizing = true;
+      }
+      node._event = event;
+      node._lastTried = p5;
+      const rect = {
+        x: ui.position.left + mLeft,
+        y: ui.position.top + mTop,
+        w: (ui.size ? ui.size.width : node.w * cellWidth) - mLeft - mRight,
+        h: (ui.size ? ui.size.height : node.h * cellHeight) - mTop - mBottom
+      };
+      if (this.engine.moveNodeCheck(node, { ...p5, cellWidth, cellHeight, rect, resizing })) {
+        node._lastUiPosition = ui.position;
+        this.engine.cacheRects(cellWidth, cellHeight, mTop, mRight, mBottom, mLeft);
+        delete node._skipDown;
+        if (resizing && node.subGrid)
+          node.subGrid.onResize();
+        this._extraDragRow = 0;
+        this._updateContainerHeight();
+        const target = event.target;
+        if (!node._sidebarOrig) {
+          this._writePosAttr(target, node);
+        }
+        this.triggerEvent(event, target);
+      }
+    }
+    /** call given event callback on our main top-most grid (if we're nested) */
+    triggerEvent(event, target) {
+      let grid = this;
+      while (grid.parentGridNode)
+        grid = grid.parentGridNode.grid;
+      if (grid._gsEventHandler[event.type]) {
+        grid._gsEventHandler[event.type](event, target);
+      }
+    }
+    /** @internal called when item leaving our area by either cursor dropout event
+     * or shape is outside our boundaries. remove it from us, and mark temporary if this was
+     * our item to start with else restore prev node values from prev grid it came from.
+     */
+    _leave(el, helper) {
+      helper = helper || el;
+      const node = helper.gridstackNode;
+      if (!node)
+        return;
+      helper.style.transform = helper.style.transformOrigin = null;
+      dd.off(el, "drag");
+      if (node._temporaryRemoved)
+        return;
+      node._temporaryRemoved = true;
+      this.engine.removeNode(node);
+      node.el = node._isExternal && helper ? helper : el;
+      const sidebarOrig = node._sidebarOrig;
+      if (node._isExternal)
+        this.engine.cleanupNode(node);
+      node._sidebarOrig = sidebarOrig;
+      if (this.opts.removable === true) {
+        _GridStack._itemRemoving(el, true);
+      }
+      if (el._gridstackNodeOrig) {
+        el.gridstackNode = el._gridstackNodeOrig;
+        delete el._gridstackNodeOrig;
+      } else if (node._isExternal) {
+        this.engine.restoreInitial();
+      }
+    }
+  };
+  GridStack.renderCB = (el, w5) => {
+    if (el && w5?.content)
+      el.textContent = w5.content;
+  };
+  GridStack.resizeToContentParent = ".grid-stack-item-content";
+  GridStack.Utils = Utils;
+  GridStack.Engine = GridStackEngine;
+  GridStack.GDRev = "12.6.0";
+
+  // src/ui/lib/layouts.ts
+  async function fetchLayout(screen) {
+    const res = await fetch(`/api/layouts/${encodeURIComponent(screen)}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`fetchLayout: HTTP ${res.status}`);
+    return res.json();
+  }
+  async function saveLayout(screen, layout) {
+    const res = await fetch(`/api/layouts/${encodeURIComponent(screen)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(layout)
+    });
+    if (!res.ok) throw new Error(`saveLayout: HTTP ${res.status}`);
+    return res.json();
+  }
+  async function resetLayout(screen) {
+    const res = await fetch(`/api/layouts/${encodeURIComponent(screen)}`, {
+      method: "DELETE"
+    });
+    if (!res.ok) throw new Error(`resetLayout: HTTP ${res.status}`);
+  }
+
+  // src/ui/widgets/mount-registry.ts
+  var callbacks = /* @__PURE__ */ new Map();
+  function registerMountCallback(mountId, cb) {
+    callbacks.set(mountId, cb);
+  }
+  function invokeMountCallback(mountId, el) {
+    const cb = callbacks.get(mountId);
+    if (cb) cb(el);
+  }
+
+  // src/ui/widgets/registry.ts
+  function mount(id) {
+    return (el) => {
+      el.id = id;
+    };
+  }
+  var WIDGET_CATALOG = [
+    // ── Overview tab ─────────────────────────────────────────────────────────
+    {
+      id: "usage-windows",
+      title: "Rate windows",
+      description: "Session and weekly rate-limit progress bars",
+      category: "kpi",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("usage-windows")
+    },
+    {
+      id: "subscription-quota",
+      title: "Subscription quota",
+      description: "Provider subscription utilization and history chart",
+      category: "kpi",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: mount("subscription-quota")
+    },
+    {
+      id: "claude-usage",
+      title: "Claude usage",
+      description: "Claude API usage details from the credentials file",
+      category: "kpi",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("claude-usage")
+    },
+    {
+      id: "agent-status",
+      title: "Agent status",
+      description: "Upstream provider health (Claude, OpenAI)",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("agent-status")
+    },
+    {
+      id: "estimation-meta",
+      title: "Estimation metadata",
+      description: "Confidence, billing mode, and pricing version breakdown",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: mount("estimation-meta")
+    },
+    {
+      id: "official-sync",
+      title: "Official pricing sync",
+      description: "Status of official pricing data synchronization",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("official-sync")
+    },
+    {
+      id: "openai-reconciliation",
+      title: "OpenAI reconciliation",
+      description: "OpenAI organization usage reconciliation",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("openai-reconciliation")
+    },
+    {
+      id: "codex-plan-kpi-mount",
+      title: "Codex plan",
+      description: "Codex plan utilization KPI tile",
+      category: "codex",
+      screens: ["overview"],
+      defaultSize: { w: 1, h: 1 },
+      minW: 1,
+      minH: 1,
+      render: mount("codex-plan-kpi-mount")
+    },
+    {
+      id: "stats-row",
+      title: "Summary stats",
+      description: "Token counts, cost, cache efficiency, and active-day averages",
+      category: "kpi",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: mount("stats-row")
+    },
+    // ── Activity tab ──────────────────────────────────────────────────────────
+    {
+      id: "codex-plan-history-mount",
+      title: "Codex plan history",
+      description: "30-day stacked bar chart of Codex plan utilization",
+      category: "codex",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: mount("codex-plan-history-mount")
+    },
+    {
+      id: "daily-chart-card",
+      title: "Daily token usage",
+      description: "Daily or weekly token usage bar chart",
+      category: "chart",
+      screens: ["activity"],
+      defaultSize: { w: 2, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "daily-chart-card";
+        el.className = "card bento-2 chart-card";
+        if (!el.querySelector("#daily-chart-title")) {
+          el.innerHTML = '<h2 id="daily-chart-title">Daily Token Usage</h2><div class="chart-wrap tall"><div id="chart-daily"></div></div>';
+        }
+      }
+    },
+    {
+      id: "model-chart-card",
+      title: "Model distribution",
+      description: "Token usage donut chart broken down by model",
+      category: "chart",
+      screens: ["activity"],
+      defaultSize: { w: 1, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "model-chart-card";
+        el.className = "card chart-card";
+        if (!el.querySelector("#chart-model")) {
+          el.innerHTML = '<h2>By Model</h2><div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>';
+        }
+      }
+    },
+    {
+      id: "project-chart-card",
+      title: "Top projects",
+      description: "Horizontal bar chart of top projects by cost",
+      category: "chart",
+      screens: ["activity"],
+      defaultSize: { w: 1, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "project-chart-card";
+        el.className = "card chart-card";
+        if (!el.querySelector("#chart-project")) {
+          el.innerHTML = '<h2>Top Projects</h2><div class="chart-wrap"><div id="chart-project"></div></div>';
+        }
+      }
+    },
+    {
+      id: "hourly-chart",
+      title: "Activity by hour",
+      description: "Token usage broken down by hour of day",
+      category: "chart",
+      screens: ["activity"],
+      defaultSize: { w: 2, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "hourly-chart";
+        el.className = "card card-flat bento-2";
+      }
+    },
+    {
+      id: "activity-heatmap",
+      title: "Activity heatmap",
+      description: "7\xD724 heatmap of token usage or cost",
+      category: "heatmap",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "activity-heatmap";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    // ── Breakdowns tab ────────────────────────────────────────────────────────
+    {
+      id: "subagent-summary",
+      title: "Subagent summary",
+      description: "Breakdown of subagent vs orchestrator turns and costs",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: (el) => {
+        el.id = "subagent-summary";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-setup-banner",
+      title: "Agent setup banner",
+      description: "Setup guidance for agent telemetry",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: mount("agent-setup-banner")
+    },
+    {
+      id: "agent-kpis-row",
+      title: "Agent KPIs",
+      description: "Key metrics for agent telemetry (sessions, cost, tokens)",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: (el) => {
+        el.id = "agent-kpis-row";
+        el.style.display = "none";
+        el.style.gridTemplateColumns = "repeat(3,1fr)";
+        el.style.gap = "16px";
+      }
+    },
+    {
+      id: "agent-timeline",
+      title: "Agent timeline",
+      description: "Cost timeline broken down by agent role",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-timeline";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-distribution",
+      title: "Agent distribution",
+      description: "Breakdown of sessions and cost by agent role",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-distribution";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-top-sessions",
+      title: "Top agent sessions",
+      description: "Highest-cost agent sessions",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-top-sessions";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-spawn-batches",
+      title: "Agent spawn batches",
+      description: "Batches of agent spawns grouped by session",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-spawn-batches";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-tool-spectrum",
+      title: "Agent tool spectrum",
+      description: "Tool usage breakdown across agent roles",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-tool-spectrum";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "entrypoint-breakdown",
+      title: "Entrypoint breakdown",
+      description: "Usage broken down by CLI entrypoint",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "entrypoint-breakdown";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "service-tiers",
+      title: "Service tiers",
+      description: "Usage and cost split by service tier",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "service-tiers";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "tool-summary",
+      title: "Tool usage",
+      description: "Tool invocation counts with cost attribution",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "tool-summary";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "mcp-summary",
+      title: "MCP server usage",
+      description: "MCP server invocation counts with cost attribution",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "mcp-summary";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "branch-summary",
+      title: "Git branch summary",
+      description: "Usage broken down by git branch",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "branch-summary";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "version-summary",
+      title: "CLI versions",
+      description: "Usage breakdown by Claude CLI version with donut chart",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 2, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "version-summary";
+        el.className = "card card-flat bento-2";
+      }
+    },
+    {
+      id: "cost-reconciliation",
+      title: "Cost reconciliation",
+      description: "Hook-measured vs estimated cost comparison",
+      category: "system",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("cost-reconciliation")
+    },
+    // ── Tables tab ────────────────────────────────────────────────────────────
+    {
+      id: "model-cost-mount",
+      title: "Cost by model",
+      description: "Per-model cost table with cache breakdown columns",
+      category: "table",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: mount("model-cost-mount")
+    },
+    {
+      id: "sessions-mount",
+      title: "Sessions",
+      description: "All sessions with sorting, pagination, and CSV export",
+      category: "table",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 5 },
+      minW: 2,
+      minH: 3,
+      render: mount("sessions-mount")
+    },
+    {
+      id: "project-cost-mount",
+      title: "Cost by project",
+      description: "Per-project cost table with CSV export",
+      category: "table",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: mount("project-cost-mount")
+    },
+    // ── Today tab ─────────────────────────────────────────────────────────────
+    {
+      id: "today-date-picker-mount",
+      title: "Date picker",
+      description: "Select a specific date to view",
+      category: "today",
+      screens: ["today"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: mount("today-date-picker-mount")
+    },
+    {
+      id: "today-kpis-mount",
+      title: "Today KPIs",
+      description: "Key metrics for the selected day",
+      category: "today",
+      screens: ["today"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: (el) => {
+        el.id = "today-kpis-mount";
+        el.style.gridTemplateColumns = "repeat(auto-fit,minmax(180px,1fr))";
+        el.style.gap = "16px";
+      }
+    },
+    {
+      id: "today-hour-timeline-mount",
+      title: "Hour timeline",
+      description: "Token usage timeline for each hour of the selected day",
+      category: "today",
+      screens: ["today"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "today-hour-timeline-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    {
+      id: "today-hour-heatstrip-mount",
+      title: "Hour heatstrip",
+      description: "Single-row heat strip showing hourly intensity",
+      category: "today",
+      screens: ["today"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: (el) => {
+        el.id = "today-hour-heatstrip-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    {
+      id: "today-days-hours-30-mount",
+      title: "30-day heat grid",
+      description: "30 days \xD7 24 hours usage grid",
+      category: "today",
+      screens: ["today"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "today-days-hours-30-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    {
+      id: "today-days-hours-7-mount",
+      title: "7-day heat grid",
+      description: "7 days \xD7 24 hours usage grid",
+      category: "today",
+      screens: ["today"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "today-days-hours-7-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    {
+      id: "today-weekday-hour-mount",
+      title: "Weekday \xD7 hour pattern",
+      description: "7\xD724 behavioral heatmap over a 90-day window",
+      category: "today",
+      screens: ["today"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "today-weekday-hour-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    // ── Backup tab ────────────────────────────────────────────────────────────
+    {
+      id: "backup-panel",
+      title: "Backup",
+      description: "Snapshot management and export",
+      category: "system",
+      screens: ["backup"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "backup-panel";
+        invokeMountCallback("backup-panel", el);
+      }
+    }
+  ];
+  function widgetById(id) {
+    return WIDGET_CATALOG.find((w5) => w5.id === id);
+  }
+  function widgetsForScreen(screen) {
+    return WIDGET_CATALOG.filter((w5) => w5.screens.includes(screen));
+  }
+
+  // src/ui/widgets/default-layouts.ts
+  function stack(defs) {
+    let y5 = 0;
+    const result = [];
+    for (const d5 of defs) {
+      const w5 = d5.w ?? 4;
+      const x4 = d5.x ?? 0;
+      const p5 = { i: d5.id, x: x4, y: y5, w: w5, h: d5.h };
+      if (d5.minW !== void 0) p5.minW = d5.minW;
+      if (d5.minH !== void 0) p5.minH = d5.minH;
+      result.push(p5);
+      y5 += d5.h;
+    }
+    return result;
+  }
+  var OVERVIEW_WIDGETS = stack([
+    { id: "usage-windows", h: 2 },
+    { id: "subscription-quota", h: 3 },
+    { id: "claude-usage", h: 2 },
+    { id: "agent-status", h: 2 },
+    { id: "estimation-meta", h: 1 },
+    { id: "official-sync", h: 2 },
+    { id: "openai-reconciliation", h: 2 },
+    { id: "codex-plan-kpi-mount", h: 1 },
+    { id: "stats-row", h: 1 }
+  ]);
+  function makeActivityWidgets() {
+    const widgets = [
+      // Codex plan history — full width
+      { i: "codex-plan-history-mount", x: 0, y: 0, w: 4, h: 3 },
+      // Charts row: daily (2 wide) | model (1) | project (1)
+      { i: "daily-chart-card", x: 0, y: 3, w: 2, h: 3, minW: 1, minH: 2 },
+      { i: "model-chart-card", x: 2, y: 3, w: 1, h: 3, minW: 1, minH: 2 },
+      { i: "project-chart-card", x: 3, y: 3, w: 1, h: 3, minW: 1, minH: 2 },
+      // Hourly chart (2 wide) then activity heatmap full width
+      { i: "hourly-chart", x: 0, y: 6, w: 2, h: 3, minW: 1, minH: 2 },
+      { i: "activity-heatmap", x: 0, y: 9, w: 4, h: 2, minW: 2, minH: 2 }
+    ];
+    return widgets;
+  }
+  var BREAKDOWNS_WIDGETS = stack([
+    { id: "subagent-summary", h: 2 },
+    { id: "agent-setup-banner", h: 1 },
+    { id: "agent-kpis-row", h: 1 },
+    { id: "agent-timeline", h: 3 },
+    { id: "agent-distribution", h: 3 },
+    { id: "agent-top-sessions", h: 3 },
+    { id: "agent-spawn-batches", h: 3 },
+    { id: "agent-tool-spectrum", h: 3 },
+    { id: "entrypoint-breakdown", h: 3 },
+    { id: "service-tiers", h: 3 },
+    { id: "tool-summary", h: 3 },
+    { id: "mcp-summary", h: 3 },
+    { id: "branch-summary", h: 3 },
+    { id: "version-summary", h: 3, w: 2 },
+    { id: "cost-reconciliation", h: 2 }
+  ]);
+  var TABLES_WIDGETS = stack([
+    { id: "model-cost-mount", h: 4 },
+    { id: "sessions-mount", h: 5 },
+    { id: "project-cost-mount", h: 4 }
+  ]);
+  var TODAY_WIDGETS = stack([
+    { id: "today-date-picker-mount", h: 1 },
+    { id: "today-kpis-mount", h: 1 },
+    { id: "today-hour-timeline-mount", h: 3 },
+    { id: "today-hour-heatstrip-mount", h: 2 },
+    { id: "today-days-hours-30-mount", h: 4 },
+    { id: "today-days-hours-7-mount", h: 3 },
+    { id: "today-weekday-hour-mount", h: 3 }
+  ]);
+  var BACKUP_WIDGETS = stack([
+    { id: "backup-panel", h: 4 }
+  ]);
+  var DEFAULT_LAYOUTS = {
+    overview: { widgets: OVERVIEW_WIDGETS, hidden: [] },
+    activity: { widgets: makeActivityWidgets(), hidden: [] },
+    breakdowns: { widgets: BREAKDOWNS_WIDGETS, hidden: [] },
+    tables: { widgets: TABLES_WIDGETS, hidden: [] },
+    today: { widgets: TODAY_WIDGETS, hidden: [] },
+    backup: { widgets: BACKUP_WIDGETS, hidden: [] }
+  };
+
+  // src/ui/components/widgets/AddWidgetPicker.tsx
+  function AddWidgetPicker({ availableWidgets, onAdd, onClose }) {
+    y2(() => {
+      const handler = (e4) => {
+        if (e4.key === "Escape") onClose();
+      };
+      window.addEventListener("keydown", handler);
+      return () => window.removeEventListener("keydown", handler);
+    }, [onClose]);
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "modal-overlay",
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": "Add widget",
+        onClick: (e4) => {
+          if (e4.target === e4.currentTarget) onClose();
+        },
+        children: /* @__PURE__ */ u4("div", { class: "modal-panel", children: [
+          /* @__PURE__ */ u4("div", { class: "modal-header", children: [
+            /* @__PURE__ */ u4("h2", { class: "modal-title", children: "Add widget" }),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "modal-close-button",
+                onClick: onClose,
+                "aria-label": "Close",
+                children: "\xD7"
+              }
+            )
+          ] }),
+          availableWidgets.length === 0 ? /* @__PURE__ */ u4("div", { class: "modal-empty", children: "All widgets are visible. Remove a widget first to add it back." }) : /* @__PURE__ */ u4("ul", { class: "widget-picker-list", children: availableWidgets.map((widget) => /* @__PURE__ */ u4("li", { class: "widget-picker-item", children: [
+            /* @__PURE__ */ u4("div", { class: "widget-picker-info", children: [
+              /* @__PURE__ */ u4("span", { class: "widget-picker-title", children: widget.title }),
+              widget.description && /* @__PURE__ */ u4("span", { class: "widget-picker-desc", children: widget.description })
+            ] }),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "widget-picker-add-btn",
+                onClick: () => {
+                  onAdd(widget.id);
+                  onClose();
+                },
+                children: "Add"
+              }
+            )
+          ] }, widget.id)) })
+        ] })
+      }
+    );
+  }
+
+  // src/ui/widgets/WidgetGrid.tsx
+  var MOBILE_BREAKPOINT = 720;
+  var SAVE_DEBOUNCE_MS = 500;
+  var GRID_COLUMNS = 4;
+  var CELL_HEIGHT = 132;
+  var CELL_MARGIN = 12;
+  function nextY(widgets) {
+    if (!widgets.length) return 0;
+    return Math.max(...widgets.map((w5) => w5.y + w5.h));
+  }
+  function reconcileLayout(saved, screen) {
+    const catalog = widgetsForScreen(screen);
+    const catalogIds = new Set(catalog.map((w5) => w5.id));
+    const widgets = saved.widgets.filter((w5) => catalogIds.has(w5.i));
+    const hidden = saved.hidden.filter((id) => catalogIds.has(id));
+    const placedIds = new Set(widgets.map((w5) => w5.i));
+    const hiddenSet = new Set(hidden);
+    let y5 = nextY(widgets);
+    for (const def of catalog) {
+      if (placedIds.has(def.id) || hiddenSet.has(def.id)) continue;
+      const placed = { i: def.id, x: 0, y: y5, w: def.defaultSize.w, h: def.defaultSize.h };
+      if (def.minW !== void 0) placed.minW = def.minW;
+      if (def.minH !== void 0) placed.minH = def.minH;
+      widgets.push(placed);
+      y5 += def.defaultSize.h;
+    }
+    return { widgets, hidden };
+  }
+  function layoutFromGrid(grid, hidden) {
+    const widgets = grid.getGridItems().map((el) => {
+      const node = el.gridstackNode;
+      const w5 = {
+        i: node?.id ?? el.getAttribute("gs-id") ?? "",
+        x: node?.x ?? 0,
+        y: node?.y ?? 0,
+        w: node?.w ?? 1,
+        h: node?.h ?? 1
+      };
+      if (node?.minW !== void 0) w5.minW = node.minW;
+      if (node?.minH !== void 0) w5.minH = node.minH;
+      return w5;
+    });
+    return { widgets, hidden };
+  }
+  function WidgetGrid({ screen }) {
+    const containerRef = A2(null);
+    const gridRef = A2(null);
+    const hiddenRef = A2([]);
+    const saveTimerRef = A2(null);
+    const pickerMountRef = A2(null);
+    const isMobileRef = A2(window.innerWidth < MOBILE_BREAKPOINT);
+    const resetBtnRef = A2(null);
+    const addBtnRef = A2(null);
+    const scheduleSave = q2(() => {
+      if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(async () => {
+        if (!gridRef.current) return;
+        const layout = layoutFromGrid(gridRef.current, hiddenRef.current);
+        try {
+          await saveLayout(screen, layout);
+          setStatus("layout-save", "success", "[SAVED]", 2e3);
+        } catch {
+          setStatus("layout-save", "error", "[SAVE FAILED]", 4e3);
+        }
+      }, SAVE_DEBOUNCE_MS);
+    }, [screen]);
+    const renderPicker = q2((open) => {
+      if (!pickerMountRef.current) return;
+      const screenWidgets = widgetsForScreen(screen);
+      const hidden = hiddenRef.current;
+      R(
+        open ? /* @__PURE__ */ u4(
+          AddWidgetPicker,
+          {
+            availableWidgets: screenWidgets.filter((w5) => hidden.includes(w5.id)),
+            onAdd: (widgetId) => {
+              const def = widgetById(widgetId);
+              if (!def || !gridRef.current) return;
+              hiddenRef.current = hiddenRef.current.filter((id) => id !== widgetId);
+              const currentWidgets = layoutFromGrid(gridRef.current, hiddenRef.current).widgets;
+              const y5 = nextY(currentWidgets);
+              const placed = { i: widgetId, x: 0, y: y5, w: def.defaultSize.w, h: def.defaultSize.h };
+              if (def.minW !== void 0) placed.minW = def.minW;
+              if (def.minH !== void 0) placed.minH = def.minH;
+              mountWidgetIntoGrid(gridRef.current, placed);
+              scheduleSave();
+              updateAddBtnVisibility();
+            },
+            onClose: () => renderPicker(false)
+          }
+        ) : null,
+        pickerMountRef.current
+      );
+    }, [screen, scheduleSave]);
+    function updateAddBtnVisibility() {
+      const btn = addBtnRef.current;
+      if (!btn) return;
+      btn.style.display = editMode.value && hiddenRef.current.length > 0 ? "" : "none";
+    }
+    y2(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      if (isMobileRef.current) {
+        renderMobileStack(el, screen);
+        return;
+      }
+      let cancelled = false;
+      (async () => {
+        let layout;
+        try {
+          const saved = await fetchLayout(screen);
+          layout = saved ? reconcileLayout(saved, screen) : reconcileLayout(DEFAULT_LAYOUTS[screen], screen);
+        } catch {
+          layout = reconcileLayout(DEFAULT_LAYOUTS[screen], screen);
+        }
+        if (cancelled) return;
+        const gridRoot = document.createElement("div");
+        gridRoot.className = "grid-stack";
+        const pickerMount = document.createElement("div");
+        pickerMount.className = "widget-picker-mount";
+        pickerMountRef.current = pickerMount;
+        const controlsBar = document.createElement("div");
+        controlsBar.className = "widget-grid-controls";
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "widget-add-button header-button";
+        addBtn.textContent = "[+] Add widget";
+        addBtn.style.display = "none";
+        addBtn.addEventListener("click", () => renderPicker(true));
+        addBtnRef.current = addBtn;
+        const resetBtn = document.createElement("button");
+        resetBtn.type = "button";
+        resetBtn.className = "widget-reset-button header-button";
+        resetBtn.textContent = "[Reset layout]";
+        resetBtn.style.display = "none";
+        resetBtn.addEventListener("click", async () => {
+          if (!confirm("Reset layout to defaults? Your custom positions will be lost.")) return;
+          try {
+            await resetLayout(screen);
+          } catch {
+          }
+          const def = reconcileLayout(DEFAULT_LAYOUTS[screen], screen);
+          hiddenRef.current = def.hidden.slice();
+          if (gridRef.current) {
+            gridRef.current.destroy(false);
+            gridRef.current = null;
+          }
+          gridRoot.innerHTML = "";
+          const newGrid = initGrid(gridRoot, def);
+          setupGridEvents(newGrid, gridRoot, scheduleSave, hiddenRef, renderPicker, updateAddBtnVisibility);
+          gridRef.current = newGrid;
+          updateAddBtnVisibility();
+          syncEditMode(newGrid, el, editMode.value, resetBtn);
+          setStatus("layout-save", "success", "[RESET]", 2e3);
+        });
+        resetBtnRef.current = resetBtn;
+        controlsBar.appendChild(addBtn);
+        controlsBar.appendChild(resetBtn);
+        el.appendChild(controlsBar);
+        el.appendChild(gridRoot);
+        el.appendChild(pickerMount);
+        hiddenRef.current = layout.hidden.slice();
+        const grid = initGrid(gridRoot, layout);
+        setupGridEvents(grid, gridRoot, scheduleSave, hiddenRef, renderPicker, updateAddBtnVisibility);
+        gridRef.current = grid;
+        updateAddBtnVisibility();
+        syncEditMode(grid, el, editMode.value, resetBtn);
+      })();
+      return () => {
+        cancelled = true;
+        if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+        if (gridRef.current) {
+          gridRef.current.destroy(false);
+          gridRef.current = null;
+        }
+      };
+    }, [screen]);
+    y2(() => {
+      const el = containerRef.current;
+      if (!el || isMobileRef.current) return;
+      const grid = gridRef.current;
+      const resetBtn = resetBtnRef.current;
+      if (grid && resetBtn) {
+        syncEditMode(grid, el, editMode.value, resetBtn);
+        updateAddBtnVisibility();
+      }
+    }, [editMode.value]);
+    y2(() => {
+      const onResize = () => {
+        const nowMobile = window.innerWidth < MOBILE_BREAKPOINT;
+        if (nowMobile !== isMobileRef.current) {
+          isMobileRef.current = nowMobile;
+          const el = containerRef.current;
+          if (!el) return;
+          if (nowMobile && gridRef.current) {
+            gridRef.current.destroy(false);
+            gridRef.current = null;
+            el.innerHTML = "";
+            renderMobileStack(el, screen);
+          }
+        }
+      };
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }, [screen]);
+    return /* @__PURE__ */ u4("div", { ref: containerRef, class: "widget-grid-root" });
+  }
+  function mountWidgetIntoGrid(grid, placed) {
+    const def = widgetById(placed.i);
+    if (!def) return;
+    const itemEl = document.createElement("div");
+    itemEl.className = "grid-stack-item";
+    itemEl.setAttribute("gs-id", placed.i);
+    itemEl.setAttribute("gs-x", String(placed.x));
+    itemEl.setAttribute("gs-y", String(placed.y));
+    itemEl.setAttribute("gs-w", String(placed.w));
+    itemEl.setAttribute("gs-h", String(placed.h));
+    if (placed.minW !== void 0) itemEl.setAttribute("gs-min-w", String(placed.minW));
+    if (placed.minH !== void 0) itemEl.setAttribute("gs-min-h", String(placed.minH));
+    const contentEl = document.createElement("div");
+    contentEl.className = "grid-stack-item-content widget-card";
+    const chromeEl = buildChrome(grid, itemEl);
+    const bodyEl = document.createElement("div");
+    bodyEl.className = "widget-body";
+    def.render(bodyEl);
+    contentEl.appendChild(chromeEl);
+    contentEl.appendChild(bodyEl);
+    itemEl.appendChild(contentEl);
+    grid.makeWidget(itemEl);
+    return itemEl;
+  }
+  function buildChrome(grid, itemEl) {
+    const chromeEl = document.createElement("div");
+    chromeEl.className = "widget-chrome";
+    chromeEl.innerHTML = '<span class="widget-drag-handle" title="Drag to move" aria-hidden="true">&#x2807;</span>';
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "widget-remove-button";
+    removeBtn.type = "button";
+    removeBtn.title = "Hide widget";
+    removeBtn.textContent = "\xD7";
+    removeBtn.addEventListener("click", () => {
+      const widgetId = itemEl.getAttribute("gs-id") ?? "";
+      grid.removeWidget(itemEl, false);
+      itemEl.dispatchEvent(new CustomEvent("widget-hidden", { detail: widgetId, bubbles: true }));
+    });
+    chromeEl.appendChild(removeBtn);
+    return chromeEl;
+  }
+  function initGrid(gridRoot, layout) {
+    const grid = GridStack.init(
+      {
+        float: true,
+        column: GRID_COLUMNS,
+        cellHeight: CELL_HEIGHT,
+        margin: CELL_MARGIN,
+        draggable: { handle: ".widget-drag-handle" },
+        resizable: { handles: "se" },
+        disableDrag: true,
+        disableResize: true
+      },
+      gridRoot
+    );
+    grid.batchUpdate(true);
+    for (const placed of layout.widgets) {
+      const def = widgetById(placed.i);
+      if (!def) continue;
+      const itemEl = document.createElement("div");
+      itemEl.className = "grid-stack-item";
+      itemEl.setAttribute("gs-id", placed.i);
+      itemEl.setAttribute("gs-x", String(placed.x));
+      itemEl.setAttribute("gs-y", String(placed.y));
+      itemEl.setAttribute("gs-w", String(placed.w));
+      itemEl.setAttribute("gs-h", String(placed.h));
+      if (placed.minW !== void 0) itemEl.setAttribute("gs-min-w", String(placed.minW));
+      if (placed.minH !== void 0) itemEl.setAttribute("gs-min-h", String(placed.minH));
+      const contentEl = document.createElement("div");
+      contentEl.className = "grid-stack-item-content widget-card";
+      const chromeEl = buildChrome(grid, itemEl);
+      const bodyEl = document.createElement("div");
+      bodyEl.className = "widget-body";
+      def.render(bodyEl);
+      contentEl.appendChild(chromeEl);
+      contentEl.appendChild(bodyEl);
+      itemEl.appendChild(contentEl);
+      gridRoot.appendChild(itemEl);
+      grid.makeWidget(itemEl);
+    }
+    grid.batchUpdate(false);
+    return grid;
+  }
+  function setupGridEvents(grid, gridRoot, scheduleSave, hiddenRef, renderPicker, updateAddBtnVisibility) {
+    grid.on("change", () => scheduleSave());
+    grid.on("added", () => scheduleSave());
+    gridRoot.addEventListener("widget-hidden", (e4) => {
+      const id = e4.detail;
+      hiddenRef.current = [...hiddenRef.current, id];
+      scheduleSave();
+      updateAddBtnVisibility();
+      renderPicker(false);
+    });
+  }
+  function syncEditMode(grid, container, editing, resetBtn) {
+    if (editing) {
+      grid.enable();
+      container.classList.add("editing");
+    } else {
+      grid.disable();
+      container.classList.remove("editing");
+    }
+    resetBtn.style.display = editing ? "" : "none";
+  }
+  function renderMobileStack(el, screen) {
+    el.innerHTML = "";
+    const layout = reconcileLayout(DEFAULT_LAYOUTS[screen], screen);
+    const sorted = layout.widgets.slice().sort((a4, b4) => a4.y - b4.y || a4.x - b4.x);
+    const stack2 = document.createElement("div");
+    stack2.className = "widget-mobile-stack";
+    for (const placed of sorted) {
+      const def = widgetById(placed.i);
+      if (!def) continue;
+      const card = document.createElement("div");
+      card.className = "widget-card widget-mobile-card";
+      const body = document.createElement("div");
+      body.className = "widget-body";
+      def.render(body);
+      card.appendChild(body);
+      stack2.appendChild(card);
+    }
+    el.appendChild(stack2);
+  }
+
+  // src/ui/widgets/ScreenGridManager.tsx
+  var ALL_SCREENS = [
+    "overview",
+    "activity",
+    "breakdowns",
+    "tables",
+    "today",
+    "backup"
+  ];
+  function ScreenGridManager() {
+    const activeScreen = activeDashboardTab.value;
+    y2(() => {
+    }, [activeScreen]);
+    return /* @__PURE__ */ u4(S, { children: ALL_SCREENS.map((screen) => /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "screen-grid-wrapper",
+        "data-screen": screen,
+        style: { display: screen === activeScreen ? "" : "none" },
+        children: /* @__PURE__ */ u4(WidgetGrid, { screen })
+      },
+      screen
+    )) });
+  }
+
   // src/ui/app.tsx
   async function loadBackupSnapshots() {
     backupLoadState.value = "loading";
@@ -12045,14 +18881,25 @@ ${row.project}` : row.project;
   if (globalStatusMount && dashboardRuntime) {
     R(/* @__PURE__ */ u4(InlineStatus, { placement: "global" }), globalStatusMount);
   }
-  var backupPanelMount = document.getElementById("backup-panel");
-  if (backupPanelMount && dashboardRuntime) {
-    R(
-      /* @__PURE__ */ u4(BackupPanel, { onSnapshot: triggerSnapshot, onReload: loadBackupSnapshots }),
-      backupPanelMount
-    );
-    void loadBackupSnapshots();
+  if (dashboardRuntime) {
+    registerMountCallback("backup-panel", (el) => {
+      R(
+        /* @__PURE__ */ u4(BackupPanel, { onSnapshot: triggerSnapshot, onReload: loadBackupSnapshots }),
+        el
+      );
+      void loadBackupSnapshots();
+    });
   }
+  var widgetGridMount = document.getElementById("widget-grid-mount");
+  if (widgetGridMount && dashboardRuntime) {
+    let renderGridManager = function() {
+      R(/* @__PURE__ */ u4(ScreenGridManager, {}), widgetGridMount);
+    };
+    renderGridManager2 = renderGridManager;
+    renderGridManager();
+    activeDashboardTab.subscribe(() => renderGridManager());
+  }
+  var renderGridManager2;
   async function loadArchiveImports() {
     try {
       const r4 = await fetch("/api/archive/imports");
@@ -12130,4 +18977,13 @@ ${row.project}` : row.project;
      *
      * @license MIT
      *)
+
+gridstack/dist/gridstack.js:
+  (*!
+   * GridStack 12.6.0
+   * https://gridstackjs.com/
+   *
+   * Copyright (c) 2021-2025  Alain Dumesny
+   * see root license https://github.com/gridstack/gridstack.js/tree/master/LICENSE
+   *)
 */

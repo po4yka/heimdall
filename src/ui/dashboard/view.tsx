@@ -150,6 +150,9 @@ export function setSectionVisibility(
   const container = $(sectionId);
   if (!container) return;
   container.dataset['hasContent'] = hasContent ? '1' : '0';
+  // When this element lives inside a GridStack widget body the grid manages
+  // visibility; only apply display toggling for legacy static containers.
+  if (container.closest('.widget-body')) return;
   const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
   container.style.display = hasContent && visibleInTab ? displayMode : 'none';
 }
@@ -170,6 +173,8 @@ export function refreshSectionVisibility(): void {
   for (const [sectionId, tab] of Object.entries(SECTION_TAB_MAP)) {
     const container = $(sectionId);
     if (!container) continue;
+    // Grid-managed elements: visibility is controlled by ScreenGridManager.
+    if (container.closest('.widget-body')) continue;
     const hasContent = container.dataset['hasContent'] !== '0';
     const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? '';
     container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : 'none';
