@@ -5,6 +5,7 @@ import type {
 } from '../state/dashboard-types';
 import type { ApexOptions } from '../lib/apex';
 import { ApexChart } from './charts/ApexChart';
+import { resolveCssVar } from '../lib/colors';
 
 interface Props {
   history: RateWindowHistoryRow[];
@@ -27,20 +28,6 @@ const WINDOW_LABELS: Record<string, string> = {
 // vars at runtime, so we differentiate via `stroke.dashArray` patterns
 // instead — solid, short, medium, long — cycling through the 6 series.
 const DASH_LADDER = [0, 3, 6, 9, 12, 15];
-
-/**
- * Resolve a CSS custom property to its computed value at render time.
- * ApexCharts injects strings directly into SVG attributes; some attributes
- * (legend marker fills, tooltip backgrounds) don't resolve `var(...)` so
- * we have to feed them concrete values.
- */
-function resolveCssVar(name: string, fallback: string): string {
-  if (typeof window === 'undefined') return fallback;
-  const value = getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
-  return value || fallback;
-}
 
 function inferProvider(windowType: string): 'claude' | 'codex' {
   return windowType.startsWith('codex_') ? 'codex' : 'claude';

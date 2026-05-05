@@ -4727,17 +4727,24 @@
         ] })
       ] }),
       /* @__PURE__ */ u4("div", { id: sectionContentId, style: collapsed ? { display: "none" } : void 0, children: [
-        enableColumnVisibility && /* @__PURE__ */ u4("div", { class: "column-toggle", children: table.getAllLeafColumns().map((column) => /* @__PURE__ */ u4("label", { children: [
-          /* @__PURE__ */ u4(
-            "input",
-            {
-              type: "checkbox",
-              checked: column.getIsVisible(),
-              onChange: column.getToggleVisibilityHandler()
-            }
-          ),
-          typeof column.columnDef.header === "string" ? column.columnDef.header : column.id
-        ] }, column.id)) }),
+        enableColumnVisibility && /* @__PURE__ */ u4("div", { class: "column-toggle", children: table.getAllLeafColumns().map((column) => {
+          const colLabel = typeof column.columnDef.header === "string" ? column.columnDef.header : column.id;
+          const inputId = `col-toggle-${column.id}`;
+          return /* @__PURE__ */ u4("label", { htmlFor: inputId, children: [
+            /* @__PURE__ */ u4(
+              "input",
+              {
+                id: inputId,
+                name: inputId,
+                type: "checkbox",
+                checked: column.getIsVisible(),
+                onChange: column.getToggleVisibilityHandler(),
+                "aria-label": `Toggle column: ${colLabel}`
+              }
+            ),
+            colLabel
+          ] }, column.id);
+        }) }),
         /* @__PURE__ */ u4("table", { "aria-labelledby": headingId, children: [
           /* @__PURE__ */ u4("thead", { children: headerGroups.map((headerGroup) => /* @__PURE__ */ u4("tr", { children: headerGroup.headers.map((header) => {
             const canSort = header.column.getCanSort();
@@ -9094,7 +9101,7 @@ ${row.project}` : row.project;
           children: [
             /* @__PURE__ */ u4("span", { class: "stat-sub", children: [
               level.label,
-              level.key === suggestions.recommended_key && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--success)" }, children: "[RECOMMENDED]" })
+              level.key === suggestions.recommended_key && /* @__PURE__ */ u4("small", { style: { marginLeft: "6px", fontSize: "9px", letterSpacing: "0.08em", color: "var(--text-disabled)", textTransform: "uppercase" }, children: "recommended" })
             ] }),
             /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: fmt(level.limit_tokens) })
           ]
@@ -9941,7 +9948,7 @@ ${row.project}` : row.project;
         /* @__PURE__ */ u4("div", { class: "subscription-quota-section-label", children: [
           "Estimated",
           " ",
-          /* @__PURE__ */ u4("span", { class: "subscription-quota-tag", children: "[ESTIMATED]" })
+          /* @__PURE__ */ u4("small", { style: { fontSize: "9px", letterSpacing: "0.08em", color: "var(--text-disabled)", textTransform: "uppercase" }, children: "estimated" })
         ] }),
         !hasEstimates && /* @__PURE__ */ u4("div", { class: "subscription-quota-empty", children: "Insufficient data \u2014 utilization too low to derive a token cap." }),
         estimated.map((w5) => {
@@ -9979,6 +9986,13 @@ ${row.project}` : row.project;
     ] });
   }
 
+  // src/ui/lib/colors.ts
+  function resolveCssVar(name, fallback) {
+    if (typeof window === "undefined") return fallback;
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
   // src/ui/components/SubscriptionHistoryChart.tsx
   var WINDOW_LABELS = {
     five_hour: "Claude \xB7 5h",
@@ -9989,11 +10003,6 @@ ${row.project}` : row.project;
     codex_secondary: "Codex \xB7 secondary"
   };
   var DASH_LADDER = [0, 3, 6, 9, 12, 15];
-  function resolveCssVar(name, fallback) {
-    if (typeof window === "undefined") return fallback;
-    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return value || fallback;
-  }
   function inferProvider(windowType) {
     return windowType.startsWith("codex_") ? "codex" : "claude";
   }
@@ -11059,6 +11068,46 @@ ${row.project}` : row.project;
     refreshSectionVisibility();
   }
   function renderDashboardView(data, focusSingleModel, focusProjectQuery, exportSessionsCSV2, exportProjectsCSV2, onReload) {
+    const emptyMount = $2("empty-state-mount");
+    if (emptyMount) {
+      if (data.sessions_all.length === 0) {
+        R(
+          /* @__PURE__ */ u4(
+            "div",
+            {
+              role: "status",
+              style: {
+                fontFamily: "var(--font-mono)",
+                fontSize: "11px",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--text-secondary)",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 16px",
+                border: "1px solid var(--text-secondary)",
+                borderRadius: "4px",
+                background: "var(--surface)",
+                marginTop: "12px"
+              },
+              children: [
+                "[INFO: No sessions ingested yet. Run",
+                " ",
+                /* @__PURE__ */ u4("code", { style: { fontFamily: "var(--font-mono)" }, children: "cargo run -- scan" }),
+                " ",
+                "(or open Claude Code / Codex once and revisit) to populate the dashboard.]"
+              ]
+            }
+          ),
+          emptyMount
+        );
+        emptyMount.style.display = "";
+      } else {
+        R(null, emptyMount);
+        emptyMount.style.display = "none";
+      }
+    }
     const cutoff = getRangeCutoff(selectedRange.value);
     const filteredDaily = data.daily_by_model.filter(
       (row) => selectedModels.value.has(row.model) && (!cutoff || row.day >= cutoff) && matchesProvider(row)
@@ -19228,6 +19277,7 @@ ${row.project}` : row.project;
         addBtn.type = "button";
         addBtn.className = "widget-add-button header-button";
         addBtn.textContent = "[+] Add widget";
+        addBtn.setAttribute("aria-label", "Add widget");
         addBtn.style.display = "none";
         addBtn.addEventListener("click", () => renderPicker(true));
         addBtnRef.current = addBtn;
@@ -19235,6 +19285,7 @@ ${row.project}` : row.project;
         resetBtn.type = "button";
         resetBtn.className = "widget-reset-button header-button";
         resetBtn.textContent = "[Reset layout]";
+        resetBtn.setAttribute("aria-label", "Reset layout to defaults");
         resetBtn.style.display = "none";
         resetBtn.addEventListener("click", async () => {
           if (!confirm("Reset layout to defaults? Your custom positions will be lost.")) return;
@@ -19340,6 +19391,7 @@ ${row.project}` : row.project;
     removeBtn.className = "widget-remove-button";
     removeBtn.type = "button";
     removeBtn.title = "Hide widget";
+    removeBtn.setAttribute("aria-label", "Hide widget");
     removeBtn.textContent = "\xD7";
     removeBtn.addEventListener("click", () => {
       const widgetId = itemEl.getAttribute("gs-id") ?? "";
