@@ -8,7 +8,7 @@ import {
   deleteRole,
   type RegistryUpsertBody,
 } from '../../lib/agents';
-import type { AgentRegistryRow, AgentTelemetry } from '../../state/types';
+import type { AgentRegistryRow, AgentTelemetry, RoleConfidenceLevel } from '../../state/types';
 import { esc } from '../../lib/format';
 
 interface AgentRegistryModalProps {
@@ -177,8 +177,8 @@ export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegist
                   const state = rowStates[rawRole] ?? initialRowState(undefined);
                   const registered = registryRows.find(r => r.raw_role === rawRole);
                   const detected = detectedForProject.find(d => d.raw_role === rawRole);
-                  // confidence: show count as a simple "detected N times" badge
-                  const countBadge = detected ? `${detected.count}×` : '—';
+                  const confidence: RoleConfidenceLevel = detected?.confidence ?? 'unknown';
+                  const sessionCount = detected?.count ?? 0;
 
                   return (
                     <tr key={rawRole} class={!registered ? 'agent-row-unclassified' : ''}>
@@ -223,7 +223,14 @@ export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegist
                         </select>
                       </td>
                       <td>
-                        <span class="agent-confidence-badge">{countBadge}</span>
+                        {/* Confidence badge: highest tier observed across this role's sessions.
+                            Session count shown dimmed alongside for reference. */}
+                        <span class={`confidence-badge ${confidence}`}>[{confidence.toUpperCase()}]</span>
+                        {sessionCount > 0 && (
+                          <span style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '10px', marginLeft: '6px' }}>
+                            ({sessionCount} {sessionCount === 1 ? 'session' : 'sessions'})
+                          </span>
+                        )}
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px' }}>

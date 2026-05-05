@@ -1679,7 +1679,8 @@
               const state = rowStates[rawRole] ?? initialRowState(void 0);
               const registered = registryRows.find((r4) => r4.raw_role === rawRole);
               const detected = detectedForProject.find((d5) => d5.raw_role === rawRole);
-              const countBadge = detected ? `${detected.count}\xD7` : "\u2014";
+              const confidence = detected?.confidence ?? "unknown";
+              const sessionCount = detected?.count ?? 0;
               return /* @__PURE__ */ u4("tr", { class: !registered ? "agent-row-unclassified" : "", children: [
                 /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("span", { class: "model-tag", title: rawRole, children: esc(rawRole) }) }),
                 /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4(
@@ -1722,7 +1723,20 @@
                     ]
                   }
                 ) }),
-                /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("span", { class: "agent-confidence-badge", children: countBadge }) }),
+                /* @__PURE__ */ u4("td", { children: [
+                  /* @__PURE__ */ u4("span", { class: `confidence-badge ${confidence}`, children: [
+                    "[",
+                    confidence.toUpperCase(),
+                    "]"
+                  ] }),
+                  sessionCount > 0 && /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "10px", marginLeft: "6px" }, children: [
+                    "(",
+                    sessionCount,
+                    " ",
+                    sessionCount === 1 ? "session" : "sessions",
+                    ")"
+                  ] })
+                ] }),
                 /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "6px" }, children: [
                   /* @__PURE__ */ u4(
                     "button",

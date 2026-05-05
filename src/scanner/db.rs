@@ -10,9 +10,9 @@ use crate::models::{
     ClaudeUsageFactor, ClaudeUsageResponse, ClaudeUsageRunMeta, ClaudeUsageSnapshot,
     ConfidenceSummary, DailyModelRow, DailyProjectRow, DashboardData, DetectedRole,
     EntrypointSummary, HourlyRow, McpServerSummary, OfficialSyncRecordCount,
-    OfficialSyncSourceStatus, OfficialSyncSummary, ProviderSummary, ServiceTierSummary, SessionRow,
-    SpawnBatch, ToolErrorRow, ToolErrorsResponse, ToolEvent, ToolSpectrumCell, ToolSummary, Turn,
-    VersionSummary, WeeklyModelRow,
+    OfficialSyncSourceStatus, OfficialSyncSummary, ProviderSummary, RoleConfidence,
+    ServiceTierSummary, SessionRow, SpawnBatch, ToolErrorRow, ToolErrorsResponse, ToolEvent,
+    ToolSpectrumCell, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
 use crate::pricing_defs::{
     OfficialExtractedRecord, OfficialModelPricing, OfficialSyncRunRecord, PricingSyncRun,
@@ -4957,19 +4957,27 @@ pub fn query_dashboard_agent_telemetry(
     let detected: Vec<DetectedRole> = {
         let mut stmt = conn.prepare(
             "SELECT s.project, s.role, COUNT(*) AS cnt,
-                    CASE WHEN ar.raw_role IS NOT NULL THEN 1 ELSE 0 END AS registered
+                    CASE WHEN ar.raw_role IS NOT NULL THEN 1 ELSE 0 END AS registered,
+                    MAX(CASE s.role_confidence WHEN 'meta' THEN 2 WHEN 'prompt' THEN 1 ELSE 0 END) AS conf_rank
              FROM agent_sessions s
              LEFT JOIN agent_registry ar ON ar.project = s.project AND ar.raw_role = s.role
-             GROUP BY s.project, s.role
+             GROUP BY s.project, s.role, registered
              ORDER BY s.project, cnt DESC",
         )?;
         collect_warn(
             stmt.query_map([], |row| {
+                let conf_rank: i64 = row.get(4)?;
+                let confidence = match conf_rank {
+                    2 => RoleConfidence::Meta,
+                    1 => RoleConfidence::Prompt,
+                    _ => RoleConfidence::Unknown,
+                };
                 Ok(DetectedRole {
                     project: row.get(0)?,
                     raw_role: row.get(1)?,
                     count: row.get(2)?,
                     registered: row.get::<_, i64>(3)? != 0,
+                    confidence,
                 })
             })?,
             "agent detected roles",
@@ -7830,5 +7838,44 @@ mod tests {
         assert!(detected_roles.contains(&"planner"));
         // registered = false since we didn't call upsert_agent_registry.
         assert!(telemetry.detected.iter().all(|d| !d.registered));
+        // sample_agent_session uses RoleConfidence::Meta, so both roles must show Meta.
+        assert!(
+            telemetry
+                .detected
+                .iter()
+                .all(|d| d.confidence == crate::models::RoleConfidence::Meta),
+            "all roles should have Meta confidence"
+        );
+    }
+
+    #[test]
+    fn query_dashboard_agent_telemetry_confidence_takes_highest_tier() {
+        let conn = test_conn();
+
+        // Two sessions for the same role: one prompt, one meta.
+        let mut rec_prompt = sample_agent_session("ag-conf-1", "analyst", "/f1.jsonl");
+        rec_prompt.role_confidence = crate::models::RoleConfidence::Prompt;
+
+        let mut rec_meta = sample_agent_session("ag-conf-2", "analyst", "/f2.jsonl");
+        rec_meta.role_confidence = crate::models::RoleConfidence::Meta;
+
+        insert_agent_session(&conn, &rec_prompt).unwrap();
+        insert_agent_session(&conn, &rec_meta).unwrap();
+
+        let tz = TzParams::default();
+        let telemetry = query_dashboard_agent_telemetry(&conn, &tz).unwrap();
+
+        let analyst = telemetry
+            .detected
+            .iter()
+            .find(|d| d.raw_role == "analyst")
+            .expect("analyst role must be detected");
+
+        assert_eq!(
+            analyst.confidence,
+            crate::models::RoleConfidence::Meta,
+            "dominant confidence should be Meta even though one session was Prompt"
+        );
+        assert_eq!(analyst.count, 2, "both sessions must be counted");
     }
 }

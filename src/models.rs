@@ -1438,6 +1438,8 @@ pub struct DetectedRole {
     pub raw_role: String,
     pub count: i64,
     pub registered: bool,
+    /// Highest confidence tier observed across this role's agent_sessions rows.
+    pub confidence: RoleConfidence,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

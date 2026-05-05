@@ -1586,3 +1586,14 @@
   border-radius: 4px;
 }
 
+/* Role confidence badge: bracket-style [META] / [PROMPT] / [UNKNOWN]. */
+.confidence-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.confidence-badge.meta { color: var(--success); }
+.confidence-badge.prompt { color: var(--text-secondary); }
+.confidence-badge.unknown { color: var(--warning); }
+

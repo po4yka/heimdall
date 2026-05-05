@@ -461,11 +461,14 @@ export interface ToolSpectrumCell {
   count: number;
 }
 
+export type RoleConfidenceLevel = 'meta' | 'prompt' | 'unknown';
+
 export interface DetectedRole {
   project: string;
   raw_role: string;
   count: number;
   registered: boolean;
+  confidence: RoleConfidenceLevel;
 }
 
 export interface AgentTelemetry {
