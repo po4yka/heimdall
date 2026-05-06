@@ -3591,3 +3591,32 @@
 .widget-flash {
   animation: widget-flash-pulse 1.2s ease-out;
 }
+
+/* ── Project pin-star ────────────────────────────────────────────────
+ * Pinned projects keep their ★ permanently visible; unpinned project
+ * stars stay hidden until the row is hovered or the button receives
+ * keyboard focus, so the registry doesn't ship a column of dim ☆ glyphs.
+ */
+.pin-star {
+  background: transparent;
+  border: none;
+  padding: 0 var(--space-1);
+  cursor: pointer;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1.05em;
+  line-height: 1;
+  transition: opacity var(--duration-fast);
+}
+.pin-star.is-pinned { opacity: 1; }
+.pin-star.is-unpinned { opacity: 0; }
+tr:hover .pin-star.is-unpinned,
+.pin-star.is-unpinned:hover,
+.pin-star.is-unpinned:focus-visible {
+  opacity: 0.6;
+}
+.pin-star.is-unpinned:hover,
+.pin-star.is-unpinned:focus-visible {
+  opacity: 0.85;
+}
+.pin-star:disabled { cursor: wait; }

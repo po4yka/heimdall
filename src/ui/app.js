@@ -6407,23 +6407,13 @@
       "button",
       {
         type: "button",
-        class: "pin-star",
+        class: `pin-star ${current ? "is-pinned" : "is-unpinned"}`,
         "aria-label": ariaLabel,
         "aria-pressed": current,
         title: ariaLabel,
         onClick: toggle2,
         disabled: busy,
-        style: {
-          background: "transparent",
-          border: "none",
-          padding: "0 4px",
-          cursor: busy ? "wait" : "pointer",
-          color: "var(--color-text-primary)",
-          opacity: current ? 1 : 0.35,
-          fontSize: "1.05em",
-          lineHeight: 1,
-          font: "inherit"
-        },
+        style: busy ? { cursor: "wait" } : void 0,
         children: current ? "\u2605" : "\u2606"
       }
     );
@@ -7430,7 +7420,7 @@
     { id: "project-cost-mount", h: 4 }
   ]);
   var PROJECTS_WIDGETS = stack([
-    { id: "projects-registry", h: 12 }
+    { id: "projects-registry", h: 8 }
   ]);
   var DEFAULT_LAYOUTS = {
     overview: { widgets: OVERVIEW_WIDGETS, hidden: [] },

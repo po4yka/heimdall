@@ -47,23 +47,13 @@ export function PinStar({ projectUuid, pinned, onChange, label }: PinStarProps) 
   return (
     <button
       type="button"
-      class="pin-star"
+      class={`pin-star ${current ? 'is-pinned' : 'is-unpinned'}`}
       aria-label={ariaLabel}
       aria-pressed={current}
       title={ariaLabel}
       onClick={toggle}
       disabled={busy}
-      style={{
-        background: 'transparent',
-        border: 'none',
-        padding: '0 4px',
-        cursor: busy ? 'wait' : 'pointer',
-        color: 'var(--color-text-primary)',
-        opacity: current ? 1 : 0.35,
-        fontSize: '1.05em',
-        lineHeight: 1,
-        font: 'inherit',
-      }}
+      style={busy ? { cursor: 'wait' } : undefined}
     >
       {current ? '★' : '☆'}
     </button>

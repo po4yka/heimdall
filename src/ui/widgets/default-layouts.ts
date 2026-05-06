@@ -101,7 +101,7 @@ const TABLES_WIDGETS = stack([
 ]);
 
 const PROJECTS_WIDGETS = stack([
-  { id: 'projects-registry', h: 12 },
+  { id: 'projects-registry', h: 8 },
 ]);
 
 export const DEFAULT_LAYOUTS: Record<DashboardScreen, ScreenLayout> = {
