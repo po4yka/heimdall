@@ -14,6 +14,7 @@ import { PollingSection } from './PollingSection';
 import { StatuslineBlocksSection } from './StatuslineBlocksSection';
 import { WebhooksSection } from './WebhooksSection';
 import type { UrlIntent } from './WebhooksSection';
+import { ProjectAliasesSection } from './ProjectAliasesSection';
 
 interface SettingsModalProps {
   onDataReload: (force?: boolean) => Promise<void>;
@@ -32,7 +33,7 @@ const SECTIONS: SectionMeta[] = [
   { key: 'polling', label: 'Polling', description: 'How often live data sources are refreshed.', comingSoon: false },
   { key: 'statusline_blocks', label: 'Statusline & blocks', description: 'Threshold tuning and block sizing.', comingSoon: false },
   { key: 'webhooks', label: 'Webhooks', description: 'Notify external systems on events.', comingSoon: false },
-  { key: 'aliases', label: 'Project aliases', description: 'Map project slugs to display names.', comingSoon: true },
+  { key: 'aliases', label: 'Project aliases', description: 'Map project slugs to display names.', comingSoon: false },
   { key: 'pricing', label: 'Pricing overrides', description: 'Custom rates for specific models.', comingSoon: true },
 ];
 
@@ -225,6 +226,7 @@ export function SettingsModal({ onDataReload }: SettingsModalProps) {
           onUrlIntentChange={setUrlIntent}
         />
       );
+      case 'aliases': return <ProjectAliasesSection />;
       default: return (
         <div class="settings-loading">Coming soon.</div>
       );

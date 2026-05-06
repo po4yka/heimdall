@@ -2220,13 +2220,235 @@
     ] });
   }
 
+  // src/ui/components/settings/ProjectAliasesSection.tsx
+  function patchAliases(entries) {
+    const draft = settingsDraft.value;
+    if (!draft) return;
+    settingsDraft.value = {
+      ...draft,
+      project_aliases: { entries }
+    };
+  }
+  function AutocompleteDropdown({ query, onSelect, onClose }) {
+    const ref = A2(null);
+    y2(() => {
+      function handler(e4) {
+        if (ref.current && !ref.current.contains(e4.target)) {
+          onClose();
+        }
+      }
+      document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }, [onClose]);
+    const allSlugs = projectsRegistry.value.map((r4) => r4.slug);
+    const lower = query.toLowerCase();
+    const matches = allSlugs.filter((s4) => !lower || s4.toLowerCase().includes(lower)).slice(0, 8);
+    return /* @__PURE__ */ u4("div", { class: "settings-aliases-autocomplete", ref, children: matches.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-aliases-autocomplete-empty", children: "No matching projects" }) : matches.map((slug) => /* @__PURE__ */ u4(
+      "button",
+      {
+        type: "button",
+        class: "settings-aliases-autocomplete-item",
+        onMouseDown: (e4) => {
+          e4.preventDefault();
+          onSelect(slug);
+        },
+        children: esc(slug)
+      },
+      slug
+    )) });
+  }
+  function AliasRow({ entry, index, isFocusTarget, isDuplicateSlug, onChange, onDelete }) {
+    const slugRef = A2(null);
+    const [showAc, setShowAc] = d2(false);
+    y2(() => {
+      if (isFocusTarget && slugRef.current) {
+        slugRef.current.focus();
+        slugRef.current.scrollIntoView({ block: "nearest" });
+      }
+    }, [isFocusTarget]);
+    const isEmpty = !entry.slug.trim() || !entry.display_name.trim();
+    const showHint = isEmpty || isDuplicateSlug;
+    function handleSlugChange(val) {
+      onChange(index, { ...entry, slug: val });
+    }
+    function handleDisplayNameChange(val) {
+      onChange(index, { ...entry, display_name: val });
+    }
+    function handleAcSelect(slug) {
+      onChange(index, { ...entry, slug });
+      setShowAc(false);
+    }
+    return /* @__PURE__ */ u4("div", { class: "settings-aliases-row-wrapper", children: [
+      /* @__PURE__ */ u4("div", { class: "settings-aliases-row", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-aliases-cell settings-aliases-cell--slug", children: [
+          /* @__PURE__ */ u4("div", { class: "settings-aliases-slug-wrap", children: [
+            /* @__PURE__ */ u4(
+              "input",
+              {
+                ref: slugRef,
+                type: "text",
+                class: "settings-input num settings-aliases-input",
+                value: entry.slug,
+                placeholder: "project-slug",
+                onInput: (e4) => handleSlugChange(e4.target.value),
+                onKeyDown: (e4) => {
+                  if (e4.key === "Escape") setShowAc(false);
+                  if (e4.key === "/" && !entry.slug) setShowAc(true);
+                },
+                onFocus: () => {
+                }
+              }
+            ),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "settings-aliases-ac-trigger",
+                title: "Pick from recent projects",
+                onClick: () => setShowAc((v4) => !v4),
+                tabIndex: -1,
+                children: "\u21A7"
+              }
+            )
+          ] }),
+          showAc && /* @__PURE__ */ u4(
+            AutocompleteDropdown,
+            {
+              query: entry.slug,
+              onSelect: handleAcSelect,
+              onClose: () => setShowAc(false)
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u4("div", { class: "settings-aliases-cell settings-aliases-cell--name", children: /* @__PURE__ */ u4(
+          "input",
+          {
+            type: "text",
+            class: "settings-input settings-aliases-input",
+            value: entry.display_name,
+            placeholder: "Friendly name",
+            onInput: (e4) => handleDisplayNameChange(e4.target.value)
+          }
+        ) }),
+        /* @__PURE__ */ u4("div", { class: "settings-aliases-cell settings-aliases-cell--action", children: /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: "settings-aliases-delete-btn",
+            "aria-label": `Delete alias for ${esc(entry.slug)}`,
+            onClick: () => onDelete(index),
+            children: "[X]"
+          }
+        ) })
+      ] }),
+      showHint && /* @__PURE__ */ u4("div", { class: "settings-aliases-validation-hint", children: isDuplicateSlug ? "Duplicate slug \u2014 only the first will save." : "Both fields are required." })
+    ] });
+  }
+  function ProjectAliasesSection() {
+    const draft = settingsDraft.value;
+    if (!draft) return null;
+    const entries = draft.project_aliases.entries;
+    const [filter, setFilter] = d2("");
+    const [focusIndex, setFocusIndex] = d2(null);
+    const slugCounts = /* @__PURE__ */ new Map();
+    for (const e4 of entries) {
+      const s4 = e4.slug.trim().toLowerCase();
+      if (s4) slugCounts.set(s4, (slugCounts.get(s4) ?? 0) + 1);
+    }
+    const firstOccurrence = /* @__PURE__ */ new Map();
+    for (let i4 = 0; i4 < entries.length; i4++) {
+      const s4 = entries[i4].slug.trim().toLowerCase();
+      if (s4 && !firstOccurrence.has(s4)) firstOccurrence.set(s4, i4);
+    }
+    const hasEmptySlugRow = entries.some((e4) => e4.slug.trim() === "");
+    function handleAdd() {
+      if (hasEmptySlugRow) return;
+      const newEntries = [...entries, { slug: "", display_name: "" }];
+      patchAliases(newEntries);
+      setFocusIndex(newEntries.length - 1);
+    }
+    function handleChange(index, updated) {
+      const newEntries = entries.map((e4, i4) => i4 === index ? updated : e4);
+      patchAliases(newEntries);
+    }
+    function handleDelete(index) {
+      patchAliases(entries.filter((_4, i4) => i4 !== index));
+      setFocusIndex(null);
+    }
+    const lowerFilter = filter.toLowerCase();
+    const visibleIndices = entries.map((e4, i4) => ({ e: e4, i: i4 })).filter(
+      ({ e: e4 }) => !lowerFilter || e4.slug.toLowerCase().includes(lowerFilter) || e4.display_name.toLowerCase().includes(lowerFilter)
+    );
+    const count2 = entries.length;
+    return /* @__PURE__ */ u4("div", { class: "settings-section", children: [
+      /* @__PURE__ */ u4("div", { class: "settings-aliases-header", children: [
+        /* @__PURE__ */ u4(
+          "input",
+          {
+            type: "text",
+            class: "settings-input settings-aliases-filter",
+            placeholder: "Filter aliases...",
+            value: filter,
+            onInput: (e4) => setFilter(e4.target.value)
+          }
+        ),
+        /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: "settings-btn settings-btn--primary",
+            disabled: hasEmptySlugRow,
+            onClick: handleAdd,
+            title: hasEmptySlugRow ? "Fill in the empty row first" : void 0,
+            children: "[+ Add alias]"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-aliases-table", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-aliases-thead", children: [
+          /* @__PURE__ */ u4("div", { class: "settings-aliases-th settings-aliases-th--slug", children: "SLUG" }),
+          /* @__PURE__ */ u4("div", { class: "settings-aliases-th settings-aliases-th--name", children: "DISPLAY NAME" }),
+          /* @__PURE__ */ u4("div", { class: "settings-aliases-th settings-aliases-th--action" })
+        ] }),
+        entries.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-aliases-empty", children: "No project aliases configured yet. Click [+ Add alias] to create one." }) : visibleIndices.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-aliases-empty", children: [
+          "No aliases match \u201C",
+          esc(filter),
+          "\u201D."
+        ] }) : visibleIndices.map(({ e: e4, i: i4 }) => {
+          const slugKey = e4.slug.trim().toLowerCase();
+          const isDup = slugKey !== "" && (slugCounts.get(slugKey) ?? 0) > 1 && firstOccurrence.get(slugKey) !== i4;
+          return /* @__PURE__ */ u4(
+            AliasRow,
+            {
+              entry: e4,
+              index: i4,
+              isFocusTarget: focusIndex === i4,
+              isDuplicateSlug: isDup,
+              onChange: handleChange,
+              onDelete: handleDelete
+            },
+            i4
+          );
+        })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-aliases-footer", children: [
+        /* @__PURE__ */ u4("span", { class: "settings-hint", children: "Aliases override the slug shown in the dashboard. The raw slug is always preserved in storage." }),
+        /* @__PURE__ */ u4("span", { class: "settings-aliases-counter", children: [
+          count2,
+          " ",
+          count2 === 1 ? "alias" : "aliases"
+        ] })
+      ] })
+    ] });
+  }
+
   // src/ui/components/settings/SettingsModal.tsx
   var SECTIONS = [
     { key: "display", label: "Display", description: "Currency, locale, and number compaction.", comingSoon: false },
     { key: "polling", label: "Polling", description: "How often live data sources are refreshed.", comingSoon: false },
     { key: "statusline_blocks", label: "Statusline & blocks", description: "Threshold tuning and block sizing.", comingSoon: false },
     { key: "webhooks", label: "Webhooks", description: "Notify external systems on events.", comingSoon: false },
-    { key: "aliases", label: "Project aliases", description: "Map project slugs to display names.", comingSoon: true },
+    { key: "aliases", label: "Project aliases", description: "Map project slugs to display names.", comingSoon: false },
     { key: "pricing", label: "Pricing overrides", description: "Custom rates for specific models.", comingSoon: true }
   ];
   function isDirty(server, draft) {
@@ -2388,6 +2610,8 @@
               onUrlIntentChange: setUrlIntent
             }
           );
+        case "aliases":
+          return /* @__PURE__ */ u4(ProjectAliasesSection, {});
         default:
           return /* @__PURE__ */ u4("div", { class: "settings-loading", children: "Coming soon." });
       }

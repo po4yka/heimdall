@@ -2510,6 +2510,220 @@
   letter-spacing: 0.04em;
 }
 
+/* ── ProjectAliasesSection (M4) ──────────────────────────────── */
+
+.settings-aliases-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-aliases-filter {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-aliases-table {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.settings-aliases-thead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-aliases-th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.settings-aliases-th--slug {
+  flex: 1;
+}
+
+.settings-aliases-th--name {
+  flex: 1;
+}
+
+.settings-aliases-th--action {
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.settings-aliases-row-wrapper {
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-aliases-row-wrapper:last-child {
+  border-bottom: none;
+}
+
+.settings-aliases-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.settings-aliases-cell {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.settings-aliases-cell--slug {
+  flex: 1;
+}
+
+.settings-aliases-cell--name {
+  flex: 1;
+}
+
+.settings-aliases-cell--action {
+  width: 60px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+}
+
+.settings-aliases-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.settings-aliases-slug-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings-aliases-slug-wrap .settings-aliases-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-aliases-ac-trigger {
+  background: transparent;
+  border: 1px solid var(--border-visible);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.settings-aliases-ac-trigger:hover {
+  color: var(--text-display);
+  border-color: var(--text-display);
+}
+
+/* Autocomplete dropdown — flat, no shadow per industrial design. */
+.settings-aliases-autocomplete {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--surface);
+  border: 1px solid var(--border-visible);
+  border-radius: 4px;
+  margin-top: 2px;
+  overflow: hidden;
+}
+
+.settings-aliases-autocomplete-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.settings-aliases-autocomplete-item:hover {
+  background: color-mix(in srgb, var(--accent-interactive) 12%, transparent);
+  color: var(--text-display);
+}
+
+.settings-aliases-autocomplete-empty {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+}
+
+.settings-aliases-validation-hint {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--accent);
+  padding: 0 12px 8px;
+}
+
+.settings-aliases-delete-btn {
+  background: transparent;
+  border: 1px solid var(--border-visible);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  border-color: var(--accent);
+}
+
+.settings-aliases-delete-btn:hover {
+  opacity: 0.75;
+}
+
+.settings-aliases-empty {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.settings-aliases-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-aliases-counter {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 @media (max-width: 720px) {
   .settings-modal {
     flex-direction: column;
