@@ -125,10 +125,23 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
     if (!pickerMountRef.current) return;
     const screenWidgets = widgetsForScreen(screen);
     const hidden = hiddenRef.current;
+    // Empty-hidden widgets: layout-present hideWhenEmpty widgets whose
+    // grid item is currently `display: none` because the renderer
+    // reported no content. Surface them in the picker so users can
+    // discover them and toggle "Show anyway".
+    const emptyHiddenWidgets = screenWidgets.filter(w => {
+      if (!w.hideWhenEmpty) return false;
+      if (hidden.includes(w.id)) return false;
+      const itemEl = gridRef.current?.engine.nodes.find(n => n.id === w.id)?.el
+        ?? document.querySelector<HTMLElement>(`.grid-stack-item[gs-id="${w.id}"]`);
+      if (!itemEl) return false;
+      return (itemEl as HTMLElement).style.display === 'none';
+    });
     render(
       open ? (
         <AddWidgetPicker
           availableWidgets={screenWidgets.filter(w => hidden.includes(w.id))}
+          emptyHiddenWidgets={emptyHiddenWidgets}
           onAdd={(widgetId) => {
             const def = widgetById(widgetId);
             if (!def || !gridRef.current) return;

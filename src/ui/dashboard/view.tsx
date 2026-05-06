@@ -45,6 +45,7 @@ import { VersionTable } from '../components/tables/VersionTable';
 import { WeeklyChart } from '../components/charts/WeeklyChart';
 import { $ } from '../lib/format';
 import { RANGE_LABELS } from '../lib/charts';
+import { isOverridden } from '../lib/widget-overrides';
 import {
   activeDashboardTab,
   billingBlocksData,
@@ -161,7 +162,16 @@ export function setSectionVisibility(
   const widgetBody = container.closest('.widget-body');
   if (widgetBody) {
     const gridItem = widgetBody.closest('.grid-stack-item');
-    if (gridItem) (gridItem as HTMLElement).style.display = hasContent ? '' : 'none';
+    if (gridItem) {
+      // Per-widget "show anyway" override: if the user explicitly toggled
+      // this widget visible from AddWidgetPicker, keep the grid item shown
+      // even when the renderer reports no content. Useful while waiting
+      // for first data ingest, or to keep an "Unavailable" inline status
+      // visible for diagnostics.
+      const widgetId = gridItem.getAttribute('gs-id') ?? '';
+      const overridden = widgetId ? isOverridden(widgetId) : false;
+      (gridItem as HTMLElement).style.display = hasContent || overridden ? '' : 'none';
+    }
     return;
   }
   const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
@@ -508,6 +518,24 @@ export function renderUsageWindows(
     return;
   }
 
+  // The widget is `hideWhenEmpty: true` — render nothing when no
+  // window data is present (the screenshot showed a tall empty hero
+  // card sitting above the rate-windows because hasContent was being
+  // reported true unconditionally).
+  const hasAnyWindow =
+    Boolean(data.session) ||
+    Boolean(data.weekly) ||
+    Boolean(data.weekly_opus) ||
+    Boolean(data.weekly_sonnet) ||
+    Boolean(data.budget);
+  const hasAdmin = data.source === 'admin' && Boolean(data.admin_fallback);
+  if (!hasAnyWindow && !hasAdmin) {
+    setSectionVisibility('usage-windows', false, 'grid');
+    render(null, container);
+    setPreviousSessionPercent(null);
+    clearStatusMessage();
+    return;
+  }
   setSectionVisibility('usage-windows', true, 'grid');
   if (data.source === 'admin' && data.admin_fallback) {
     render(

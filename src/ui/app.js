@@ -12116,6 +12116,50 @@ ${row.project}` : row.project;
     return /* @__PURE__ */ u4(ApexChart, { options, id: "chart-weekly" });
   }
 
+  // src/ui/lib/widget-overrides.ts
+  var STORAGE_KEY = "heimdall.widget-empty-overrides";
+  function readStorage() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return /* @__PURE__ */ new Set();
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return /* @__PURE__ */ new Set();
+      return new Set(parsed.filter((x4) => typeof x4 === "string"));
+    } catch {
+      return /* @__PURE__ */ new Set();
+    }
+  }
+  function writeStorage(set) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
+    } catch {
+    }
+  }
+  var widgetEmptyOverrides = y3(readStorage());
+  function isOverridden(widgetId) {
+    return widgetEmptyOverrides.value.has(widgetId);
+  }
+  function setOverride(widgetId, on) {
+    const next = new Set(widgetEmptyOverrides.value);
+    if (on) next.add(widgetId);
+    else next.delete(widgetId);
+    widgetEmptyOverrides.value = next;
+    writeStorage(next);
+    const itemEl = document.querySelector(
+      `.grid-stack-item[gs-id="${widgetId}"]`
+    );
+    if (!itemEl) return;
+    if (on) {
+      itemEl.style.display = "";
+    } else {
+      const inner = itemEl.querySelector(
+        `[id="${widgetId}"], .widget-body > [id]`
+      );
+      const hasContent = inner?.dataset["hasContent"] === "1";
+      itemEl.style.display = hasContent ? "" : "none";
+    }
+  }
+
   // src/ui/dashboard/aggregation.ts
   function formatLocalDate(date) {
     const year = date.getFullYear();
@@ -12401,7 +12445,11 @@ ${row.project}` : row.project;
     const widgetBody = container.closest(".widget-body");
     if (widgetBody) {
       const gridItem = widgetBody.closest(".grid-stack-item");
-      if (gridItem) gridItem.style.display = hasContent ? "" : "none";
+      if (gridItem) {
+        const widgetId = gridItem.getAttribute("gs-id") ?? "";
+        const overridden = widgetId ? isOverridden(widgetId) : false;
+        gridItem.style.display = hasContent || overridden ? "" : "none";
+      }
       return;
     }
     const visibleInTab = SECTION_TAB_MAP[sectionId] === activeDashboardTab.value;
@@ -12671,6 +12719,15 @@ ${row.project}` : row.project;
         setSectionVisibility("usage-windows", false, "grid");
         R(null, container);
       }
+      return;
+    }
+    const hasAnyWindow = Boolean(data.session) || Boolean(data.weekly) || Boolean(data.weekly_opus) || Boolean(data.weekly_sonnet) || Boolean(data.budget);
+    const hasAdmin = data.source === "admin" && Boolean(data.admin_fallback);
+    if (!hasAnyWindow && !hasAdmin) {
+      setSectionVisibility("usage-windows", false, "grid");
+      R(null, container);
+      setPreviousSessionPercent(null);
+      clearStatusMessage();
       return;
     }
     setSectionVisibility("usage-windows", true, "grid");
@@ -20203,7 +20260,8 @@ ${row.project}` : row.project;
       defaultSize: { w: 4, h: 2 },
       minW: 2,
       minH: 1,
-      render: mount("usage-windows")
+      render: mount("usage-windows"),
+      hideWhenEmpty: true
     },
     {
       id: "subscription-quota",
@@ -20261,7 +20319,8 @@ ${row.project}` : row.project;
       defaultSize: { w: 4, h: 2 },
       minW: 2,
       minH: 1,
-      render: mount("official-sync")
+      render: mount("official-sync"),
+      hideWhenEmpty: true
     },
     {
       id: "openai-reconciliation",
@@ -20272,7 +20331,8 @@ ${row.project}` : row.project;
       defaultSize: { w: 4, h: 2 },
       minW: 2,
       minH: 1,
-      render: mount("openai-reconciliation")
+      render: mount("openai-reconciliation"),
+      hideWhenEmpty: true
     },
     {
       id: "subagent-reconciliation",
@@ -20283,7 +20343,8 @@ ${row.project}` : row.project;
       defaultSize: { w: 4, h: 2 },
       minW: 2,
       minH: 1,
-      render: mount("subagent-reconciliation")
+      render: mount("subagent-reconciliation"),
+      hideWhenEmpty: true
     },
     {
       id: "codex-plan-kpi-mount",
@@ -20422,7 +20483,8 @@ ${row.project}` : row.project;
       defaultSize: { w: 4, h: 1 },
       minW: 2,
       minH: 1,
-      render: mount("agent-setup-banner")
+      render: mount("agent-setup-banner"),
+      hideWhenEmpty: true
     },
     {
       id: "agent-kpis-row",
@@ -20536,7 +20598,8 @@ ${row.project}` : row.project;
       render: (el) => {
         el.id = "service-tiers";
         el.className = "card card-flat bento-full table-card";
-      }
+      },
+      hideWhenEmpty: true
     },
     {
       id: "tool-summary",
@@ -20578,7 +20641,8 @@ ${row.project}` : row.project;
       render: (el) => {
         el.id = "branch-summary";
         el.className = "card card-flat bento-full table-card";
-      }
+      },
+      hideWhenEmpty: true
     },
     {
       id: "version-summary",
@@ -20592,7 +20656,8 @@ ${row.project}` : row.project;
       render: (el) => {
         el.id = "version-summary";
         el.className = "card card-flat bento-2";
-      }
+      },
+      hideWhenEmpty: true
     },
     {
       id: "cost-reconciliation",
@@ -20843,7 +20908,13 @@ ${row.project}` : row.project;
   };
 
   // src/ui/components/widgets/AddWidgetPicker.tsx
-  function AddWidgetPicker({ availableWidgets, onAdd, onClose }) {
+  function AddWidgetPicker({
+    availableWidgets,
+    emptyHiddenWidgets,
+    onAdd,
+    onClose
+  }) {
+    void widgetEmptyOverrides.value;
     y2(() => {
       const handler = (e4) => {
         if (e4.key === "Escape") onClose();
@@ -20851,6 +20922,9 @@ ${row.project}` : row.project;
       window.addEventListener("keydown", handler);
       return () => window.removeEventListener("keydown", handler);
     }, [onClose]);
+    const hasAvailable = availableWidgets.length > 0;
+    const hasEmpty = emptyHiddenWidgets.length > 0;
+    const isEmpty = !hasAvailable && !hasEmpty;
     return /* @__PURE__ */ u4(
       "div",
       {
@@ -20875,24 +20949,53 @@ ${row.project}` : row.project;
               }
             )
           ] }),
-          availableWidgets.length === 0 ? /* @__PURE__ */ u4("div", { class: "modal-empty", children: "All widgets are visible. Remove a widget first to add it back." }) : /* @__PURE__ */ u4("ul", { class: "widget-picker-list", children: availableWidgets.map((widget) => /* @__PURE__ */ u4("li", { class: "widget-picker-item", children: [
-            /* @__PURE__ */ u4("div", { class: "widget-picker-info", children: [
-              /* @__PURE__ */ u4("span", { class: "widget-picker-title", children: widget.title }),
-              widget.description && /* @__PURE__ */ u4("span", { class: "widget-picker-desc", children: widget.description })
+          isEmpty && /* @__PURE__ */ u4("div", { class: "modal-empty", children: "All widgets are visible. Remove a widget first to add it back." }),
+          hasAvailable && /* @__PURE__ */ u4("div", { class: "widget-picker-group", children: [
+            hasEmpty && /* @__PURE__ */ u4("div", { class: "widget-picker-group-label", children: "Available" }),
+            /* @__PURE__ */ u4("ul", { class: "widget-picker-list", children: availableWidgets.map((widget) => /* @__PURE__ */ u4("li", { class: "widget-picker-item", children: [
+              /* @__PURE__ */ u4("div", { class: "widget-picker-info", children: [
+                /* @__PURE__ */ u4("span", { class: "widget-picker-title", children: widget.title }),
+                widget.description && /* @__PURE__ */ u4("span", { class: "widget-picker-desc", children: widget.description })
+              ] }),
+              /* @__PURE__ */ u4(
+                "button",
+                {
+                  type: "button",
+                  class: "widget-picker-add-btn",
+                  onClick: () => {
+                    onAdd(widget.id);
+                    onClose();
+                  },
+                  children: "Add"
+                }
+              )
+            ] }, widget.id)) })
+          ] }),
+          hasEmpty && /* @__PURE__ */ u4("div", { class: "widget-picker-group", children: [
+            /* @__PURE__ */ u4("div", { class: "widget-picker-group-label", children: [
+              "Hidden because empty",
+              /* @__PURE__ */ u4("span", { class: "widget-picker-group-hint", children: "These widgets reappear automatically when their data is available." })
             ] }),
-            /* @__PURE__ */ u4(
-              "button",
-              {
-                type: "button",
-                class: "widget-picker-add-btn",
-                onClick: () => {
-                  onAdd(widget.id);
-                  onClose();
-                },
-                children: "Add"
-              }
-            )
-          ] }, widget.id)) })
+            /* @__PURE__ */ u4("ul", { class: "widget-picker-list", children: emptyHiddenWidgets.map((widget) => {
+              const overridden = isOverridden(widget.id);
+              return /* @__PURE__ */ u4("li", { class: "widget-picker-item widget-picker-item--muted", children: [
+                /* @__PURE__ */ u4("div", { class: "widget-picker-info", children: [
+                  /* @__PURE__ */ u4("span", { class: "widget-picker-title", children: widget.title }),
+                  widget.description && /* @__PURE__ */ u4("span", { class: "widget-picker-desc", children: widget.description })
+                ] }),
+                /* @__PURE__ */ u4(
+                  "button",
+                  {
+                    type: "button",
+                    class: `widget-picker-add-btn${overridden ? " is-active" : ""}`,
+                    onClick: () => setOverride(widget.id, !overridden),
+                    "aria-pressed": overridden,
+                    children: overridden ? "Hide" : "Show anyway"
+                  }
+                )
+              ] }, widget.id);
+            }) })
+          ] })
         ] })
       }
     );
@@ -20976,11 +21079,19 @@ ${row.project}` : row.project;
       if (!pickerMountRef.current) return;
       const screenWidgets = widgetsForScreen(screen);
       const hidden = hiddenRef.current;
+      const emptyHiddenWidgets = screenWidgets.filter((w5) => {
+        if (!w5.hideWhenEmpty) return false;
+        if (hidden.includes(w5.id)) return false;
+        const itemEl = gridRef.current?.engine.nodes.find((n3) => n3.id === w5.id)?.el ?? document.querySelector(`.grid-stack-item[gs-id="${w5.id}"]`);
+        if (!itemEl) return false;
+        return itemEl.style.display === "none";
+      });
       R(
         open ? /* @__PURE__ */ u4(
           AddWidgetPicker,
           {
             availableWidgets: screenWidgets.filter((w5) => hidden.includes(w5.id)),
+            emptyHiddenWidgets,
             onAdd: (widgetId) => {
               const def = widgetById(widgetId);
               if (!def || !gridRef.current) return;

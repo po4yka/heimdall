@@ -66,6 +66,14 @@ export interface WidgetDef {
   render: (el: HTMLElement) => void;
   /** Optional cleanup (e.g. clear timers) when the widget is removed. */
   destroy?: (el: HTMLElement) => void;
+  /**
+   * If true, the widget is auto-hidden (display: none on its grid item)
+   * when its data response reports no content. The widget remains in the
+   * saved layout and reappears automatically when content returns. The
+   * AddWidgetPicker surfaces it under "Hidden because empty" so the user
+   * can still discover it.
+   */
+  hideWhenEmpty?: boolean;
 }
 
 /** Sets el.id so legacy getElementById-based renderers find the right node. */
@@ -87,6 +95,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     minW: 2,
     minH: 1,
     render: mount('usage-windows'),
+    hideWhenEmpty: true,
   },
   {
     id: 'subscription-quota',
@@ -145,6 +154,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     minW: 2,
     minH: 1,
     render: mount('official-sync'),
+    hideWhenEmpty: true,
   },
   {
     id: 'openai-reconciliation',
@@ -156,6 +166,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     minW: 2,
     minH: 1,
     render: mount('openai-reconciliation'),
+    hideWhenEmpty: true,
   },
   {
     id: 'subagent-reconciliation',
@@ -167,6 +178,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     minW: 2,
     minH: 1,
     render: mount('subagent-reconciliation'),
+    hideWhenEmpty: true,
   },
   {
     id: 'codex-plan-kpi-mount',
@@ -309,6 +321,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     minW: 2,
     minH: 1,
     render: mount('agent-setup-banner'),
+    hideWhenEmpty: true,
   },
   {
     id: 'agent-kpis-row',
@@ -423,6 +436,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       el.id = 'service-tiers';
       el.className = 'card card-flat bento-full table-card';
     },
+    hideWhenEmpty: true,
   },
   {
     id: 'tool-summary',
@@ -465,6 +479,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       el.id = 'branch-summary';
       el.className = 'card card-flat bento-full table-card';
     },
+    hideWhenEmpty: true,
   },
   {
     id: 'version-summary',
@@ -479,6 +494,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       el.id = 'version-summary';
       el.className = 'card card-flat bento-2';
     },
+    hideWhenEmpty: true,
   },
   {
     id: 'cost-reconciliation',
