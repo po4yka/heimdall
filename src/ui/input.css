@@ -422,6 +422,15 @@
   #main-content {
     scroll-margin-top: calc(var(--header-offset, 48px) + 16px);
   }
+
+  /* Live Monitor view — mounts directly into #main-content (no .bento
+     wrapper) so it owns its own page padding + max-width. Without this,
+     section labels and cards run flush to the viewport edges. */
+  .live-monitor {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+  }
   .bento-2 { grid-column: span 2; }
   .bento-3 { grid-column: span 3; }
   .bento-full { grid-column: 1 / -1; }

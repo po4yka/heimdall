@@ -390,7 +390,7 @@ export function renderLiveMonitorView(): JSX.Element {
   const details = detailProviders(data, liveMonitorFocus.value, hiddenPanels);
 
   return (
-    <div style={{ display: 'grid', gap: '24px' }}>
+    <div class="live-monitor" style={{ display: 'grid', gap: '24px' }}>
       <section style={{ display: 'grid', gap: '14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline', flexWrap: 'wrap' }}>
           <h2 style={{ margin: 0 }}>Provider Lanes</h2>

@@ -13856,7 +13856,7 @@ ${row.project}` : row.project;
     const hiddenPanels = new Set(liveMonitorHiddenPanels.value);
     const density = liveMonitorDensity.value;
     const details = detailProviders(data, liveMonitorFocus.value, hiddenPanels);
-    return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "24px" }, children: [
+    return /* @__PURE__ */ u4("div", { class: "live-monitor", style: { display: "grid", gap: "24px" }, children: [
       /* @__PURE__ */ u4("section", { style: { display: "grid", gap: "14px" }, children: [
         /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline", flexWrap: "wrap" }, children: [
           /* @__PURE__ */ u4("h2", { style: { margin: 0 }, children: "Provider Lanes" }),
