@@ -161,6 +161,13 @@ export function setSectionVisibility(
   // disappear instead of leaving a hollow card.
   const widgetBody = container.closest('.widget-body');
   if (widgetBody) {
+    // Initial-load shimmer (Phase 2 of the loaders work): WidgetGrid
+    // stamps data-loading="1" on every new .widget-body so the empty
+    // cell shows a generic shimmer until the first response lands.
+    // The first call to setSectionVisibility for this section means
+    // data has arrived (regardless of whether it has content) — drop
+    // the attribute so the CSS pseudo-element disappears.
+    delete (widgetBody as HTMLElement).dataset['loading'];
     const gridItem = widgetBody.closest('.grid-stack-item');
     if (gridItem) {
       // Per-widget "show anyway" override: if the user explicitly toggled

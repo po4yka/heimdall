@@ -365,6 +365,7 @@ function mountWidgetIntoGrid(grid: GridStack, placed: PlacedWidget) {
   const chromeEl = buildChrome(grid, itemEl);
   const bodyEl = document.createElement('div');
   bodyEl.className = 'widget-body';
+  bodyEl.dataset['loading'] = '1';
   def.render(bodyEl);
 
   contentEl.appendChild(chromeEl);
@@ -443,6 +444,7 @@ function initGrid(gridRoot: HTMLElement, layout: ScreenLayout): GridStack {
     const chromeEl = buildChrome(grid, itemEl);
     const bodyEl = document.createElement('div');
     bodyEl.className = 'widget-body';
+  bodyEl.dataset['loading'] = '1';
     def.render(bodyEl);
 
     contentEl.appendChild(chromeEl);
@@ -509,6 +511,7 @@ function renderMobileStack(el: HTMLElement, screen: DashboardScreen) {
     card.className = 'widget-card widget-mobile-card';
     const body = document.createElement('div');
     body.className = 'widget-body';
+    body.dataset['loading'] = '1';
     def.render(body);
     card.appendChild(body);
     stack.appendChild(card);
