@@ -710,6 +710,22 @@
     gap: 16px;
   }
 
+  /* KPI-card mount points: SECTION_DISPLAY_MODE in dashboard/view.tsx sets
+     `display: grid` inline on these containers, but without an explicit
+     `grid-template-columns` they collapse to a single column and each
+     stat card stretches to the widget's full width. Mirror the
+     .today-kpi-grid auto-fit pattern so cards flow into 2-5 columns
+     depending on the host widget's width. */
+  #stats-row,
+  #usage-windows,
+  #agent-kpis-row,
+  #codex-plan-kpi-mount,
+  #today-kpis-mount {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    align-items: stretch;
+  }
+
   /* Hour heatstrip: single 24-cell row */
   .hour-heatstrip {
     display: grid;
