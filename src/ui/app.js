@@ -9437,7 +9437,12 @@
         } else {
           const parent = ref.current.parentElement;
           let h5 = parent?.clientHeight ?? 0;
-          if (h5 <= 0) h5 = parent?.classList.contains("tall") ? 300 : 240;
+          if (h5 <= 0) {
+            const tokenName = parent?.classList.contains("tall") ? "--chart-h-lg" : "--chart-h-md";
+            const resolved = getComputedStyle(document.documentElement).getPropertyValue(tokenName).trim();
+            const parsed = parseFloat(resolved);
+            h5 = Number.isFinite(parsed) && parsed > 0 ? parsed : 240;
+          }
           opts = { ...options, chart: { ...options.chart, height: h5 } };
         }
         chartRef.current = new apexCharts(ref.current, opts);

@@ -949,8 +949,8 @@
     letter-spacing: 0.08em;
     margin-bottom: 16px;
   }
-  .chart-wrap { position: relative; height: 240px; }
-  .chart-wrap.tall { height: 300px; }
+  .chart-wrap { position: relative; height: var(--chart-h-md); }
+  .chart-wrap.tall { height: var(--chart-h-lg); }
   .chart-wrap.model-chart-wrap { height: auto; min-height: 0; }
   .heatmap-panel {
     display: flex;
@@ -1006,9 +1006,9 @@
     letter-spacing: 0.04em;
   }
   .heatmap-cell {
-    border-radius: 2px;
+    border-radius: 1px;
     aspect-ratio: 1;
-    min-height: 10px;
+    min-height: 12px;
     transition: outline 0.1s ease;
   }
   .heatmap-cell:hover,
@@ -1125,7 +1125,7 @@
     display: grid;
     grid-template-columns: repeat(24, 1fr);
     gap: 1px;
-    height: 24px;
+    height: var(--space-5);
   }
 
   .hour-heatstrip-cell {
@@ -1143,12 +1143,12 @@
   }
 
   .days-hours-heatmap-title {
-    font-size: 11px;
-    font-family: var(--font-mono);
+    font-size: var(--font-size-tertiary);
+    font-family: var(--font-sans);
+    font-weight: 500;
     color: var(--text-secondary);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    margin-bottom: 8px;
+    letter-spacing: 0;
+    margin-bottom: var(--space-2);
   }
 
   .days-hours-heatmap-cell {

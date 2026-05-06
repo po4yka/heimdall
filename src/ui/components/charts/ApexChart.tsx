@@ -18,11 +18,11 @@ export function ApexChart({ options, id }: { options: ApexOptions; id?: string }
     }
     // ApexCharts' `height: '100%'` is unreliable because it reads the
     // parent's clientHeight synchronously during `new ApexCharts(...)`; if
-    // layout hasn't settled, the chart falls back to 150px. Wait for the
-    // next animation frame so the chart-wrap's CSS height (240px / 300px)
-    // has resolved, then pass a numeric height. Tall chart-wraps use the
-    // `.tall` class modifier (300px) — the explicit fallback keeps the
-    // chart usable even if clientHeight is still zero.
+    // layout hasn't settled, the chart renders at 150px. Wait one frame
+    // for the chart-wrap's CSS height to resolve, then pass a numeric
+    // height. When clientHeight is still zero we read the resolved value
+    // of --chart-h-md / --chart-h-lg from the document root so the chart
+    // height is governed by the same token system as the rest of the UI.
     let cancelled = false;
     const raf = requestAnimationFrame(() => {
       if (cancelled || !ref.current) return;
@@ -40,7 +40,16 @@ export function ApexChart({ options, id }: { options: ApexOptions; id?: string }
       } else {
         const parent = ref.current.parentElement;
         let h = parent?.clientHeight ?? 0;
-        if (h <= 0) h = parent?.classList.contains('tall') ? 300 : 240;
+        if (h <= 0) {
+          const tokenName = parent?.classList.contains('tall')
+            ? '--chart-h-lg'
+            : '--chart-h-md';
+          const resolved = getComputedStyle(document.documentElement)
+            .getPropertyValue(tokenName)
+            .trim();
+          const parsed = parseFloat(resolved);
+          h = Number.isFinite(parsed) && parsed > 0 ? parsed : 240;
+        }
         opts = { ...options, chart: { ...options.chart, height: h } };
       }
       chartRef.current = new apexCharts(ref.current, opts);
