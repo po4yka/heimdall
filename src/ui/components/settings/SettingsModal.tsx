@@ -15,6 +15,7 @@ import { StatuslineBlocksSection } from './StatuslineBlocksSection';
 import { WebhooksSection } from './WebhooksSection';
 import type { UrlIntent } from './WebhooksSection';
 import { ProjectAliasesSection } from './ProjectAliasesSection';
+import { PricingSection } from './PricingSection';
 
 interface SettingsModalProps {
   onDataReload: (force?: boolean) => Promise<void>;
@@ -34,7 +35,7 @@ const SECTIONS: SectionMeta[] = [
   { key: 'statusline_blocks', label: 'Statusline & blocks', description: 'Threshold tuning and block sizing.', comingSoon: false },
   { key: 'webhooks', label: 'Webhooks', description: 'Notify external systems on events.', comingSoon: false },
   { key: 'aliases', label: 'Project aliases', description: 'Map project slugs to display names.', comingSoon: false },
-  { key: 'pricing', label: 'Pricing overrides', description: 'Custom rates for specific models.', comingSoon: true },
+  { key: 'pricing', label: 'Pricing overrides', description: 'Custom rates for specific models.', comingSoon: false },
 ];
 
 function isDirty(server: SettingsResponse | null, draft: SettingsResponse | null): boolean {
@@ -227,6 +228,7 @@ export function SettingsModal({ onDataReload }: SettingsModalProps) {
         />
       );
       case 'aliases': return <ProjectAliasesSection />;
+      case 'pricing': return <PricingSection />;
       default: return (
         <div class="settings-loading">Coming soon.</div>
       );

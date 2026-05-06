@@ -2442,6 +2442,357 @@
     ] });
   }
 
+  // src/ui/components/settings/PricingSection.tsx
+  function patchOverrides(overrides) {
+    const draft = settingsDraft.value;
+    if (!draft) return;
+    settingsDraft.value = {
+      ...draft,
+      pricing: { overrides }
+    };
+  }
+  function fmtRate(v4) {
+    if (v4 === null) return "?";
+    return `$${v4.toFixed(2)}`;
+  }
+  function ModelPicker({ models, existingModels, onSelect, onCustom, onClose }) {
+    const ref = A2(null);
+    const inputRef = A2(null);
+    const [query, setQuery] = d2("");
+    y2(() => {
+      if (inputRef.current) inputRef.current.focus();
+    }, []);
+    y2(() => {
+      function handler(e4) {
+        if (ref.current && !ref.current.contains(e4.target)) {
+          onClose();
+        }
+      }
+      document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }, [onClose]);
+    y2(() => {
+      function handler(e4) {
+        if (e4.key === "Escape") onClose();
+      }
+      document.addEventListener("keydown", handler);
+      return () => document.removeEventListener("keydown", handler);
+    }, [onClose]);
+    const lower = query.toLowerCase();
+    const filtered = models.filter((m5) => !lower || m5.model.toLowerCase().includes(lower) || m5.family.toLowerCase().includes(lower)).slice(0, 50);
+    const grouped = /* @__PURE__ */ new Map();
+    for (const m5 of filtered) {
+      const group = grouped.get(m5.family) ?? [];
+      group.push(m5);
+      grouped.set(m5.family, group);
+    }
+    const typedNotInList = query.trim().length > 0 && !models.some((m5) => m5.model.toLowerCase() === query.trim().toLowerCase());
+    return /* @__PURE__ */ u4("div", { class: "settings-pricing-picker", ref, children: [
+      /* @__PURE__ */ u4(
+        "input",
+        {
+          ref: inputRef,
+          type: "text",
+          class: "settings-input settings-pricing-picker-search",
+          placeholder: "Search models...",
+          value: query,
+          onInput: (e4) => setQuery(e4.target.value)
+        }
+      ),
+      /* @__PURE__ */ u4("div", { class: "settings-pricing-picker-list", children: [
+        filtered.length === 0 && !typedNotInList && /* @__PURE__ */ u4("div", { class: "settings-pricing-picker-empty", children: models.length === 0 ? "No model catalog available. Type a model name below." : "No models match." }),
+        Array.from(grouped.entries()).map(([family, rows2]) => /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-picker-group", children: esc(family) }),
+          rows2.map((m5) => {
+            const alreadyAdded = existingModels.has(m5.model);
+            return /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: `settings-pricing-picker-row${alreadyAdded ? " settings-pricing-picker-row--disabled" : ""}`,
+                disabled: alreadyAdded,
+                onMouseDown: (e4) => {
+                  e4.preventDefault();
+                  if (!alreadyAdded) onSelect(m5);
+                },
+                children: [
+                  /* @__PURE__ */ u4("span", { class: "num", children: esc(m5.model) }),
+                  /* @__PURE__ */ u4("span", { class: "settings-pricing-picker-rates", children: alreadyAdded ? /* @__PURE__ */ u4("em", { children: "Already overridden" }) : `${fmtRate(m5.default_input)} / ${fmtRate(m5.default_output)}` })
+                ]
+              },
+              m5.model
+            );
+          })
+        ] }, family)),
+        typedNotInList && /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: "settings-pricing-picker-row settings-pricing-picker-row--custom",
+            onMouseDown: (e4) => {
+              e4.preventDefault();
+              onCustom(query.trim());
+            },
+            children: [
+              /* @__PURE__ */ u4("span", { class: "num", children: [
+                "Use custom: ",
+                esc(query.trim())
+              ] }),
+              /* @__PURE__ */ u4("span", { class: "settings-pricing-picker-rates", children: "rates: 0 / 0" })
+            ]
+          }
+        )
+      ] })
+    ] });
+  }
+  function OverrideRow({ entry, index, defaultRates, onChange, onDelete }) {
+    function setField(k4, v4) {
+      onChange(index, { ...entry, [k4]: v4 });
+    }
+    function parseNum(raw) {
+      const v4 = parseFloat(raw);
+      return isFinite(v4) && v4 >= 0 ? v4 : 0;
+    }
+    function parseOptNum(raw) {
+      if (raw.trim() === "") return null;
+      const v4 = parseFloat(raw);
+      return isFinite(v4) && v4 >= 0 ? v4 : null;
+    }
+    return /* @__PURE__ */ u4("div", { class: "settings-pricing-row", children: [
+      /* @__PURE__ */ u4("div", { class: "settings-pricing-cell settings-pricing-cell--model", children: /* @__PURE__ */ u4("span", { class: "num", children: esc(entry.model) }) }),
+      /* @__PURE__ */ u4("div", { class: "settings-pricing-cell settings-pricing-cell--rate", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-pricing-input-wrap", children: [
+          /* @__PURE__ */ u4(
+            "input",
+            {
+              type: "number",
+              class: "settings-input num settings-pricing-num-input",
+              value: entry.input,
+              min: "0",
+              step: "0.01",
+              onInput: (e4) => setField("input", parseNum(e4.target.value))
+            }
+          ),
+          /* @__PURE__ */ u4("span", { class: "settings-pricing-suffix", children: "/ 1M" })
+        ] }),
+        /* @__PURE__ */ u4("small", { class: "settings-pricing-default", children: defaultRates !== null ? `default: ${fmtRate(defaultRates.default_input)}` : "default: ?" })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-pricing-cell settings-pricing-cell--rate", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-pricing-input-wrap", children: [
+          /* @__PURE__ */ u4(
+            "input",
+            {
+              type: "number",
+              class: "settings-input num settings-pricing-num-input",
+              value: entry.output,
+              min: "0",
+              step: "0.01",
+              onInput: (e4) => setField("output", parseNum(e4.target.value))
+            }
+          ),
+          /* @__PURE__ */ u4("span", { class: "settings-pricing-suffix", children: "/ 1M" })
+        ] }),
+        /* @__PURE__ */ u4("small", { class: "settings-pricing-default", children: defaultRates !== null ? `default: ${fmtRate(defaultRates.default_output)}` : "default: ?" })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-pricing-cell settings-pricing-cell--rate", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-pricing-input-wrap", children: [
+          /* @__PURE__ */ u4(
+            "input",
+            {
+              type: "number",
+              class: "settings-input num settings-pricing-num-input",
+              value: entry.cache_write ?? "",
+              placeholder: "\u2014",
+              min: "0",
+              step: "0.01",
+              onInput: (e4) => setField("cache_write", parseOptNum(e4.target.value))
+            }
+          ),
+          entry.cache_write !== null && /* @__PURE__ */ u4(
+            "button",
+            {
+              type: "button",
+              class: "settings-pricing-clear-btn",
+              onClick: () => setField("cache_write", null),
+              children: "[CLEAR]"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u4("small", { class: "settings-pricing-default", children: defaultRates !== null ? `default: ${fmtRate(defaultRates.default_cache_write)}` : "default: ?" })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-pricing-cell settings-pricing-cell--rate", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-pricing-input-wrap", children: [
+          /* @__PURE__ */ u4(
+            "input",
+            {
+              type: "number",
+              class: "settings-input num settings-pricing-num-input",
+              value: entry.cache_read ?? "",
+              placeholder: "\u2014",
+              min: "0",
+              step: "0.01",
+              onInput: (e4) => setField("cache_read", parseOptNum(e4.target.value))
+            }
+          ),
+          entry.cache_read !== null && /* @__PURE__ */ u4(
+            "button",
+            {
+              type: "button",
+              class: "settings-pricing-clear-btn",
+              onClick: () => setField("cache_read", null),
+              children: "[CLEAR]"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u4("small", { class: "settings-pricing-default", children: defaultRates !== null ? `default: ${fmtRate(defaultRates.default_cache_read)}` : "default: ?" })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-pricing-cell settings-pricing-cell--action", children: /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: "settings-aliases-delete-btn",
+          "aria-label": `Delete override for ${esc(entry.model)}`,
+          onClick: () => onDelete(index),
+          children: "[X]"
+        }
+      ) })
+    ] });
+  }
+  function PricingSection() {
+    const draft = settingsDraft.value;
+    if (!draft) return null;
+    const overrides = draft.pricing.overrides;
+    const [filter, setFilter] = d2("");
+    const [showPicker, setShowPicker] = d2(false);
+    const [pricingModels, setPricingModels] = d2([]);
+    const [modelsFetched, setModelsFetched] = d2(false);
+    const [defaultsCache, setDefaultsCache] = d2(/* @__PURE__ */ new Map());
+    const addBtnRef = A2(null);
+    async function ensureModelsFetched() {
+      if (modelsFetched) return;
+      try {
+        const r4 = await fetch("/api/pricing-models");
+        if (!r4.ok) throw new Error(`HTTP ${r4.status}`);
+        const body = await r4.json();
+        setPricingModels(body.models ?? []);
+        setDefaultsCache((prev) => {
+          const next = new Map(prev);
+          for (const m5 of body.models ?? []) next.set(m5.model, m5);
+          return next;
+        });
+      } catch {
+        setPricingModels([]);
+      }
+      setModelsFetched(true);
+    }
+    function handleAddClick() {
+      void ensureModelsFetched().then(() => setShowPicker(true));
+      if (modelsFetched) setShowPicker(true);
+    }
+    function handlePickerSelect(m5) {
+      const newEntry = {
+        model: m5.model,
+        input: m5.default_input,
+        output: m5.default_output,
+        cache_write: m5.default_cache_write,
+        cache_read: m5.default_cache_read
+      };
+      setDefaultsCache((prev) => new Map(prev).set(m5.model, m5));
+      patchOverrides([...overrides, newEntry]);
+      setShowPicker(false);
+    }
+    function handlePickerCustom(name) {
+      const newEntry = {
+        model: name,
+        input: 0,
+        output: 0,
+        cache_write: null,
+        cache_read: null
+      };
+      patchOverrides([...overrides, newEntry]);
+      setShowPicker(false);
+    }
+    function handleChange(index, updated) {
+      patchOverrides(overrides.map((e4, i4) => i4 === index ? updated : e4));
+    }
+    function handleDelete(index) {
+      patchOverrides(overrides.filter((_4, i4) => i4 !== index));
+    }
+    const lowerFilter = filter.toLowerCase();
+    const visibleIndices = overrides.map((e4, i4) => ({ e: e4, i: i4 })).filter(({ e: e4 }) => !lowerFilter || e4.model.toLowerCase().includes(lowerFilter));
+    const existingModels = new Set(overrides.map((o4) => o4.model));
+    const count2 = overrides.length;
+    return /* @__PURE__ */ u4("div", { class: "settings-section", children: [
+      /* @__PURE__ */ u4("div", { class: "settings-aliases-header", children: [
+        /* @__PURE__ */ u4(
+          "input",
+          {
+            type: "text",
+            class: "settings-input settings-aliases-filter",
+            placeholder: "Filter overrides...",
+            value: filter,
+            onInput: (e4) => setFilter(e4.target.value)
+          }
+        ),
+        /* @__PURE__ */ u4("div", { class: "settings-pricing-add-wrap", children: [
+          /* @__PURE__ */ u4(
+            "button",
+            {
+              ref: addBtnRef,
+              type: "button",
+              class: "settings-btn settings-btn--primary",
+              onClick: handleAddClick,
+              children: "[+ Add override]"
+            }
+          ),
+          showPicker && /* @__PURE__ */ u4(
+            ModelPicker,
+            {
+              models: pricingModels,
+              existingModels,
+              onSelect: handlePickerSelect,
+              onCustom: handlePickerCustom,
+              onClose: () => setShowPicker(false)
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-pricing-table", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-pricing-thead", children: [
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--model", children: "MODEL" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "INPUT" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "OUTPUT" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "CACHE WRITE" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "CACHE READ" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--action" })
+        ] }),
+        overrides.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-pricing-empty", children: "No pricing overrides configured yet. Click [+ Add override] to override a model's price." }) : visibleIndices.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-pricing-empty", children: [
+          "No overrides match \u201C",
+          esc(filter),
+          "\u201D."
+        ] }) : visibleIndices.map(({ e: e4, i: i4 }) => /* @__PURE__ */ u4(
+          OverrideRow,
+          {
+            entry: e4,
+            index: i4,
+            defaultRates: defaultsCache.get(e4.model) ?? null,
+            onChange: handleChange,
+            onDelete: handleDelete
+          },
+          i4
+        ))
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-aliases-footer", children: [
+        /* @__PURE__ */ u4("span", { class: "settings-hint", children: "Overrides replace Heimdall's built-in pricing for matching model names. Values are USD per million tokens." }),
+        /* @__PURE__ */ u4("span", { class: "settings-aliases-counter", children: [
+          count2,
+          " ",
+          count2 === 1 ? "override" : "overrides"
+        ] })
+      ] })
+    ] });
+  }
+
   // src/ui/components/settings/SettingsModal.tsx
   var SECTIONS = [
     { key: "display", label: "Display", description: "Currency, locale, and number compaction.", comingSoon: false },
@@ -2449,7 +2800,7 @@
     { key: "statusline_blocks", label: "Statusline & blocks", description: "Threshold tuning and block sizing.", comingSoon: false },
     { key: "webhooks", label: "Webhooks", description: "Notify external systems on events.", comingSoon: false },
     { key: "aliases", label: "Project aliases", description: "Map project slugs to display names.", comingSoon: false },
-    { key: "pricing", label: "Pricing overrides", description: "Custom rates for specific models.", comingSoon: true }
+    { key: "pricing", label: "Pricing overrides", description: "Custom rates for specific models.", comingSoon: false }
   ];
   function isDirty(server, draft) {
     if (!server || !draft) return false;
@@ -2612,6 +2963,8 @@
           );
         case "aliases":
           return /* @__PURE__ */ u4(ProjectAliasesSection, {});
+        case "pricing":
+          return /* @__PURE__ */ u4(PricingSection, {});
         default:
           return /* @__PURE__ */ u4("div", { class: "settings-loading", children: "Coming soon." });
       }

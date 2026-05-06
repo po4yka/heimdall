@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
 use crate::litellm::LiteLlmSnapshot;
 
@@ -30,15 +30,62 @@ pub struct CostEstimate {
     pub cost_confidence: String,
 }
 
-static PRICING_OVERRIDES: OnceLock<HashMap<String, ModelPricing>> = OnceLock::new();
+/// Hot-swappable pricing override map. Reads take a brief read lock; writes
+/// (`set_overrides`, `replace_overrides`) take an exclusive lock and swap
+/// the entire `HashMap` atomically. Empty by default until populated at
+/// startup or by a settings PATCH.
+static PRICING_OVERRIDES: RwLock<Option<HashMap<String, ModelPricing>>> = RwLock::new(None);
 
 /// Install custom pricing overrides from config. Call once at startup.
+///
+/// First call seeds the map; subsequent calls replace it wholesale (matching
+/// the legacy `OnceLock::set` semantics for the startup path while still
+/// allowing later hot-reloads via `replace_overrides`).
 pub fn set_overrides(overrides: HashMap<String, ModelPricing>) {
-    let _ = PRICING_OVERRIDES.set(overrides);
+    replace_overrides(overrides);
 }
 
-fn get_override(model: &str) -> Option<&ModelPricing> {
-    PRICING_OVERRIDES.get()?.get(model)
+/// Atomically swap the entire pricing override map. Called by the settings
+/// PATCH handler after a successful write so newly-saved overrides take effect
+/// on the next cost calculation without restarting the process.
+///
+/// The 5-tier pricing fallback (exact hardcoded → prefix hardcoded → keyword
+/// hardcoded → LiteLLM cache → unknown) is preserved unchanged — overrides
+/// remain the topmost tier; this only replaces the storage backing them.
+pub fn replace_overrides(overrides: HashMap<String, ModelPricing>) {
+    match PRICING_OVERRIDES.write() {
+        Ok(mut guard) => {
+            *guard = Some(overrides);
+        }
+        Err(poisoned) => {
+            // RwLock poisoning is recoverable for our use case: a previously
+            // panicking writer left no partially-initialized state since we
+            // always assign a fresh map.
+            tracing::warn!("pricing override RwLock was poisoned; recovering");
+            let mut guard = poisoned.into_inner();
+            *guard = Some(overrides);
+        }
+    }
+}
+
+/// Look up a single override entry. Used by the 5-tier fallback in
+/// `lookup_pricing` — copies the `ModelPricing` (a `Copy` value type) so the
+/// read lock can be released before returning.
+fn get_override(model: &str) -> Option<ModelPricing> {
+    let guard = PRICING_OVERRIDES.read().ok()?;
+    guard.as_ref()?.get(model).copied()
+}
+
+/// Snapshot the current override map. Test-only helper used to verify that
+/// `replace_overrides` swapped successfully without coupling tests to the
+/// `RwLock` internals.
+#[cfg(test)]
+pub fn current_overrides() -> HashMap<String, ModelPricing> {
+    PRICING_OVERRIDES
+        .read()
+        .ok()
+        .and_then(|g| g.as_ref().cloned())
+        .unwrap_or_default()
 }
 
 // ── LiteLLM pricing source ────────────────────────────────────────────────────
@@ -232,33 +279,94 @@ pub fn builtin_catalog() -> HashMap<String, ModelPricing> {
         .collect()
 }
 
+/// One entry in the response of `GET /api/pricing-models`. Surfaces the
+/// hardcoded default rates so the Settings UI's model-picker can render
+/// "Claude Sonnet 4.6 — $3 / $15" hints next to override fields.
+///
+/// Rates come from the `PRICING_TABLE` exact-match tier only — overrides
+/// (whether config-loaded or PATCH'd) are intentionally excluded so the
+/// response always reflects the *built-in default*, not the live override.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct KnownModel {
+    pub model: String,
+    pub family: String,
+    pub default_input: f64,
+    pub default_output: f64,
+    pub default_cache_write: Option<f64>,
+    pub default_cache_read: Option<f64>,
+}
+
+/// Derive a coarse family label from a model name. Used for grouping in the
+/// UI's model-picker. Matches the same prefix logic as `lookup_pricing`'s
+/// keyword tier so the family agrees with where pricing falls back to.
+fn model_family(name: &str) -> String {
+    let lower = name.to_lowercase();
+    if lower.starts_with("claude") {
+        "claude".to_string()
+    } else if lower.starts_with("gpt") || lower.contains("codex") {
+        "openai".to_string()
+    } else if lower.starts_with("gemini") {
+        "google".to_string()
+    } else if lower.starts_with("grok") {
+        "xai".to_string()
+    } else if lower.starts_with("llama") {
+        "meta".to_string()
+    } else {
+        "other".to_string()
+    }
+}
+
+/// Return all hardcoded models heimdall knows about, sorted alphabetically by
+/// model name. Used by `GET /api/pricing-models` to populate the Settings UI's
+/// model autocomplete.
+///
+/// Source: `PRICING_TABLE` exact-match tier. LiteLLM and override entries are
+/// not included — the UI requests *defaults* so it can show users the rates
+/// they would override.
+pub fn known_models() -> Vec<KnownModel> {
+    let mut models: Vec<KnownModel> = PRICING_TABLE
+        .iter()
+        .map(|(name, p)| KnownModel {
+            model: (*name).to_string(),
+            family: model_family(name),
+            default_input: p.input,
+            default_output: p.output,
+            default_cache_write: Some(p.cache_write),
+            default_cache_read: Some(p.cache_read),
+        })
+        .collect();
+    models.sort_by(|a, b| a.model.cmp(&b.model));
+    models
+}
+
 /// Look up pricing for a model across overrides, built-ins, heuristic
 /// fallbacks, and the LiteLLM cache.
 ///
 /// Test-only helper: production code goes through `calc_cost_nanos` /
 /// `estimate_cost`, which call `lookup_pricing` directly.
 #[cfg(test)]
-pub fn get_pricing(model: &str) -> Option<&ModelPricing> {
-    match lookup_pricing(model)? {
-        PricingLookup::Borrowed { pricing, .. } => Some(pricing),
-    }
+pub fn get_pricing(model: &str) -> Option<ModelPricing> {
+    lookup_pricing(model).map(|l| l.pricing)
 }
 
-enum PricingLookup<'a> {
-    Borrowed {
-        pricing: &'a ModelPricing,
-        pricing_model: String,
-        cost_confidence: &'static str,
-    },
+/// Result of `lookup_pricing`: pricing rates plus the resolved canonical
+/// model name and confidence tier. Held by value (`ModelPricing` is `Copy`)
+/// so the override lookup can release its read lock immediately and so all
+/// five tiers — overrides, hardcoded, prefix, keyword, LiteLLM — share one
+/// shape regardless of underlying storage.
+struct PricingLookup {
+    pricing: ModelPricing,
+    pricing_model: String,
+    cost_confidence: &'static str,
 }
 
-fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
+fn lookup_pricing(model: &str) -> Option<PricingLookup> {
     if model.is_empty() {
         return None;
     }
 
     if let Some(p) = get_override(model) {
-        return Some(PricingLookup::Borrowed {
+        return Some(PricingLookup {
             pricing: p,
             pricing_model: model.to_string(),
             cost_confidence: COST_CONFIDENCE_HIGH,
@@ -267,8 +375,8 @@ fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
 
     for (name, pricing) in PRICING_TABLE {
         if *name == model {
-            return Some(PricingLookup::Borrowed {
-                pricing,
+            return Some(PricingLookup {
+                pricing: *pricing,
                 pricing_model: (*name).to_string(),
                 cost_confidence: COST_CONFIDENCE_HIGH,
             });
@@ -282,8 +390,8 @@ fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
         .filter(|(name, _)| model.starts_with(name))
         .max_by_key(|(name, _)| name.len());
     if let Some((name, pricing)) = prefix_match {
-        return Some(PricingLookup::Borrowed {
-            pricing,
+        return Some(PricingLookup {
+            pricing: *pricing,
             pricing_model: (*name).to_string(),
             cost_confidence: COST_CONFIDENCE_HIGH,
         });
@@ -291,57 +399,57 @@ fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
 
     let lower = model.to_lowercase();
     if lower.contains("opus") {
-        return get_builtin("claude-opus-4-6").map(|pricing| PricingLookup::Borrowed {
-            pricing,
+        return get_builtin("claude-opus-4-6").map(|pricing| PricingLookup {
+            pricing: *pricing,
             pricing_model: "claude-opus-4-6".to_string(),
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
     }
     if lower.contains("sonnet") {
-        return get_builtin("claude-sonnet-4-6").map(|pricing| PricingLookup::Borrowed {
-            pricing,
+        return get_builtin("claude-sonnet-4-6").map(|pricing| PricingLookup {
+            pricing: *pricing,
             pricing_model: "claude-sonnet-4-6".to_string(),
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
     }
     if lower.contains("haiku") {
-        return get_builtin("claude-haiku-4-5").map(|pricing| PricingLookup::Borrowed {
-            pricing,
+        return get_builtin("claude-haiku-4-5").map(|pricing| PricingLookup {
+            pricing: *pricing,
             pricing_model: "claude-haiku-4-5".to_string(),
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
     }
     if lower.contains("gpt-5.5") {
-        return get_builtin("gpt-5.5").map(|pricing| PricingLookup::Borrowed {
-            pricing,
+        return get_builtin("gpt-5.5").map(|pricing| PricingLookup {
+            pricing: *pricing,
             pricing_model: "gpt-5.5".to_string(),
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
     }
     if lower.contains("gpt-5.4-mini") {
-        return get_builtin("gpt-5.4-mini").map(|pricing| PricingLookup::Borrowed {
-            pricing,
+        return get_builtin("gpt-5.4-mini").map(|pricing| PricingLookup {
+            pricing: *pricing,
             pricing_model: "gpt-5.4-mini".to_string(),
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
     }
     if lower.contains("gpt-5.4-nano") {
-        return get_builtin("gpt-5.4-nano").map(|pricing| PricingLookup::Borrowed {
-            pricing,
+        return get_builtin("gpt-5.4-nano").map(|pricing| PricingLookup {
+            pricing: *pricing,
             pricing_model: "gpt-5.4-nano".to_string(),
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
     }
     if lower.contains("gpt-5.4") {
-        return get_builtin("gpt-5.4").map(|pricing| PricingLookup::Borrowed {
-            pricing,
+        return get_builtin("gpt-5.4").map(|pricing| PricingLookup {
+            pricing: *pricing,
             pricing_model: "gpt-5.4".to_string(),
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
     }
     if lower.contains("codex") {
-        return get_builtin("gpt-5.3-codex").map(|pricing| PricingLookup::Borrowed {
-            pricing,
+        return get_builtin("gpt-5.3-codex").map(|pricing| PricingLookup {
+            pricing: *pricing,
             pricing_model: "gpt-5.3-codex".to_string(),
             cost_confidence: COST_CONFIDENCE_MEDIUM,
         });
@@ -350,8 +458,8 @@ fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
     // Tier 5: LiteLLM cache — only reached for models NOT matched by any hardcoded
     // tier above.  This guarantees Claude/GPT-5 families always use hardcoded prices.
     if let Some(pricing) = get_litellm(model) {
-        return Some(PricingLookup::Borrowed {
-            pricing,
+        return Some(PricingLookup {
+            pricing: *pricing,
             pricing_model: model.to_string(),
             cost_confidence: COST_CONFIDENCE_LOW,
         });
@@ -360,17 +468,17 @@ fn lookup_pricing(model: &str) -> Option<PricingLookup<'_>> {
     None
 }
 
-fn lookup_catalog_pricing<'a>(
+fn lookup_catalog_pricing(
     model: &str,
-    catalog: &'a HashMap<String, ModelPricing>,
-) -> Option<PricingLookup<'a>> {
+    catalog: &HashMap<String, ModelPricing>,
+) -> Option<PricingLookup> {
     if model.is_empty() {
         return None;
     }
 
     if let Some(pricing) = catalog.get(model) {
-        return Some(PricingLookup::Borrowed {
-            pricing,
+        return Some(PricingLookup {
+            pricing: *pricing,
             pricing_model: model.to_string(),
             cost_confidence: COST_CONFIDENCE_HIGH,
         });
@@ -378,8 +486,8 @@ fn lookup_catalog_pricing<'a>(
 
     for (name, pricing) in catalog {
         if model.starts_with(name) {
-            return Some(PricingLookup::Borrowed {
-                pricing,
+            return Some(PricingLookup {
+                pricing: *pricing,
                 pricing_model: name.clone(),
                 cost_confidence: COST_CONFIDENCE_HIGH,
             });
@@ -438,8 +546,8 @@ fn lookup_catalog_pricing<'a>(
     }?;
 
     let pricing = catalog.get(&fallback)?;
-    Some(PricingLookup::Borrowed {
-        pricing,
+    Some(PricingLookup {
+        pricing: *pricing,
         pricing_model: fallback,
         cost_confidence: COST_CONFIDENCE_MEDIUM,
     })
@@ -467,11 +575,7 @@ pub fn calc_cost_nanos(
     let Some(lookup) = lookup_pricing(model) else {
         return 0;
     };
-    let p = match lookup {
-        PricingLookup::Borrowed { pricing, .. } => pricing,
-    };
-
-    calc_cost_nanos_with_pricing(p, input, output, cache_read, cache_creation)
+    calc_cost_nanos_with_pricing(&lookup.pricing, input, output, cache_read, cache_creation)
 }
 
 fn calc_cost_nanos_with_pricing(
@@ -573,13 +677,11 @@ pub fn estimate_cost_breakdown(
         );
     };
 
-    let (pricing, pricing_model, cost_confidence) = match lookup {
-        PricingLookup::Borrowed {
-            pricing,
-            pricing_model,
-            cost_confidence,
-        } => (*pricing, pricing_model, cost_confidence),
-    };
+    let PricingLookup {
+        pricing,
+        pricing_model,
+        cost_confidence,
+    } = lookup;
 
     let total_tokens = input_tokens + output_tokens;
 
@@ -651,13 +753,11 @@ pub fn estimate_cost(
         };
     };
 
-    let (pricing, pricing_model, cost_confidence) = match lookup {
-        PricingLookup::Borrowed {
-            pricing,
-            pricing_model,
-            cost_confidence,
-        } => (*pricing, pricing_model, cost_confidence),
-    };
+    let PricingLookup {
+        pricing,
+        pricing_model,
+        cost_confidence,
+    } = lookup;
 
     CostEstimate {
         estimated_cost_nanos: calc_cost_nanos_with_pricing(
@@ -691,13 +791,11 @@ pub fn estimate_cost_with_catalog(
         };
     };
 
-    let (pricing, pricing_model, cost_confidence) = match lookup {
-        PricingLookup::Borrowed {
-            pricing,
-            pricing_model,
-            cost_confidence,
-        } => (*pricing, pricing_model, cost_confidence),
-    };
+    let PricingLookup {
+        pricing,
+        pricing_model,
+        cost_confidence,
+    } = lookup;
 
     CostEstimate {
         estimated_cost_nanos: calc_cost_nanos_with_pricing(
@@ -735,7 +833,7 @@ pub fn calc_cache_savings_nanos(model: &str, cache_read_tokens: i64) -> i64 {
     let Some(lookup) = lookup_pricing(model) else {
         return 0;
     };
-    let PricingLookup::Borrowed { pricing: p, .. } = lookup;
+    let p = lookup.pricing;
     let delta = p.input - p.cache_read;
     if delta <= 0.0 {
         return 0;
@@ -1183,5 +1281,119 @@ mod tests {
         let est = estimate_cost("gemini-2.5-flash", 1_000_000, 0, 0, 0);
         assert_eq!(est.estimated_cost_nanos, 0);
         assert_eq!(est.cost_confidence, COST_CONFIDENCE_LOW);
+    }
+
+    // ── known_models()  ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_known_models_sorted_alphabetically() {
+        let models = known_models();
+        assert!(!models.is_empty());
+        let mut sorted = models.clone();
+        sorted.sort_by(|a, b| a.model.cmp(&b.model));
+        for (a, b) in models.iter().zip(sorted.iter()) {
+            assert_eq!(a.model, b.model, "known_models() must be sorted by name");
+        }
+    }
+
+    #[test]
+    fn test_known_models_includes_claude_and_openai() {
+        let models = known_models();
+        let names: Vec<&str> = models.iter().map(|m| m.model.as_str()).collect();
+        assert!(
+            names.iter().any(|n| n.starts_with("claude-")),
+            "expected at least one claude-* entry; got: {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n.starts_with("gpt-")),
+            "expected at least one gpt-* entry; got: {names:?}"
+        );
+    }
+
+    #[test]
+    fn test_known_models_family_label() {
+        let models = known_models();
+        for entry in &models {
+            if entry.model.starts_with("claude-") {
+                assert_eq!(entry.family, "claude", "{}", entry.model);
+            } else if entry.model.starts_with("gpt-") {
+                assert_eq!(entry.family, "openai", "{}", entry.model);
+            }
+        }
+    }
+
+    // ── replace_overrides() hot-swap  ────────────────────────────────────────
+    //
+    // Pricing overrides live in process-wide state, so these tests serialize
+    // against a local mutex to avoid trampling each other (and `lookup_pricing`
+    // tests run elsewhere). Each test snapshots the existing map, mutates,
+    // asserts, and restores so the rest of the suite is unaffected.
+    static OVERRIDE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn with_override_guard<F: FnOnce()>(f: F) {
+        let _guard = OVERRIDE_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let snapshot = current_overrides();
+        f();
+        replace_overrides(snapshot);
+    }
+
+    fn make_override(input: f64, output: f64) -> ModelPricing {
+        ModelPricing {
+            input,
+            output,
+            cache_write: input * 1.25,
+            cache_read: input * 0.1,
+            threshold_tokens: None,
+            input_above_threshold: None,
+            output_above_threshold: None,
+        }
+    }
+
+    #[test]
+    fn replace_overrides_swaps_atomically() {
+        with_override_guard(|| {
+            // Use a synthetic model name that won't collide with the
+            // hardcoded table or any keyword fallback.
+            let model = "heimdall-override-test-zzz";
+
+            // Initial overrides: lookup returns the seeded value.
+            let mut initial = HashMap::new();
+            initial.insert(model.to_string(), make_override(11.0, 22.0));
+            replace_overrides(initial);
+            let p1 = get_pricing(model).expect("initial override");
+            assert!((p1.input - 11.0).abs() < f64::EPSILON);
+            assert!((p1.output - 22.0).abs() < f64::EPSILON);
+
+            // Replace wholesale: lookup now returns the new value.
+            let mut updated = HashMap::new();
+            updated.insert(model.to_string(), make_override(99.0, 199.0));
+            replace_overrides(updated);
+            let p2 = get_pricing(model).expect("replaced override");
+            assert!((p2.input - 99.0).abs() < f64::EPSILON);
+            assert!((p2.output - 199.0).abs() < f64::EPSILON);
+
+            // Replace with empty map: synthetic key disappears entirely.
+            replace_overrides(HashMap::new());
+            assert!(
+                get_pricing(model).is_none(),
+                "after empty replace, synthetic model must not resolve"
+            );
+        });
+    }
+
+    #[test]
+    fn replace_overrides_takes_effect_in_estimate_cost() {
+        with_override_guard(|| {
+            let model = "heimdall-override-cost-test";
+            let mut map = HashMap::new();
+            map.insert(model.to_string(), make_override(7.0, 14.0));
+            replace_overrides(map);
+
+            // 1M input tokens at $7/MTok = $7 = 7_000_000_000 nanos.
+            let est = estimate_cost(model, 1_000_000, 0, 0, 0);
+            assert_eq!(est.estimated_cost_nanos, 7_000_000_000);
+            assert_eq!(est.pricing_model, model);
+            assert_eq!(est.cost_confidence, COST_CONFIDENCE_HIGH);
+        });
     }
 }

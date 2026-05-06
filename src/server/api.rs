@@ -3246,6 +3246,30 @@ pub async fn settings_patch(
         *live = LiveSettings::from_config(&cfg);
     }
 
+    // Hot-reload pricing overrides: convert config entries into the runtime
+    // ModelPricing shape and atomically swap the override map so the next cost
+    // calculation picks them up. Cache rates default to standard multipliers
+    // when omitted, matching the startup loader in `apply_pricing_overrides`.
+    let mut pricing_overrides: std::collections::HashMap<String, crate::pricing::ModelPricing> =
+        std::collections::HashMap::new();
+    for (name, p) in &cfg.pricing {
+        let cache_write = p.cache_write.unwrap_or(p.input * 1.25);
+        let cache_read = p.cache_read.unwrap_or(p.input * 0.1);
+        pricing_overrides.insert(
+            name.clone(),
+            crate::pricing::ModelPricing {
+                input: p.input,
+                output: p.output,
+                cache_write,
+                cache_read,
+                threshold_tokens: None,
+                input_above_threshold: None,
+                output_above_threshold: None,
+            },
+        );
+    }
+    crate::pricing::replace_overrides(pricing_overrides);
+
     Ok(Json(response))
 }
 
@@ -3253,6 +3277,47 @@ pub async fn settings_patch(
 enum SettingsPatchError {
     Validation(crate::config::ValidationError),
     Io(anyhow::Error),
+}
+
+/// Response shape for `GET /api/pricing-models` — the list heimdall's hardcoded
+/// pricing table knows about, used by the Settings UI's model-picker autocomplete.
+#[derive(Debug, serde::Serialize)]
+pub struct PricingModelsResponse {
+    pub models: Vec<PricingModelEntry>,
+}
+
+/// Single entry in `PricingModelsResponse`. Default rates come from the
+/// `PRICING_TABLE` exact-match tier — the UI displays them as hints next to
+/// override input fields.
+#[derive(Debug, serde::Serialize)]
+pub struct PricingModelEntry {
+    pub model: String,
+    pub family: String,
+    pub default_input: f64,
+    pub default_output: f64,
+    pub default_cache_write: Option<f64>,
+    pub default_cache_read: Option<f64>,
+}
+
+/// `GET /api/pricing-models` — list of known model names + default rates for
+/// the Settings UI's model-picker. Loopback-guarded; no DB access.
+pub async fn pricing_models_get(
+    State(_state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<PricingModelsResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let models = crate::pricing::known_models()
+        .into_iter()
+        .map(|m| PricingModelEntry {
+            model: m.model,
+            family: m.family,
+            default_input: m.default_input,
+            default_output: m.default_output,
+            default_cache_write: m.default_cache_write,
+            default_cache_read: m.default_cache_read,
+        })
+        .collect();
+    Ok(Json(PricingModelsResponse { models }))
 }
 
 // ---------------------------------------------------------------------------

@@ -223,6 +223,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             "/api/settings",
             get(api::settings_get).patch(api::settings_patch),
         )
+        .route("/api/pricing-models", get(api::pricing_models_get))
         .route(
             "/api/agents/{project_id}/registry",
             get(api::agent_registry_list),

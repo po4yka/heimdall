@@ -5681,4 +5681,135 @@ mod tests {
         let live = state.settings.read().await;
         assert_eq!(live.oauth.refresh_interval, 120);
     }
+
+    // ── M5: GET /api/pricing-models  ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn pricing_models_get_returns_known_models() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/pricing-models")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let models = parsed["models"].as_array().expect("models array");
+        assert!(!models.is_empty(), "expected non-empty models list");
+
+        // Sorted alphabetically by name.
+        let names: Vec<&str> = models
+            .iter()
+            .map(|m| m["model"].as_str().unwrap())
+            .collect();
+        let mut sorted = names.clone();
+        sorted.sort();
+        assert_eq!(names, sorted, "models must be sorted alphabetically");
+
+        // At least one Claude and one OpenAI/GPT model present.
+        assert!(
+            names.iter().any(|n| n.starts_with("claude-")),
+            "expected a claude-* entry; got: {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n.starts_with("gpt-")),
+            "expected a gpt-* entry; got: {names:?}"
+        );
+
+        // Each entry exposes default rates and a family label.
+        for entry in models {
+            assert!(entry["model"].as_str().is_some());
+            assert!(entry["family"].as_str().is_some());
+            assert!(entry["default_input"].as_f64().is_some());
+            assert!(entry["default_output"].as_f64().is_some());
+        }
+    }
+
+    // ── M5: pricing PATCH hot-reload  ────────────────────────────────────────
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_patch_pricing_takes_effect_immediately() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        // Snapshot the override map so we can restore it after the test —
+        // pricing overrides live in process-wide state.
+        let snapshot = crate::pricing::current_overrides();
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(&cfg_path, r#"{}"#).unwrap();
+        settings_set_test_config_env(&cfg_path);
+
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let model = "heimdall-test-model";
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/api/settings")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "pricing": {
+                                "overrides": [
+                                    {
+                                        "model": model,
+                                        "input": 1.0,
+                                        "output": 2.0,
+                                        "cache_write": null,
+                                        "cache_read": null
+                                    }
+                                ]
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = resp.status();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+
+        // Restore env+overrides regardless of assertion outcome.
+        settings_remove_test_config_env();
+
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "PATCH failed: {}",
+            String::from_utf8_lossy(&body)
+        );
+
+        // The hot-swapped override is live: estimate_cost picks it up
+        // immediately, no restart needed. 1M input @ $1/MTok = $1 = 1e9 nanos.
+        let est = crate::pricing::estimate_cost(model, 1_000_000, 0, 0, 0);
+        assert_eq!(est.estimated_cost_nanos, 1_000_000_000);
+        assert_eq!(est.pricing_model, model);
+
+        // current_overrides() snapshot also reflects the swap.
+        let live = crate::pricing::current_overrides();
+        assert!(
+            live.contains_key(model),
+            "expected override for {model} after PATCH; got keys: {:?}",
+            live.keys().collect::<Vec<_>>()
+        );
+
+        // Restore so other tests run against the original override state.
+        crate::pricing::replace_overrides(snapshot);
+    }
 }
