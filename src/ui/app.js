@@ -10797,8 +10797,8 @@
   function CostShareBar({ value, max: max2, label }) {
     if (max2 <= 0 || value <= 0) return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
     const pct = value / max2 * 100;
-    return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", gap: "6px", minWidth: "100px" }, children: [
-      /* @__PURE__ */ u4("span", { class: "num", style: { fontSize: "13px", minWidth: "52px", textAlign: "right" }, children: fmtCost(value) }),
+    return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minWidth: "100px" }, children: [
+      /* @__PURE__ */ u4("span", { class: "num", style: { fontSize: "var(--font-size-body)", minWidth: "52px", textAlign: "right" }, children: fmtCost(value) }),
       /* @__PURE__ */ u4(
         "div",
         {
@@ -10806,8 +10806,8 @@
           style: {
             flex: 1,
             height: "4px",
-            background: "rgba(var(--text-primary-rgb,232,232,232),0.12)",
-            borderRadius: "2px",
+            background: "color-mix(in srgb, var(--accent-interactive) 12%, transparent)",
+            borderRadius: "var(--radius-1)",
             overflow: "hidden"
           },
           "aria-label": label,
@@ -10817,8 +10817,9 @@
               style: {
                 height: "100%",
                 width: `${Math.min(100, pct).toFixed(1)}%`,
-                background: "rgba(var(--text-primary-rgb,232,232,232),0.65)",
-                borderRadius: "2px"
+                background: "var(--accent-interactive)",
+                opacity: 0.6,
+                borderRadius: "var(--radius-1)"
               }
             }
           )
@@ -11666,7 +11667,7 @@
   var primaryOverflowStyle = {
     display: "block",
     minWidth: 0,
-    maxWidth: "clamp(14rem, 28vw, 24rem)",
+    maxWidth: "clamp(12rem, 24vw, 20rem)",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap"
@@ -11674,12 +11675,12 @@
   var secondaryOverflowStyle = {
     ...primaryOverflowStyle,
     marginTop: "2px",
-    fontSize: "10px",
+    fontSize: "var(--font-size-tertiary)",
     fontFamily: "var(--font-mono)"
   };
   var projectOverflowStyle = {
     ...primaryOverflowStyle,
-    maxWidth: "clamp(12rem, 24vw, 22rem)"
+    maxWidth: "clamp(10rem, 20vw, 18rem)"
   };
   function useSessionColumns(showCredits, onSelectProject, onSelectModel) {
     return T2(

@@ -22,7 +22,7 @@ const defaultSort: SortingState = [{ id: 'last', desc: true }];
 const primaryOverflowStyle = {
   display: 'block',
   minWidth: 0,
-  maxWidth: 'clamp(14rem, 28vw, 24rem)',
+  maxWidth: 'clamp(12rem, 24vw, 20rem)',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
@@ -30,12 +30,12 @@ const primaryOverflowStyle = {
 const secondaryOverflowStyle = {
   ...primaryOverflowStyle,
   marginTop: '2px',
-  fontSize: '10px',
+  fontSize: 'var(--font-size-tertiary)',
   fontFamily: 'var(--font-mono)',
 };
 const projectOverflowStyle = {
   ...primaryOverflowStyle,
-  maxWidth: 'clamp(12rem, 24vw, 22rem)',
+  maxWidth: 'clamp(10rem, 20vw, 18rem)',
 };
 
 function useSessionColumns(

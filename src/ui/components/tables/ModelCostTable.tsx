@@ -17,8 +17,8 @@ function CostShareBar({ value, max, label }: { value: number; max: number; label
   if (max <= 0 || value <= 0) return <span class="cost-na">&mdash;</span>;
   const pct = (value / max) * 100;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '100px' }}>
-      <span class="num" style={{ fontSize: '13px', minWidth: '52px', textAlign: 'right' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', minWidth: '100px' }}>
+      <span class="num" style={{ fontSize: 'var(--font-size-body)', minWidth: '52px', textAlign: 'right' }}>
         {fmtCost(value)}
       </span>
       <div
@@ -26,8 +26,8 @@ function CostShareBar({ value, max, label }: { value: number; max: number; label
         style={{
           flex: 1,
           height: '4px',
-          background: 'rgba(var(--text-primary-rgb,232,232,232),0.12)',
-          borderRadius: '2px',
+          background: 'color-mix(in srgb, var(--accent-interactive) 12%, transparent)',
+          borderRadius: 'var(--radius-1)',
           overflow: 'hidden',
         }}
         aria-label={label}
@@ -36,8 +36,9 @@ function CostShareBar({ value, max, label }: { value: number; max: number; label
           style={{
             height: '100%',
             width: `${Math.min(100, pct).toFixed(1)}%`,
-            background: 'rgba(var(--text-primary-rgb,232,232,232),0.65)',
-            borderRadius: '2px',
+            background: 'var(--accent-interactive)',
+            opacity: 0.6,
+            borderRadius: 'var(--radius-1)',
           }}
         />
       </div>
