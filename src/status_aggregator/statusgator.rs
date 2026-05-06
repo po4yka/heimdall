@@ -497,6 +497,8 @@ mod tests {
     fn fetch_returns_unknown_signal_when_api_key_missing() {
         let _env_guard = env_lock().lock().expect("env lock should succeed");
         let config = test_config();
+        // SAFETY: this test holds `env_lock`, serializing mutation of the
+        // process-global environment for the duration of the check.
         unsafe {
             std::env::remove_var(&config.key_env_var);
         }

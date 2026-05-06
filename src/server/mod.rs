@@ -181,6 +181,10 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             post(api::api_archive_companion_heartbeat),
         )
         .route(
+            "/api/agents/unclassified-global",
+            get(api::agent_unclassified_global),
+        )
+        .route(
             "/api/agents/{project_id}/registry",
             get(api::agent_registry_list),
         )

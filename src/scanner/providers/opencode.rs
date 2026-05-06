@@ -174,7 +174,10 @@ fn parse_opencode_db(path: &Path) -> Vec<Turn> {
         .iter()
         .find(|t| {
             let lower = t.to_lowercase();
-            lower.contains("session") || lower.contains("message") || lower.contains("turn")
+            is_valid_sql_identifier(t)
+                && (lower.contains("session")
+                    || lower.contains("message")
+                    || lower.contains("turn"))
         })
         .cloned();
 
@@ -210,6 +213,10 @@ fn list_tables(conn: &Connection) -> Vec<String> {
 
 /// List column names for a given table.
 fn list_columns(conn: &Connection, table_name: &str) -> HashSet<String> {
+    if !is_valid_sql_identifier(table_name) {
+        warn!("opencode: skipping table with invalid SQL identifier {table_name:?}");
+        return HashSet::new();
+    }
     let query = format!("PRAGMA table_info({table_name})");
     let mut stmt = match conn.prepare(&query) {
         Ok(s) => s,
@@ -229,6 +236,10 @@ fn extract_turns_from_table(
     table_name: &str,
     columns: &HashSet<String>,
 ) -> Vec<Turn> {
+    if !is_valid_sql_identifier(table_name) {
+        warn!("opencode: skipping table with invalid SQL identifier {table_name:?}");
+        return Vec::new();
+    }
     // Build the SELECT list based on what columns exist.
     let has = |col: &str| columns.contains(col);
 
@@ -306,6 +317,15 @@ fn extract_turns_from_table(
     }
     if let Some(c) = ts_col {
         select_cols.push(c);
+    }
+
+    if let Some(invalid) = select_cols
+        .iter()
+        .copied()
+        .find(|col| !is_valid_sql_identifier(col))
+    {
+        warn!("opencode: skipping invalid column identifier {invalid:?}");
+        return Vec::new();
     }
 
     let sql = format!("SELECT {} FROM {}", select_cols.join(", "), table_name);
@@ -444,6 +464,15 @@ fn extract_turns_from_table(
     }
 
     turns
+}
+
+fn is_valid_sql_identifier(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 // ---------------------------------------------------------------------------

@@ -445,6 +445,8 @@ fn looks_like_jsonl(path: &std::path::Path) -> bool {
 
 #[cfg(unix)]
 fn task_output_roots() -> Vec<PathBuf> {
+    // SAFETY: POSIX `getuid()` has no preconditions, does not dereference
+    // pointers, and only reads the current process' real UID.
     let uid = unsafe { libc::getuid() };
     let candidates = [
         format!("/private/tmp/claude-{}", uid),

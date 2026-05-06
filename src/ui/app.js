@@ -6385,6 +6385,18 @@
   }
 
   // src/ui/components/agents/AgentKpis.tsx
+  function fmtDurationTotal(seconds) {
+    if (seconds <= 0) return "0s";
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    if (seconds < 3600) {
+      const m6 = Math.floor(seconds / 60);
+      const s4 = Math.round(seconds % 60);
+      return s4 ? `${m6}m ${s4}s` : `${m6}m`;
+    }
+    const h5 = Math.floor(seconds / 3600);
+    const m5 = Math.round(seconds % 3600 / 60);
+    return m5 ? `${h5}h ${m5}m` : `${h5}h`;
+  }
   function AgentKpis({ telemetry, totalCostUsd }) {
     const { totals } = telemetry;
     if (totals.sessions === 0) {
@@ -6411,6 +6423,11 @@
         label: "Tokens / session",
         value: totals.sessions > 0 ? fmt(tokensPerSession) : "\u2014",
         sub: totals.sessions > 0 ? `${fmtCostBig(costPerSession)} avg cost` : "no sessions"
+      },
+      {
+        label: "Tool calls",
+        value: fmt(totals.tool_uses),
+        sub: `${fmtDurationTotal(totals.duration_s)} total runtime`
       }
     ];
     return /* @__PURE__ */ u4(S, { children: cards.map((c4) => /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
@@ -6421,13 +6438,31 @@
   }
 
   // src/ui/components/agents/AgentSetupBanner.tsx
+  var unclassifiedGlobal = y3(null);
+  var inFlight = false;
+  async function fetchUnclassifiedGlobal() {
+    if (inFlight || unclassifiedGlobal.value !== null) return;
+    inFlight = true;
+    try {
+      const res = await fetch("/api/agents/unclassified-global");
+      if (!res.ok) return;
+      unclassifiedGlobal.value = await res.json();
+    } finally {
+      inFlight = false;
+    }
+  }
   function AgentSetupBanner({ telemetry }) {
+    y2(() => {
+      void fetchUnclassifiedGlobal();
+    }, []);
     if (setupBannerDismissed.value) return null;
-    const unclassified = unclassifiedDetectedRolesGlobal(telemetry);
-    if (!unclassified.length) return null;
-    const projects = [...new Set(unclassified.map((d5) => d5.project))];
-    const roleCount = unclassified.length;
-    const projectCount = projects.length;
+    const server = unclassifiedGlobal.value;
+    if (!server || server.count <= 0) return null;
+    const roleCount = server.count;
+    const projects = [
+      ...new Set(unclassifiedDetectedRolesGlobal(telemetry).map((d5) => d5.project))
+    ];
+    const projectCount = projects.length || 1;
     function openRegistry() {
       const firstProject = projects[0];
       if (firstProject) {
@@ -6516,18 +6551,43 @@
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtCostBig(getValue()) })
     }
   ];
-  function AgentSpawnBatches({ data }) {
+  function AgentSpawnBatches({ data, summary }) {
     if (!data.length) return null;
-    return /* @__PURE__ */ u4(
-      DataTable,
-      {
-        columns: columns2,
-        data,
-        title: "Parallel spawn batches",
-        sectionKey: "agent-spawn-batches",
-        defaultSort: [{ id: "spawned_at", desc: true }]
-      }
-    );
+    const avg = summary.avg_size > 0 ? summary.avg_size.toFixed(1) : "0";
+    return /* @__PURE__ */ u4(S, { children: [
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          class: "num",
+          style: {
+            color: "var(--text-secondary)",
+            fontSize: "12px",
+            padding: "0 4px 8px"
+          },
+          children: [
+            summary.batch_count,
+            " batches \xB7 avg ",
+            avg,
+            " \xB7 max ",
+            summary.max_size,
+            " \xB7",
+            " ",
+            summary.batched_agents,
+            " agents"
+          ]
+        }
+      ),
+      /* @__PURE__ */ u4(
+        DataTable,
+        {
+          columns: columns2,
+          data,
+          title: "Parallel spawn batches",
+          sectionKey: "agent-spawn-batches",
+          defaultSort: [{ id: "spawned_at", desc: true }]
+        }
+      )
+    ] });
   }
 
   // src/ui/components/charts/ApexChart.tsx
@@ -10819,7 +10879,13 @@ ${row.project}` : row.project;
     renderSection(
       "agent-spawn-batches",
       agent_telemetry.spawn_batches.length > 0,
-      /* @__PURE__ */ u4(AgentSpawnBatches, { data: agent_telemetry.spawn_batches })
+      /* @__PURE__ */ u4(
+        AgentSpawnBatches,
+        {
+          data: agent_telemetry.spawn_batches,
+          summary: agent_telemetry.spawn_batches_summary
+        }
+      )
     );
     renderSection(
       "agent-tool-spectrum",

@@ -1,6 +1,19 @@
 import { fmtCostBig, fmt } from '../../lib/format';
 import type { AgentTelemetry } from '../../state/types';
 
+function fmtDurationTotal(seconds: number): string {
+  if (seconds <= 0) return '0s';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return s ? `${m}m ${s}s` : `${m}m`;
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
 interface AgentKpisProps {
   telemetry: AgentTelemetry;
   totalCostUsd: number;
@@ -40,6 +53,11 @@ export function AgentKpis({ telemetry, totalCostUsd }: AgentKpisProps) {
       label: 'Tokens / session',
       value: totals.sessions > 0 ? fmt(tokensPerSession) : '—',
       sub: totals.sessions > 0 ? `${fmtCostBig(costPerSession)} avg cost` : 'no sessions',
+    },
+    {
+      label: 'Tool calls',
+      value: fmt(totals.tool_uses),
+      sub: `${fmtDurationTotal(totals.duration_s)} total runtime`,
     },
   ];
 

@@ -127,6 +127,18 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    fn set_test_config_env(path: &std::path::Path) {
+        // SAFETY: callers hold `HEIMDALL_CONFIG_MUTEX`, serializing all
+        // mutation of the process-global HEIMDALL_CONFIG variable.
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", path) };
+    }
+
+    fn remove_test_config_env() {
+        // SAFETY: callers hold `HEIMDALL_CONFIG_MUTEX`, serializing all
+        // mutation of the process-global HEIMDALL_CONFIG variable.
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+    }
+
     /// Write a live_events row directly and verify it can be read back.
     #[test]
     fn live_events_migration_is_idempotent() {
@@ -184,8 +196,7 @@ mod tests {
             format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
         )
         .unwrap();
-        // SAFETY: single-threaded test; env mutation is safe here.
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+        set_test_config_env(&cfg_path);
 
         let json = r#"{
             "session_id": "test-session",
@@ -200,7 +211,7 @@ mod tests {
         ingest_event(json).unwrap();
 
         // Clean up env var.
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         let conn = open_db(&db_path).unwrap();
         let (session_id, tool_name, cost_nanos, hook_reported): (String, String, i64, Option<i64>) =
@@ -237,7 +248,7 @@ mod tests {
             format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
         )
         .unwrap();
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+        set_test_config_env(&cfg_path);
 
         let json = r#"{
             "session_id": "ctx-session",
@@ -255,7 +266,7 @@ mod tests {
 
         ingest_event(json).unwrap();
 
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         let conn = open_db(&db_path).unwrap();
         let (ctx_tokens, ctx_size): (Option<i64>, Option<i64>) = conn
@@ -290,7 +301,7 @@ mod tests {
             format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
         )
         .unwrap();
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+        set_test_config_env(&cfg_path);
 
         // Payload with cost object shape
         let json = r#"{
@@ -305,7 +316,7 @@ mod tests {
 
         ingest_event(json).unwrap();
 
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         let conn = open_db(&db_path).unwrap();
         let hook_nanos: Option<i64> = conn
@@ -338,7 +349,7 @@ mod tests {
             format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
         )
         .unwrap();
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+        set_test_config_env(&cfg_path);
 
         // Payload with NO cost field
         let json = r#"{
@@ -352,7 +363,7 @@ mod tests {
 
         ingest_event(json).unwrap();
 
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         let conn = open_db(&db_path).unwrap();
         let hook_nanos: Option<i64> = conn
@@ -401,8 +412,7 @@ mod tests {
             format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
         )
         .unwrap();
-        // SAFETY: single-threaded under the mutex; env mutation is safe here.
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+        set_test_config_env(&cfg_path);
 
         let garbage_inputs = [
             "not json at all",
@@ -421,7 +431,7 @@ mod tests {
             );
         }
 
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
     }
 
     /// Panic-safety: a deliberately panicking closure inside catch_unwind is
@@ -458,8 +468,7 @@ mod tests {
             format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
         )
         .unwrap();
-        // SAFETY: single-threaded test; env mutation is safe here.
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &cfg_path) };
+        set_test_config_env(&cfg_path);
 
         let json = r#"{
             "session_id": "s1",
@@ -472,7 +481,7 @@ mod tests {
         // Second call with same tool_use_id must not fail (INSERT OR IGNORE).
         ingest_event(json).unwrap();
 
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         let conn = open_db(&db_path).unwrap();
         let count: i64 = conn

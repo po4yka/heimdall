@@ -733,6 +733,18 @@ mod tests {
     use std::io::Write;
     use tempfile::TempDir;
 
+    fn set_test_config_env(path: &std::path::Path) {
+        // SAFETY: callers hold `HEIMDALL_CONFIG_MUTEX`, serializing all
+        // mutation of the process-global HEIMDALL_CONFIG variable.
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", path) };
+    }
+
+    fn remove_test_config_env() {
+        // SAFETY: callers hold `HEIMDALL_CONFIG_MUTEX`, serializing all
+        // mutation of the process-global HEIMDALL_CONFIG variable.
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+    }
+
     #[test]
     fn test_missing_file_returns_defaults() {
         let config = load_config_from(Path::new("/nonexistent/path/config.toml"));
@@ -1120,10 +1132,9 @@ output = 8.0
         let explicit = tmp.path().join("explicit.toml");
         std::fs::File::create(&explicit).unwrap();
 
-        // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &explicit) };
+        set_test_config_env(&explicit);
         let result = resolve_config_path();
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         assert_eq!(result, Some(explicit));
     }
@@ -1139,12 +1150,11 @@ output = 8.0
         let tmp = TempDir::new().unwrap();
         let nonexistent = tmp.path().join("does_not_exist.toml");
 
-        // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &nonexistent) };
+        set_test_config_env(&nonexistent);
         // We don't assert the exact value because the test machine might have
         // real config files; we only assert we don't get the nonexistent path.
         let result = resolve_config_path();
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         assert_ne!(result, Some(nonexistent));
     }
@@ -1155,8 +1165,7 @@ output = 8.0
             .lock()
             .unwrap_or_else(|p| p.into_inner());
         // Make sure env var is not set.
-        // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
         // We can't easily override HOME without unsafe or extra deps,
         // but we can verify the function doesn't panic and returns
         // Some or None based on the real filesystem.
@@ -1232,10 +1241,9 @@ spike_webhook = false
         let mut f = std::fs::File::create(&path).unwrap();
         writeln!(f, "port = 7777").unwrap();
 
-        // SAFETY: serialised against other HEIMDALL_CONFIG mutators by the guard above.
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &path) };
+        set_test_config_env(&path);
         let config = load_config_resolved();
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         assert_eq!(config.port, Some(7777));
     }
@@ -1300,10 +1308,10 @@ spike_webhook = false
         let mut f = std::fs::File::create(&toml_path).unwrap();
         writeln!(f, "port = 2222").unwrap();
 
-        // Point HEIMDALL_CONFIG at the JSON file explicitly
-        unsafe { std::env::set_var("HEIMDALL_CONFIG", &json_path) };
+        // Point HEIMDALL_CONFIG at the JSON file explicitly.
+        set_test_config_env(&json_path);
         let config = load_config_resolved();
-        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+        remove_test_config_env();
 
         assert_eq!(config.port, Some(1111));
     }

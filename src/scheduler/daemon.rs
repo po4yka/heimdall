@@ -216,7 +216,7 @@ impl DaemonScheduler for LaunchdDaemonScheduler {
         std::fs::write(&plist_path, &plist_xml)?;
 
         if !self.is_isolated() {
-            let uid = unsafe { libc_uid() };
+            let uid = libc_uid();
             let status = std::process::Command::new("launchctl")
                 .args([
                     "bootstrap",
@@ -243,7 +243,7 @@ impl DaemonScheduler for LaunchdDaemonScheduler {
         }
 
         if !self.is_isolated() {
-            let uid = unsafe { libc_uid() };
+            let uid = libc_uid();
             // Bootout; ignore errors (service may not be loaded).
             let _ = std::process::Command::new("launchctl")
                 .args([
@@ -278,13 +278,12 @@ impl DaemonScheduler for LaunchdDaemonScheduler {
 // ── Unsafe helper ─────────────────────────────────────────────────────────────
 
 /// Return the real UID of the current process.
-///
-/// # Safety
-/// Calls POSIX `getuid()` which is always safe.
-unsafe fn libc_uid() -> u32 {
+fn libc_uid() -> u32 {
     unsafe extern "C" {
         fn getuid() -> u32;
     }
+    // SAFETY: POSIX `getuid()` has no preconditions, does not dereference
+    // pointers, and returns the real UID for the current process.
     unsafe { getuid() }
 }
 

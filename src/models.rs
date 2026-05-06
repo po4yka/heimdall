@@ -1557,6 +1557,12 @@ pub struct AgentTelemetryTotals {
     pub sessions: i64,
     pub total_tokens: i64,
     pub cost_usd: f64,
+    pub input_tokens: i64,
+    pub cache_create_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub output_tokens: i64,
+    pub tool_uses: i64,
+    pub duration_s: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1625,6 +1631,14 @@ pub struct SpawnBatch {
     pub cost_usd: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SpawnBatchAggregate {
+    pub batch_count: i64,
+    pub avg_size: f64,
+    pub max_size: i64,
+    pub batched_agents: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolSpectrumCell {
     pub role: String,
@@ -1649,6 +1663,7 @@ pub struct AgentTelemetry {
     pub distribution: Vec<AgentRoleAggregate>,
     pub top_sessions: Vec<AgentSessionRow>,
     pub spawn_batches: Vec<SpawnBatch>,
+    pub spawn_batches_summary: SpawnBatchAggregate,
     pub tool_spectrum: Vec<ToolSpectrumCell>,
     pub detected: Vec<DetectedRole>,
 }

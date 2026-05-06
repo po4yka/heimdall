@@ -12,8 +12,8 @@ use crate::models::{
     DailyProjectRow, DashboardData, DetectedRole, EntrypointSummary, HourlyRow, McpServerSummary,
     OfficialSyncRecordCount, OfficialSyncSourceStatus, OfficialSyncSummary, ProjectRegistryRow,
     ProjectSettingsRow, ProjectSettingsUpdate, ProviderSummary, RoleConfidence, ServiceTierSummary,
-    SessionRow, SpawnBatch, ToolErrorRow, ToolErrorsResponse, ToolEvent, ToolSpectrumCell,
-    ToolSummary, Turn, VersionSummary, WeeklyModelRow,
+    SessionRow, SpawnBatch, SpawnBatchAggregate, ToolErrorRow, ToolErrorsResponse, ToolEvent,
+    ToolSpectrumCell, ToolSummary, Turn, VersionSummary, WeeklyModelRow,
 };
 use crate::pricing_defs::{
     OfficialExtractedRecord, OfficialModelPricing, OfficialSyncRunRecord, PricingSyncRun,
@@ -4167,8 +4167,7 @@ pub fn query_today_provider_breakdown(
                 row.get(7)?,
             ))
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -4188,8 +4187,7 @@ pub fn query_today_confidence_breakdown(
     )?;
     let rows = stmt
         .query_map([today], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -4209,8 +4207,7 @@ pub fn query_today_billing_mode_breakdown(
     )?;
     let rows = stmt
         .query_map([today], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -4312,8 +4309,7 @@ pub fn query_stats_by_provider(conn: &Connection) -> rusqlite::Result<Vec<StatsB
                 row.get(8)?,
             ))
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -4331,8 +4327,7 @@ pub fn query_stats_confidence_breakdown(
     )?;
     let rows = stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -4350,8 +4345,7 @@ pub fn query_stats_billing_mode_breakdown(
     )?;
     let rows = stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 
@@ -4981,6 +4975,19 @@ pub fn query_agent_registry(
     .collect::<rusqlite::Result<Vec<_>>>()
 }
 
+/// Returns true iff at least one row exists in `agent_registry`.
+///
+/// Used by the global setup banner to distinguish "fresh install with no roles
+/// configured yet" from "configured but new role just appeared". Cheap LIMIT 1
+/// existence probe — does not scan the table.
+pub fn any_agent_registry_row_exists(conn: &Connection) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM agent_registry LIMIT 1)",
+        [],
+        |row| row.get::<_, i64>(0).map(|v| v != 0),
+    )
+}
+
 /// Assemble the full agent telemetry payload for the dashboard.
 ///
 /// All sections are populated from `agent_sessions` and `agent_registry`.
@@ -4993,7 +5000,15 @@ pub fn query_dashboard_agent_telemetry(
     // --- Totals ---
     let totals = conn
         .query_row(
-            "SELECT COUNT(*), COALESCE(SUM(total_tokens),0), COALESCE(SUM(cost_nanos),0)
+            "SELECT COUNT(*),
+                    COALESCE(SUM(total_tokens),0),
+                    COALESCE(SUM(cost_nanos),0),
+                    COALESCE(SUM(input_tokens),0),
+                    COALESCE(SUM(cache_create_tokens),0),
+                    COALESCE(SUM(cache_read_tokens),0),
+                    COALESCE(SUM(output_tokens),0),
+                    COALESCE(SUM(tool_uses),0),
+                    COALESCE(SUM(duration_s),0)
              FROM agent_sessions",
             [],
             |row| {
@@ -5001,6 +5016,12 @@ pub fn query_dashboard_agent_telemetry(
                     sessions: row.get(0)?,
                     total_tokens: row.get(1)?,
                     cost_usd: row.get::<_, i64>(2)? as f64 / 1e9,
+                    input_tokens: row.get(3)?,
+                    cache_create_tokens: row.get(4)?,
+                    cache_read_tokens: row.get(5)?,
+                    output_tokens: row.get(6)?,
+                    tool_uses: row.get(7)?,
+                    duration_s: row.get(8)?,
                 })
             },
         )
@@ -5149,6 +5170,31 @@ pub fn query_dashboard_agent_telemetry(
             .collect()
     };
 
+    // --- Spawn batch aggregate stats (over the same prompt_id GROUP BY) ---
+    let spawn_batches_summary = conn
+        .query_row(
+            "SELECT COUNT(*)            AS batch_count,
+                    COALESCE(AVG(size), 0.0)  AS avg_size,
+                    COALESCE(MAX(size), 0)    AS max_size,
+                    COALESCE(SUM(size), 0)    AS batched_agents
+             FROM (
+                 SELECT COUNT(*) AS size FROM agent_sessions
+                 WHERE prompt_id IS NOT NULL
+                 GROUP BY prompt_id
+                 HAVING COUNT(*) > 1
+             )",
+            [],
+            |row| {
+                Ok(SpawnBatchAggregate {
+                    batch_count: row.get(0)?,
+                    avg_size: row.get(1)?,
+                    max_size: row.get(2)?,
+                    batched_agents: row.get(3)?,
+                })
+            },
+        )
+        .unwrap_or_default();
+
     // --- Tool spectrum (json_each expansion; bundled rusqlite includes json1) ---
     let tool_spectrum: Vec<ToolSpectrumCell> = {
         let mut stmt = conn.prepare(
@@ -5206,6 +5252,7 @@ pub fn query_dashboard_agent_telemetry(
         distribution,
         top_sessions,
         spawn_batches,
+        spawn_batches_summary,
         tool_spectrum,
         detected,
     })
@@ -8793,6 +8840,114 @@ mod tests {
             "dominant confidence should be Meta even though one session was Prompt"
         );
         assert_eq!(analyst.count, 2, "both sessions must be counted");
+    }
+
+    #[test]
+    fn agent_telemetry_totals_sum_token_subcomponents() {
+        let conn = test_conn();
+
+        // Two sessions with known per-bucket token counts.
+        let mut a = sample_agent_session("ag-tot-1", "executor", "/f1.jsonl");
+        a.input_tokens = 100;
+        a.cache_create_tokens = 200;
+        a.cache_read_tokens = 50;
+        a.output_tokens = 25;
+        a.tool_uses = 4;
+        a.duration_s = 10;
+
+        let mut b = sample_agent_session("ag-tot-2", "planner", "/f2.jsonl");
+        b.input_tokens = 300;
+        b.cache_create_tokens = 50;
+        b.cache_read_tokens = 0;
+        b.output_tokens = 75;
+        b.tool_uses = 7;
+        b.duration_s = 5;
+
+        insert_agent_session(&conn, &a).unwrap();
+        insert_agent_session(&conn, &b).unwrap();
+
+        let tz = TzParams::default();
+        let t = query_dashboard_agent_telemetry(&conn, &tz).unwrap().totals;
+
+        assert_eq!(t.sessions, 2);
+        assert_eq!(t.input_tokens, 400);
+        assert_eq!(t.cache_create_tokens, 250);
+        assert_eq!(t.cache_read_tokens, 50);
+        assert_eq!(t.output_tokens, 100);
+        assert_eq!(t.tool_uses, 11);
+        assert_eq!(t.duration_s, 15);
+    }
+
+    #[test]
+    fn agent_telemetry_spawn_batches_aggregate_avg_max() {
+        let conn = test_conn();
+
+        // Batch "pid-A": 3 members. Batch "pid-B": 2 members.
+        for (i, pid) in [("a1", "pid-A"), ("a2", "pid-A"), ("a3", "pid-A")]
+            .into_iter()
+            .enumerate()
+        {
+            let mut rec = sample_agent_session(pid.0, "executor", &format!("/f-a-{i}.jsonl"));
+            rec.prompt_id = Some(pid.1.into());
+            insert_agent_session(&conn, &rec).unwrap();
+        }
+        for (i, pid) in [("b1", "pid-B"), ("b2", "pid-B")].into_iter().enumerate() {
+            let mut rec = sample_agent_session(pid.0, "planner", &format!("/f-b-{i}.jsonl"));
+            rec.prompt_id = Some(pid.1.into());
+            insert_agent_session(&conn, &rec).unwrap();
+        }
+
+        let tz = TzParams::default();
+        let summary = query_dashboard_agent_telemetry(&conn, &tz)
+            .unwrap()
+            .spawn_batches_summary;
+
+        assert_eq!(summary.batch_count, 2);
+        assert!(
+            (summary.avg_size - 2.5).abs() < 1e-9,
+            "avg_size mismatch: {}",
+            summary.avg_size
+        );
+        assert_eq!(summary.max_size, 3);
+        assert_eq!(summary.batched_agents, 5);
+    }
+
+    #[test]
+    fn agent_telemetry_spawn_batches_aggregate_empty() {
+        let conn = test_conn();
+
+        // Three sessions with all-distinct prompt_ids — no batches qualify.
+        for (i, pid) in ["solo-1", "solo-2", "solo-3"].iter().enumerate() {
+            let mut rec = sample_agent_session(pid, "executor", &format!("/f-{i}.jsonl"));
+            rec.prompt_id = Some((*pid).into());
+            insert_agent_session(&conn, &rec).unwrap();
+        }
+
+        let tz = TzParams::default();
+        let summary = query_dashboard_agent_telemetry(&conn, &tz)
+            .unwrap()
+            .spawn_batches_summary;
+
+        assert_eq!(summary.batch_count, 0);
+        assert_eq!(summary.avg_size, 0.0);
+        assert_eq!(summary.max_size, 0);
+        assert_eq!(summary.batched_agents, 0);
+    }
+
+    #[test]
+    fn any_agent_registry_row_exists_reports_presence() {
+        let conn = test_conn();
+        assert!(!any_agent_registry_row_exists(&conn).unwrap());
+
+        upsert_agent_registry(
+            &conn,
+            "proj-A",
+            "executor",
+            &crate::models::AgentRegistryUpdate::default(),
+        )
+        .unwrap();
+
+        assert!(any_agent_registry_row_exists(&conn).unwrap());
     }
 
     // -----------------------------------------------------------------

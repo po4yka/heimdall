@@ -176,7 +176,7 @@ impl Scheduler for LaunchdScheduler {
 
         if !self.is_isolated() {
             // Load the job via launchctl bootstrap.
-            let uid = unsafe { libc_uid() };
+            let uid = libc_uid();
             let status = std::process::Command::new("launchctl")
                 .args([
                     "bootstrap",
@@ -203,7 +203,7 @@ impl Scheduler for LaunchdScheduler {
         }
 
         if !self.is_isolated() {
-            let uid = unsafe { libc_uid() };
+            let uid = libc_uid();
             // Attempt bootout; ignore errors (service may not be loaded).
             let _ = std::process::Command::new("launchctl")
                 .args([
@@ -239,13 +239,12 @@ impl Scheduler for LaunchdScheduler {
 // ── Unsafe helper: get real UID for launchctl domain ─────────────────────────
 
 /// Return the real UID of the current process.
-///
-/// # Safety
-/// Calls POSIX `getuid()` which is always safe.
-unsafe fn libc_uid() -> u32 {
+fn libc_uid() -> u32 {
     unsafe extern "C" {
         fn getuid() -> u32;
     }
+    // SAFETY: POSIX `getuid()` has no preconditions, does not dereference
+    // pointers, and returns the real UID for the current process.
     unsafe { getuid() }
 }
 

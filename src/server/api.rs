@@ -2881,6 +2881,12 @@ pub struct AcknowledgeResponse {
     pub already_existed: usize,
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct UnclassifiedGlobalResponse {
+    pub count: i64,
+    pub any_configured: bool,
+}
+
 // ---------------------------------------------------------------------------
 // Agent registry handlers
 // ---------------------------------------------------------------------------
@@ -3015,6 +3021,41 @@ pub async fn agent_registry_acknowledge_all(
         acknowledged,
         already_existed,
     }))
+}
+
+/// `GET /api/agents/unclassified-global`
+///
+/// Returns the global count of unclassified agent roles (across all projects)
+/// and whether any registry rows are configured. Used by the setup banner to
+/// decide whether to render itself without depending on the embedded
+/// `telemetry.detected[]` array.
+pub async fn agent_unclassified_global(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<UnclassifiedGlobalResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let db_path = state.db_path.clone();
+    let response =
+        tokio::task::spawn_blocking(move || -> anyhow::Result<UnclassifiedGlobalResponse> {
+            let conn = db::open_db(&db_path)?;
+            db::init_db(&conn)?;
+            let tz = crate::tz::TzParams::default();
+            let telemetry = db::query_dashboard_agent_telemetry(&conn, &tz)?;
+            let count = telemetry
+                .detected
+                .iter()
+                .filter(|d| !d.registered && d.raw_role != "unknown")
+                .count() as i64;
+            let any_configured = db::any_agent_registry_row_exists(&conn)?;
+            Ok(UnclassifiedGlobalResponse {
+                count,
+                any_configured,
+            })
+        })
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(response))
 }
 
 // ---------------------------------------------------------------------------
@@ -3241,12 +3282,11 @@ pub async fn api_today(
             } else {
                 // Compute "today" in the client's timezone via a one-shot SQL query.
                 let param = tz.offset_sql_param();
-                let sql = if let Some(ref p) = param {
-                    format!("SELECT date('now', '{}')", p)
+                if let Some(ref p) = param {
+                    conn.query_row("SELECT date('now', ?1)", [p], |row| row.get::<_, String>(0))?
                 } else {
-                    "SELECT date('now')".to_string()
-                };
-                conn.query_row(&sql, [], |row| row.get::<_, String>(0))?
+                    conn.query_row("SELECT date('now')", [], |row| row.get::<_, String>(0))?
+                }
             };
 
             let hours = db::query_today_hourly(&conn, &tz, &day)?;

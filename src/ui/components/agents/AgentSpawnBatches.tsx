@@ -1,6 +1,6 @@
 import { type ColumnDef } from '@tanstack/table-core';
 import { fmt, fmtCostBig, fmtRelativeTime, esc } from '../../lib/format';
-import type { SpawnBatch } from '../../state/types';
+import type { SpawnBatch, SpawnBatchAggregate } from '../../state/types';
 import { DataTable } from '../tables/DataTable';
 
 const columns: ColumnDef<SpawnBatch, unknown>[] = [
@@ -48,15 +48,34 @@ const columns: ColumnDef<SpawnBatch, unknown>[] = [
   },
 ];
 
-export function AgentSpawnBatches({ data }: { data: SpawnBatch[] }) {
+interface AgentSpawnBatchesProps {
+  data: SpawnBatch[];
+  summary: SpawnBatchAggregate;
+}
+
+export function AgentSpawnBatches({ data, summary }: AgentSpawnBatchesProps) {
   if (!data.length) return null;
+  const avg = summary.avg_size > 0 ? summary.avg_size.toFixed(1) : '0';
   return (
-    <DataTable
-      columns={columns}
-      data={data}
-      title="Parallel spawn batches"
-      sectionKey="agent-spawn-batches"
-      defaultSort={[{ id: 'spawned_at', desc: true }]}
-    />
+    <>
+      <div
+        class="num"
+        style={{
+          color: 'var(--text-secondary)',
+          fontSize: '12px',
+          padding: '0 4px 8px',
+        }}
+      >
+        {summary.batch_count} batches · avg {avg} · max {summary.max_size} ·{' '}
+        {summary.batched_agents} agents
+      </div>
+      <DataTable
+        columns={columns}
+        data={data}
+        title="Parallel spawn batches"
+        sectionKey="agent-spawn-batches"
+        defaultSort={[{ id: 'spawned_at', desc: true }]}
+      />
+    </>
   );
 }

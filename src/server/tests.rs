@@ -13,6 +13,23 @@ mod tests {
     /// `cargo test` runs tests in parallel by default.
     static HOME_LOCK: Mutex<()> = Mutex::new(());
 
+    fn set_test_home(path: &std::path::Path) {
+        // SAFETY: callers hold `HOME_LOCK` across all async work that observes
+        // HOME, serializing mutation of the process-global environment.
+        unsafe { std::env::set_var("HOME", path) };
+    }
+
+    fn restore_test_home(prev_home: Option<std::ffi::OsString>) {
+        // SAFETY: callers hold `HOME_LOCK`, so restoring HOME cannot race with
+        // another test mutating or reading this process-global variable.
+        unsafe {
+            match prev_home {
+                Some(prev) => std::env::set_var("HOME", prev),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+    }
+
     use axum::Router;
     use axum::body::Body;
     use axum::extract::State;
@@ -4288,7 +4305,7 @@ mod tests {
         // exports sub-directory does not exist.
         let _home_guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", tmp.path()) };
+        set_test_home(tmp.path());
 
         let app = test_app(db_path, projects);
         let resp = app
@@ -4302,10 +4319,7 @@ mod tests {
             .unwrap();
 
         // Restore HOME before any assertion that could panic.
-        match prev_home {
-            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
+        restore_test_home(prev_home);
 
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -4325,7 +4339,7 @@ mod tests {
         // the snapshots sub-directory does not exist.
         let _home_guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", tmp.path()) };
+        set_test_home(tmp.path());
 
         let app = test_app(db_path, projects);
         let resp = app
@@ -4339,10 +4353,7 @@ mod tests {
             .unwrap();
 
         // Restore HOME before any assertion that could panic.
-        match prev_home {
-            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
+        restore_test_home(prev_home);
 
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -4359,7 +4370,7 @@ mod tests {
 
         let _home_guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", tmp.path()) };
+        set_test_home(tmp.path());
 
         let app = test_app(db_path, projects);
         let resp = app
@@ -4374,10 +4385,7 @@ mod tests {
             .await
             .unwrap();
 
-        match prev_home {
-            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
+        restore_test_home(prev_home);
 
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
@@ -4392,7 +4400,7 @@ mod tests {
 
         let _home_guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", tmp.path()) };
+        set_test_home(tmp.path());
 
         // Seed the companion token into the tempdir.
         let token_path = tmp.path().join(".heimdall").join("companion-token");
@@ -4422,10 +4430,7 @@ mod tests {
             .await
             .unwrap();
 
-        match prev_home {
-            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
+        restore_test_home(prev_home);
 
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -4456,7 +4461,7 @@ mod tests {
 
         let _home_guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", tmp.path()) };
+        set_test_home(tmp.path());
 
         // Seed the companion token into the tempdir.
         let token_path = tmp.path().join(".heimdall").join("companion-token");
@@ -4502,10 +4507,7 @@ mod tests {
             .await
             .unwrap();
 
-        match prev_home {
-            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
+        restore_test_home(prev_home);
 
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -4523,7 +4525,7 @@ mod tests {
 
         let _home_guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", tmp.path()) };
+        set_test_home(tmp.path());
 
         let app = test_app(db_path, projects);
         let resp = app
@@ -4536,10 +4538,7 @@ mod tests {
             .await
             .unwrap();
 
-        match prev_home {
-            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
+        restore_test_home(prev_home);
 
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -4558,7 +4557,7 @@ mod tests {
 
         let _home_guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", tmp.path()) };
+        set_test_home(tmp.path());
 
         let app = test_app(db_path, projects);
         let resp = app
@@ -4573,10 +4572,7 @@ mod tests {
             .await
             .unwrap();
 
-        match prev_home {
-            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
+        restore_test_home(prev_home);
 
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
@@ -4591,7 +4587,7 @@ mod tests {
 
         let _home_guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", tmp.path()) };
+        set_test_home(tmp.path());
 
         // Seed the companion token into the tempdir so the handler finds it.
         let token_path = tmp.path().join(".heimdall").join("companion-token");
@@ -4618,10 +4614,7 @@ mod tests {
             .await
             .unwrap();
 
-        match prev_home {
-            Some(prev) => unsafe { std::env::set_var("HOME", prev) },
-            None => unsafe { std::env::remove_var("HOME") },
-        }
+        restore_test_home(prev_home);
 
         assert_eq!(resp.status(), StatusCode::OK);
         let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -4711,8 +4704,28 @@ mod tests {
         assert!(at.get("distribution").is_some(), "missing distribution");
         assert!(at.get("top_sessions").is_some(), "missing top_sessions");
         assert!(at.get("spawn_batches").is_some(), "missing spawn_batches");
+        assert!(
+            at.get("spawn_batches_summary").is_some(),
+            "missing spawn_batches_summary"
+        );
         assert!(at.get("tool_spectrum").is_some(), "missing tool_spectrum");
         assert!(at.get("detected").is_some(), "missing detected");
+
+        // Totals must include the extended token-subcomponent fields.
+        let totals = at.get("totals").unwrap();
+        for key in [
+            "sessions",
+            "total_tokens",
+            "cost_usd",
+            "input_tokens",
+            "cache_create_tokens",
+            "cache_read_tokens",
+            "output_tokens",
+            "tool_uses",
+            "duration_s",
+        ] {
+            assert!(totals.get(key).is_some(), "totals missing key: {key}");
+        }
     }
 
     #[tokio::test]
@@ -4862,6 +4875,67 @@ mod tests {
         let list: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let registry = list["registry"].as_array().unwrap();
         assert_eq!(registry.len(), 2, "both roles should have stub entries");
+    }
+
+    #[tokio::test]
+    async fn agent_unclassified_global_counts_unregistered_roles() {
+        let tmp = TempDir::new().unwrap();
+        let db_path = setup_db_with_agent_sessions(&tmp);
+        let projects = tmp.path().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+
+        // Pre-register one of the two seeded roles so it is counted as configured.
+        {
+            let conn = crate::scanner::db::open_db(&db_path).unwrap();
+            crate::scanner::db::upsert_agent_registry(
+                &conn,
+                "myproj",
+                "explorer",
+                &crate::models::AgentRegistryUpdate::default(),
+            )
+            .unwrap();
+        }
+
+        let app = test_app(db_path, projects);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/agents/unclassified-global")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        // Only "planner" remains unclassified — "explorer" is registered.
+        assert_eq!(body["count"].as_i64().unwrap(), 1);
+        assert!(body["any_configured"].as_bool().unwrap());
+    }
+
+    #[tokio::test]
+    async fn agent_unclassified_global_zero_when_empty() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/agents/unclassified-global")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["count"].as_i64().unwrap(), 0);
+        assert!(!body["any_configured"].as_bool().unwrap());
     }
 
     // ── Layout API tests ─────────────────────────────────────────────────────

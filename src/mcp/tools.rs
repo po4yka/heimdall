@@ -295,8 +295,7 @@ fn query_today(db_path: &Path) -> Result<serde_json::Value> {
                 "estimated_cost": row.get::<_, i64>(8)? as f64 / 1_000_000_000.0,
             }))
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
 
     let mut by_provider_stmt = conn.prepare(
         "SELECT provider, COUNT(*),
@@ -318,8 +317,7 @@ fn query_today(db_path: &Path) -> Result<serde_json::Value> {
                 "estimated_cost": row.get::<_, i64>(4)? as f64 / 1_000_000_000.0,
             }))
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
 
     let total_cost: f64 = models
         .iter()
@@ -388,8 +386,7 @@ fn query_stats(db_path: &Path) -> Result<serde_json::Value> {
                 "estimated_cost": row.get::<_, i64>(6)? as f64 / 1_000_000_000.0,
             }))
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
 
     let f = |s: &Option<String>| {
         s.as_deref()
@@ -510,8 +507,7 @@ fn query_sessions(
             rusqlite::params![format!("%{proj}%"), limit, offset],
             session_row_to_json,
         )?
-        .filter_map(|r| r.ok())
-        .collect()
+        .collect::<rusqlite::Result<Vec<_>>>()?
     } else {
         let mut stmt = conn.prepare(
             "SELECT session_id, provider, project_name, first_timestamp, last_timestamp,
@@ -522,8 +518,7 @@ fn query_sessions(
              LIMIT ?1 OFFSET ?2",
         )?;
         stmt.query_map(rusqlite::params![limit, offset], session_row_to_json)?
-            .filter_map(|r| r.ok())
-            .collect()
+            .collect::<rusqlite::Result<Vec<_>>>()?
     };
 
     Ok(serde_json::json!({
@@ -622,8 +617,7 @@ fn query_rate_windows(db_path: &Path) -> Result<serde_json::Value> {
                 "captured_at": row.get::<_, String>(3)?,
             }))
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
 
     Ok(serde_json::json!({ "rate_windows": windows }))
 }

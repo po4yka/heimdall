@@ -339,11 +339,12 @@ impl ArchiveLock {
         {
             use std::os::unix::io::AsRawFd;
             let fd = file.as_raw_fd();
-            let rc = unsafe { libc_flock(fd, LOCK_EX | LOCK_NB) };
+            let rc = libc_flock(fd, LOCK_EX | LOCK_NB);
             if rc != 0 {
                 anyhow::bail!(
-                    "another archive operation is in progress (flock failed on {})",
-                    path.display()
+                    "another archive operation is in progress (flock failed on {}: {})",
+                    path.display(),
+                    std::io::Error::last_os_error()
                 );
             }
         }
@@ -357,9 +358,12 @@ const LOCK_EX: i32 = 2;
 const LOCK_NB: i32 = 4;
 
 #[cfg(unix)]
-unsafe fn libc_flock(fd: i32, op: i32) -> i32 {
+fn libc_flock(fd: i32, op: i32) -> i32 {
     unsafe extern "C" {
         fn flock(fd: i32, op: i32) -> i32;
     }
+    // SAFETY: `fd` comes from the live `File` owned by `ArchiveLock::acquire`;
+    // `op` is built from valid flock flags and the return value is checked by
+    // the caller.
     unsafe { flock(fd, op) }
 }

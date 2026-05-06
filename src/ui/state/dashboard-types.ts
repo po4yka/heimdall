@@ -507,6 +507,12 @@ export interface AgentTelemetryTotals {
   sessions: number;
   total_tokens: number;
   cost_usd: number;
+  input_tokens: number;
+  cache_create_tokens: number;
+  cache_read_tokens: number;
+  output_tokens: number;
+  tool_uses: number;
+  duration_s: number;
 }
 
 export interface AgentTimelinePoint {
@@ -549,6 +555,13 @@ export interface SpawnBatch {
   cost_usd: number;
 }
 
+export interface SpawnBatchAggregate {
+  batch_count: number;
+  avg_size: number;
+  max_size: number;
+  batched_agents: number;
+}
+
 export interface ToolSpectrumCell {
   role: string;
   tool: string;
@@ -571,6 +584,7 @@ export interface AgentTelemetry {
   distribution: AgentRoleAggregate[];
   top_sessions: AgentSessionRow[];
   spawn_batches: SpawnBatch[];
+  spawn_batches_summary: SpawnBatchAggregate;
   tool_spectrum: ToolSpectrumCell[];
   detected: DetectedRole[];
 }

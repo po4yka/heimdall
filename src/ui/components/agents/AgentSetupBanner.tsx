@@ -1,3 +1,5 @@
+import { useEffect } from 'preact/hooks';
+import { signal } from '@preact/signals';
 import { registryModalOpen, setupBannerDismissed } from '../../state/store';
 import { unclassifiedDetectedRolesGlobal } from '../../lib/agents';
 import type { AgentTelemetry } from '../../state/types';
@@ -6,15 +8,43 @@ interface AgentSetupBannerProps {
   telemetry: AgentTelemetry;
 }
 
+interface UnclassifiedGlobalResponse {
+  count: number;
+  any_configured: boolean;
+}
+
+const unclassifiedGlobal = signal<UnclassifiedGlobalResponse | null>(null);
+let inFlight = false;
+
+async function fetchUnclassifiedGlobal(): Promise<void> {
+  if (inFlight || unclassifiedGlobal.value !== null) return;
+  inFlight = true;
+  try {
+    const res = await fetch('/api/agents/unclassified-global');
+    if (!res.ok) return;
+    unclassifiedGlobal.value = (await res.json()) as UnclassifiedGlobalResponse;
+  } finally {
+    inFlight = false;
+  }
+}
+
 export function AgentSetupBanner({ telemetry }: AgentSetupBannerProps) {
+  useEffect(() => {
+    void fetchUnclassifiedGlobal();
+  }, []);
+
   if (setupBannerDismissed.value) return null;
 
-  const unclassified = unclassifiedDetectedRolesGlobal(telemetry);
-  if (!unclassified.length) return null;
+  const server = unclassifiedGlobal.value;
+  if (!server || server.count <= 0) return null;
+  const roleCount = server.count;
 
-  const projects = [...new Set(unclassified.map(d => d.project))];
-  const roleCount = unclassified.length;
-  const projectCount = projects.length;
+  // Project list is derived client-side from the embedded telemetry to
+  // pick which project the [Open registry] button should target.
+  const projects = [
+    ...new Set(unclassifiedDetectedRolesGlobal(telemetry).map(d => d.project)),
+  ];
+  const projectCount = projects.length || 1;
 
   function openRegistry() {
     const firstProject = projects[0];

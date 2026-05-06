@@ -287,7 +287,10 @@ function renderAgentTelemetry(data: DashboardData): void {
   renderSection(
     'agent-spawn-batches',
     agent_telemetry.spawn_batches.length > 0,
-    <AgentSpawnBatches data={agent_telemetry.spawn_batches} />,
+    <AgentSpawnBatches
+      data={agent_telemetry.spawn_batches}
+      summary={agent_telemetry.spawn_batches_summary}
+    />,
   );
 
   // Tool spectrum
