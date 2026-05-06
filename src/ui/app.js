@@ -9085,33 +9085,89 @@
     return /* @__PURE__ */ u4(DataTable, { columns: columns4, data, title: "Usage by Entrypoint", sectionKey: "entrypoint-breakdown" });
   }
 
+  // src/ui/components/_primitives/KpiCard.tsx
+  var TONE_CLASS = {
+    default: "",
+    cost: "cost-value",
+    success: "kpi-value--success",
+    warning: "kpi-value--warning",
+    accent: "kpi-value--accent",
+    muted: "kpi-value--muted"
+  };
+  function KpiCard({
+    label,
+    value,
+    sub,
+    bar,
+    valueTone = "default",
+    size = "standard",
+    actions,
+    className
+  }) {
+    const cardClass = ["card", "stat-card", "kpi-card", `kpi-card--${size}`, className].filter(Boolean).join(" ");
+    const valueClass = ["stat-value", TONE_CLASS[valueTone]].filter(Boolean).join(" ");
+    return /* @__PURE__ */ u4("div", { class: cardClass, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: label }),
+        /* @__PURE__ */ u4("div", { class: valueClass, children: value }),
+        bar && /* @__PURE__ */ u4("div", { class: "kpi-card__bar", children: /* @__PURE__ */ u4(
+          SegmentedProgressBar,
+          {
+            value: bar.value,
+            max: bar.max ?? 100,
+            size: bar.size ?? "standard",
+            status: bar.status ?? "auto",
+            "aria-label": bar.ariaLabel ?? label
+          }
+        ) }),
+        sub && /* @__PURE__ */ u4("div", { class: "stat-sub", children: sub })
+      ] }),
+      actions && /* @__PURE__ */ u4("div", { class: "kpi-card__actions", children: actions })
+    ] });
+  }
+
   // src/ui/components/EstimationMeta.tsx
   function formatPricingVersion(v4) {
     const m5 = v4.match(/^\d{4}-\d{2}-\d{2}/);
     return m5 ? m5[0] : v4;
+  }
+  function formatBreakdown(rows2) {
+    return rows2.map(([key, value]) => `${fmtLabel(key)}: ${value.sessions.toLocaleString()}`).join(" \xB7 ");
   }
   function EstimationMeta({
     confidenceBreakdown,
     billingModeBreakdown,
     pricingVersions
   }) {
-    const formatBreakdown = (rows2) => rows2.map(([key, value]) => `${fmtLabel(key)}: ${value.sessions.toLocaleString()}`).join(" \xB7 ");
+    const pricingValue = pricingVersions.length === 0 ? "n/a" : pricingVersions.length === 1 ? formatPricingVersion(pricingVersions[0] ?? "") : `mixed (${pricingVersions.length})`;
     return /* @__PURE__ */ u4(S, { children: [
-      /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cost Confidence" }),
-        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: confidenceBreakdown.length ? formatBreakdown(confidenceBreakdown) : "n/a" }),
-        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Session mix in current filter" })
-      ] }) }),
-      /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Billing Mode" }),
-        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: billingModeBreakdown.length ? formatBreakdown(billingModeBreakdown) : "n/a" }),
-        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Local estimate vs subscriber-included sessions" })
-      ] }) }),
-      /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Pricing Snapshot" }),
-        /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px" }, children: pricingVersions.length === 0 ? "n/a" : pricingVersions.length === 1 ? formatPricingVersion(pricingVersions[0] ?? "") : `mixed (${pricingVersions.length})` }),
-        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Stored per-session pricing metadata" })
-      ] }) })
+      /* @__PURE__ */ u4(
+        KpiCard,
+        {
+          size: "compact",
+          label: "Cost confidence",
+          value: confidenceBreakdown.length ? formatBreakdown(confidenceBreakdown) : "n/a",
+          sub: "Session mix in current filter"
+        }
+      ),
+      /* @__PURE__ */ u4(
+        KpiCard,
+        {
+          size: "compact",
+          label: "Billing mode",
+          value: billingModeBreakdown.length ? formatBreakdown(billingModeBreakdown) : "n/a",
+          sub: "Local estimate vs subscriber-included sessions"
+        }
+      ),
+      /* @__PURE__ */ u4(
+        KpiCard,
+        {
+          size: "compact",
+          label: "Pricing snapshot",
+          value: pricingValue,
+          sub: "Stored per-session pricing metadata"
+        }
+      )
     ] });
   }
 
@@ -10014,58 +10070,42 @@
   function RateWindowCard({ label, window: window2 }) {
     const pct = Math.min(100, window2.used_percent);
     const resetText = window2.resets_in_minutes != null ? `Resets in ${fmtResetTime(window2.resets_in_minutes)}` : "";
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4("div", { class: "stat-label", children: label }),
-      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "28px" }, children: [
-        pct.toFixed(1),
-        "%"
-      ] }),
-      /* @__PURE__ */ u4("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u4(
-        SegmentedProgressBar,
-        {
-          value: window2.used_percent,
-          max: 100,
-          size: "standard",
-          "aria-label": `${label} usage`
-        }
-      ) }),
-      resetText && /* @__PURE__ */ u4("div", { class: "stat-sub", children: resetText })
-    ] }) });
+    return /* @__PURE__ */ u4(
+      KpiCard,
+      {
+        label,
+        value: `${pct.toFixed(1)}%`,
+        bar: { value: window2.used_percent, max: 100, ariaLabel: `${label} usage` },
+        sub: resetText || void 0
+      }
+    );
   }
   function BudgetCard({ used, limit, currency, utilization }) {
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Monthly Budget" }),
-      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "24px" }, children: [
-        "$",
-        used.toFixed(2),
-        " / $",
-        limit.toFixed(2)
-      ] }),
-      /* @__PURE__ */ u4("div", { style: { marginTop: "12px" }, children: /* @__PURE__ */ u4(
-        SegmentedProgressBar,
-        {
-          value: utilization,
-          max: 100,
-          size: "standard",
-          "aria-label": "Monthly budget usage"
-        }
-      ) }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", children: currency })
-    ] }) });
+    return /* @__PURE__ */ u4(
+      KpiCard,
+      {
+        size: "compact",
+        label: "Monthly budget",
+        value: `$${used.toFixed(2)} / $${limit.toFixed(2)}`,
+        bar: { value: utilization, max: 100, ariaLabel: "Monthly budget usage" },
+        sub: currency
+      }
+    );
   }
   function RateWindowUnavailable({ error }) {
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Rate Windows" }),
-      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "18px", color: "var(--text-secondary)" }, children: "Unavailable" }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", children: error })
-    ] }) });
+    return /* @__PURE__ */ u4(
+      KpiCard,
+      {
+        size: "compact",
+        valueTone: "muted",
+        label: "Rate windows",
+        value: "Unavailable",
+        sub: error
+      }
+    );
   }
   function ClaudeAdminCard({ label, value, subtitle }) {
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4("div", { class: "stat-label", children: label }),
-      /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "24px" }, children: value }),
-      /* @__PURE__ */ u4("div", { class: "stat-sub", children: subtitle })
-    ] }) });
+    return /* @__PURE__ */ u4(KpiCard, { size: "compact", label, value, sub: subtitle });
   }
   function ClaudeAdminFallbackGrid({ summary }) {
     const subtitle = `${summary.organization_name || "Org-wide"} \xB7 ${summary.data_latency_note}`;
@@ -10073,7 +10113,7 @@
       /* @__PURE__ */ u4(
         ClaudeAdminCard,
         {
-          label: "Active Users Today",
+          label: "Active users today",
           value: summary.today_active_users.toLocaleString(),
           subtitle
         }
@@ -10081,7 +10121,7 @@
       /* @__PURE__ */ u4(
         ClaudeAdminCard,
         {
-          label: "Sessions Today",
+          label: "Sessions today",
           value: summary.today_sessions.toLocaleString(),
           subtitle
         }
@@ -10089,7 +10129,7 @@
       /* @__PURE__ */ u4(
         ClaudeAdminCard,
         {
-          label: `Accepted Lines (${summary.lookback_days}d)`,
+          label: `Accepted lines (${summary.lookback_days}d)`,
           value: summary.lookback_lines_accepted.toLocaleString(),
           subtitle
         }
@@ -10097,7 +10137,7 @@
       /* @__PURE__ */ u4(
         ClaudeAdminCard,
         {
-          label: `Estimated Spend (${summary.lookback_days}d)`,
+          label: `Estimated spend (${summary.lookback_days}d)`,
           value: `$${summary.lookback_estimated_cost_usd.toFixed(2)}`,
           subtitle
         }

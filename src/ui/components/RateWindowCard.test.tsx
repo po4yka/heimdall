@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { WindowInfo } from '../state/types';
-import { SegmentedProgressBar } from './SegmentedProgressBar';
+import { KpiCard } from './_primitives/KpiCard';
 import { BudgetCard, ClaudeAdminFallbackGrid, RateWindowCard, RateWindowUnavailable } from './RateWindowCard';
 
 // Walk a vnode tree and collect every user-visible string. Beyond plain
 // text children we also harvest common label-style props (`label`,
-// `value`, `subtitle`, `title`, `placeholder`) so the walker can see
+// `value`, `sub`, `subtitle`, `title`, `placeholder`) so the walker can see
 // text passed *into* function components — components are not expanded
 // here, since we don't actually render through Preact.
 function collectText(node: unknown): string[] {
@@ -14,7 +14,7 @@ function collectText(node: unknown): string[] {
   if (!node || typeof node !== 'object') return [];
   const vnode = node as { props?: Record<string, unknown> };
   const props = vnode.props ?? {};
-  const labelProps = ['label', 'value', 'subtitle', 'title', 'placeholder'] as const;
+  const labelProps = ['label', 'value', 'sub', 'subtitle', 'title', 'placeholder'] as const;
   const fromLabels = labelProps.flatMap(key => collectText(props[key]));
   return [...fromLabels, ...collectText(props['children'])];
 }
@@ -38,11 +38,12 @@ describe('RateWindowCard', () => {
       props: Record<string, unknown>;
     };
     const text = collectText(vnode).join(' ');
-    const bars = findByType(vnode, SegmentedProgressBar);
+    const kpiCards = findByType(vnode, KpiCard);
+    const bar = kpiCards[0]?.props['bar'] as { ariaLabel?: string } | undefined;
 
     expect(text).toContain('87.6');
     expect(text).toContain('Resets in 1h 35m');
-    expect(bars[0]?.props['aria-label']).toBe('Claude usage');
+    expect(bar?.ariaLabel).toBe('Claude usage');
   });
 
   it('renders budget and unavailable fallback cards', () => {
@@ -81,8 +82,8 @@ describe('RateWindowCard', () => {
       },
     });
     const text = collectText(vnode).join(' ');
-    expect(text).toContain('Active Users Today');
-    expect(text).toContain('Accepted Lines (30d)');
+    expect(text).toContain('Active users today');
+    expect(text).toContain('Accepted lines (30d)');
     expect(text).toContain('Acme Org');
     expect(text).toContain('12.34');
   });

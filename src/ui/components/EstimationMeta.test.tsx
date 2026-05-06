@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { EstimationMeta } from './EstimationMeta';
 
+// Walks a vnode tree harvesting plain text plus common label-style props
+// (`label`, `value`, `sub`, `subtitle`, `title`, `placeholder`). Components
+// such as KpiCard expose their text via props rather than children, so a
+// children-only walker would miss them.
 function collectText(node: unknown): string[] {
   if (typeof node === 'string' || typeof node === 'number') return [String(node)];
   if (Array.isArray(node)) return node.flatMap(collectText);
   if (!node || typeof node !== 'object') return [];
-  const vnode = node as { props?: { children?: unknown } };
-  return collectText(vnode.props?.children);
+  const vnode = node as { props?: Record<string, unknown> };
+  const props = vnode.props ?? {};
+  const labelProps = ['label', 'value', 'sub', 'subtitle', 'title', 'placeholder'] as const;
+  const fromLabels = labelProps.flatMap(key => collectText(props[key]));
+  return [...fromLabels, ...collectText(props['children'])];
 }
 
 describe('EstimationMeta', () => {
@@ -18,9 +25,9 @@ describe('EstimationMeta', () => {
     });
     const text = collectText(vnode).join(' ');
 
-    expect(text).toContain('Cost Confidence');
+    expect(text).toContain('Cost confidence');
     expect(text).toContain('High: 3');
-    expect(text).toContain('Billing Mode');
+    expect(text).toContain('Billing mode');
     expect(text).toContain('Estimated Local: 2');
     expect(text).toContain('mixed (2)');
   });

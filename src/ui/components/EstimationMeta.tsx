@@ -1,4 +1,5 @@
 import { fmtLabel } from '../lib/format';
+import { KpiCard } from './_primitives/KpiCard';
 
 interface EstimationMetaProps {
   confidenceBreakdown: Array<[string, { sessions: number; cost: number }]>;
@@ -11,47 +12,46 @@ function formatPricingVersion(v: string): string {
   return m ? m[0] : v;
 }
 
+function formatBreakdown(
+  rows: Array<[string, { sessions: number; cost: number }]>
+): string {
+  return rows
+    .map(([key, value]) => `${fmtLabel(key)}: ${value.sessions.toLocaleString()}`)
+    .join(' · ');
+}
+
 export function EstimationMeta({
   confidenceBreakdown,
   billingModeBreakdown,
   pricingVersions,
 }: EstimationMetaProps) {
-  const formatBreakdown = (rows: Array<[string, { sessions: number; cost: number }]>) =>
-    rows.map(([key, value]) => `${fmtLabel(key)}: ${value.sessions.toLocaleString()}`).join(' · ');
+  const pricingValue =
+    pricingVersions.length === 0
+      ? 'n/a'
+      : pricingVersions.length === 1
+        ? formatPricingVersion(pricingVersions[0] ?? '')
+        : `mixed (${pricingVersions.length})`;
 
   return (
     <>
-      <div class="card stat-card">
-        <div class="stat-content">
-          <div class="stat-label">Cost Confidence</div>
-          <div class="stat-value" style={{ fontSize: '18px' }}>
-            {confidenceBreakdown.length ? formatBreakdown(confidenceBreakdown) : 'n/a'}
-          </div>
-          <div class="stat-sub">Session mix in current filter</div>
-        </div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-content">
-          <div class="stat-label">Billing Mode</div>
-          <div class="stat-value" style={{ fontSize: '18px' }}>
-            {billingModeBreakdown.length ? formatBreakdown(billingModeBreakdown) : 'n/a'}
-          </div>
-          <div class="stat-sub">Local estimate vs subscriber-included sessions</div>
-        </div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-content">
-          <div class="stat-label">Pricing Snapshot</div>
-          <div class="stat-value" style={{ fontSize: '18px' }}>
-            {pricingVersions.length === 0
-              ? 'n/a'
-              : pricingVersions.length === 1
-                ? formatPricingVersion(pricingVersions[0] ?? '')
-                : `mixed (${pricingVersions.length})`}
-          </div>
-          <div class="stat-sub">Stored per-session pricing metadata</div>
-        </div>
-      </div>
+      <KpiCard
+        size="compact"
+        label="Cost confidence"
+        value={confidenceBreakdown.length ? formatBreakdown(confidenceBreakdown) : 'n/a'}
+        sub="Session mix in current filter"
+      />
+      <KpiCard
+        size="compact"
+        label="Billing mode"
+        value={billingModeBreakdown.length ? formatBreakdown(billingModeBreakdown) : 'n/a'}
+        sub="Local estimate vs subscriber-included sessions"
+      />
+      <KpiCard
+        size="compact"
+        label="Pricing snapshot"
+        value={pricingValue}
+        sub="Stored per-session pricing metadata"
+      />
     </>
   );
 }
