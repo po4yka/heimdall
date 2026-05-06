@@ -132,6 +132,9 @@ workflow.
   - `Heimdall.app`
   - `bin/heimdall`
   - `Frameworks/HeimdallShared.framework`
+- [ ] Confirm the `heimdall-<version>-macos-app.dmg` artifact appears on
+      the GitHub Releases page and that its mounted volume contains
+      `Heimdall.app` plus the `Applications` drag target.
 - [ ] Download `SHA256SUMS.txt` and verify at least one archive locally:
   ```bash
   sha256sum --check --ignore-missing SHA256SUMS.txt
@@ -152,6 +155,18 @@ workflow.
   DYLD_FRAMEWORK_PATH=heimdall-v0.x.y-macos-app/Frameworks \
     ./heimdall-v0.x.y-macos-app/bin/heimdall config dump
   spctl -a -vv heimdall-v0.x.y-macos-app/Heimdall.app
+  ```
+- [ ] Smoke-test the DMG artifact:
+  ```bash
+  hdiutil attach heimdall-v0.x.y-macos-app.dmg
+  open "/Volumes/Heimdall 0.x.y/Heimdall.app"
+  hdiutil detach "/Volumes/Heimdall 0.x.y"
+  ```
+- [ ] If notary credentials were configured, verify DMG stapling and
+      Gatekeeper acceptance:
+  ```bash
+  xcrun stapler validate heimdall-v0.x.y-macos-app.dmg
+  spctl -a -t open --context context:primary-signature heimdall-v0.x.y-macos-app.dmg
   ```
 - [ ] If signing secrets were configured, confirm notarization completed and
       stapling succeeded:
@@ -189,6 +204,25 @@ workflow.
 - The bundled `heimdall` CLI is shipped outside the `.app` bundle, so local
   smoke tests should export `DYLD_FRAMEWORK_PATH=<artifact>/Frameworks` before
   invoking it directly.
+- A `.dmg` end-user installer is built alongside the `.zip` by
+  [script/package_heimdall_dmg.sh](/Users/po4yka/GitRep/heimdall/script/package_heimdall_dmg.sh:1)
+  using only `hdiutil` + `osascript` (no extra deps). It contains
+  `Heimdall.app` + a `/Applications` drag-symlink, gets signed with the same
+  identity as the app, and (when notary credentials are present) is notarized
+  and stapled by
+  [script/dmg_notarize.sh](/Users/po4yka/GitRep/heimdall/script/dmg_notarize.sh:1).
+  Stapling the DMG itself is the recommended distribution form because the
+  ticket travels with the container and Gatekeeper can verify it offline.
+- For local DMG builds (sharing a private build with someone), run
+  [script/build_dmg.sh](/Users/po4yka/GitRep/heimdall/script/build_dmg.sh:1) —
+  it produces `target/dist/heimdall-v<version>-macos-app.dmg`. Without notary
+  credentials in the environment it produces an ad-hoc-signed DMG; recipients
+  on a clean Mac will need to right-click → Open the first time.
+- The DMG window layout (size, icon positions, optional background image)
+  lives entirely inside `package_heimdall_dmg.sh`. To brand the installer,
+  drop a 600×400 PNG at `assets/dmg/background.png` (or set
+  `HEIMDALL_DMG_BACKGROUND` to a custom path); the script picks it up
+  automatically and otherwise omits the background line from the AppleScript.
 
 ## Notes
 

@@ -226,6 +226,42 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent "${STAGING_DIR}" "${ARCHIVE_NAME}"
           shasum -a 256 "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
 
+      - name: Build Heimdall DMG
+        shell: bash
+        run: |
+          DMG_NAME="${STAGING_DIR}.dmg"
+          ./script/package_heimdall_dmg.sh \
+            "${STAGING_DIR}/Heimdall.app" \
+            "${DMG_NAME}"
+
+      - name: Notarize Heimdall DMG
+        if: ${{ env.HEIMDALL_CODESIGN_IDENTITY != '' && env.HEIMDALL_NOTARY_APPLE_ID != '' && env.HEIMDALL_NOTARY_TEAM_ID != '' && env.HEIMDALL_NOTARY_APP_PASSWORD != '' }}
+        shell: bash
+        run: |
+          DMG_NAME="${STAGING_DIR}.dmg"
+          ./script/dmg_notarize.sh "${DMG_NAME}"
+
+      - name: Validate Heimdall DMG
+        shell: bash
+        run: |
+          DMG_NAME="${STAGING_DIR}.dmg"
+          hdiutil verify "${DMG_NAME}"
+          ATTACH_OUTPUT="$(hdiutil attach -nobrowse -readonly "${DMG_NAME}")"
+          MOUNT_POINT="$(echo "${ATTACH_OUTPUT}" | awk -F'\t' '$NF ~ /^\/Volumes\// { print $NF; exit }')"
+          [[ -d "${MOUNT_POINT}/Heimdall.app" ]] || { echo "missing Heimdall.app in DMG" >&2; hdiutil detach "${MOUNT_POINT}" -quiet -force >/dev/null 2>&1 || true; exit 1; }
+          [[ -L "${MOUNT_POINT}/Applications" ]] || { echo "missing /Applications symlink in DMG" >&2; hdiutil detach "${MOUNT_POINT}" -quiet -force >/dev/null 2>&1 || true; exit 1; }
+          hdiutil detach "${MOUNT_POINT}" -quiet
+          if [[ -n "$HEIMDALL_CODESIGN_IDENTITY" && -n "$HEIMDALL_NOTARY_APPLE_ID" && -n "$HEIMDALL_NOTARY_TEAM_ID" && -n "$HEIMDALL_NOTARY_APP_PASSWORD" ]]; then
+            xcrun stapler validate "${DMG_NAME}"
+            spctl -a -t open --context context:primary-signature "${DMG_NAME}"
+          fi
+
+      - name: Compute Heimdall DMG checksum
+        shell: bash
+        run: |
+          DMG_NAME="${STAGING_DIR}.dmg"
+          shasum -a 256 "${DMG_NAME}" > "${DMG_NAME}.sha256"
+
       - name: Upload Heimdall app artifact
         uses: actions/upload-artifact@v7
         with:
@@ -233,6 +269,8 @@ jobs:
           path: |
             heimdall-${{ steps.version.outputs.version }}-macos-app.zip
             heimdall-${{ steps.version.outputs.version }}-macos-app.zip.sha256
+            heimdall-${{ steps.version.outputs.version }}-macos-app.dmg
+            heimdall-${{ steps.version.outputs.version }}-macos-app.dmg.sha256
           if-no-files-found: error
           retention-days: 7
 
