@@ -159,70 +159,128 @@
 
 @layer components {
   /* ── Header ──────────────────────────────────────────────────────── */
+  /* The only Liquid-Glass surface in the system. Content surfaces stay
+     flat per the design skill; the sticky header sits above scrolled
+     content so a translucent + blurred background is permitted here. */
   header {
     position: sticky;
     top: 0;
     z-index: 50;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border-visible);
-    padding: 8px 24px;
-    min-height: 48px;
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) var(--space-4);
+    min-height: var(--space-12);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--space-3);
     flex-wrap: wrap;
   }
   header h1 {
-    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-body);
     font-weight: 500;
     color: var(--text-primary);
     letter-spacing: -0.01em;
   }
+  .header-logo-mark__pre  { color: var(--text-secondary); font-weight: 400; }
+  .header-logo-mark__post { color: var(--text-display);   font-weight: 500; }
+  .header-plan-badge {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-tertiary);
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-visible);
+    color: var(--text-secondary);
+    letter-spacing: 0;
+    text-transform: none;
+  }
   header .meta {
     color: var(--text-secondary);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
   }
 
   .header-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-1);
   }
 
+  /* Unified bracket-action button. Replaces the prior mixed treatment
+     (uppercase pill, bracket text, icon button) with a single quiet
+     monochrome chip. */
+  .header-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    padding: var(--space-1) var(--space-2);
+    min-height: var(--space-7, 28px);
+    border-radius: var(--radius-1);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
+    text-decoration: none;
+    text-transform: none;
+    transition: color var(--duration-fast), border-color var(--duration-fast),
+      background var(--duration-fast);
+  }
+  .header-button:hover {
+    color: var(--text-display);
+    border-color: var(--border-visible);
+  }
+  .header-button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .header-button--active {
+    color: var(--text-display);
+    border-color: var(--accent-interactive);
+  }
+  .header-button--update { color: var(--warning); }
+  .header-button--update:hover { color: var(--accent-interactive); }
+
+  /* Rescan button + theme toggle keep their existing IDs/classes for
+     callsite compatibility but inherit the unified button look. */
   #rescan-btn, .theme-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background: transparent;
-    border: 1px solid var(--border-visible);
+    border: 1px solid transparent;
     color: var(--text-secondary);
-    padding: 4px 12px;
-    min-height: 32px;
-    border-radius: 4px;
+    padding: var(--space-1) var(--space-2);
+    min-height: var(--space-7, 28px);
+    border-radius: var(--radius-1);
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    transition: border-color 0.15s, color 0.15s;
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
+    transition: color var(--duration-fast), border-color var(--duration-fast);
   }
   #rescan-btn:hover, .theme-toggle:hover {
     color: var(--text-display);
-    border-color: var(--text-display);
+    border-color: var(--border-visible);
   }
   #rescan-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .theme-toggle { display: flex; align-items: center; padding: 4px 8px; min-width: 32px; }
+  .theme-toggle { padding: var(--space-1); min-width: var(--space-7, 28px); }
   .theme-toggle svg { flex-shrink: 0; }
 
-  /* ── Version pill ────────────────────────────────────────────────── */
+  /* Legacy version pill — retained for any out-of-header callsites
+     (footer, debug surfaces). The header now exposes update info via
+     a `.header-button--update` link instead. */
   .version-pill {
     font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.05em;
-    padding: 2px 6px;
-    border-radius: 3px;
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-1);
     text-decoration: none;
     white-space: nowrap;
   }
@@ -231,21 +289,177 @@
   .version-pill--update   { color: var(--warning); }
   .version-pill--update:hover { color: var(--accent-interactive); }
 
-  /* ── Filter Bar ──────────────────────────────────────────────────── */
+  /* ── Filter Bar / Sticky Filter Dock ─────────────────────────────── */
   #filter-bar {
     position: sticky;
     top: var(--header-offset, 48px);
     z-index: 40;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border-visible);
-    padding: 8px 24px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-2) var(--space-4);
   }
   .filter-sections {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: var(--space-3);
     flex-wrap: wrap;
   }
+
+  /* New filter-dock primitives — chip + segmented + popover. */
+  .filter-group {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--space-7, 28px);
+  }
+  .filter-group__label {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  .filter-group--search {
+    flex: 1 1 200px;
+    min-width: 160px;
+  }
+  .filter-group--chip { position: relative; }
+
+  /* Segmented control — three-or-four-state pill group. */
+  .segmented {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid var(--border-visible);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    padding: 2px;
+    gap: 2px;
+  }
+  .segmented__item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: var(--space-1) var(--space-3);
+    min-height: var(--space-6);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
+    transition: color var(--duration-fast), background var(--duration-fast);
+  }
+  .segmented__item:hover { color: var(--text-display); }
+  .segmented__item.is-active {
+    background: var(--surface-raised);
+    color: var(--text-display);
+  }
+
+  /* Filter chip — popover trigger for multi-select fields. */
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    background: transparent;
+    border: 1px solid var(--border-visible);
+    color: var(--text-secondary);
+    padding: var(--space-1) var(--space-3);
+    min-height: var(--space-7, 28px);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
+    transition: color var(--duration-fast), border-color var(--duration-fast);
+  }
+  .filter-chip:hover { color: var(--text-display); border-color: var(--text-secondary); }
+  .filter-chip.is-open {
+    color: var(--text-display);
+    border-color: var(--accent-interactive);
+  }
+  .filter-chip__caret { font-size: 10px; opacity: 0.7; }
+
+  .filter-popover {
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    left: 0;
+    z-index: 60;
+    min-width: 280px;
+    max-width: 360px;
+    background: var(--surface);
+    border: 1px solid var(--border-visible);
+    border-radius: var(--radius-2);
+    padding: var(--space-2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .filter-popover__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: var(--space-2);
+  }
+  .filter-popover__actions { display: inline-flex; gap: var(--space-2); }
+  .filter-popover__body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .filter-popover__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-1);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--duration-fast), color var(--duration-fast);
+  }
+  .filter-popover__row:hover {
+    background: var(--surface-raised);
+    color: var(--text-primary);
+  }
+  .filter-popover__row.is-checked { color: var(--text-display); }
+  .filter-popover__row input[type="checkbox"] {
+    accent-color: var(--accent-interactive);
+    cursor: pointer;
+  }
+  .filter-popover__row-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  /* Inline text-button used inside the popover and search clear. */
+  .filter-link {
+    background: transparent;
+    border: none;
+    color: var(--accent-interactive);
+    padding: 0;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
+    transition: color var(--duration-fast);
+  }
+  .filter-link:hover { color: var(--text-display); }
   .mobile-filter-header,
   .mobile-filter-toggle {
     display: none;
@@ -386,29 +600,32 @@
     background: transparent;
     border: 1px solid var(--border-visible);
     color: var(--text-primary);
-    padding: 5px 10px;
-    min-height: 32px;
-    border-radius: 4px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    width: 160px;
+    padding: var(--space-1) var(--space-3);
+    min-height: var(--space-7, 28px);
+    border-radius: var(--radius-1);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
+    width: 100%;
     min-width: 0;
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    transition: border-color var(--duration-fast), color var(--duration-fast);
   }
   .project-search-input::placeholder {
     color: var(--text-disabled);
     text-overflow: ellipsis;
   }
   .project-search-input:hover {
-    border-color: var(--text-display);
+    border-color: var(--text-secondary);
   }
   .project-search-input:focus,
   .project-search-input:focus-visible {
-    border-color: var(--text-display);
+    border-color: var(--accent-interactive);
     color: var(--text-display);
+    outline: none;
   }
 
   /* ── Dashboard Tabs ─────────────────────────────────────────────── */

@@ -6760,8 +6760,14 @@
 
   // src/ui/components/FilterBar.tsx
   var RANGES = ["7d", "30d", "90d", "all"];
+  var RANGE_LABEL = {
+    "7d": "7d",
+    "30d": "30d",
+    "90d": "90d",
+    all: "All"
+  };
   var BUCKETS = ["day", "week"];
-  var BUCKET_LABEL = { day: "DAY", week: "WEEK" };
+  var BUCKET_LABEL = { day: "Day", week: "Week" };
   var PROVIDERS = ["both", "claude", "codex"];
   var PROVIDER_LABEL = {
     both: "Both",
@@ -6782,6 +6788,27 @@
       const pb = modelPriority(b4);
       return pa !== pb ? pa - pb : a4.localeCompare(b4);
     });
+    const [modelsOpen, setModelsOpen] = d2(false);
+    const popoverRef = A2(null);
+    const chipRef = A2(null);
+    y2(() => {
+      if (!modelsOpen) return;
+      const onDocClick = (e4) => {
+        const t4 = e4.target;
+        if (popoverRef.current?.contains(t4)) return;
+        if (chipRef.current?.contains(t4)) return;
+        setModelsOpen(false);
+      };
+      const onKey = (e4) => {
+        if (e4.key === "Escape") setModelsOpen(false);
+      };
+      document.addEventListener("mousedown", onDocClick);
+      document.addEventListener("keydown", onKey);
+      return () => {
+        document.removeEventListener("mousedown", onDocClick);
+        document.removeEventListener("keydown", onKey);
+      };
+    }, [modelsOpen]);
     const toggleModel = (model, checked) => {
       const next = new Set(selectedModels.value);
       if (checked) next.add(model);
@@ -6832,15 +6859,16 @@
       onURLUpdate();
     };
     const selectedModelCount = selectedModels.value.size;
+    const totalModels = sortedModels.length;
+    const allSelected = selectedModelCount === totalModels;
+    const modelChipLabel = totalModels === 0 ? "Models" : allSelected ? `Models \xB7 all ${totalModels}` : `Models \xB7 ${selectedModelCount}/${totalModels}`;
     const providerSummary = hasCodexData ? PROVIDER_LABEL[selectedProvider.value] : null;
-    const modelSummary = selectedModelCount === sortedModels.length ? "All Models" : `${selectedModelCount}/${sortedModels.length} Models`;
-    const projectSummary = projectSearchQuery.value ? `Project ${projectSearchQuery.value}` : "All Projects";
     const filterSummary = [
-      selectedRange.value.toUpperCase(),
+      RANGE_LABEL[selectedRange.value],
       BUCKET_LABEL[selectedBucket.value],
       providerSummary,
-      modelSummary,
-      projectSummary
+      allSelected ? `All ${totalModels} models` : `${selectedModelCount}/${totalModels} models`,
+      projectSearchQuery.value ? `Project: ${projectSearchQuery.value}` : null
     ].filter(Boolean).join(" \xB7 ");
     return /* @__PURE__ */ u4(
       "div",
@@ -6848,7 +6876,7 @@
         id: "filter-bar",
         role: "toolbar",
         "aria-label": "Filters",
-        class: mobile_filters_expanded.value ? "expanded" : "collapsed",
+        class: `filter-dock${mobile_filters_expanded.value ? " expanded" : " collapsed"}`,
         children: [
           /* @__PURE__ */ u4("div", { class: "mobile-filter-header", children: [
             /* @__PURE__ */ u4("div", { class: "mobile-filter-summary", "aria-live": "polite", children: [
@@ -6868,58 +6896,40 @@
             )
           ] }),
           /* @__PURE__ */ u4("div", { id: "filter-sections", class: "filter-sections", children: [
-            /* @__PURE__ */ u4("div", { class: "filter-label", children: "Models" }),
-            /* @__PURE__ */ u4("div", { id: "model-checkboxes", role: "group", "aria-label": "Model filters", children: sortedModels.map((model) => {
-              const checked = selectedModels.value.has(model);
-              return /* @__PURE__ */ u4("label", { class: `model-cb-label${checked ? " checked" : ""}`, "data-model": model, children: [
-                /* @__PURE__ */ u4(
-                  "input",
-                  {
-                    type: "checkbox",
-                    value: model,
-                    checked,
-                    onChange: (e4) => toggleModel(model, e4.currentTarget.checked),
-                    "aria-label": model
-                  }
-                ),
-                /* @__PURE__ */ u4("span", { class: "model-cb-text", children: model })
-              ] }, model);
-            }) }),
-            /* @__PURE__ */ u4("button", { class: "filter-btn", type: "button", onClick: selectAll, children: "All" }),
-            /* @__PURE__ */ u4("button", { class: "filter-btn", type: "button", onClick: clearAll, children: "None" }),
-            /* @__PURE__ */ u4("div", { class: "filter-sep" }),
-            /* @__PURE__ */ u4("div", { class: "filter-label", children: "Range" }),
-            /* @__PURE__ */ u4("div", { class: "range-group", role: "group", "aria-label": "Date range", children: RANGES.map((range) => /* @__PURE__ */ u4(
-              "button",
-              {
-                class: `range-btn${selectedRange.value === range ? " active" : ""}`,
-                type: "button",
-                "data-range": range,
-                onClick: () => setRange(range),
-                children: range
-              },
-              range
-            )) }),
-            /* @__PURE__ */ u4("div", { class: "filter-sep" }),
-            /* @__PURE__ */ u4("div", { class: "filter-label", children: "Bucket" }),
-            /* @__PURE__ */ u4("div", { class: "range-group", role: "group", "aria-label": "Chart bucket", children: BUCKETS.map((bucket) => /* @__PURE__ */ u4(
-              "button",
-              {
-                class: `range-btn${selectedBucket.value === bucket ? " active" : ""}`,
-                type: "button",
-                "data-bucket": bucket,
-                onClick: () => setBucket(bucket),
-                children: BUCKET_LABEL[bucket]
-              },
-              bucket
-            )) }),
-            hasCodexData && /* @__PURE__ */ u4(S, { children: [
-              /* @__PURE__ */ u4("div", { class: "filter-sep" }),
-              /* @__PURE__ */ u4("div", { class: "filter-label", children: "Provider" }),
-              /* @__PURE__ */ u4("div", { class: "range-group", role: "group", "aria-label": "Provider", children: PROVIDERS.map((provider) => /* @__PURE__ */ u4(
+            /* @__PURE__ */ u4("div", { class: "filter-group", children: [
+              /* @__PURE__ */ u4("span", { class: "filter-group__label", children: "Range" }),
+              /* @__PURE__ */ u4("div", { class: "segmented", role: "group", "aria-label": "Date range", children: RANGES.map((range) => /* @__PURE__ */ u4(
                 "button",
                 {
-                  class: `range-btn${selectedProvider.value === provider ? " active" : ""}`,
+                  class: `segmented__item${selectedRange.value === range ? " is-active" : ""}`,
+                  type: "button",
+                  "data-range": range,
+                  onClick: () => setRange(range),
+                  children: RANGE_LABEL[range]
+                },
+                range
+              )) })
+            ] }),
+            /* @__PURE__ */ u4("div", { class: "filter-group", children: [
+              /* @__PURE__ */ u4("span", { class: "filter-group__label", children: "Bucket" }),
+              /* @__PURE__ */ u4("div", { class: "segmented", role: "group", "aria-label": "Chart bucket", children: BUCKETS.map((bucket) => /* @__PURE__ */ u4(
+                "button",
+                {
+                  class: `segmented__item${selectedBucket.value === bucket ? " is-active" : ""}`,
+                  type: "button",
+                  "data-bucket": bucket,
+                  onClick: () => setBucket(bucket),
+                  children: BUCKET_LABEL[bucket]
+                },
+                bucket
+              )) })
+            ] }),
+            hasCodexData && /* @__PURE__ */ u4("div", { class: "filter-group", children: [
+              /* @__PURE__ */ u4("span", { class: "filter-group__label", children: "Provider" }),
+              /* @__PURE__ */ u4("div", { class: "segmented", role: "group", "aria-label": "Provider", children: PROVIDERS.map((provider) => /* @__PURE__ */ u4(
+                "button",
+                {
+                  class: `segmented__item${selectedProvider.value === provider ? " is-active" : ""}`,
                   type: "button",
                   "data-provider": provider,
                   onClick: () => setProvider(provider),
@@ -6928,25 +6938,91 @@
                 provider
               )) })
             ] }),
-            /* @__PURE__ */ u4("div", { class: "filter-sep" }),
-            /* @__PURE__ */ u4("label", { for: "project-search", class: "filter-label", children: "Project" }),
-            /* @__PURE__ */ u4(
-              "input",
-              {
-                type: "text",
-                id: "project-search",
-                name: "project-search",
-                placeholder: "Search projects\u2026",
-                "aria-label": "Filter by project name",
-                autoComplete: "off",
-                spellcheck: false,
-                enterKeyHint: "search",
-                value: projectSearchQuery.value,
-                onInput: onSearchInput,
-                class: "project-search-input"
-              }
-            ),
-            projectSearchQuery.value && /* @__PURE__ */ u4("button", { class: "filter-btn", id: "project-clear-btn", type: "button", onClick: clearSearch, children: "Clear" })
+            /* @__PURE__ */ u4("div", { class: "filter-group filter-group--chip", children: [
+              /* @__PURE__ */ u4(
+                "button",
+                {
+                  ref: chipRef,
+                  type: "button",
+                  class: `filter-chip${modelsOpen ? " is-open" : ""}`,
+                  "aria-expanded": modelsOpen,
+                  "aria-controls": "filter-models-popover",
+                  onClick: () => setModelsOpen((o4) => !o4),
+                  children: [
+                    modelChipLabel,
+                    /* @__PURE__ */ u4("span", { class: "filter-chip__caret", "aria-hidden": "true", children: "\u25BE" })
+                  ]
+                }
+              ),
+              modelsOpen && /* @__PURE__ */ u4(
+                "div",
+                {
+                  ref: popoverRef,
+                  id: "filter-models-popover",
+                  class: "filter-popover",
+                  role: "dialog",
+                  "aria-label": "Select models",
+                  children: [
+                    /* @__PURE__ */ u4("div", { class: "filter-popover__header", children: [
+                      /* @__PURE__ */ u4("span", { children: [
+                        selectedModelCount,
+                        "/",
+                        totalModels,
+                        " selected"
+                      ] }),
+                      /* @__PURE__ */ u4("div", { class: "filter-popover__actions", children: [
+                        /* @__PURE__ */ u4("button", { class: "filter-link", type: "button", onClick: selectAll, children: "All" }),
+                        /* @__PURE__ */ u4("button", { class: "filter-link", type: "button", onClick: clearAll, children: "None" })
+                      ] })
+                    ] }),
+                    /* @__PURE__ */ u4("div", { class: "filter-popover__body", role: "group", "aria-label": "Model filters", children: sortedModels.map((model) => {
+                      const checked = selectedModels.value.has(model);
+                      return /* @__PURE__ */ u4(
+                        "label",
+                        {
+                          class: `filter-popover__row${checked ? " is-checked" : ""}`,
+                          "data-model": model,
+                          children: [
+                            /* @__PURE__ */ u4(
+                              "input",
+                              {
+                                type: "checkbox",
+                                value: model,
+                                checked,
+                                onChange: (e4) => toggleModel(model, e4.currentTarget.checked),
+                                "aria-label": model
+                              }
+                            ),
+                            /* @__PURE__ */ u4("span", { class: "filter-popover__row-text", children: model })
+                          ]
+                        },
+                        model
+                      );
+                    }) })
+                  ]
+                }
+              )
+            ] }),
+            /* @__PURE__ */ u4("div", { class: "filter-group filter-group--search", children: [
+              /* @__PURE__ */ u4("label", { for: "project-search", class: "filter-group__label", children: "Project" }),
+              /* @__PURE__ */ u4(
+                "input",
+                {
+                  type: "text",
+                  id: "project-search",
+                  name: "project-search",
+                  placeholder: "Search projects\u2026",
+                  "aria-label": "Filter by project name",
+                  autoComplete: "off",
+                  spellcheck: false,
+                  enterKeyHint: "search",
+                  value: projectSearchQuery.value,
+                  onInput: onSearchInput,
+                  class: "project-search-input"
+                }
+              ),
+              projectSearchQuery.value && /* @__PURE__ */ u4("button", { class: "filter-link", id: "project-clear-btn", type: "button", onClick: clearSearch, children: "Clear" })
+            ] })
           ] })
         ]
       }
@@ -7035,39 +7111,6 @@
     };
   }
 
-  // src/ui/components/VersionPill.tsx
-  function VersionPill() {
-    const info = versionInfo.value;
-    const checking = versionChecking.value;
-    if (!info) return null;
-    const current = `v${info.current}`;
-    if (checking) {
-      return /* @__PURE__ */ u4("span", { class: "version-pill version-pill--checking", children: "[CHECKING]" });
-    }
-    if (info.update_available && info.latest && info.latest_url) {
-      return /* @__PURE__ */ u4(
-        "a",
-        {
-          class: "version-pill version-pill--update",
-          href: info.latest_url,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          title: `Latest: v${esc(info.latest)} (current: ${current})`,
-          children: [
-            "[v",
-            esc(info.latest),
-            " \u2192]"
-          ]
-        }
-      );
-    }
-    return /* @__PURE__ */ u4("span", { class: "version-pill version-pill--current", title: `Current: ${current}`, children: [
-      "[",
-      current,
-      "]"
-    ] });
-  }
-
   // src/ui/components/Header.tsx
   function Header({
     onDataReload,
@@ -7138,51 +7181,41 @@
       /* @__PURE__ */ u4("line", { x1: "4.22", y1: "19.78", x2: "5.64", y2: "18.36" }),
       /* @__PURE__ */ u4("line", { x1: "18.36", y1: "5.64", x2: "19.78", y2: "4.22" })
     ] });
+    const info = versionInfo.value;
+    const versionTitle = info ? `Heimdall \xB7 v${info.current}` : "Heimdall";
+    const updateUrl = info?.update_available ? info.latest_url : null;
+    const planLabel2 = planBadge.value;
     return /* @__PURE__ */ u4("header", { ref: headerRef, children: [
-      /* @__PURE__ */ u4("h1", { children: [
-        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontWeight: 400 }, children: "Code" }),
-        " ",
-        /* @__PURE__ */ u4("span", { style: { color: "var(--text-display)", fontWeight: 500 }, children: "Usage" }),
-        planBadge.value && /* @__PURE__ */ u4(
-          "span",
-          {
-            "aria-live": "polite",
-            style: {
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              padding: "1px 8px",
-              borderRadius: "999px",
-              border: "1px solid var(--border-visible)",
-              color: "var(--text-secondary)",
-              verticalAlign: "middle",
-              marginLeft: "8px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase"
-            },
-            children: planBadge.value
-          }
-        )
+      /* @__PURE__ */ u4("h1", { title: versionTitle, children: [
+        /* @__PURE__ */ u4("span", { class: "header-logo-mark", children: [
+          /* @__PURE__ */ u4("span", { class: "header-logo-mark__pre", children: "Code" }),
+          " ",
+          /* @__PURE__ */ u4("span", { class: "header-logo-mark__post", children: "Usage" })
+        ] }),
+        planLabel2 && /* @__PURE__ */ u4("span", { class: "header-plan-badge", "aria-live": "polite", children: planLabel2 })
       ] }),
       /* @__PURE__ */ u4("div", { class: "meta", children: metaText.value }),
       /* @__PURE__ */ u4("div", { class: "header-actions", children: [
-        navigationHref && navigationLabel && /* @__PURE__ */ u4(
+        navigationHref && navigationLabel && /* @__PURE__ */ u4("a", { class: "header-button header-button--link", href: navigationHref, children: [
+          "[",
+          navigationLabel,
+          "]"
+        ] }),
+        updateUrl && /* @__PURE__ */ u4(
           "a",
           {
-            href: navigationHref,
-            style: {
-              border: "1px solid var(--border-visible)",
-              borderRadius: "999px",
-              padding: "8px 12px",
-              color: "var(--text-primary)",
-              textDecoration: "none",
-              fontSize: "12px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase"
-            },
-            children: navigationLabel
+            class: "header-button header-button--link header-button--update",
+            href: updateUrl,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            title: `Latest: v${info?.latest} (current: v${info?.current})`,
+            children: [
+              "[Update v",
+              info?.latest,
+              " \u2192]"
+            ]
           }
         ),
-        /* @__PURE__ */ u4(VersionPill, {}),
         /* @__PURE__ */ u4(
           "button",
           {
@@ -7203,7 +7236,7 @@
             },
             "aria-pressed": isEditing,
             "aria-label": isEditing ? "Done editing layout" : "Edit layout",
-            children: isEditing ? "[DONE]" : "[EDIT LAYOUT]"
+            children: isEditing ? "[Done]" : "[Edit layout]"
           }
         ),
         !isMobile && /* @__PURE__ */ u4(
@@ -7218,14 +7251,14 @@
               }
             },
             "aria-label": "Open backup and snapshots",
-            children: "[BACKUP]"
+            children: "[Backup]"
           }
         ),
         !isMobile && /* @__PURE__ */ u4(
           "button",
           {
             type: "button",
-            class: "header-button header-button--icon",
+            class: "header-button",
             onClick: () => {
               settingsModalOpen.value = true;
               if (!/^#\/settings\b/.test(window.location.hash)) {
@@ -7233,10 +7266,7 @@
               }
             },
             "aria-label": "Open settings",
-            children: /* @__PURE__ */ u4("svg", { "aria-hidden": "true", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: [
-              /* @__PURE__ */ u4("circle", { cx: "12", cy: "12", r: "3" }),
-              /* @__PURE__ */ u4("path", { d: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" })
-            ] })
+            children: "[Settings]"
           }
         ),
         /* @__PURE__ */ u4(

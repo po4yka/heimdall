@@ -2,8 +2,17 @@ import { useRef, useEffect } from 'preact/hooks';
 import { createTriggerRescan } from '../lib/rescan';
 import { setStatus } from '../lib/status';
 import { InlineStatus } from './InlineStatus';
-import { VersionPill } from './VersionPill';
-import { metaText, planBadge, rescanLabel, rescanDisabled, themeMode, editMode, backupModalOpen, settingsModalOpen } from '../state/store';
+import {
+  metaText,
+  planBadge,
+  rescanLabel,
+  rescanDisabled,
+  themeMode,
+  editMode,
+  backupModalOpen,
+  settingsModalOpen,
+  versionInfo,
+} from '../state/store';
 
 interface HeaderProps {
   onDataReload: (force?: boolean) => Promise<void>;
@@ -85,52 +94,43 @@ export function Header({
         <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
       </svg>;
 
+  const info = versionInfo.value;
+  const versionTitle = info ? `Heimdall · v${info.current}` : 'Heimdall';
+  const updateUrl = info?.update_available ? info.latest_url : null;
+  const planLabel = planBadge.value;
+
   return (
     <header ref={headerRef}>
-      <h1>
-        <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>Code</span>
-        {' '}
-        <span style={{ color: 'var(--text-display)', fontWeight: 500 }}>Usage</span>
-        {planBadge.value && (
-          <span
-            aria-live="polite"
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '10px',
-              padding: '1px 8px',
-              borderRadius: '999px',
-              border: '1px solid var(--border-visible)',
-              color: 'var(--text-secondary)',
-              verticalAlign: 'middle',
-              marginLeft: '8px',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {planBadge.value}
+      <h1 title={versionTitle}>
+        <span class="header-logo-mark">
+          <span class="header-logo-mark__pre">Code</span>
+          {' '}
+          <span class="header-logo-mark__post">Usage</span>
+        </span>
+        {planLabel && (
+          <span class="header-plan-badge" aria-live="polite">
+            {planLabel}
           </span>
         )}
       </h1>
       <div class="meta">{metaText.value}</div>
       <div class="header-actions">
         {navigationHref && navigationLabel && (
-          <a
-            href={navigationHref}
-            style={{
-              border: '1px solid var(--border-visible)',
-              borderRadius: '999px',
-              padding: '8px 12px',
-              color: 'var(--text-primary)',
-              textDecoration: 'none',
-              fontSize: '12px',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {navigationLabel}
+          <a class="header-button header-button--link" href={navigationHref}>
+            [{navigationLabel}]
           </a>
         )}
-        <VersionPill />
+        {updateUrl && (
+          <a
+            class="header-button header-button--link header-button--update"
+            href={updateUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Latest: v${info?.latest} (current: v${info?.current})`}
+          >
+            [Update v{info?.latest} →]
+          </a>
+        )}
         <button
           class="theme-toggle"
           type="button"
@@ -147,7 +147,7 @@ export function Header({
             aria-pressed={isEditing}
             aria-label={isEditing ? 'Done editing layout' : 'Edit layout'}
           >
-            {isEditing ? '[DONE]' : '[EDIT LAYOUT]'}
+            {isEditing ? '[Done]' : '[Edit layout]'}
           </button>
         )}
         {!isMobile && (
@@ -162,13 +162,13 @@ export function Header({
             }}
             aria-label="Open backup and snapshots"
           >
-            [BACKUP]
+            [Backup]
           </button>
         )}
         {!isMobile && (
           <button
             type="button"
-            class="header-button header-button--icon"
+            class="header-button"
             onClick={() => {
               settingsModalOpen.value = true;
               if (!/^#\/settings\b/.test(window.location.hash)) {
@@ -177,10 +177,7 @@ export function Header({
             }}
             aria-label="Open settings"
           >
-            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
+            [Settings]
           </button>
         )}
         <button

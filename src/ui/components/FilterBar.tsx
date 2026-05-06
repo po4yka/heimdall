@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'preact/hooks';
 import {
   rawData,
   selectedModels,
@@ -11,8 +12,14 @@ import {
 import type { RangeKey, BucketKey } from '../state/types';
 
 const RANGES: RangeKey[] = ['7d', '30d', '90d', 'all'];
+const RANGE_LABEL: Record<RangeKey, string> = {
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+  all: 'All',
+};
 const BUCKETS: BucketKey[] = ['day', 'week'];
-const BUCKET_LABEL: Record<BucketKey, string> = { day: 'DAY', week: 'WEEK' };
+const BUCKET_LABEL: Record<BucketKey, string> = { day: 'Day', week: 'Week' };
 const PROVIDERS: ProviderFilter[] = ['both', 'claude', 'codex'];
 const PROVIDER_LABEL: Record<ProviderFilter, string> = {
   both: 'Both',
@@ -40,6 +47,30 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
     const pb = modelPriority(b);
     return pa !== pb ? pa - pb : a.localeCompare(b);
   });
+
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const chipRef = useRef<HTMLButtonElement | null>(null);
+
+  // Click-outside / Escape to close popover
+  useEffect(() => {
+    if (!modelsOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (popoverRef.current?.contains(t)) return;
+      if (chipRef.current?.contains(t)) return;
+      setModelsOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModelsOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [modelsOpen]);
 
   const toggleModel = (model: string, checked: boolean) => {
     const next = new Set(selectedModels.value);
@@ -101,17 +132,20 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
   };
 
   const selectedModelCount = selectedModels.value.size;
+  const totalModels = sortedModels.length;
+  const allSelected = selectedModelCount === totalModels;
+  const modelChipLabel = totalModels === 0
+    ? 'Models'
+    : allSelected
+      ? `Models · all ${totalModels}`
+      : `Models · ${selectedModelCount}/${totalModels}`;
   const providerSummary = hasCodexData ? PROVIDER_LABEL[selectedProvider.value] : null;
-  const modelSummary = selectedModelCount === sortedModels.length
-    ? 'All Models'
-    : `${selectedModelCount}/${sortedModels.length} Models`;
-  const projectSummary = projectSearchQuery.value ? `Project ${projectSearchQuery.value}` : 'All Projects';
   const filterSummary = [
-    selectedRange.value.toUpperCase(),
+    RANGE_LABEL[selectedRange.value],
     BUCKET_LABEL[selectedBucket.value],
     providerSummary,
-    modelSummary,
-    projectSummary,
+    allSelected ? `All ${totalModels} models` : `${selectedModelCount}/${totalModels} models`,
+    projectSearchQuery.value ? `Project: ${projectSearchQuery.value}` : null,
   ].filter(Boolean).join(' · ');
 
   return (
@@ -119,7 +153,7 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
       id="filter-bar"
       role="toolbar"
       aria-label="Filters"
-      class={mobile_filters_expanded.value ? 'expanded' : 'collapsed'}
+      class={`filter-dock${mobile_filters_expanded.value ? ' expanded' : ' collapsed'}`}
     >
       <div class="mobile-filter-header">
         <div class="mobile-filter-summary" aria-live="polite">
@@ -136,66 +170,50 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
           {mobile_filters_expanded.value ? 'Hide' : 'Show'}
         </button>
       </div>
+
       <div id="filter-sections" class="filter-sections">
-        <div class="filter-label">Models</div>
-        <div id="model-checkboxes" role="group" aria-label="Model filters">
-          {sortedModels.map(model => {
-            const checked = selectedModels.value.has(model);
-            return (
-              <label key={model} class={`model-cb-label${checked ? ' checked' : ''}`} data-model={model}>
-                <input
-                  type="checkbox"
-                  value={model}
-                  checked={checked}
-                  onChange={(e) => toggleModel(model, (e.currentTarget as HTMLInputElement).checked)}
-                  aria-label={model}
-                />
-                <span class="model-cb-text">{model}</span>
-              </label>
-            );
-          })}
+        <div class="filter-group">
+          <span class="filter-group__label">Range</span>
+          <div class="segmented" role="group" aria-label="Date range">
+            {RANGES.map(range => (
+              <button
+                key={range}
+                class={`segmented__item${selectedRange.value === range ? ' is-active' : ''}`}
+                type="button"
+                data-range={range}
+                onClick={() => setRange(range)}
+              >
+                {RANGE_LABEL[range]}
+              </button>
+            ))}
+          </div>
         </div>
-        <button class="filter-btn" type="button" onClick={selectAll}>All</button>
-        <button class="filter-btn" type="button" onClick={clearAll}>None</button>
-        <div class="filter-sep"></div>
-        <div class="filter-label">Range</div>
-        <div class="range-group" role="group" aria-label="Date range">
-          {RANGES.map(range => (
-            <button
-              key={range}
-              class={`range-btn${selectedRange.value === range ? ' active' : ''}`}
-              type="button"
-              data-range={range}
-              onClick={() => setRange(range)}
-            >
-              {range}
-            </button>
-          ))}
+
+        <div class="filter-group">
+          <span class="filter-group__label">Bucket</span>
+          <div class="segmented" role="group" aria-label="Chart bucket">
+            {BUCKETS.map(bucket => (
+              <button
+                key={bucket}
+                class={`segmented__item${selectedBucket.value === bucket ? ' is-active' : ''}`}
+                type="button"
+                data-bucket={bucket}
+                onClick={() => setBucket(bucket)}
+              >
+                {BUCKET_LABEL[bucket]}
+              </button>
+            ))}
+          </div>
         </div>
-        <div class="filter-sep"></div>
-        <div class="filter-label">Bucket</div>
-        <div class="range-group" role="group" aria-label="Chart bucket">
-          {BUCKETS.map(bucket => (
-            <button
-              key={bucket}
-              class={`range-btn${selectedBucket.value === bucket ? ' active' : ''}`}
-              type="button"
-              data-bucket={bucket}
-              onClick={() => setBucket(bucket)}
-            >
-              {BUCKET_LABEL[bucket]}
-            </button>
-          ))}
-        </div>
+
         {hasCodexData && (
-          <>
-            <div class="filter-sep"></div>
-            <div class="filter-label">Provider</div>
-            <div class="range-group" role="group" aria-label="Provider">
+          <div class="filter-group">
+            <span class="filter-group__label">Provider</span>
+            <div class="segmented" role="group" aria-label="Provider">
               {PROVIDERS.map(provider => (
                 <button
                   key={provider}
-                  class={`range-btn${selectedProvider.value === provider ? ' active' : ''}`}
+                  class={`segmented__item${selectedProvider.value === provider ? ' is-active' : ''}`}
                   type="button"
                   data-provider={provider}
                   onClick={() => setProvider(provider)}
@@ -204,28 +222,84 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
                 </button>
               ))}
             </div>
-          </>
+          </div>
         )}
-        <div class="filter-sep"></div>
-        <label for="project-search" class="filter-label">Project</label>
-        <input
-          type="text"
-          id="project-search"
-          name="project-search"
-          placeholder="Search projects…"
-          aria-label="Filter by project name"
-          autoComplete="off"
-          spellcheck={false}
-          enterKeyHint="search"
-          value={projectSearchQuery.value}
-          onInput={onSearchInput}
-          class="project-search-input"
-        />
-        {projectSearchQuery.value && (
-          <button class="filter-btn" id="project-clear-btn" type="button" onClick={clearSearch}>
-            Clear
+
+        <div class="filter-group filter-group--chip">
+          <button
+            ref={chipRef}
+            type="button"
+            class={`filter-chip${modelsOpen ? ' is-open' : ''}`}
+            aria-expanded={modelsOpen}
+            aria-controls="filter-models-popover"
+            onClick={() => setModelsOpen(o => !o)}
+          >
+            {modelChipLabel}
+            <span class="filter-chip__caret" aria-hidden="true">▾</span>
           </button>
-        )}
+          {modelsOpen && (
+            <div
+              ref={popoverRef}
+              id="filter-models-popover"
+              class="filter-popover"
+              role="dialog"
+              aria-label="Select models"
+            >
+              <div class="filter-popover__header">
+                <span>{selectedModelCount}/{totalModels} selected</span>
+                <div class="filter-popover__actions">
+                  <button class="filter-link" type="button" onClick={selectAll}>All</button>
+                  <button class="filter-link" type="button" onClick={clearAll}>None</button>
+                </div>
+              </div>
+              <div class="filter-popover__body" role="group" aria-label="Model filters">
+                {sortedModels.map(model => {
+                  const checked = selectedModels.value.has(model);
+                  return (
+                    <label
+                      key={model}
+                      class={`filter-popover__row${checked ? ' is-checked' : ''}`}
+                      data-model={model}
+                    >
+                      <input
+                        type="checkbox"
+                        value={model}
+                        checked={checked}
+                        onChange={(e) =>
+                          toggleModel(model, (e.currentTarget as HTMLInputElement).checked)
+                        }
+                        aria-label={model}
+                      />
+                      <span class="filter-popover__row-text">{model}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div class="filter-group filter-group--search">
+          <label for="project-search" class="filter-group__label">Project</label>
+          <input
+            type="text"
+            id="project-search"
+            name="project-search"
+            placeholder="Search projects…"
+            aria-label="Filter by project name"
+            autoComplete="off"
+            spellcheck={false}
+            enterKeyHint="search"
+            value={projectSearchQuery.value}
+            onInput={onSearchInput}
+            class="project-search-input"
+          />
+          {projectSearchQuery.value && (
+            <button class="filter-link" id="project-clear-btn" type="button" onClick={clearSearch}>
+              Clear
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
