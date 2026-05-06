@@ -12088,7 +12088,7 @@ ${row.project}` : row.project;
           children: [
             /* @__PURE__ */ u4("span", { class: "stat-sub", children: [
               level.label,
-              level.key === suggestions.recommended_key && /* @__PURE__ */ u4("small", { style: { marginLeft: "6px", fontSize: "9px", letterSpacing: "0.08em", color: "var(--text-disabled)", textTransform: "uppercase" }, children: "recommended" })
+              level.key === suggestions.recommended_key && /* @__PURE__ */ u4("small", { style: { marginLeft: "var(--space-2)", fontSize: "var(--font-size-tertiary)", color: "var(--accent-interactive)", fontFamily: "var(--font-mono)" }, children: "[Recommended]" })
             ] }),
             /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: fmt(level.limit_tokens) })
           ]

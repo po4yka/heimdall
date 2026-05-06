@@ -232,6 +232,7 @@ describe('dashboard runtime', () => {
       expect.any(Function),
       expect.any(Function),
       expect.any(Function),
+      expect.any(Function),
       expect.any(Function)
     );
   });

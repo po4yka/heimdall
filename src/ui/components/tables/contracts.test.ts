@@ -235,7 +235,9 @@ describe('table leaf contracts', () => {
     const modelColumns = modelTable.props['columns'] as Array<{ cell: (ctx: unknown) => unknown }>;
     const sessionColumns = sessionsTable.props['columns'] as Array<{ id: string; cell: (ctx: unknown) => unknown }>;
 
-    const projectCell = projectColumns[0]?.cell(sampleCellContext(projectRows[0]!.project, projectRows[0]!)) as { type: string };
+    // projectColumns[0] is the pin-star column; the project action cell
+    // we want to verify is at index 1 (after pin-star was added).
+    const projectCell = projectColumns[1]?.cell(sampleCellContext(projectRows[0]!.project, projectRows[0]!)) as { type: string };
     const modelCell = modelColumns[0]?.cell(sampleCellContext(modelRows[0]!.model, modelRows[0]!)) as { type: string };
     const sessionModelCell = sessionColumns.find(column => column.id === 'model')?.cell(
       sampleCellContext(sessionRows[0]!.model, sessionRows[0]!)

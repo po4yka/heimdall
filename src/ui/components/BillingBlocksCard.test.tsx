@@ -54,7 +54,7 @@ describe('BillingBlocksCard', () => {
     expect(text).toContain('123.0K');
     expect(text).toContain('SUGGESTED QUOTAS');
     expect(text).toContain('P90');
-    expect(text).toContain('[RECOMMENDED]');
+    expect(text).toContain('[Recommended]');
   });
 
   it('renders active block totals, burn rate, and quota summaries', () => {

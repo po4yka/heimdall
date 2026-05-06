@@ -15,6 +15,7 @@ interface FakeElement {
   dataset: Record<string, string>;
   style: Record<string, string>;
   textContent: string;
+  closest: (selector: string) => Element | null;
 }
 
 interface LoadedViewContext {
@@ -59,6 +60,11 @@ function makeFakeElement(id: string): FakeElement {
     dataset: {},
     style: {},
     textContent: '',
+    // setSectionVisibility now walks up via .closest('.widget-body') →
+    // .closest('.grid-stack-item'); the test stubs aren't inside a grid
+    // so neither selector matches and we short-circuit at the first
+    // call. Returning null here is correct behaviour.
+    closest: () => null,
   };
 }
 
@@ -384,10 +390,10 @@ describe('dashboard view', () => {
     view.renderUsageWindows(usage, null, () => {}, () => {}, () => {});
 
     const text = lastRenderedTextFor(elements, 'usage-windows');
-    expect(text).toContain('Active Users Today');
-    expect(text).toContain('Sessions Today');
-    expect(text).toContain('Accepted Lines (30d)');
-    expect(text).toContain('Estimated Spend (30d)');
+    expect(text).toContain('Active users today');
+    expect(text).toContain('Sessions today');
+    expect(text).toContain('Accepted lines (30d)');
+    expect(text).toContain('Estimated spend (30d)');
     expect(text).toContain('Acme Org');
   });
 });

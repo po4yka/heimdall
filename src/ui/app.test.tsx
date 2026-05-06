@@ -50,7 +50,18 @@ vi.mock('./monitor/MonitorHeader', () => ({
   MonitorHeader: (props: unknown) => ({ type: 'MonitorHeader', props }),
 }));
 vi.mock('./lib/theme', () => themeSpies);
-vi.mock('./state/store', () => storeMock);
+// Partial-mock so the test only overrides the two signals it asserts on
+// (rawData + syncDashboardUrl) while every other signal app.tsx subscribes
+// to (backupModalOpen, settingsModalOpen, commandPaletteOpen, projectsRegistry,
+// archiveImports, activeDashboardTab, …) keeps its real exported shape.
+vi.mock('./state/store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./state/store')>();
+  return {
+    ...actual,
+    rawData: storeMock.rawData,
+    syncDashboardUrl: storeMock.syncDashboardUrl,
+  };
+});
 
 describe('app entrypoint', () => {
   beforeEach(() => {
@@ -96,6 +107,10 @@ describe('app entrypoint', () => {
     });
     vi.stubGlobal('window', {
       location: { pathname: '/', search: '' },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      setTimeout: globalThis.setTimeout.bind(globalThis),
+      clearTimeout: globalThis.clearTimeout.bind(globalThis),
     });
 
     // @ts-expect-error intentional source import so the test exercises app.tsx, not the bundled app.js artifact
@@ -142,6 +157,10 @@ describe('app entrypoint', () => {
     });
     vi.stubGlobal('window', {
       location: { pathname: '/monitor', search: '' },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      setTimeout: globalThis.setTimeout.bind(globalThis),
+      clearTimeout: globalThis.clearTimeout.bind(globalThis),
     });
 
     // @ts-expect-error intentional source import so the test exercises app.tsx, not the bundled app.js artifact

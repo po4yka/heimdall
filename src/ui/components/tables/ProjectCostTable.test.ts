@@ -46,7 +46,9 @@ describe('ProjectCostTable', () => {
       onSelectProject: () => undefined,
     }) as { props: Record<string, unknown> };
     const columns = vnode.props['columns'] as Array<{ cell: (ctx: unknown) => unknown }>;
-    const projectCell = columns[0]?.cell({
+    // columns[0] is the pin-star column; the project action cell is at
+    // index 1 since the pin column was added.
+    const projectCell = columns[1]?.cell({
       getValue: () => rows[0]!.project,
       row: { original: rows[0]! },
     } as never) as { type: string };
