@@ -65,4 +65,37 @@ describe('BackupPanel', () => {
     const texts = collectText(vnode);
     expect(texts.some(t => t.includes('Failed to load snapshots'))).toBe(true);
   });
+
+  it('renders a TableSkeleton (>=1 .skeleton element) while loading', () => {
+    // Recursively expand function-component vnodes and collect
+    // anything whose className contains 'skeleton'.
+    function findSkeletons(node: unknown, depth = 0): unknown[] {
+      if (depth > 30) return [];
+      if (Array.isArray(node)) return node.flatMap(n => findSkeletons(n, depth));
+      if (!node || typeof node !== 'object') return [];
+      const vnode = node as {
+        type?: unknown;
+        props?: Record<string, unknown> & { class?: string; className?: string };
+      };
+      const props = vnode.props ?? {};
+      const cls = (props['class'] ?? props['className'] ?? '') as string;
+      const hits = typeof cls === 'string' && cls.includes('skeleton') ? [vnode] : [];
+      const childrenHits = findSkeletons(props['children'], depth + 1);
+      // Walk into function-component vnodes by invoking them with their props.
+      const expanded: unknown[] =
+        typeof vnode.type === 'function'
+          ? findSkeletons(
+              (vnode.type as (p: Record<string, unknown>) => unknown)(props),
+              depth + 1,
+            )
+          : [];
+      return [...hits, ...childrenHits, ...expanded];
+    }
+
+    backupSnapshots.value = [];
+    backupLoadState.value = 'loading';
+    const vnode = BackupPanel({ onSnapshot: async () => {}, onReload: async () => {} });
+    const skeletons = findSkeletons(vnode);
+    expect(skeletons.length).toBeGreaterThan(0);
+  });
 });

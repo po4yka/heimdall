@@ -1384,6 +1384,56 @@
     return l.vnode && l.vnode(l5), l5;
   }
 
+  // src/ui/components/_primitives/Skeleton.tsx
+  function Skeleton({
+    width = "100%",
+    height = "var(--font-size-body)",
+    radius = "var(--radius-1)",
+    className,
+    ariaLabel
+  }) {
+    const cls = ["skeleton", className].filter(Boolean).join(" ");
+    return /* @__PURE__ */ u4(
+      "span",
+      {
+        class: cls,
+        role: ariaLabel ? "status" : void 0,
+        "aria-label": ariaLabel,
+        "aria-busy": ariaLabel ? "true" : void 0,
+        style: { width, height, borderRadius: radius, display: "block" }
+      }
+    );
+  }
+  function KpiSkeleton({
+    size = "standard",
+    withBar = false,
+    withSub = true
+  }) {
+    const valueHeight = size === "hero" ? "var(--font-size-display)" : size === "compact" ? "var(--font-size-value)" : "var(--font-size-display-sm)";
+    return /* @__PURE__ */ u4("div", { class: `card stat-card kpi-card kpi-card--${size}`, "aria-busy": "true", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
+      /* @__PURE__ */ u4(Skeleton, { width: "40%", height: "var(--font-size-tertiary)" }),
+      /* @__PURE__ */ u4(Skeleton, { width: "60%", height: valueHeight }),
+      withBar && /* @__PURE__ */ u4(Skeleton, { width: "100%", height: "6px" }),
+      withSub && /* @__PURE__ */ u4(Skeleton, { width: "50%", height: "var(--font-size-tertiary)" })
+    ] }) });
+  }
+  function TableSkeleton({ rows: rows2 = 6, columns: columns7 = 4 }) {
+    return /* @__PURE__ */ u4("table", { "aria-busy": "true", style: { width: "100%" }, children: [
+      /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: Array.from({ length: columns7 }).map((_4, i4) => /* @__PURE__ */ u4("th", { children: /* @__PURE__ */ u4(Skeleton, { width: "60%", height: "var(--font-size-tertiary)" }) }, i4)) }) }),
+      /* @__PURE__ */ u4("tbody", { children: Array.from({ length: rows2 }).map((_4, ri) => /* @__PURE__ */ u4("tr", { children: Array.from({ length: columns7 }).map((_5, ci) => /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4(Skeleton, { width: ci === 0 ? "70%" : "50%" }) }, ci)) }, ri)) })
+    ] });
+  }
+  function SkeletonGroup({ children }) {
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        "aria-busy": "true",
+        style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
+        children
+      }
+    );
+  }
+
   // src/ui/components/BackupPanel.tsx
   function BackupPanel({ onSnapshot, onReload }) {
     const snapshots = backupSnapshots.value;
@@ -1412,6 +1462,7 @@
         )
       ] }),
       state === "error" && /* @__PURE__ */ u4("p", { class: "backup-panel-error", children: "Failed to load snapshots." }),
+      state === "loading" && snapshots.length === 0 && /* @__PURE__ */ u4(TableSkeleton, { rows: 5, columns: 4 }),
       snapshots.length === 0 && state === "idle" && /* @__PURE__ */ u4("p", { class: "backup-panel-empty", children: 'No snapshots yet \u2014 click "Snapshot now" to create one.' }),
       snapshots.length > 0 && /* @__PURE__ */ u4("table", { class: "data-table", children: [
         /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
@@ -2935,7 +2986,13 @@
     const activeMeta = SECTIONS.find((s4) => s4.key === activeKey) ?? SECTIONS[0];
     function renderSection2() {
       if (loading) {
-        return /* @__PURE__ */ u4("div", { class: "settings-loading", children: "Loading settings\u2026" });
+        return /* @__PURE__ */ u4(SkeletonGroup, { children: [
+          /* @__PURE__ */ u4(Skeleton, { width: "40%", height: "var(--font-size-display-sm)" }),
+          Array.from({ length: 4 }).map((_4, i4) => /* @__PURE__ */ u4(SkeletonGroup, { children: [
+            /* @__PURE__ */ u4(Skeleton, { width: "30%", height: "var(--font-size-tertiary)" }),
+            /* @__PURE__ */ u4(Skeleton, { width: "100%", height: "32px", radius: "var(--radius-1)" })
+          ] }, i4))
+        ] });
       }
       if (loadError) {
         return /* @__PURE__ */ u4("div", { class: "settings-error-panel", children: [
@@ -3290,7 +3347,7 @@
             )
           ] }),
           /* @__PURE__ */ u4("div", { style: { padding: "0 20px 8px" }, children: /* @__PURE__ */ u4(InlineStatus, { placement: "agent-registry", inline: true }) }),
-          loading ? /* @__PURE__ */ u4("div", { style: { padding: "20px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "11px" }, children: "Loading\u2026" }) : allRoles.length === 0 ? /* @__PURE__ */ u4("div", { class: "empty-state", style: { margin: "20px" }, children: "No agent roles detected for this project" }) : /* @__PURE__ */ u4("div", { class: "agent-registry-table-wrap", children: /* @__PURE__ */ u4("table", { class: "agent-registry-table", children: [
+          loading ? /* @__PURE__ */ u4("div", { style: { padding: "var(--space-4)" }, children: /* @__PURE__ */ u4(TableSkeleton, { rows: 4, columns: 3 }) }) : allRoles.length === 0 ? /* @__PURE__ */ u4("div", { class: "empty-state", style: { margin: "20px" }, children: "No agent roles detected for this project" }) : /* @__PURE__ */ u4("div", { class: "agent-registry-table-wrap", children: /* @__PURE__ */ u4("table", { class: "agent-registry-table", children: [
             /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
               /* @__PURE__ */ u4("th", { children: "ROLE" }),
               /* @__PURE__ */ u4("th", { children: "DISPLAY NAME" }),
@@ -6708,7 +6765,7 @@
         ] })
       ] }),
       /* @__PURE__ */ u4("div", { style: { padding: "0 20px 20px" }, children: [
-        /* @__PURE__ */ u4(
+        loading && rows2.length === 0 ? /* @__PURE__ */ u4(TableSkeleton, { rows: 6, columns: 5 }) : /* @__PURE__ */ u4(
           DataTable,
           {
             columns: columns7,
@@ -15223,10 +15280,13 @@ ${row.project}` : row.project;
   function renderLiveMonitorView() {
     const data = liveMonitorData.value;
     if (!data) {
-      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "20px" }, children: [
-        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Live Monitor" }),
-        /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Waiting for provider data\u2026" })
-      ] });
+      return /* @__PURE__ */ u4("div", { class: "live-monitor", style: { display: "grid", gap: "var(--space-6)" }, children: /* @__PURE__ */ u4("section", { style: { display: "grid", gap: "var(--space-3)" }, children: [
+        /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "var(--space-3)", alignItems: "baseline" }, children: /* @__PURE__ */ u4("h2", { style: { margin: 0 }, children: "Provider Lanes" }) }),
+        /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "var(--space-4)" }, children: [
+          /* @__PURE__ */ u4(KpiSkeleton, { size: "hero", withBar: true, withSub: true }),
+          /* @__PURE__ */ u4(KpiSkeleton, { size: "hero", withBar: true, withSub: true })
+        ] })
+      ] }) });
     }
     const laneProviders = providersForFocus(data, liveMonitorFocus.value);
     const hiddenPanels = new Set(liveMonitorHiddenPanels.value);
@@ -15552,7 +15612,9 @@ ${row.project}` : row.project;
         /* @__PURE__ */ u4("code", { children: "cargo run -- db reset --yes && cargo run -- scan" }),
         " to capture pre-upgrade errors]"
       ] }),
-      data.length > 0 ? /* @__PURE__ */ u4(ToolErrorsTable, { data }) : state === "idle" && /* @__PURE__ */ u4("p", { class: "muted", children: "No errors found for the selected filters." }),
+      data.length > 0 && /* @__PURE__ */ u4(ToolErrorsTable, { data }),
+      data.length === 0 && state === "loading" && /* @__PURE__ */ u4(TableSkeleton, { rows: 8, columns: 5 }),
+      data.length === 0 && state === "idle" && /* @__PURE__ */ u4("p", { class: "muted", children: "No errors found for the selected filters." }),
       totalPages > 1 && /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "8px", alignItems: "center", marginTop: "16px", fontSize: "13px" }, children: [
         /* @__PURE__ */ u4(
           "button",

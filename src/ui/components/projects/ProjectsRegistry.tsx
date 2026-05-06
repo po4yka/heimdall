@@ -18,6 +18,7 @@ import {
 import type { ProjectRegistryRow } from '../../state/dashboard-types';
 import { DataTable } from '../tables/DataTable';
 import { InlineStatus } from '../InlineStatus';
+import { TableSkeleton } from '../_primitives/Skeleton';
 import { PinStar } from './PinStar';
 
 interface ProjectsRegistryProps {
@@ -340,11 +341,15 @@ export function ProjectsRegistry({ onReload }: ProjectsRegistryProps) {
         </div>
       </div>
       <div style={{ padding: '0 20px 20px' }}>
-        <DataTable
-          columns={columns}
-          data={filtered}
-          defaultSort={defaultSort}
-        />
+        {loading && rows.length === 0 ? (
+          <TableSkeleton rows={6} columns={5} />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filtered}
+            defaultSort={defaultSort}
+          />
+        )}
         {!loading && filtered.length === 0 && (
           <div class="empty-state" style={{ marginTop: 12 }}>
             {query ? 'No projects match the search.' : 'No projects detected yet.'}

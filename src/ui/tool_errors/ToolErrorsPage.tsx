@@ -11,6 +11,7 @@ import {
   total,
 } from './store';
 import { ToolErrorsTable } from './ToolErrorsTable';
+import { TableSkeleton } from '../components/_primitives/Skeleton';
 
 interface Props {
   onLoad: () => Promise<void>;
@@ -102,10 +103,13 @@ export function ToolErrorsPage({ onLoad }: Props) {
       )}
 
       {/* Table */}
-      {data.length > 0
-        ? <ToolErrorsTable data={data} />
-        : state === 'idle' && <p class="muted">No errors found for the selected filters.</p>
-      }
+      {data.length > 0 && <ToolErrorsTable data={data} />}
+      {data.length === 0 && state === 'loading' && (
+        <TableSkeleton rows={8} columns={5} />
+      )}
+      {data.length === 0 && state === 'idle' && (
+        <p class="muted">No errors found for the selected filters.</p>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (

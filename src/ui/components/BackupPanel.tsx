@@ -1,6 +1,7 @@
 import { backupSnapshots, backupLoadState, type SnapshotMeta } from '../state/store';
 import { setStatus } from '../lib/status';
 import { esc } from '../lib/format';
+import { TableSkeleton } from './_primitives/Skeleton';
 
 export interface BackupPanelProps {
   /** POSTs to /api/archive/snapshot. */
@@ -38,6 +39,9 @@ export function BackupPanel({ onSnapshot, onReload }: BackupPanelProps) {
       </header>
       {state === 'error' && (
         <p class="backup-panel-error">Failed to load snapshots.</p>
+      )}
+      {state === 'loading' && snapshots.length === 0 && (
+        <TableSkeleton rows={5} columns={4} />
       )}
       {snapshots.length === 0 && state === 'idle' && (
         <p class="backup-panel-empty">No snapshots yet — click "Snapshot now" to create one.</p>

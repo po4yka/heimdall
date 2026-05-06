@@ -9,6 +9,7 @@ import {
 import type { SettingsResponse, SettingsSectionKey, SettingsPatch } from '../../state/types';
 import { setStatus } from '../../lib/status';
 import { InlineStatus } from '../InlineStatus';
+import { Skeleton, SkeletonGroup } from '../_primitives/Skeleton';
 import { DisplaySection } from './DisplaySection';
 import { PollingSection } from './PollingSection';
 import { StatuslineBlocksSection } from './StatuslineBlocksSection';
@@ -203,8 +204,19 @@ export function SettingsModal({ onDataReload }: SettingsModalProps) {
 
   function renderSection() {
     if (loading) {
+      // Settings-pane skeleton: a section title line + four form-row
+      // pairs (label + control). Mirrors the actual layout each
+      // SECTION component produces so the swap is visually quiet.
       return (
-        <div class="settings-loading">Loading settings…</div>
+        <SkeletonGroup>
+          <Skeleton width="40%" height="var(--font-size-display-sm)" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonGroup key={i}>
+              <Skeleton width="30%" height="var(--font-size-tertiary)" />
+              <Skeleton width="100%" height="32px" radius="var(--radius-1)" />
+            </SkeletonGroup>
+          ))}
+        </SkeletonGroup>
       );
     }
     if (loadError) {

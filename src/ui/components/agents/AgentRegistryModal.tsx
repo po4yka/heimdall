@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'preact/hooks';
 import { registryModalOpen } from '../../state/store';
 import { InlineStatus } from '../InlineStatus';
+import { TableSkeleton } from '../_primitives/Skeleton';
 import { setStatus, clearStatus } from '../../lib/status';
 import {
   fetchRegistry,
@@ -153,8 +154,8 @@ export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegist
         </div>
 
         {loading ? (
-          <div style={{ padding: '20px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
-            Loading…
+          <div style={{ padding: 'var(--space-4)' }}>
+            <TableSkeleton rows={4} columns={3} />
           </div>
         ) : allRoles.length === 0 ? (
           <div class="empty-state" style={{ margin: '20px' }}>No agent roles detected for this project</div>

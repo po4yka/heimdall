@@ -1,5 +1,6 @@
 import type { JSX } from 'preact';
 import { SegmentedProgressBar } from '../components/SegmentedProgressBar';
+import { KpiSkeleton } from '../components/_primitives/Skeleton';
 import { DepletionForecastCard } from '../components/DepletionForecastCard';
 import { PredictiveInsightsCard } from '../components/PredictiveInsightsCard';
 import { fmt, fmtCostCompact, fmtRelativeTime, fmtResetTime } from '../lib/format';
@@ -378,10 +379,19 @@ function ProviderDetails({
 export function renderLiveMonitorView(): JSX.Element {
   const data = liveMonitorData.value;
   if (!data) {
+    // Two hero KPI placeholders matching the real Claude + Codex lane
+    // layout, so the page doesn't pop when liveMonitorData arrives.
     return (
-      <div class="card" style={{ padding: '20px' }}>
-        <div class="stat-label">Live Monitor</div>
-        <div class="stat-sub">Waiting for provider data…</div>
+      <div class="live-monitor" style={{ display: 'grid', gap: 'var(--space-6)' }}>
+        <section style={{ display: 'grid', gap: 'var(--space-3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)', alignItems: 'baseline' }}>
+            <h2 style={{ margin: 0 }}>Provider Lanes</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'var(--space-4)' }}>
+            <KpiSkeleton size="hero" withBar withSub />
+            <KpiSkeleton size="hero" withBar withSub />
+          </div>
+        </section>
       </div>
     );
   }
