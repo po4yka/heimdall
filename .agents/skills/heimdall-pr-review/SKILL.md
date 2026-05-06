@@ -32,6 +32,8 @@ Use this skill for review requests in the Heimdall repo.
 - Missing `// SAFETY:` comment on any `unsafe {}` block (**CRITICAL**)
 - `unsafe impl Sync` or `unsafe impl Send` without a `// SAFETY:` comment listing every field type (**CRITICAL**)
 - `tokio::spawn` capturing a non-`'static` reference (including `&mut State`) (**CRITICAL**)
+- Panicking inside `Drop::drop` — any `.unwrap()` on cleanup path = double-panic if called during unwind (**CRITICAL**)
+- `#[no_mangle]` without `#[unsafe(no_mangle)]` form in edition 2024 (**CRITICAL**)
 
 ### Correctness
 
@@ -43,6 +45,11 @@ Use this skill for review requests in the Heimdall repo.
 - New config fields use `#[serde(default)]` and are threaded through the call path.
 - `&String`, `&Vec<T>`, or `&PathBuf` as function parameters — prefer `&str`, `&[T]`, `&Path`, or `impl AsRef<...>` (**WARNING**)
 - New `impl Drop` on a struct that has a field external code needs to move out — prefer `ManuallyDrop` guard (**WARNING**)
+- `tokio::time::timeout` wrapping a non-yielding future — timeout will never fire (**WARNING**)
+- `std::sync::Mutex` guard held across `.await` — deadlocks silently under concurrent load (**CRITICAL**)
+- `broadcast::RecvError::Lagged` unhandled — silently drops N messages under load (**WARNING**)
+- Manual `PartialEq` without matching `Hash` (or vice versa) on `HashMap`/`HashSet` key types (**CRITICAL**)
+- Integer overflow on length or counter arithmetic using bare `+`/`-`/`*` on untrusted input (**WARNING**)
 
 ### Quality
 

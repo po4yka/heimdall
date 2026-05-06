@@ -1,0 +1,7 @@
+interface:
+  display_name: "Serde deserialization pitfalls"
+  short_description: "Review serde attributes and deserialization code in heimdall for untagged enum errors, flatten bugs, and roundtrip gaps."
+  default_prompt: "Use $heimdall-serde-pitfalls to review serde serialization and deserialization code in heimdall."
+
+policy:
+  allow_implicit_invocation: true

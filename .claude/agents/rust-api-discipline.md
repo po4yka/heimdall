@@ -48,3 +48,15 @@ Before adding `impl Drop`: check if any field needs to be consumed. If yes, use 
 3. Closure HRTB failure? → name function or `force_hrtb`.
 4. New `impl Drop` with consume-able field? → `ManuallyDrop` guard.
 5. `fn(T)->T` on large struct in hot path? → `fn(&mut T)`.
+
+## `#[derive(Clone)]` on resource-backed types
+
+Cloning an `Arc<T>` shares the resource, not copies it. Document with: `/// Cloning shares the underlying pool/config.`
+
+## `Deref` on non-pointer types
+
+Causes silent method collision when either the wrapper or the target adds a same-named method. Use `AsRef`/`From`/accessors instead.
+
+## `async fn` in traits — not object-safe, no `Send`
+
+Native `async fn in trait` (Rust 1.75) is not `dyn`-safe and has no `Send` bound. For `tokio::spawn` contexts use `#[trait_variant::make(TraitSend: Send)]`. Do not mass-replace `#[async_trait]` without auditing every `Box<dyn>` and spawn site.

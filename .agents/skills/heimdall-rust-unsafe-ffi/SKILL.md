@@ -114,6 +114,44 @@ Heimdall has no self-referential types today. If future tokio patterns (long-liv
 
 Reference: `crabbook/pin.md`
 
+## `#[no_mangle]` and `#[link_section]` symbol collision (edition 2024)
+
+**Severity: CRITICAL**
+
+In Rust 2024, `#[no_mangle]`, `#[export_name = "..."]`, and `#[link_section = "..."]` must use the `#[unsafe(...)]` form. The hazard that motivates this: two compilation units exporting the same unmangled symbol causes the linker to silently pick one, calling the wrong function — a soundness bug with no compile-time diagnostic.
+
+Heimdall currently uses `edition = "2024"`. Audit:
+```bash
+rg '#\[no_mangle\]|#\[export_name' src/ --type rust -n
+```
+Any hit must use `#[unsafe(no_mangle)]` or `#[unsafe(export_name = "...")]` and have a SAFETY comment asserting the symbol name is unique across the linked binary.
+
+## Panicking inside `Drop::drop` during unwinding aborts the process
+
+**Severity: CRITICAL**
+
+If a panic is already in progress (stack unwinding), and a `Drop` impl panics, Rust immediately aborts the process — this is a "double panic" and cannot be caught by `catch_unwind`. Any `.unwrap()` or `.expect()` inside `drop()` is a double-panic bomb that fires exactly when another error is already in flight.
+
+```rust
+// DANGEROUS: double-panic if called during unwind
+impl Drop for LockFile {
+    fn drop(&mut self) {
+        std::fs::remove_file(&self.path).unwrap(); // aborts on unwind
+    }
+}
+
+// CORRECT: log-and-discard in drop(); expose explicit close() -> Result
+impl Drop for LockFile {
+    fn drop(&mut self) {
+        if let Err(e) = std::fs::remove_file(&self.path) {
+            tracing::error!("failed to remove lock file: {e}");
+        }
+    }
+}
+```
+
+Check heimdall's `src/scheduler/daemon.rs` PID-file guard and `src/archive/mod.rs` flock guard — both perform cleanup in `Drop`. Ensure neither has `.unwrap()` on the cleanup path.
+
 ## Audit checklist
 
 Apply to every `unsafe` block in a diff:
@@ -125,3 +163,5 @@ Apply to every `unsafe` block in a diff:
 - [ ] Drop-guarantee: no RAII guard in the safety chain can be `mem::forget`-ed by callers?
 - [ ] No `from_utf8_unchecked` or `from_raw_parts` without a SAFETY comment tracing the invariant?
 - [ ] `unsafe impl Sync/Send`: every field type listed in the SAFETY comment?
+- [ ] Any `Drop::drop` containing `.unwrap()` or `.expect()` on the cleanup path? → move to explicit `close()`/`flush()` returning `Result`.
+- [ ] Any `#[no_mangle]` without `#[unsafe(no_mangle)]` form (edition 2024 requirement)?

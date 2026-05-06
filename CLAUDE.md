@@ -15,9 +15,14 @@ Claude Code mirrors the Codex Rust workflow skills through repo-local agent and 
 - `.claude/agents/pr-reviewer.md` mirrors `heimdall-pr-review`
 - `.claude/agents/rust-unsafe-ffi.md` mirrors `heimdall-rust-unsafe-ffi`
 - `.claude/agents/rust-api-discipline.md` mirrors `heimdall-rust-api-discipline`
+- `.claude/agents/serde-pitfalls.md` mirrors `heimdall-serde-pitfalls`
 - `.claude/commands/fix-unwraps.md` mirrors `heimdall-fix-unwraps`
 - `.claude/commands/audit-deps.md` mirrors `heimdall-rust-dependency-audit`
 - `.claude/commands/binary-audit.md` mirrors `heimdall-rust-binary-audit`
+
+## Mandatory Skill Usage
+
+- Use `$heimdall-serde-pitfalls` when reviewing or authoring `#[derive(Serialize, Deserialize)]` types, serde attributes, or JSON deserialization code.
 
 ## Build & Run
 

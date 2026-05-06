@@ -124,6 +124,32 @@ Rule:
 
 Reference: `crabbook/consume_and_borrowing.md`
 
+## `#[derive(Clone)]` on resource-backed types
+
+**Severity: WARNING**
+
+Deriving `Clone` on a struct containing `Arc<T>` does not duplicate the resource — it clones the handle, giving two owners pointing to the same resource. This is often the correct behavior, but must be documented. The hazard is when callers expect an isolated copy (for testing, per-connection isolation) but get aliasing instead.
+
+In heimdall: `Config`, `AppState`, and database pool handles are passed with `.clone()` throughout `src/server/` and `src/scanner/`. Verify that all such clones intentionally share the underlying resource and add a doc comment: `/// Cloning shares the underlying pool/config.`
+
+## `Deref` on non-pointer types causes method collision
+
+**Severity: WARNING**
+
+`Deref<Target = T>` on a non-smart-pointer newtype exposes all of `T`'s methods via auto-deref. If either `Wrapper` or `T` later adds a method with the same name, resolution changes silently — no compile error, different behavior. This also forecloses adding bounds in future versions without breaking callers.
+
+Use `AsRef<T>`, `From<T>`/`Into<T>`, or explicit accessor methods instead of `Deref` on application newtypes. Check `src/models.rs` and `src/scanner/` for any non-pointer `Deref` implementations.
+
+## `async fn` in traits not object-safe, no `Send` bound
+
+**Severity: WARNING**
+
+`async fn` in traits (stable Rust 1.75) is not `dyn`-safe and does not automatically add `Send` to the returned future. Teams replacing `#[async_trait]` with native syntax hit:
+1. `Box<dyn MyTrait>` compile errors (not object-safe).
+2. `tokio::spawn(obj.method())` failures (future not `Send`).
+
+Fix: use `#[trait_variant::make(MyTraitSend: Send)]` from the `trait-variant` crate, or keep `#[async_trait]` for traits that need `dyn` dispatch. Do not mass-replace `#[async_trait]` in heimdall without auditing every `tokio::spawn` and `Box<dyn>` use site in `src/server/` and `src/scanner/`.
+
 ## Quick review checklist
 
 Apply to every changed public or `pub(crate)` signature in a diff:
@@ -133,3 +159,6 @@ Apply to every changed public or `pub(crate)` signature in a diff:
 3. Any closure callback failing HRTB inference? → name the function or use `force_hrtb` shim.
 4. Any new `impl Drop` on a struct with a field that callers need to consume? → use `ManuallyDrop` guard.
 5. Any `fn(T) -> T` consuming a large struct (> 4 pointer fields) in per-session/per-turn code? → use `fn(&mut T)`.
+6. Any `#[derive(Clone)]` on a struct with `Arc<T>` fields where callers might expect an isolated copy? → add doc comment clarifying sharing semantics.
+7. Any `Deref` on a non-smart-pointer newtype? → use `AsRef`/`From`/accessors instead.
+8. Any `async fn` in a trait now used with `dyn Trait` or `tokio::spawn`? → add `trait_variant` or keep `#[async_trait]`.

@@ -21,6 +21,7 @@ Persistent storage is a single SQLite database. UI is Preact + Tailwind v4 compi
 - Use `$heimdall-dashboard` for dashboard work in `src/ui/`.
 - Use `$heimdall-rust-unsafe-ffi` when touching `src/archive/`, `src/scheduler/`, `src/statusline/`, or any `unsafe` block or libc FFI call.
 - Use `$heimdall-rust-api-discipline` when reviewing or authoring public API signatures, `tokio::spawn` closures, or large-struct processing.
+- Use `$heimdall-serde-pitfalls` when touching serde-annotated types in `src/models.rs`, `src/config.rs`, `src/server/` API types, or webhook payload definitions.
 
 ## Build & Run
 

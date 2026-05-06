@@ -50,3 +50,15 @@ List every field type in the SAFETY comment. Add `static_assertions` regression 
 - [ ] Drop-guarantee: RAII guard cannot be `mem::forget`-ed?
 - [ ] No `from_utf8_unchecked`/`from_raw_parts` without SAFETY comment?
 - [ ] `unsafe impl Sync/Send`: every field type listed?
+
+## `#[no_mangle]` symbol collision (edition 2024)
+
+Edition 2024 requires `#[unsafe(no_mangle)]`. The hazard: two crates with the same unmangled symbol cause the linker to silently call the wrong function.
+
+Grep: `rg '#\[no_mangle\]|#\[export_name' src/ --type rust -n` — every hit must use `unsafe()` form.
+
+## Panic in `Drop::drop` during unwind = process abort
+
+Any `.unwrap()` or `.expect()` inside `drop()` is a double-panic bomb. Move fallible cleanup to an explicit `close()` returning `Result`. `drop()` must only log-and-discard errors.
+
+Check: `src/scheduler/daemon.rs` PID-file guard, `src/archive/mod.rs` flock guard.

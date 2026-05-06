@@ -22,6 +22,9 @@ Review Heimdall code changes for correctness, regressions, safety, missing tests
 - Missing `// SAFETY:` comment on any `unsafe {}` block
 - `unsafe impl Sync` or `unsafe impl Send` without a `// SAFETY:` comment listing every field type
 - `tokio::spawn` closure capturing a non-`'static` reference (including `&mut State`)
+- `panic!` or `.unwrap()` inside `Drop::drop` implementation (double-panic = process abort on unwind)
+- `std::sync::Mutex` guard held across `.await` point (deadlocks silently under concurrent load)
+- Manual `PartialEq` without matching `Hash` (or vice versa) on a `HashMap`/`HashSet` key type
 
 ### Correctness (WARNING – should fix)
 - New public functions have corresponding tests
@@ -32,6 +35,11 @@ Review Heimdall code changes for correctness, regressions, safety, missing tests
 - Config fields have `#[serde(default)]` for backward compatibility
 - `&String`, `&Vec<T>`, or `&PathBuf` as function parameters (prefer `&str`, `&[T]`, `&Path`, or `impl AsRef<...>`)
 - New `impl Drop` on a struct with a field that code needs to consume — prefer `ManuallyDrop` guard type
+- `tokio::time::timeout` wrapping a future with no `.await` inside (timeout never fires)
+- `broadcast::RecvError::Lagged` variant unhandled — silently drops N messages under load
+- Integer overflow with bare `+`/`-`/`*` on external input in length/counter calculations
+- `#[serde(untagged)]` on externally-sourced type without actionable error handling
+- `#[serde(flatten)]` combined with `#[serde(deny_unknown_fields)]` (combination is non-functional)
 
 ### Quality (SUGGESTION – nice to have)
 - TODO comments include author tags: `TODO(name)`
