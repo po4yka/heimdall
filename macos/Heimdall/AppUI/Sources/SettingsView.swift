@@ -52,6 +52,18 @@ struct SettingsView: View {
 
             SettingsAdvancedTab(model: self.model)
                 .tabItem { Label("Advanced", systemImage: "slider.horizontal.3") }
+
+            SettingsAlertsTab(model: self.model)
+                .tabItem { Label("Alerts", systemImage: "bell") }
+
+            SettingsQuotasTab(model: self.model)
+                .tabItem { Label("Quotas", systemImage: "gauge.medium") }
+
+            SettingsAliasesTab(model: self.model)
+                .tabItem { Label("Aliases", systemImage: "tag") }
+
+            SettingsPricingTab(model: self.model)
+                .tabItem { Label("Pricing", systemImage: "dollarsign.circle") }
         }
         .onAppear { self.model.resetDraftFromLiveConfig() }
         .task {
@@ -61,14 +73,53 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - Currency / locale helpers (M6)
+
+private let heimdallCurrencyOptions: [String] = ["USD", "EUR", "GBP", "JPY", "KRW", "CNY"]
+
 // MARK: - General
 
 private struct SettingsGeneralTab: View {
     @Bindable var model: SettingsFeatureModel
 
+    private var currencyBinding: Binding<String> {
+        Binding(
+            get: { self.model.draftConfig.display.currency ?? "USD" },
+            set: { self.model.draftConfig.display.currency = $0 }
+        )
+    }
+
+    private var localeBinding: Binding<String> {
+        Binding(
+            get: { self.model.draftConfig.display.locale ?? "" },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+                self.model.draftConfig.display.locale = trimmed.isEmpty ? nil : trimmed
+            }
+        )
+    }
+
+    private var compactBinding: Binding<Bool> {
+        Binding(
+            get: { self.model.draftConfig.display.compact ?? false },
+            set: { self.model.draftConfig.display.compact = $0 }
+        )
+    }
+
     var body: some View {
         Form {
             Section("Display") {
+                Picker("Currency", selection: self.currencyBinding) {
+                    ForEach(heimdallCurrencyOptions, id: \.self) { code in
+                        Text(code).tag(code)
+                    }
+                }
+                TextField("Locale (BCP-47)", text: self.localeBinding, prompt: Text("auto"))
+                    .textFieldStyle(.roundedBorder)
+                Toggle("Compact number formatting", isOn: self.compactBinding)
+            }
+
+            Section("Menu bar") {
                 Toggle("Merge menu-bar icons", isOn: self.$model.draftConfig.mergeIcons)
                 Toggle("Show used values", isOn: self.$model.draftConfig.showUsedValues)
                 Picker("Reset display", selection: self.$model.draftConfig.resetDisplayMode) {
@@ -513,6 +564,15 @@ private struct SettingsAdvancedTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Server") {
+                Text("Web dashboard runs on the default localhost:8080 — set host/port in ~/.config/heimdall/config.json and restart.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("[restart required to change]")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Maintenance") {
                 Button("Refresh data") {
                     Task { await self.model.refreshAll() }
@@ -526,6 +586,450 @@ private struct SettingsAdvancedTab: View {
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - Alerts (M6)
+
+private struct SettingsAlertsTab: View {
+    @Bindable var model: SettingsFeatureModel
+
+    private var webhookURLBinding: Binding<String> {
+        Binding(
+            get: { self.model.draftConfig.webhooks.url ?? "" },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.model.draftConfig.webhooks.url = trimmed.isEmpty ? nil : trimmed
+            }
+        )
+    }
+
+    private var costThresholdBinding: Binding<String> {
+        Binding(
+            get: {
+                if let v = self.model.draftConfig.webhooks.costThreshold {
+                    return String(format: "%g", v)
+                }
+                return ""
+            },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty {
+                    self.model.draftConfig.webhooks.costThreshold = nil
+                } else if let parsed = Double(trimmed) {
+                    self.model.draftConfig.webhooks.costThreshold = parsed
+                }
+            }
+        )
+    }
+
+    private var stopReasonFilterBinding: Binding<String> {
+        Binding(
+            get: {
+                self.model.draftConfig.webhooks.agentStopReasonFilter?.joined(separator: ", ") ?? ""
+            },
+            set: { newValue in
+                let parts = newValue
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty }
+                self.model.draftConfig.webhooks.agentStopReasonFilter = parts.isEmpty ? nil : parts
+            }
+        )
+    }
+
+    var body: some View {
+        Form {
+            Section("Webhook delivery") {
+                TextField(
+                    "Webhook URL",
+                    text: self.webhookURLBinding,
+                    prompt: Text("https://example.com/heimdall-webhook")
+                )
+                .textFieldStyle(.roundedBorder)
+                .help("Heimdall posts JSON events to this URL. Leave empty to disable.")
+
+                TextField(
+                    "Cost threshold (USD)",
+                    text: self.costThresholdBinding,
+                    prompt: Text("e.g. 25.00")
+                )
+                .textFieldStyle(.roundedBorder)
+                .help("Trigger a webhook once cumulative session cost exceeds this value.")
+            }
+
+            Section("Webhook events") {
+                Toggle("Session depleted", isOn: self.$model.draftConfig.webhooks.sessionDepleted)
+                Toggle("Agent status transitions", isOn: self.$model.draftConfig.webhooks.agentStatus)
+                Toggle("Community spike alerts", isOn: self.$model.draftConfig.webhooks.spikeWebhook)
+                Toggle("Cap changes", isOn: self.$model.draftConfig.webhooks.capChanges)
+                Toggle("Agent stop reason", isOn: self.$model.draftConfig.webhooks.agentStopReason)
+                TextField(
+                    "Stop reason filter",
+                    text: self.stopReasonFilterBinding,
+                    prompt: Text("comma-separated, blank = all")
+                )
+                .textFieldStyle(.roundedBorder)
+            }
+
+            Section("Agent status alerts") {
+                Picker(
+                    "Minimum severity",
+                    selection: self.$model.draftConfig.agentStatus.alertMinSeverity
+                ) {
+                    ForEach(HeimdallAlertSeverity.allCases, id: \.self) { severity in
+                        Text(severity.rawValue.capitalized).tag(severity)
+                    }
+                }
+            }
+
+            Section("Community status aggregator") {
+                Toggle("Enable aggregator", isOn: self.$model.draftConfig.aggregator.enabled)
+                Toggle(
+                    "Send spike webhook",
+                    isOn: self.$model.draftConfig.aggregator.spikeWebhook
+                )
+                .disabled(!self.model.draftConfig.aggregator.enabled)
+                LabeledContent("Refresh interval") {
+                    Stepper(
+                        value: Binding(
+                            get: { Int(self.model.draftConfig.aggregator.refreshInterval) },
+                            set: { self.model.draftConfig.aggregator.refreshInterval = UInt64(max(0, $0)) }
+                        ),
+                        in: 60...3600,
+                        step: 60
+                    ) {
+                        Text("\(self.model.draftConfig.aggregator.refreshInterval)s")
+                            .font(.body.monospacedDigit())
+                    }
+                    .labelsHidden()
+                    .disabled(!self.model.draftConfig.aggregator.enabled)
+                }
+            }
+
+            SettingsSaveActionSection(model: self.model)
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - Quotas (M6)
+
+private struct SettingsQuotasTab: View {
+    @Bindable var model: SettingsFeatureModel
+
+    private var tokenLimitBinding: Binding<String> {
+        Binding(
+            get: {
+                if let v = self.model.draftConfig.blocks.tokenLimit { return String(v) }
+                return ""
+            },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty {
+                    self.model.draftConfig.blocks.tokenLimit = nil
+                } else if let parsed = Int64(trimmed) {
+                    self.model.draftConfig.blocks.tokenLimit = parsed
+                }
+            }
+        )
+    }
+
+    private var sessionLengthBinding: Binding<String> {
+        Binding(
+            get: {
+                if let v = self.model.draftConfig.blocks.sessionLengthHours {
+                    return String(format: "%g", v)
+                }
+                return ""
+            },
+            set: { newValue in
+                let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty {
+                    self.model.draftConfig.blocks.sessionLengthHours = nil
+                } else if let parsed = Double(trimmed) {
+                    self.model.draftConfig.blocks.sessionLengthHours = parsed
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        Form {
+            Section("Statusline thresholds") {
+                LabeledContent("Context low") {
+                    Stepper(
+                        value: self.$model.draftConfig.statusline.contextLowThreshold,
+                        in: 0.0...1.0,
+                        step: 0.05
+                    ) {
+                        Text(String(format: "%.2f", self.model.draftConfig.statusline.contextLowThreshold))
+                            .font(.body.monospacedDigit())
+                    }
+                    .labelsHidden()
+                }
+                LabeledContent("Context medium") {
+                    Stepper(
+                        value: self.$model.draftConfig.statusline.contextMediumThreshold,
+                        in: 0.0...1.0,
+                        step: 0.05
+                    ) {
+                        Text(String(format: "%.2f", self.model.draftConfig.statusline.contextMediumThreshold))
+                            .font(.body.monospacedDigit())
+                    }
+                    .labelsHidden()
+                }
+                LabeledContent("Burn rate normal max") {
+                    Stepper(
+                        value: self.$model.draftConfig.statusline.burnRateNormalMax,
+                        in: 0...100_000,
+                        step: 500
+                    ) {
+                        Text(String(format: "%.0f", self.model.draftConfig.statusline.burnRateNormalMax))
+                            .font(.body.monospacedDigit())
+                    }
+                    .labelsHidden()
+                }
+                LabeledContent("Burn rate moderate max") {
+                    Stepper(
+                        value: self.$model.draftConfig.statusline.burnRateModerateMax,
+                        in: 0...500_000,
+                        step: 1000
+                    ) {
+                        Text(String(format: "%.0f", self.model.draftConfig.statusline.burnRateModerateMax))
+                            .font(.body.monospacedDigit())
+                    }
+                    .labelsHidden()
+                }
+            }
+
+            Section("Billing block overrides") {
+                HStack {
+                    TextField("Token limit", text: self.tokenLimitBinding, prompt: Text("auto"))
+                        .textFieldStyle(.roundedBorder)
+                    Button("Clear") {
+                        self.model.draftConfig.blocks.tokenLimit = nil
+                    }
+                    .controlSize(.small)
+                    .disabled(self.model.draftConfig.blocks.tokenLimit == nil)
+                }
+                HStack {
+                    TextField("Session length (hours)", text: self.sessionLengthBinding, prompt: Text("auto"))
+                        .textFieldStyle(.roundedBorder)
+                    Button("Clear") {
+                        self.model.draftConfig.blocks.sessionLengthHours = nil
+                    }
+                    .controlSize(.small)
+                    .disabled(self.model.draftConfig.blocks.sessionLengthHours == nil)
+                }
+                Text("Leave blank to use heimdall's default per-provider rolling block.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            SettingsSaveActionSection(model: self.model)
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+// MARK: - Aliases (M6)
+
+private struct AliasEntry: Identifiable, Equatable {
+    let id = UUID()
+    var slug: String
+    var name: String
+}
+
+private struct SettingsAliasesTab: View {
+    @Bindable var model: SettingsFeatureModel
+    @State private var entries: [AliasEntry] = []
+    @State private var initialized = false
+
+    var body: some View {
+        Form {
+            Section("Project aliases") {
+                if self.entries.isEmpty {
+                    Text("No aliases defined. Add one below.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(self.$entries) { $entry in
+                        HStack(spacing: 8) {
+                            TextField("Slug", text: $entry.slug, prompt: Text("-Users-foo-bar"))
+                                .textFieldStyle(.roundedBorder)
+                                .font(.caption.monospaced())
+                            TextField("Display name", text: $entry.name, prompt: Text("Pretty Name"))
+                                .textFieldStyle(.roundedBorder)
+                            Button {
+                                if let idx = self.entries.firstIndex(where: { $0.id == entry.id }) {
+                                    self.entries.remove(at: idx)
+                                    self.syncToConfig()
+                                }
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.red)
+                        }
+                    }
+                    .onChange(of: self.entries) { _, _ in
+                        self.syncToConfig()
+                    }
+                }
+                Button {
+                    self.entries.append(AliasEntry(slug: "", name: ""))
+                } label: {
+                    Label("Add alias", systemImage: "plus")
+                }
+            }
+
+            SettingsSaveActionSection(model: self.model)
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .onAppear {
+            if !self.initialized {
+                self.loadFromConfig()
+                self.initialized = true
+            }
+        }
+    }
+
+    private func loadFromConfig() {
+        self.entries = self.model.draftConfig.projectAliases
+            .map { AliasEntry(slug: $0.key, name: $0.value) }
+            .sorted { $0.slug < $1.slug }
+    }
+
+    private func syncToConfig() {
+        var dict: [String: String] = [:]
+        for entry in self.entries {
+            let slug = entry.slug.trimmingCharacters(in: .whitespaces)
+            let name = entry.name.trimmingCharacters(in: .whitespaces)
+            guard !slug.isEmpty else { continue }
+            dict[slug] = name
+        }
+        self.model.draftConfig.projectAliases = dict
+    }
+}
+
+// MARK: - Pricing (M6)
+
+private struct PricingEntryRow: Identifiable, Equatable {
+    let id = UUID()
+    var model: String
+    var input: String
+    var output: String
+    var cacheWrite: String
+    var cacheRead: String
+}
+
+private struct SettingsPricingTab: View {
+    @Bindable var model: SettingsFeatureModel
+    @State private var entries: [PricingEntryRow] = []
+    @State private var initialized = false
+
+    var body: some View {
+        Form {
+            Section("Pricing overrides") {
+                if self.entries.isEmpty {
+                    Text("No pricing overrides defined. Heimdall uses its built-in price table plus the LiteLLM cache.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(self.$entries) { $entry in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 8) {
+                                TextField("Model", text: $entry.model, prompt: Text("e.g. claude-sonnet-4-5"))
+                                    .textFieldStyle(.roundedBorder)
+                                    .font(.body.monospaced())
+                                Button {
+                                    if let idx = self.entries.firstIndex(where: { $0.id == entry.id }) {
+                                        self.entries.remove(at: idx)
+                                        self.syncToConfig()
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.red)
+                            }
+                            HStack(spacing: 8) {
+                                TextField("Input", text: $entry.input, prompt: Text("$/1M"))
+                                    .textFieldStyle(.roundedBorder)
+                                TextField("Output", text: $entry.output, prompt: Text("$/1M"))
+                                    .textFieldStyle(.roundedBorder)
+                                TextField("Cache write", text: $entry.cacheWrite, prompt: Text("optional"))
+                                    .textFieldStyle(.roundedBorder)
+                                TextField("Cache read", text: $entry.cacheRead, prompt: Text("optional"))
+                                    .textFieldStyle(.roundedBorder)
+                            }
+                            .font(.body.monospacedDigit())
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .onChange(of: self.entries) { _, _ in
+                        self.syncToConfig()
+                    }
+                }
+                Button {
+                    self.entries.append(
+                        PricingEntryRow(model: "", input: "", output: "", cacheWrite: "", cacheRead: "")
+                    )
+                } label: {
+                    Label("Add pricing override", systemImage: "plus")
+                }
+                Text("All values are USD per 1M tokens. Input and output are required; cache rates are optional.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            SettingsSaveActionSection(model: self.model)
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .onAppear {
+            if !self.initialized {
+                self.loadFromConfig()
+                self.initialized = true
+            }
+        }
+    }
+
+    private func loadFromConfig() {
+        self.entries = self.model.draftConfig.pricing
+            .map { (modelName, override) -> PricingEntryRow in
+                PricingEntryRow(
+                    model: modelName,
+                    input: String(format: "%g", override.input),
+                    output: String(format: "%g", override.output),
+                    cacheWrite: override.cacheWrite.map { String(format: "%g", $0) } ?? "",
+                    cacheRead: override.cacheRead.map { String(format: "%g", $0) } ?? ""
+                )
+            }
+            .sorted { $0.model < $1.model }
+    }
+
+    private func syncToConfig() {
+        var dict: [String: HeimdallPricingOverride] = [:]
+        for entry in self.entries {
+            let modelName = entry.model.trimmingCharacters(in: .whitespaces)
+            guard !modelName.isEmpty else { continue }
+            guard let input = Double(entry.input.trimmingCharacters(in: .whitespaces)) else { continue }
+            guard let output = Double(entry.output.trimmingCharacters(in: .whitespaces)) else { continue }
+            let cacheWrite = Double(entry.cacheWrite.trimmingCharacters(in: .whitespaces))
+            let cacheRead = Double(entry.cacheRead.trimmingCharacters(in: .whitespaces))
+            dict[modelName] = HeimdallPricingOverride(
+                input: input,
+                output: output,
+                cacheWrite: cacheWrite,
+                cacheRead: cacheRead
+            )
+        }
+        self.model.draftConfig.pricing = dict
     }
 }
 
