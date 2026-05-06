@@ -178,6 +178,19 @@ function renderSection(
   if (!container) return;
   setSectionVisibility(mountId, hasContent, displayMode ?? '');
   render(hasContent ? element : null, container);
+  // Defensive: a widget may report hasContent:true but the rendered VNode
+  // could resolve to null (e.g. AgentSetupBanner returning null when there
+  // are no unclassified roles, or a component short-circuiting on a flag).
+  // In that case GridStack still reserves the cell, leaving a hollow card.
+  // After Preact's synchronous render, hide the .grid-stack-item if the
+  // container ended up with no element children.
+  if (hasContent && container.childElementCount === 0) {
+    const widgetBody = container.closest('.widget-body');
+    if (widgetBody) {
+      const gridItem = widgetBody.closest('.grid-stack-item');
+      if (gridItem) (gridItem as HTMLElement).style.display = 'none';
+    }
+  }
 }
 
 export function refreshSectionVisibility(): void {
@@ -217,9 +230,13 @@ function renderEstimationMeta(
 }
 
 function renderOpenAiReconciliation(reconciliation: DashboardData['openai_reconciliation']): void {
+  // Hide the widget when the API key isn't configured. ReconciliationBlock
+  // renders a small one-line "Set OPENAI_ADMIN_KEY..." banner in that state,
+  // but GridStack still reserves the widget's full default cell height —
+  // leaving a tall empty card with a sliver of text at the top.
   renderSection(
     'openai-reconciliation',
-    !!reconciliation,
+    !!reconciliation?.available,
     <ReconciliationBlock reconciliation={reconciliation!} />,
   );
 }
@@ -227,9 +244,12 @@ function renderOpenAiReconciliation(reconciliation: DashboardData['openai_reconc
 function renderSubagentReconciliation(
   reconciliation: DashboardData['subagent_reconciliation'],
 ): void {
+  // Same banner-vs-cell mismatch as renderOpenAiReconciliation. When the
+  // reconciliation isn't available, hide the entire widget instead of
+  // leaving a tall empty card.
   renderSection(
     'subagent-reconciliation',
-    !!reconciliation,
+    !!reconciliation?.available,
     <SubagentReconciliationBlock reconciliation={reconciliation!} />,
   );
 }

@@ -12342,6 +12342,13 @@ ${row.project}` : row.project;
     if (!container) return;
     setSectionVisibility(mountId, hasContent, displayMode ?? "");
     R(hasContent ? element : null, container);
+    if (hasContent && container.childElementCount === 0) {
+      const widgetBody = container.closest(".widget-body");
+      if (widgetBody) {
+        const gridItem = widgetBody.closest(".grid-stack-item");
+        if (gridItem) gridItem.style.display = "none";
+      }
+    }
   }
   function refreshSectionVisibility() {
     for (const [sectionId, tab] of Object.entries(SECTION_TAB_MAP)) {
@@ -12377,14 +12384,14 @@ ${row.project}` : row.project;
   function renderOpenAiReconciliation(reconciliation) {
     renderSection(
       "openai-reconciliation",
-      !!reconciliation,
+      !!reconciliation?.available,
       /* @__PURE__ */ u4(ReconciliationBlock, { reconciliation })
     );
   }
   function renderSubagentReconciliation(reconciliation) {
     renderSection(
       "subagent-reconciliation",
-      !!reconciliation,
+      !!reconciliation?.available,
       /* @__PURE__ */ u4(SubagentReconciliationBlock, { reconciliation })
     );
   }
