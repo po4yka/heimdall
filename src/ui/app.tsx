@@ -6,6 +6,8 @@ import { WebCapturesPanel } from './components/WebCapturesPanel';
 import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
 import { ProjectsRegistry } from './components/projects/ProjectsRegistry';
 import { DashboardTabs } from './components/DashboardTabs';
+import { SavedViewsBar } from './components/SavedViewsBar';
+import { currentLayoutByScreen } from './widgets/apply-layout';
 import { FilterBar } from './components/FilterBar';
 import { Footer } from './components/Footer';
 import { Header } from './components/Header';
@@ -115,7 +117,16 @@ if (filterBarMount && dashboardRuntime) {
 
 const dashboardTabsMount = document.getElementById('dashboard-tabs-mount');
 if (dashboardTabsMount && dashboardRuntime) {
-  render(<DashboardTabs onTabChange={dashboardRuntime.handleDashboardTabChange} />, dashboardTabsMount);
+  const onTabChange = dashboardRuntime.handleDashboardTabChange;
+  const getCurrentLayout = () =>
+    currentLayoutByScreen.value[activeDashboardTab.value] ?? null;
+  render(
+    <>
+      <DashboardTabs onTabChange={onTabChange} />
+      <SavedViewsBar getCurrentLayout={getCurrentLayout} />
+    </>,
+    dashboardTabsMount
+  );
 }
 
 const footerEl = document.querySelector('footer');

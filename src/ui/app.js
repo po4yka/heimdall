@@ -6758,6 +6758,912 @@
     }) });
   }
 
+  // src/ui/widgets/apply-layout.ts
+  var pendingLayoutApply = y3(null);
+  var currentLayoutByScreen = y3({});
+  function publishCurrentLayout(screen, layout) {
+    currentLayoutByScreen.value = { ...currentLayoutByScreen.value, [screen]: layout };
+  }
+
+  // src/ui/widgets/mount-registry.ts
+  var callbacks = /* @__PURE__ */ new Map();
+  function registerMountCallback(mountId, cb) {
+    callbacks.set(mountId, cb);
+  }
+  function invokeMountCallback(mountId, el) {
+    const cb = callbacks.get(mountId);
+    if (cb) cb(el);
+  }
+
+  // src/ui/widgets/registry.ts
+  function mount(id) {
+    return (el) => {
+      el.id = id;
+    };
+  }
+  var WIDGET_CATALOG = [
+    // ── Overview tab ─────────────────────────────────────────────────────────
+    {
+      id: "usage-windows",
+      title: "Rate windows",
+      description: "Session and weekly rate-limit progress bars",
+      category: "kpi",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("usage-windows"),
+      hideWhenEmpty: true
+    },
+    {
+      id: "subscription-quota",
+      title: "Subscription quota",
+      description: "Provider subscription utilization and history chart",
+      category: "kpi",
+      screens: ["overview"],
+      // Renders six rate-window sub-cards (Session/Weekly/Weekly Sonnet/
+      // Weekly Opus/Claude/Codex). Natural content height ≈ 1300 px which at
+      // the 132 px GridStack cellHeight is exactly 10 rows.
+      defaultSize: { w: 4, h: 10 },
+      minW: 2,
+      minH: 8,
+      render: mount("subscription-quota")
+    },
+    {
+      id: "claude-usage",
+      title: "Claude usage",
+      description: "Claude API usage details from the credentials file",
+      category: "kpi",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("claude-usage")
+    },
+    {
+      id: "agent-status",
+      title: "Agent status",
+      description: "Upstream provider health (Claude, OpenAI)",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("agent-status")
+    },
+    {
+      id: "estimation-meta",
+      title: "Estimation metadata",
+      description: "Confidence, billing mode, and pricing version breakdown",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: mount("estimation-meta")
+    },
+    {
+      id: "official-sync",
+      title: "Official pricing sync",
+      description: "Status of official pricing data synchronization",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("official-sync"),
+      hideWhenEmpty: true
+    },
+    {
+      id: "openai-reconciliation",
+      title: "OpenAI reconciliation",
+      description: "OpenAI organization usage reconciliation",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("openai-reconciliation"),
+      hideWhenEmpty: true
+    },
+    {
+      id: "subagent-reconciliation",
+      title: "Subagent reconciliation",
+      description: "agent_sessions vs turns(is_subagent=1) cost diff",
+      category: "system",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("subagent-reconciliation"),
+      hideWhenEmpty: true
+    },
+    {
+      id: "codex-plan-kpi-mount",
+      title: "Codex plan",
+      description: "Codex plan utilization KPI tile",
+      category: "codex",
+      screens: ["overview"],
+      defaultSize: { w: 1, h: 1 },
+      minW: 1,
+      minH: 1,
+      render: mount("codex-plan-kpi-mount")
+    },
+    {
+      id: "stats-row",
+      title: "Summary stats",
+      description: "Token counts, cost, cache efficiency, and active-day averages",
+      category: "kpi",
+      screens: ["overview"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: mount("stats-row")
+    },
+    // ── Activity tab ──────────────────────────────────────────────────────────
+    {
+      id: "codex-plan-history-mount",
+      title: "Codex plan history",
+      description: "30-day stacked bar chart of Codex plan utilization",
+      category: "codex",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: mount("codex-plan-history-mount")
+    },
+    {
+      id: "daily-chart-card",
+      title: "Daily token usage",
+      description: "Daily or weekly token usage bar chart",
+      category: "chart",
+      screens: ["activity"],
+      defaultSize: { w: 2, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "daily-chart-card";
+        el.className = "card bento-2 chart-card";
+        if (!el.querySelector("#daily-chart-title")) {
+          el.innerHTML = '<h2 id="daily-chart-title">Daily Token Usage</h2><div class="chart-wrap tall"><div id="chart-daily"></div></div>';
+        }
+      }
+    },
+    {
+      id: "model-chart-card",
+      title: "Model distribution",
+      description: "Token usage donut chart broken down by model",
+      category: "chart",
+      screens: ["activity"],
+      defaultSize: { w: 1, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "model-chart-card";
+        el.className = "card chart-card";
+        if (!el.querySelector("#chart-model")) {
+          el.innerHTML = '<h2>By Model</h2><div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>';
+        }
+      }
+    },
+    {
+      id: "project-chart-card",
+      title: "Top projects",
+      description: "Horizontal bar chart of top projects by cost",
+      category: "chart",
+      screens: ["activity"],
+      defaultSize: { w: 1, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "project-chart-card";
+        el.className = "card chart-card";
+        if (!el.querySelector("#chart-project")) {
+          el.innerHTML = '<h2>Top Projects</h2><div class="chart-wrap"><div id="chart-project"></div></div>';
+        }
+      }
+    },
+    {
+      id: "hourly-chart",
+      title: "Activity by hour",
+      description: "Token usage broken down by hour of day",
+      category: "chart",
+      screens: ["activity"],
+      defaultSize: { w: 2, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "hourly-chart";
+        el.className = "card card-flat bento-2";
+      }
+    },
+    {
+      id: "activity-heatmap",
+      title: "Activity heatmap",
+      description: "7\xD724 heatmap of token usage or cost",
+      category: "heatmap",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "activity-heatmap";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    // ── Breakdowns tab ────────────────────────────────────────────────────────
+    {
+      id: "subagent-summary",
+      title: "Subagent summary",
+      description: "Breakdown of subagent vs orchestrator turns and costs",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: (el) => {
+        el.id = "subagent-summary";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-setup-banner",
+      title: "Agent setup banner",
+      description: "Setup guidance for agent telemetry",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: mount("agent-setup-banner"),
+      hideWhenEmpty: true
+    },
+    {
+      id: "agent-kpis-row",
+      title: "Agent KPIs",
+      description: "Key metrics for agent telemetry (sessions, cost, tokens)",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: (el) => {
+        el.id = "agent-kpis-row";
+        el.style.display = "none";
+        el.style.gridTemplateColumns = "repeat(3,1fr)";
+        el.style.gap = "16px";
+      }
+    },
+    {
+      id: "agent-timeline",
+      title: "Agent timeline",
+      description: "Cost timeline broken down by agent role",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-timeline";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-distribution",
+      title: "Agent distribution",
+      description: "Breakdown of sessions and cost by agent role",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-distribution";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-top-sessions",
+      title: "Top agent sessions",
+      description: "Highest-cost agent sessions",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-top-sessions";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-spawn-batches",
+      title: "Agent spawn batches",
+      description: "Batches of agent spawns grouped by session",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-spawn-batches";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "agent-tool-spectrum",
+      title: "Agent tool spectrum",
+      description: "Tool usage breakdown across agent roles",
+      category: "agent",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-tool-spectrum";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "entrypoint-breakdown",
+      title: "Entrypoint breakdown",
+      description: "Usage broken down by CLI entrypoint",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "entrypoint-breakdown";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "service-tiers",
+      title: "Service tiers",
+      description: "Usage and cost split by service tier",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "service-tiers";
+        el.className = "card card-flat bento-full table-card";
+      },
+      hideWhenEmpty: true
+    },
+    {
+      id: "tool-summary",
+      title: "Tool usage",
+      description: "Tool invocation counts with cost attribution",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "tool-summary";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "mcp-summary",
+      title: "MCP server usage",
+      description: "MCP server invocation counts with cost attribution",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "mcp-summary";
+        el.className = "card card-flat bento-full table-card";
+      }
+    },
+    {
+      id: "branch-summary",
+      title: "Git branch summary",
+      description: "Usage broken down by git branch",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "branch-summary";
+        el.className = "card card-flat bento-full table-card";
+      },
+      hideWhenEmpty: true
+    },
+    {
+      id: "version-summary",
+      title: "CLI versions",
+      description: "Usage breakdown by Claude CLI version with donut chart",
+      category: "table",
+      screens: ["breakdowns"],
+      defaultSize: { w: 2, h: 3 },
+      minW: 1,
+      minH: 2,
+      render: (el) => {
+        el.id = "version-summary";
+        el.className = "card card-flat bento-2";
+      },
+      hideWhenEmpty: true
+    },
+    {
+      id: "cost-reconciliation",
+      title: "Cost reconciliation",
+      description: "Hook-measured vs estimated cost comparison",
+      category: "system",
+      screens: ["breakdowns"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: mount("cost-reconciliation")
+    },
+    // ── Tables tab ────────────────────────────────────────────────────────────
+    {
+      id: "model-cost-mount",
+      title: "Cost by model",
+      description: "Per-model cost table with cache breakdown columns",
+      category: "table",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: mount("model-cost-mount")
+    },
+    {
+      id: "sessions-mount",
+      title: "Sessions",
+      description: "All sessions with sorting, pagination, and CSV export",
+      category: "table",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 5 },
+      minW: 2,
+      minH: 3,
+      render: mount("sessions-mount")
+    },
+    {
+      id: "project-cost-mount",
+      title: "Cost by project",
+      description: "Per-project cost table with CSV export",
+      category: "table",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: mount("project-cost-mount")
+    },
+    // ── Today tab ─────────────────────────────────────────────────────────────
+    {
+      id: "today-date-picker-mount",
+      title: "Date picker",
+      description: "Select a specific date to view",
+      category: "today",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: mount("today-date-picker-mount")
+    },
+    {
+      id: "today-kpis-mount",
+      title: "Today KPIs",
+      description: "Key metrics for the selected day",
+      category: "today",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 1 },
+      minW: 2,
+      minH: 1,
+      render: (el) => {
+        el.id = "today-kpis-mount";
+        el.style.gridTemplateColumns = "repeat(auto-fit,minmax(180px,1fr))";
+        el.style.gap = "16px";
+      }
+    },
+    {
+      id: "today-hour-timeline-mount",
+      title: "Hour timeline",
+      description: "Token usage timeline for each hour of the selected day",
+      category: "today",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "today-hour-timeline-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    {
+      id: "today-hour-heatstrip-mount",
+      title: "Hour heatstrip",
+      description: "Single-row heat strip showing hourly intensity",
+      category: "today",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 2 },
+      minW: 2,
+      minH: 1,
+      render: (el) => {
+        el.id = "today-hour-heatstrip-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    {
+      id: "today-days-hours-30-mount",
+      title: "30-day heat grid",
+      description: "30 days \xD7 24 hours usage grid",
+      category: "today",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "today-days-hours-30-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    {
+      id: "today-days-hours-7-mount",
+      title: "7-day heat grid",
+      description: "7 days \xD7 24 hours usage grid",
+      category: "today",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "today-days-hours-7-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    {
+      id: "today-weekday-hour-mount",
+      title: "Weekday \xD7 hour pattern",
+      description: "7\xD724 behavioral heatmap over a 90-day window",
+      category: "today",
+      screens: ["activity"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "today-weekday-hour-mount";
+        el.className = "card card-flat bento-full";
+      }
+    },
+    // ── Projects tab ──────────────────────────────────────────────────────────
+    {
+      id: "projects-registry",
+      title: "Projects",
+      description: "Searchable project registry with pinning, custom labels, and deep links",
+      category: "table",
+      screens: ["projects"],
+      defaultSize: { w: 4, h: 12 },
+      minW: 2,
+      minH: 4,
+      render: (el) => {
+        el.id = "projects-registry";
+        invokeMountCallback("projects-registry", el);
+      }
+    }
+  ];
+  function widgetById(id) {
+    return WIDGET_CATALOG.find((w5) => w5.id === id);
+  }
+  function widgetsForScreen(screen) {
+    return WIDGET_CATALOG.filter((w5) => w5.screens.includes(screen));
+  }
+
+  // src/ui/widgets/default-layouts.ts
+  function stack(defs) {
+    let y5 = 0;
+    const result = [];
+    for (const d5 of defs) {
+      const w5 = d5.w ?? 4;
+      const x4 = d5.x ?? 0;
+      const p5 = { i: d5.id, x: x4, y: y5, w: w5, h: d5.h };
+      if (d5.minW !== void 0) p5.minW = d5.minW;
+      if (d5.minH !== void 0) p5.minH = d5.minH;
+      result.push(p5);
+      y5 += d5.h;
+    }
+    return result;
+  }
+  var OVERVIEW_WIDGETS = stack([
+    { id: "usage-windows", h: 2 },
+    { id: "subscription-quota", h: 10 },
+    { id: "claude-usage", h: 2 },
+    { id: "agent-status", h: 2 },
+    { id: "estimation-meta", h: 1 },
+    { id: "official-sync", h: 2 },
+    { id: "openai-reconciliation", h: 2 },
+    { id: "subagent-reconciliation", h: 2 },
+    { id: "codex-plan-kpi-mount", h: 1 },
+    { id: "stats-row", h: 1 }
+  ]);
+  function makeActivityWidgets() {
+    const widgets = [
+      // Today block — drilldown for the selected date.
+      { i: "today-date-picker-mount", x: 0, y: 0, w: 4, h: 1 },
+      { i: "today-kpis-mount", x: 0, y: 1, w: 4, h: 1 },
+      { i: "today-hour-timeline-mount", x: 0, y: 2, w: 4, h: 3 },
+      { i: "today-hour-heatstrip-mount", x: 0, y: 5, w: 4, h: 2 },
+      { i: "today-days-hours-30-mount", x: 0, y: 7, w: 4, h: 4 },
+      { i: "today-days-hours-7-mount", x: 0, y: 11, w: 4, h: 3 },
+      { i: "today-weekday-hour-mount", x: 0, y: 14, w: 4, h: 3 },
+      // Range block — applies the dashboard filter strip.
+      // Codex plan history — full width
+      { i: "codex-plan-history-mount", x: 0, y: 17, w: 4, h: 3 },
+      // Charts row: daily (2 wide) | model (1) | project (1)
+      { i: "daily-chart-card", x: 0, y: 20, w: 2, h: 3, minW: 1, minH: 2 },
+      { i: "model-chart-card", x: 2, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
+      { i: "project-chart-card", x: 3, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
+      // Hourly chart (2 wide) then activity heatmap full width
+      { i: "hourly-chart", x: 0, y: 23, w: 2, h: 3, minW: 1, minH: 2 },
+      { i: "activity-heatmap", x: 0, y: 26, w: 4, h: 2, minW: 2, minH: 2 }
+    ];
+    return widgets;
+  }
+  var BREAKDOWNS_WIDGETS = stack([
+    { id: "subagent-summary", h: 2 },
+    { id: "agent-setup-banner", h: 1 },
+    { id: "agent-kpis-row", h: 1 },
+    { id: "agent-timeline", h: 3 },
+    { id: "agent-distribution", h: 3 },
+    { id: "agent-top-sessions", h: 3 },
+    { id: "agent-spawn-batches", h: 3 },
+    { id: "agent-tool-spectrum", h: 3 },
+    { id: "entrypoint-breakdown", h: 3 },
+    { id: "service-tiers", h: 3 },
+    { id: "tool-summary", h: 3 },
+    { id: "mcp-summary", h: 3 },
+    { id: "branch-summary", h: 3 },
+    { id: "version-summary", h: 3, w: 2 },
+    { id: "cost-reconciliation", h: 2 }
+  ]);
+  var TABLES_WIDGETS = stack([
+    { id: "model-cost-mount", h: 4 },
+    { id: "sessions-mount", h: 5 },
+    { id: "project-cost-mount", h: 4 }
+  ]);
+  var PROJECTS_WIDGETS = stack([
+    { id: "projects-registry", h: 12 }
+  ]);
+  var DEFAULT_LAYOUTS = {
+    overview: { widgets: OVERVIEW_WIDGETS, hidden: [] },
+    activity: { widgets: makeActivityWidgets(), hidden: [] },
+    breakdowns: { widgets: BREAKDOWNS_WIDGETS, hidden: [] },
+    tables: { widgets: TABLES_WIDGETS, hidden: [] },
+    projects: { widgets: PROJECTS_WIDGETS, hidden: [] }
+  };
+
+  // src/ui/lib/saved-views.ts
+  var STORAGE_KEY_PREFIX = "heimdall.saved-views.";
+  var ACTIVE_KEY_PREFIX = "heimdall.active-view.";
+  var TRIAGE_WIDGET_IDS = {
+    overview: ["usage-windows", "subscription-quota", "agent-status", "claude-usage", "stats-row"],
+    activity: ["today-date-picker-mount", "today-kpis-mount", "today-hour-heatstrip-mount"],
+    breakdowns: ["subagent-summary", "cost-reconciliation"],
+    tables: ["sessions-mount"],
+    projects: ["projects-registry"]
+  };
+  function compactLayout(screen) {
+    const widgets = widgetsForScreen(screen);
+    let y5 = 0;
+    const placed = widgets.map((def) => {
+      const w5 = def.minW ?? def.defaultSize.w;
+      const h5 = def.minH ?? def.defaultSize.h;
+      const item = { i: def.id, x: 0, y: y5, w: w5, h: h5 };
+      if (def.minW !== void 0) item.minW = def.minW;
+      if (def.minH !== void 0) item.minH = def.minH;
+      y5 += h5;
+      return item;
+    });
+    return { widgets: placed, hidden: [] };
+  }
+  function triageLayout(screen) {
+    const want = new Set(TRIAGE_WIDGET_IDS[screen]);
+    const allDefs = WIDGET_CATALOG.filter((d5) => d5.screens.includes(screen));
+    const visible = allDefs.filter((d5) => want.has(d5.id));
+    const hidden = allDefs.filter((d5) => !want.has(d5.id)).map((d5) => d5.id);
+    let y5 = 0;
+    const widgets = visible.map((def) => {
+      const item = {
+        i: def.id,
+        x: 0,
+        y: y5,
+        w: def.defaultSize.w,
+        h: def.defaultSize.h
+      };
+      if (def.minW !== void 0) item.minW = def.minW;
+      if (def.minH !== void 0) item.minH = def.minH;
+      y5 += def.defaultSize.h;
+      return item;
+    });
+    return { widgets, hidden };
+  }
+  function presetsFor(screen) {
+    return [
+      {
+        id: "preset-default",
+        name: "Default",
+        screen,
+        layout: DEFAULT_LAYOUTS[screen],
+        isPreset: true
+      },
+      {
+        id: "preset-compact",
+        name: "Compact",
+        screen,
+        layout: compactLayout(screen),
+        isPreset: true
+      },
+      {
+        id: "preset-triage",
+        name: "Triage",
+        screen,
+        layout: triageLayout(screen),
+        isPreset: true
+      }
+    ];
+  }
+  function readCustom(screen) {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${screen}`);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        (v4) => typeof v4 === "object" && v4 !== null && typeof v4.id === "string" && typeof v4.name === "string" && typeof v4.screen === "string" && typeof v4.layout === "object"
+      );
+    } catch {
+      return [];
+    }
+  }
+  function writeCustom(screen, views) {
+    try {
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}${screen}`, JSON.stringify(views));
+    } catch {
+    }
+  }
+  function listViews(screen) {
+    return [...presetsFor(screen), ...readCustom(screen)];
+  }
+  function saveView(screen, name, layout) {
+    const id = `view-${Date.now().toString(36)}`;
+    const view = { id, name, screen, layout, isPreset: false };
+    const next = [...readCustom(screen), view];
+    writeCustom(screen, next);
+    savedViewsToken.value++;
+    return view;
+  }
+  function deleteView(screen, viewId) {
+    const next = readCustom(screen).filter((v4) => v4.id !== viewId);
+    writeCustom(screen, next);
+    if (getActiveViewId(screen) === viewId) {
+      setActiveViewId(screen, "preset-default");
+    }
+    savedViewsToken.value++;
+  }
+  function getActiveViewId(screen) {
+    try {
+      return localStorage.getItem(`${ACTIVE_KEY_PREFIX}${screen}`) ?? "preset-default";
+    } catch {
+      return "preset-default";
+    }
+  }
+  function setActiveViewId(screen, viewId) {
+    try {
+      localStorage.setItem(`${ACTIVE_KEY_PREFIX}${screen}`, viewId);
+    } catch {
+    }
+    activeViewToken.value++;
+  }
+  var savedViewsToken = y3(0);
+  var activeViewToken = y3(0);
+
+  // src/ui/components/SavedViewsBar.tsx
+  function SavedViewsBar({ getCurrentLayout }) {
+    void savedViewsToken.value;
+    void activeViewToken.value;
+    const screen = activeDashboardTab.value;
+    const views = listViews(screen);
+    const activeId = getActiveViewId(screen);
+    const [savingName, setSavingName] = d2(null);
+    y2(() => {
+      if (savingName === null) return;
+      const handler = (e4) => {
+        if (e4.key === "Escape") setSavingName(null);
+      };
+      window.addEventListener("keydown", handler);
+      return () => window.removeEventListener("keydown", handler);
+    }, [savingName]);
+    const applyView = (view) => {
+      setActiveViewId(screen, view.id);
+      pendingLayoutApply.value = { screen: view.screen, layout: view.layout };
+    };
+    const onSaveCurrent = () => {
+      const layout = getCurrentLayout();
+      if (!layout) return;
+      setSavingName("My view");
+    };
+    const commitSave = (name) => {
+      const layout = getCurrentLayout();
+      if (!layout) {
+        setSavingName(null);
+        return;
+      }
+      const trimmed = name.trim();
+      if (!trimmed) {
+        setSavingName(null);
+        return;
+      }
+      const view = saveView(screen, trimmed, layout);
+      setActiveViewId(screen, view.id);
+      setSavingName(null);
+    };
+    return /* @__PURE__ */ u4("nav", { class: "saved-views-bar", "aria-label": "Saved views", children: /* @__PURE__ */ u4("ul", { class: "saved-views-bar__list", children: [
+      views.map((view) => {
+        const isActive = view.id === activeId;
+        return /* @__PURE__ */ u4("li", { class: "saved-views-bar__item", children: /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: `saved-views-bar__chip${isActive ? " is-active" : ""}${view.isPreset ? " is-preset" : ""}`,
+            "aria-pressed": isActive,
+            onClick: () => applyView(view),
+            title: view.isPreset ? "Built-in preset" : "Custom view \u2014 click \xD7 to delete",
+            children: [
+              view.name,
+              !view.isPreset && /* @__PURE__ */ u4(
+                "span",
+                {
+                  class: "saved-views-bar__delete",
+                  role: "button",
+                  "aria-label": `Delete ${view.name}`,
+                  onClick: (e4) => {
+                    e4.stopPropagation();
+                    if (confirm(`Delete view "${view.name}"?`)) {
+                      deleteView(screen, view.id);
+                    }
+                  },
+                  children: "\xD7"
+                }
+              )
+            ]
+          }
+        ) }, view.id);
+      }),
+      /* @__PURE__ */ u4("li", { class: "saved-views-bar__item", children: savingName === null ? /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: "saved-views-bar__chip saved-views-bar__chip--ghost",
+          onClick: onSaveCurrent,
+          "aria-label": "Save current view",
+          children: "+ Save view"
+        }
+      ) : /* @__PURE__ */ u4(
+        "input",
+        {
+          autoFocus: true,
+          class: "saved-views-bar__input",
+          type: "text",
+          value: savingName,
+          placeholder: "View name",
+          onInput: (e4) => setSavingName(e4.currentTarget.value),
+          onKeyDown: (e4) => {
+            if (e4.key === "Enter") commitSave(savingName ?? "");
+            if (e4.key === "Escape") setSavingName(null);
+          },
+          onBlur: () => commitSave(savingName ?? "")
+        }
+      ) })
+    ] }) });
+  }
+
   // src/ui/components/FilterBar.tsx
   var RANGES = ["7d", "30d", "90d", "all"];
   var RANGE_LABEL = {
@@ -20233,680 +21139,6 @@ ${row.project}` : row.project;
     if (!res.ok) throw new Error(`resetLayout: HTTP ${res.status}`);
   }
 
-  // src/ui/widgets/mount-registry.ts
-  var callbacks = /* @__PURE__ */ new Map();
-  function registerMountCallback(mountId, cb) {
-    callbacks.set(mountId, cb);
-  }
-  function invokeMountCallback(mountId, el) {
-    const cb = callbacks.get(mountId);
-    if (cb) cb(el);
-  }
-
-  // src/ui/widgets/registry.ts
-  function mount(id) {
-    return (el) => {
-      el.id = id;
-    };
-  }
-  var WIDGET_CATALOG = [
-    // ── Overview tab ─────────────────────────────────────────────────────────
-    {
-      id: "usage-windows",
-      title: "Rate windows",
-      description: "Session and weekly rate-limit progress bars",
-      category: "kpi",
-      screens: ["overview"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: mount("usage-windows"),
-      hideWhenEmpty: true
-    },
-    {
-      id: "subscription-quota",
-      title: "Subscription quota",
-      description: "Provider subscription utilization and history chart",
-      category: "kpi",
-      screens: ["overview"],
-      // Renders six rate-window sub-cards (Session/Weekly/Weekly Sonnet/
-      // Weekly Opus/Claude/Codex). Natural content height ≈ 1300 px which at
-      // the 132 px GridStack cellHeight is exactly 10 rows.
-      defaultSize: { w: 4, h: 10 },
-      minW: 2,
-      minH: 8,
-      render: mount("subscription-quota")
-    },
-    {
-      id: "claude-usage",
-      title: "Claude usage",
-      description: "Claude API usage details from the credentials file",
-      category: "kpi",
-      screens: ["overview"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: mount("claude-usage")
-    },
-    {
-      id: "agent-status",
-      title: "Agent status",
-      description: "Upstream provider health (Claude, OpenAI)",
-      category: "system",
-      screens: ["overview"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: mount("agent-status")
-    },
-    {
-      id: "estimation-meta",
-      title: "Estimation metadata",
-      description: "Confidence, billing mode, and pricing version breakdown",
-      category: "system",
-      screens: ["overview"],
-      defaultSize: { w: 4, h: 1 },
-      minW: 2,
-      minH: 1,
-      render: mount("estimation-meta")
-    },
-    {
-      id: "official-sync",
-      title: "Official pricing sync",
-      description: "Status of official pricing data synchronization",
-      category: "system",
-      screens: ["overview"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: mount("official-sync"),
-      hideWhenEmpty: true
-    },
-    {
-      id: "openai-reconciliation",
-      title: "OpenAI reconciliation",
-      description: "OpenAI organization usage reconciliation",
-      category: "system",
-      screens: ["overview"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: mount("openai-reconciliation"),
-      hideWhenEmpty: true
-    },
-    {
-      id: "subagent-reconciliation",
-      title: "Subagent reconciliation",
-      description: "agent_sessions vs turns(is_subagent=1) cost diff",
-      category: "system",
-      screens: ["overview"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: mount("subagent-reconciliation"),
-      hideWhenEmpty: true
-    },
-    {
-      id: "codex-plan-kpi-mount",
-      title: "Codex plan",
-      description: "Codex plan utilization KPI tile",
-      category: "codex",
-      screens: ["overview"],
-      defaultSize: { w: 1, h: 1 },
-      minW: 1,
-      minH: 1,
-      render: mount("codex-plan-kpi-mount")
-    },
-    {
-      id: "stats-row",
-      title: "Summary stats",
-      description: "Token counts, cost, cache efficiency, and active-day averages",
-      category: "kpi",
-      screens: ["overview"],
-      defaultSize: { w: 4, h: 1 },
-      minW: 2,
-      minH: 1,
-      render: mount("stats-row")
-    },
-    // ── Activity tab ──────────────────────────────────────────────────────────
-    {
-      id: "codex-plan-history-mount",
-      title: "Codex plan history",
-      description: "30-day stacked bar chart of Codex plan utilization",
-      category: "codex",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: mount("codex-plan-history-mount")
-    },
-    {
-      id: "daily-chart-card",
-      title: "Daily token usage",
-      description: "Daily or weekly token usage bar chart",
-      category: "chart",
-      screens: ["activity"],
-      defaultSize: { w: 2, h: 3 },
-      minW: 1,
-      minH: 2,
-      render: (el) => {
-        el.id = "daily-chart-card";
-        el.className = "card bento-2 chart-card";
-        if (!el.querySelector("#daily-chart-title")) {
-          el.innerHTML = '<h2 id="daily-chart-title">Daily Token Usage</h2><div class="chart-wrap tall"><div id="chart-daily"></div></div>';
-        }
-      }
-    },
-    {
-      id: "model-chart-card",
-      title: "Model distribution",
-      description: "Token usage donut chart broken down by model",
-      category: "chart",
-      screens: ["activity"],
-      defaultSize: { w: 1, h: 3 },
-      minW: 1,
-      minH: 2,
-      render: (el) => {
-        el.id = "model-chart-card";
-        el.className = "card chart-card";
-        if (!el.querySelector("#chart-model")) {
-          el.innerHTML = '<h2>By Model</h2><div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>';
-        }
-      }
-    },
-    {
-      id: "project-chart-card",
-      title: "Top projects",
-      description: "Horizontal bar chart of top projects by cost",
-      category: "chart",
-      screens: ["activity"],
-      defaultSize: { w: 1, h: 3 },
-      minW: 1,
-      minH: 2,
-      render: (el) => {
-        el.id = "project-chart-card";
-        el.className = "card chart-card";
-        if (!el.querySelector("#chart-project")) {
-          el.innerHTML = '<h2>Top Projects</h2><div class="chart-wrap"><div id="chart-project"></div></div>';
-        }
-      }
-    },
-    {
-      id: "hourly-chart",
-      title: "Activity by hour",
-      description: "Token usage broken down by hour of day",
-      category: "chart",
-      screens: ["activity"],
-      defaultSize: { w: 2, h: 3 },
-      minW: 1,
-      minH: 2,
-      render: (el) => {
-        el.id = "hourly-chart";
-        el.className = "card card-flat bento-2";
-      }
-    },
-    {
-      id: "activity-heatmap",
-      title: "Activity heatmap",
-      description: "7\xD724 heatmap of token usage or cost",
-      category: "heatmap",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "activity-heatmap";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    // ── Breakdowns tab ────────────────────────────────────────────────────────
-    {
-      id: "subagent-summary",
-      title: "Subagent summary",
-      description: "Breakdown of subagent vs orchestrator turns and costs",
-      category: "agent",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: (el) => {
-        el.id = "subagent-summary";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "agent-setup-banner",
-      title: "Agent setup banner",
-      description: "Setup guidance for agent telemetry",
-      category: "agent",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 1 },
-      minW: 2,
-      minH: 1,
-      render: mount("agent-setup-banner"),
-      hideWhenEmpty: true
-    },
-    {
-      id: "agent-kpis-row",
-      title: "Agent KPIs",
-      description: "Key metrics for agent telemetry (sessions, cost, tokens)",
-      category: "agent",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 1 },
-      minW: 2,
-      minH: 1,
-      render: (el) => {
-        el.id = "agent-kpis-row";
-        el.style.display = "none";
-        el.style.gridTemplateColumns = "repeat(3,1fr)";
-        el.style.gap = "16px";
-      }
-    },
-    {
-      id: "agent-timeline",
-      title: "Agent timeline",
-      description: "Cost timeline broken down by agent role",
-      category: "agent",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "agent-timeline";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "agent-distribution",
-      title: "Agent distribution",
-      description: "Breakdown of sessions and cost by agent role",
-      category: "agent",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "agent-distribution";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "agent-top-sessions",
-      title: "Top agent sessions",
-      description: "Highest-cost agent sessions",
-      category: "agent",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "agent-top-sessions";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "agent-spawn-batches",
-      title: "Agent spawn batches",
-      description: "Batches of agent spawns grouped by session",
-      category: "agent",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "agent-spawn-batches";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "agent-tool-spectrum",
-      title: "Agent tool spectrum",
-      description: "Tool usage breakdown across agent roles",
-      category: "agent",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "agent-tool-spectrum";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "entrypoint-breakdown",
-      title: "Entrypoint breakdown",
-      description: "Usage broken down by CLI entrypoint",
-      category: "table",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "entrypoint-breakdown";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "service-tiers",
-      title: "Service tiers",
-      description: "Usage and cost split by service tier",
-      category: "table",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "service-tiers";
-        el.className = "card card-flat bento-full table-card";
-      },
-      hideWhenEmpty: true
-    },
-    {
-      id: "tool-summary",
-      title: "Tool usage",
-      description: "Tool invocation counts with cost attribution",
-      category: "table",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "tool-summary";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "mcp-summary",
-      title: "MCP server usage",
-      description: "MCP server invocation counts with cost attribution",
-      category: "table",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "mcp-summary";
-        el.className = "card card-flat bento-full table-card";
-      }
-    },
-    {
-      id: "branch-summary",
-      title: "Git branch summary",
-      description: "Usage broken down by git branch",
-      category: "table",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "branch-summary";
-        el.className = "card card-flat bento-full table-card";
-      },
-      hideWhenEmpty: true
-    },
-    {
-      id: "version-summary",
-      title: "CLI versions",
-      description: "Usage breakdown by Claude CLI version with donut chart",
-      category: "table",
-      screens: ["breakdowns"],
-      defaultSize: { w: 2, h: 3 },
-      minW: 1,
-      minH: 2,
-      render: (el) => {
-        el.id = "version-summary";
-        el.className = "card card-flat bento-2";
-      },
-      hideWhenEmpty: true
-    },
-    {
-      id: "cost-reconciliation",
-      title: "Cost reconciliation",
-      description: "Hook-measured vs estimated cost comparison",
-      category: "system",
-      screens: ["breakdowns"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: mount("cost-reconciliation")
-    },
-    // ── Tables tab ────────────────────────────────────────────────────────────
-    {
-      id: "model-cost-mount",
-      title: "Cost by model",
-      description: "Per-model cost table with cache breakdown columns",
-      category: "table",
-      screens: ["tables"],
-      defaultSize: { w: 4, h: 4 },
-      minW: 2,
-      minH: 2,
-      render: mount("model-cost-mount")
-    },
-    {
-      id: "sessions-mount",
-      title: "Sessions",
-      description: "All sessions with sorting, pagination, and CSV export",
-      category: "table",
-      screens: ["tables"],
-      defaultSize: { w: 4, h: 5 },
-      minW: 2,
-      minH: 3,
-      render: mount("sessions-mount")
-    },
-    {
-      id: "project-cost-mount",
-      title: "Cost by project",
-      description: "Per-project cost table with CSV export",
-      category: "table",
-      screens: ["tables"],
-      defaultSize: { w: 4, h: 4 },
-      minW: 2,
-      minH: 2,
-      render: mount("project-cost-mount")
-    },
-    // ── Today tab ─────────────────────────────────────────────────────────────
-    {
-      id: "today-date-picker-mount",
-      title: "Date picker",
-      description: "Select a specific date to view",
-      category: "today",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 1 },
-      minW: 2,
-      minH: 1,
-      render: mount("today-date-picker-mount")
-    },
-    {
-      id: "today-kpis-mount",
-      title: "Today KPIs",
-      description: "Key metrics for the selected day",
-      category: "today",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 1 },
-      minW: 2,
-      minH: 1,
-      render: (el) => {
-        el.id = "today-kpis-mount";
-        el.style.gridTemplateColumns = "repeat(auto-fit,minmax(180px,1fr))";
-        el.style.gap = "16px";
-      }
-    },
-    {
-      id: "today-hour-timeline-mount",
-      title: "Hour timeline",
-      description: "Token usage timeline for each hour of the selected day",
-      category: "today",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "today-hour-timeline-mount";
-        el.className = "card card-flat bento-full";
-      }
-    },
-    {
-      id: "today-hour-heatstrip-mount",
-      title: "Hour heatstrip",
-      description: "Single-row heat strip showing hourly intensity",
-      category: "today",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 2 },
-      minW: 2,
-      minH: 1,
-      render: (el) => {
-        el.id = "today-hour-heatstrip-mount";
-        el.className = "card card-flat bento-full";
-      }
-    },
-    {
-      id: "today-days-hours-30-mount",
-      title: "30-day heat grid",
-      description: "30 days \xD7 24 hours usage grid",
-      category: "today",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 4 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "today-days-hours-30-mount";
-        el.className = "card card-flat bento-full";
-      }
-    },
-    {
-      id: "today-days-hours-7-mount",
-      title: "7-day heat grid",
-      description: "7 days \xD7 24 hours usage grid",
-      category: "today",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "today-days-hours-7-mount";
-        el.className = "card card-flat bento-full";
-      }
-    },
-    {
-      id: "today-weekday-hour-mount",
-      title: "Weekday \xD7 hour pattern",
-      description: "7\xD724 behavioral heatmap over a 90-day window",
-      category: "today",
-      screens: ["activity"],
-      defaultSize: { w: 4, h: 3 },
-      minW: 2,
-      minH: 2,
-      render: (el) => {
-        el.id = "today-weekday-hour-mount";
-        el.className = "card card-flat bento-full";
-      }
-    },
-    // ── Projects tab ──────────────────────────────────────────────────────────
-    {
-      id: "projects-registry",
-      title: "Projects",
-      description: "Searchable project registry with pinning, custom labels, and deep links",
-      category: "table",
-      screens: ["projects"],
-      defaultSize: { w: 4, h: 12 },
-      minW: 2,
-      minH: 4,
-      render: (el) => {
-        el.id = "projects-registry";
-        invokeMountCallback("projects-registry", el);
-      }
-    }
-  ];
-  function widgetById(id) {
-    return WIDGET_CATALOG.find((w5) => w5.id === id);
-  }
-  function widgetsForScreen(screen) {
-    return WIDGET_CATALOG.filter((w5) => w5.screens.includes(screen));
-  }
-
-  // src/ui/widgets/default-layouts.ts
-  function stack(defs) {
-    let y5 = 0;
-    const result = [];
-    for (const d5 of defs) {
-      const w5 = d5.w ?? 4;
-      const x4 = d5.x ?? 0;
-      const p5 = { i: d5.id, x: x4, y: y5, w: w5, h: d5.h };
-      if (d5.minW !== void 0) p5.minW = d5.minW;
-      if (d5.minH !== void 0) p5.minH = d5.minH;
-      result.push(p5);
-      y5 += d5.h;
-    }
-    return result;
-  }
-  var OVERVIEW_WIDGETS = stack([
-    { id: "usage-windows", h: 2 },
-    { id: "subscription-quota", h: 10 },
-    { id: "claude-usage", h: 2 },
-    { id: "agent-status", h: 2 },
-    { id: "estimation-meta", h: 1 },
-    { id: "official-sync", h: 2 },
-    { id: "openai-reconciliation", h: 2 },
-    { id: "subagent-reconciliation", h: 2 },
-    { id: "codex-plan-kpi-mount", h: 1 },
-    { id: "stats-row", h: 1 }
-  ]);
-  function makeActivityWidgets() {
-    const widgets = [
-      // Today block — drilldown for the selected date.
-      { i: "today-date-picker-mount", x: 0, y: 0, w: 4, h: 1 },
-      { i: "today-kpis-mount", x: 0, y: 1, w: 4, h: 1 },
-      { i: "today-hour-timeline-mount", x: 0, y: 2, w: 4, h: 3 },
-      { i: "today-hour-heatstrip-mount", x: 0, y: 5, w: 4, h: 2 },
-      { i: "today-days-hours-30-mount", x: 0, y: 7, w: 4, h: 4 },
-      { i: "today-days-hours-7-mount", x: 0, y: 11, w: 4, h: 3 },
-      { i: "today-weekday-hour-mount", x: 0, y: 14, w: 4, h: 3 },
-      // Range block — applies the dashboard filter strip.
-      // Codex plan history — full width
-      { i: "codex-plan-history-mount", x: 0, y: 17, w: 4, h: 3 },
-      // Charts row: daily (2 wide) | model (1) | project (1)
-      { i: "daily-chart-card", x: 0, y: 20, w: 2, h: 3, minW: 1, minH: 2 },
-      { i: "model-chart-card", x: 2, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
-      { i: "project-chart-card", x: 3, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
-      // Hourly chart (2 wide) then activity heatmap full width
-      { i: "hourly-chart", x: 0, y: 23, w: 2, h: 3, minW: 1, minH: 2 },
-      { i: "activity-heatmap", x: 0, y: 26, w: 4, h: 2, minW: 2, minH: 2 }
-    ];
-    return widgets;
-  }
-  var BREAKDOWNS_WIDGETS = stack([
-    { id: "subagent-summary", h: 2 },
-    { id: "agent-setup-banner", h: 1 },
-    { id: "agent-kpis-row", h: 1 },
-    { id: "agent-timeline", h: 3 },
-    { id: "agent-distribution", h: 3 },
-    { id: "agent-top-sessions", h: 3 },
-    { id: "agent-spawn-batches", h: 3 },
-    { id: "agent-tool-spectrum", h: 3 },
-    { id: "entrypoint-breakdown", h: 3 },
-    { id: "service-tiers", h: 3 },
-    { id: "tool-summary", h: 3 },
-    { id: "mcp-summary", h: 3 },
-    { id: "branch-summary", h: 3 },
-    { id: "version-summary", h: 3, w: 2 },
-    { id: "cost-reconciliation", h: 2 }
-  ]);
-  var TABLES_WIDGETS = stack([
-    { id: "model-cost-mount", h: 4 },
-    { id: "sessions-mount", h: 5 },
-    { id: "project-cost-mount", h: 4 }
-  ]);
-  var PROJECTS_WIDGETS = stack([
-    { id: "projects-registry", h: 12 }
-  ]);
-  var DEFAULT_LAYOUTS = {
-    overview: { widgets: OVERVIEW_WIDGETS, hidden: [] },
-    activity: { widgets: makeActivityWidgets(), hidden: [] },
-    breakdowns: { widgets: BREAKDOWNS_WIDGETS, hidden: [] },
-    tables: { widgets: TABLES_WIDGETS, hidden: [] },
-    projects: { widgets: PROJECTS_WIDGETS, hidden: [] }
-  };
-
   // src/ui/components/widgets/AddWidgetPicker.tsx
   function AddWidgetPicker({
     availableWidgets,
@@ -21067,6 +21299,7 @@ ${row.project}` : row.project;
       saveTimerRef.current = window.setTimeout(async () => {
         if (!gridRef.current) return;
         const layout = layoutFromGrid(gridRef.current, hiddenRef.current);
+        publishCurrentLayout(screen, layout);
         try {
           await saveLayout(screen, layout);
           setStatus("layout-save", "success", "[SAVED]", 2e3);
@@ -21184,6 +21417,7 @@ ${row.project}` : row.project;
         const grid = initGrid(gridRoot, layout);
         setupGridEvents(grid, gridRoot, scheduleSave, hiddenRef, renderPicker, updateAddBtnVisibility);
         gridRef.current = grid;
+        publishCurrentLayout(screen, layout);
         updateAddBtnVisibility();
         syncEditMode(grid, el, editMode.value, resetBtn);
       })();
@@ -21206,6 +21440,32 @@ ${row.project}` : row.project;
         updateAddBtnVisibility();
       }
     }, [editMode.value]);
+    y2(() => {
+      const pending = pendingLayoutApply.value;
+      if (!pending || pending.screen !== screen) return;
+      const el = containerRef.current;
+      if (!el || isMobileRef.current) return;
+      const reconciled = reconcileLayout(pending.layout, screen);
+      hiddenRef.current = reconciled.hidden.slice();
+      if (gridRef.current) {
+        gridRef.current.destroy(false);
+        gridRef.current = null;
+      }
+      const gridRoot = el.querySelector(".grid-stack");
+      if (!gridRoot) return;
+      gridRoot.innerHTML = "";
+      const newGrid = initGrid(gridRoot, reconciled);
+      setupGridEvents(newGrid, gridRoot, scheduleSave, hiddenRef, renderPicker, updateAddBtnVisibility);
+      gridRef.current = newGrid;
+      publishCurrentLayout(screen, reconciled);
+      updateAddBtnVisibility();
+      const resetBtn = resetBtnRef.current;
+      if (resetBtn) syncEditMode(newGrid, el, editMode.value, resetBtn);
+      saveLayout(screen, reconciled).catch(() => {
+      });
+      setStatus("layout-save", "success", "[VIEW APPLIED]", 2e3);
+      pendingLayoutApply.value = null;
+    }, [pendingLayoutApply.value, screen]);
     y2(() => {
       const onResize = () => {
         const nowMobile = window.innerWidth < MOBILE_BREAKPOINT;
@@ -21454,7 +21714,15 @@ ${row.project}` : row.project;
   }
   var dashboardTabsMount = document.getElementById("dashboard-tabs-mount");
   if (dashboardTabsMount && dashboardRuntime) {
-    R(/* @__PURE__ */ u4(DashboardTabs, { onTabChange: dashboardRuntime.handleDashboardTabChange }), dashboardTabsMount);
+    const onTabChange = dashboardRuntime.handleDashboardTabChange;
+    const getCurrentLayout = () => currentLayoutByScreen.value[activeDashboardTab.value] ?? null;
+    R(
+      /* @__PURE__ */ u4(S, { children: [
+        /* @__PURE__ */ u4(DashboardTabs, { onTabChange }),
+        /* @__PURE__ */ u4(SavedViewsBar, { getCurrentLayout })
+      ] }),
+      dashboardTabsMount
+    );
   }
   var footerEl = document.querySelector("footer");
   if (footerEl?.parentElement) {

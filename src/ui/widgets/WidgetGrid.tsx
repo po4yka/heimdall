@@ -18,6 +18,7 @@ import { widgetsForScreen, widgetById, WIDGET_CATALOG } from './registry';
 import { DEFAULT_LAYOUTS } from './default-layouts';
 import { AddWidgetPicker } from '../components/widgets/AddWidgetPicker';
 import type { DashboardScreen, PlacedWidget, ScreenLayout } from './registry';
+import { pendingLayoutApply, publishCurrentLayout } from './apply-layout';
 
 const MOBILE_BREAKPOINT = 720;
 const SAVE_DEBOUNCE_MS = 500;
@@ -111,6 +112,8 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
     saveTimerRef.current = window.setTimeout(async () => {
       if (!gridRef.current) return;
       const layout = layoutFromGrid(gridRef.current, hiddenRef.current);
+      // Publish the latest layout so SavedViewsBar can capture it.
+      publishCurrentLayout(screen, layout);
       try {
         await saveLayout(screen, layout);
         setStatus('layout-save', 'success', '[SAVED]', 2000);
@@ -253,6 +256,10 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
       setupGridEvents(grid, gridRoot, scheduleSave, hiddenRef, renderPicker, updateAddBtnVisibility);
       gridRef.current = grid;
 
+      // Publish the initial layout so SavedViewsBar's "Save view" can
+      // capture it without waiting for the user to drag anything.
+      publishCurrentLayout(screen, layout);
+
       updateAddBtnVisibility();
       syncEditMode(grid, el, editMode.value, resetBtn);
     })();
@@ -279,6 +286,39 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
       updateAddBtnVisibility();
     }
   }, [editMode.value]);
+
+  // ── React to saved-view application ────────────────────────────────
+  useEffect(() => {
+    const pending = pendingLayoutApply.value;
+    if (!pending || pending.screen !== screen) return;
+    const el = containerRef.current;
+    if (!el || isMobileRef.current) return;
+    // Tear down + rebuild grid from the picked view's layout.
+    const reconciled = reconcileLayout(pending.layout, screen);
+    hiddenRef.current = reconciled.hidden.slice();
+    if (gridRef.current) {
+      gridRef.current.destroy(false);
+      gridRef.current = null;
+    }
+    const gridRoot = el.querySelector<HTMLElement>('.grid-stack');
+    if (!gridRoot) return;
+    gridRoot.innerHTML = '';
+    const newGrid = initGrid(gridRoot, reconciled);
+    setupGridEvents(newGrid, gridRoot, scheduleSave, hiddenRef, renderPicker, updateAddBtnVisibility);
+    gridRef.current = newGrid;
+    publishCurrentLayout(screen, reconciled);
+    updateAddBtnVisibility();
+    const resetBtn = resetBtnRef.current;
+    if (resetBtn) syncEditMode(newGrid, el, editMode.value, resetBtn);
+    // Persist to backend so the picked layout survives without the user
+    // having to drag anything (matches the existing reset-layout flow).
+    saveLayout(screen, reconciled).catch(() => {
+      /* server may not yet have a row — non-fatal */
+    });
+    setStatus('layout-save', 'success', '[VIEW APPLIED]', 2000);
+    pendingLayoutApply.value = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingLayoutApply.value, screen]);
 
   // ── Mobile resize handler ──────────────────────────────────────────
   useEffect(() => {

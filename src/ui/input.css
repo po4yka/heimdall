@@ -656,6 +656,85 @@
     border-bottom-color: var(--accent-interactive);
   }
 
+  /* ── Saved views bar ─────────────────────────────────────────────── */
+  .saved-views-bar {
+    margin-top: var(--space-2);
+  }
+  .saved-views-bar__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+  .saved-views-bar__item { display: inline-flex; }
+  .saved-views-bar__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: var(--space-1) var(--space-3);
+    min-height: var(--space-7, 28px);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    letter-spacing: 0;
+    text-transform: none;
+    transition: color var(--duration-fast), border-color var(--duration-fast),
+      background var(--duration-fast);
+  }
+  .saved-views-bar__chip:hover {
+    color: var(--text-display);
+    border-color: var(--border-visible);
+  }
+  .saved-views-bar__chip.is-active {
+    color: var(--text-display);
+    border-color: var(--accent-interactive);
+    background: color-mix(in srgb, var(--accent-interactive) 12%, transparent);
+  }
+  .saved-views-bar__chip.is-preset.is-active {
+    background: color-mix(in srgb, var(--accent-interactive) 8%, transparent);
+  }
+  .saved-views-bar__chip--ghost {
+    border-style: dashed;
+    color: var(--text-disabled);
+  }
+  .saved-views-bar__chip--ghost:hover { color: var(--text-primary); }
+  .saved-views-bar__delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 2px;
+    border-radius: var(--radius-pill);
+    color: var(--text-disabled);
+    cursor: pointer;
+    transition: color var(--duration-fast), background var(--duration-fast);
+  }
+  .saved-views-bar__delete:hover {
+    color: var(--text-display);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .saved-views-bar__input {
+    background: transparent;
+    border: 1px solid var(--accent-interactive);
+    color: var(--text-display);
+    padding: var(--space-1) var(--space-3);
+    min-height: var(--space-7, 28px);
+    border-radius: var(--radius-pill);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-tertiary);
+    width: 140px;
+  }
+  .saved-views-bar__input:focus,
+  .saved-views-bar__input:focus-visible { outline: none; }
+
   /* ── Bento Grid ──────────────────────────────────────────────────── */
   .bento {
     max-width: 1400px;
