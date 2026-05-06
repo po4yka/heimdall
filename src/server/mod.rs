@@ -17,7 +17,10 @@ use axum::response::Html;
 use axum::routing::{get, post, put};
 use tokio::sync::{Mutex, RwLock};
 
-use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
+use crate::config::{
+    AgentStatusConfig, AggregatorConfig, BlocksConfig, ClaudeAdminConfig, Display, LiveSettings,
+    OAuthConfig, OpenAiConfig, StatuslineConfig, WebhookConfig,
+};
 use crate::webhooks::WebhookState;
 use api::AppState;
 
@@ -61,6 +64,35 @@ pub(crate) fn build_state(
     options: &ServeOptions,
     scan_event_tx: tokio::sync::broadcast::Sender<String>,
 ) -> Arc<AppState> {
+    let live = LiveSettings {
+        display: Display::default(),
+        oauth: OAuthConfig {
+            enabled: options.oauth_enabled,
+            refresh_interval: options.oauth_refresh_interval,
+        },
+        claude_admin: ClaudeAdminConfig {
+            enabled: options.claude_admin_enabled,
+            admin_key_env: options.claude_admin_key_env.clone(),
+            refresh_interval: options.claude_admin_refresh_interval,
+            lookback_days: options.claude_admin_lookback_days,
+        },
+        openai: OpenAiConfig {
+            enabled: options.openai_enabled,
+            admin_key_env: options.openai_admin_key_env.clone(),
+            refresh_interval: options.openai_refresh_interval,
+            lookback_days: options.openai_lookback_days,
+        },
+        agent_status: options.agent_status_config.clone(),
+        aggregator: options.aggregator_config.clone(),
+        webhooks: options.webhook_config.clone(),
+        blocks: BlocksConfig {
+            token_limit: options.blocks_token_limit,
+            session_length_hours: Some(options.session_length_hours),
+            session_length_by_provider: std::collections::HashMap::new(),
+        },
+        statusline: StatuslineConfig::default(),
+        project_aliases: options.project_aliases.clone(),
+    };
     Arc::new(AppState {
         host: options.host.clone(),
         port: options.port,
@@ -98,6 +130,7 @@ pub(crate) fn build_state(
         live_provider_cache: RwLock::new(None),
         live_provider_refresh_lock: Mutex::new(()),
         version_cache: version_check::new_cache(),
+        settings: Arc::new(RwLock::new(live)),
     })
 }
 
@@ -186,7 +219,10 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             "/api/agents/unclassified-global",
             get(api::agent_unclassified_global),
         )
-        .route("/api/settings", get(api::settings_get))
+        .route(
+            "/api/settings",
+            get(api::settings_get).patch(api::settings_patch),
+        )
         .route(
             "/api/agents/{project_id}/registry",
             get(api::agent_registry_list),
@@ -353,11 +389,56 @@ pub(crate) fn start_background_pollers_with<F>(state: Arc<AppState>, mut spawn: 
 where
     F: FnMut(&'static str, u64, BackgroundPollRefresh),
 {
-    if state.oauth_enabled {
+    // Use the live snapshot at startup for the initial enable / interval
+    // decision. Each refresh closure re-reads the live snapshot inside its
+    // refresher (refresh_usage_windows / refresh_agent_status /
+    // refresh_community_signal already do), so PATCH propagates without
+    // restart for the cache TTLs. Spawning gating itself is one-shot at
+    // startup — disabling a poller via PATCH stops new fetches inside the
+    // refresher (`enabled: false` short-circuits) but does not tear down
+    // the loop.
+    let snapshot = {
+        let guard = state.settings.try_read();
+        match guard {
+            Ok(live) => Some((
+                live.oauth.clone(),
+                live.claude_admin.clone(),
+                live.openai.clone(),
+                live.agent_status.clone(),
+                live.aggregator.clone(),
+            )),
+            Err(_) => None,
+        }
+    };
+    let (oauth, claude_admin, openai, agent_status_cfg, aggregator) =
+        snapshot.unwrap_or_else(|| {
+            (
+                crate::config::OAuthConfig {
+                    enabled: state.oauth_enabled,
+                    refresh_interval: state.oauth_refresh_interval,
+                },
+                crate::config::ClaudeAdminConfig {
+                    enabled: state.claude_admin_enabled,
+                    admin_key_env: state.claude_admin_key_env.clone(),
+                    refresh_interval: state.claude_admin_refresh_interval,
+                    lookback_days: state.claude_admin_lookback_days,
+                },
+                crate::config::OpenAiConfig {
+                    enabled: state.openai_enabled,
+                    admin_key_env: state.openai_admin_key_env.clone(),
+                    refresh_interval: state.openai_refresh_interval,
+                    lookback_days: state.openai_lookback_days,
+                },
+                state.agent_status_config.clone(),
+                state.aggregator_config.clone(),
+            )
+        });
+
+    if oauth.enabled {
         let state = state.clone();
         spawn(
             "oauth usage",
-            state.oauth_refresh_interval,
+            oauth.refresh_interval,
             Box::new(move || {
                 let state = state.clone();
                 Box::pin(async move {
@@ -368,11 +449,11 @@ where
         );
     }
 
-    if state.claude_admin_enabled {
+    if claude_admin.enabled {
         let state = state.clone();
         spawn(
             "Claude admin analytics",
-            state.claude_admin_refresh_interval,
+            claude_admin.refresh_interval,
             Box::new(move || {
                 let state = state.clone();
                 Box::pin(async move {
@@ -383,11 +464,11 @@ where
         );
     }
 
-    if state.agent_status_config.enabled {
+    if agent_status_cfg.enabled {
         let state = state.clone();
         spawn(
             "agent status",
-            state.agent_status_config.refresh_interval,
+            agent_status_cfg.refresh_interval,
             Box::new(move || {
                 let state = state.clone();
                 Box::pin(async move {
@@ -398,11 +479,11 @@ where
         );
     }
 
-    if state.aggregator_config.enabled {
+    if aggregator.enabled {
         let state = state.clone();
         spawn(
             "community signal",
-            state.aggregator_config.refresh_interval,
+            aggregator.refresh_interval,
             Box::new(move || {
                 let state = state.clone();
                 Box::pin(async move {
@@ -413,11 +494,11 @@ where
         );
     }
 
-    if state.openai_enabled {
+    if openai.enabled {
         let state = state.clone();
         spawn(
             "OpenAI reconciliation",
-            state.openai_refresh_interval,
+            openai.refresh_interval,
             Box::new(move || {
                 let state = state.clone();
                 Box::pin(async move {

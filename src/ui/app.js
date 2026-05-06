@@ -1102,11 +1102,17 @@
     "snapshot": null,
     "agent-registry": null,
     "layout-save": null,
-    "project-registry": null
+    "project-registry": null,
+    "settings": null
   });
   var registryModalOpen = y3(null);
   var backupModalOpen = y3(false);
   var setupBannerDismissed = y3(false);
+  var settingsModalOpen = y3(false);
+  var settingsServer = y3(null);
+  var settingsDraft = y3(null);
+  var settingsInFlight = y3(false);
+  var settingsActiveSection = y3("display");
   var selectedProjectUuid = y3(null);
   var projectsRegistry = y3([]);
   var registryByUuid = g2(
@@ -1469,6 +1475,722 @@
     ) });
   }
 
+  // src/ui/components/InlineStatus.tsx
+  var LABEL_MAP = {
+    success: "OK",
+    error: "ERROR",
+    loading: "LOADING",
+    info: "INFO"
+  };
+  var COLOR_MAP = {
+    success: "var(--success)",
+    error: "var(--accent)",
+    loading: "var(--text-secondary)",
+    info: "var(--text-secondary)"
+  };
+  function InlineStatus({ placement, inline = false, dismissable = true }) {
+    const entry = statusByPlacement.value[placement];
+    if (!entry) return null;
+    const label = LABEL_MAP[entry.kind];
+    const color = COLOR_MAP[entry.kind];
+    const content = entry.message ? `[${label}: ${entry.message}]` : `[${label}]`;
+    const baseStyle = {
+      fontFamily: "var(--font-mono)",
+      fontSize: "11px",
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      color,
+      animation: "fadeUp 0.15s ease-out",
+      display: inline ? "inline-flex" : "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: inline ? "0" : "8px 16px",
+      border: inline ? "none" : `1px solid ${color}`,
+      borderRadius: inline ? "0" : "4px",
+      background: inline ? "transparent" : "var(--surface)"
+    };
+    return /* @__PURE__ */ u4("div", { role: entry.kind === "error" ? "alert" : "status", style: baseStyle, children: [
+      /* @__PURE__ */ u4("span", { children: content }),
+      dismissable && entry.kind !== "loading" && /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          onClick: () => clearStatus(placement),
+          "aria-label": "Dismiss",
+          style: {
+            background: "transparent",
+            border: "none",
+            color,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            fontSize: "inherit",
+            letterSpacing: "inherit",
+            padding: "0 4px",
+            opacity: 0.7
+          },
+          children: "[X]"
+        }
+      )
+    ] });
+  }
+
+  // src/ui/components/settings/DisplaySection.tsx
+  var CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "JPY", "KRW", "CNY"];
+  function patchDisplay(patch2) {
+    const draft = settingsDraft.value;
+    if (!draft) return;
+    settingsDraft.value = { ...draft, display: { ...draft.display, ...patch2 } };
+  }
+  function DisplaySection() {
+    const draft = settingsDraft.value;
+    if (!draft) return null;
+    const { currency, locale, compact } = draft.display;
+    return /* @__PURE__ */ u4("div", { class: "settings-section", children: [
+      /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+        /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-display-currency", children: "Currency" }),
+        /* @__PURE__ */ u4(
+          "select",
+          {
+            id: "settings-display-currency",
+            class: "settings-input num",
+            value: currency ?? "USD",
+            onChange: (e4) => patchDisplay({ currency: e4.target.value }),
+            children: CURRENCY_OPTIONS.map((c4) => /* @__PURE__ */ u4("option", { value: c4, children: c4 }, c4))
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+        /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-display-locale", children: "Locale" }),
+        /* @__PURE__ */ u4(
+          "input",
+          {
+            id: "settings-display-locale",
+            type: "text",
+            class: "settings-input",
+            value: locale ?? "",
+            placeholder: "auto",
+            onInput: (e4) => {
+              const v4 = e4.target.value.trim();
+              patchDisplay({ locale: v4.length === 0 ? null : v4 });
+            }
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-row settings-row--toggle", children: [
+        /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-display-compact", children: "Compact mode" }),
+        /* @__PURE__ */ u4(
+          "input",
+          {
+            id: "settings-display-compact",
+            type: "checkbox",
+            checked: compact ?? false,
+            onChange: (e4) => patchDisplay({ compact: e4.target.checked })
+          }
+        )
+      ] })
+    ] });
+  }
+
+  // src/ui/components/settings/PollingSection.tsx
+  var ROWS = [
+    { key: "oauth", label: "OAuth (Claude usage windows)", minInterval: 30, hasLookback: false },
+    { key: "claude_admin", label: "Claude admin", minInterval: 30, hasLookback: true },
+    { key: "openai", label: "OpenAI", minInterval: 30, hasLookback: true },
+    { key: "agent_status", label: "Agent status", minInterval: 30, hasLookback: false },
+    { key: "aggregator", label: "Aggregator", minInterval: 60, hasLookback: false }
+  ];
+  var SEVERITY_OPTIONS = [
+    "minor",
+    "major",
+    "critical"
+  ];
+  var MAX_INTERVAL = 86400;
+  var MIN_LOOKBACK = 1;
+  var MAX_LOOKBACK = 365;
+  function patch(key, p5) {
+    const draft = settingsDraft.value;
+    if (!draft) return;
+    const next = { ...draft[key], ...p5 };
+    settingsDraft.value = { ...draft, [key]: next };
+  }
+  function clampInterval(raw, min2) {
+    if (!Number.isFinite(raw)) return min2;
+    return Math.max(min2, Math.min(MAX_INTERVAL, Math.round(raw)));
+  }
+  function clampLookback(raw) {
+    if (!Number.isFinite(raw)) return MIN_LOOKBACK;
+    return Math.max(MIN_LOOKBACK, Math.min(MAX_LOOKBACK, Math.round(raw)));
+  }
+  function intervalLabel(seconds) {
+    if (seconds >= 3600 && seconds % 3600 === 0) {
+      const h5 = seconds / 3600;
+      return `polled every ${h5} hour${h5 === 1 ? "" : "s"}`;
+    }
+    if (seconds >= 60 && seconds % 60 === 0) {
+      const m5 = seconds / 60;
+      return `polled every ${m5} minute${m5 === 1 ? "" : "s"}`;
+    }
+    return `polled every ${seconds} seconds`;
+  }
+  function IntervalStepper({ value, min: min2, onChange, ariaLabel }) {
+    return /* @__PURE__ */ u4("div", { class: "settings-stepper", children: [
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: "settings-stepper-btn",
+          "aria-label": `${ariaLabel} decrease`,
+          onClick: () => onChange(clampInterval(value - 30, min2)),
+          children: "[-]"
+        }
+      ),
+      /* @__PURE__ */ u4(
+        "input",
+        {
+          type: "number",
+          class: "settings-input num settings-input--narrow",
+          value,
+          min: min2,
+          max: MAX_INTERVAL,
+          step: 30,
+          "aria-label": ariaLabel,
+          onInput: (e4) => {
+            const raw = Number.parseFloat(e4.target.value);
+            onChange(clampInterval(raw, min2));
+          }
+        }
+      ),
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          class: "settings-stepper-btn",
+          "aria-label": `${ariaLabel} increase`,
+          onClick: () => onChange(clampInterval(value + 30, min2)),
+          children: "[+]"
+        }
+      )
+    ] });
+  }
+  function PollingSection() {
+    const draft = settingsDraft.value;
+    if (!draft) return null;
+    return /* @__PURE__ */ u4("div", { class: "settings-section", children: ROWS.map((row) => {
+      const groupAny = draft[row.key];
+      const enabled = groupAny.enabled;
+      const interval = groupAny.refresh_interval;
+      return /* @__PURE__ */ u4("div", { class: "settings-card", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-row settings-row--toggle", children: [
+          /* @__PURE__ */ u4("label", { class: "settings-label", for: `settings-polling-${row.key}-enabled`, children: row.label }),
+          /* @__PURE__ */ u4(
+            "input",
+            {
+              id: `settings-polling-${row.key}-enabled`,
+              type: "checkbox",
+              checked: enabled,
+              onChange: (e4) => patch(row.key, { enabled: e4.target.checked })
+            }
+          )
+        ] }),
+        enabled && /* @__PURE__ */ u4(S, { children: [
+          /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+            /* @__PURE__ */ u4("label", { class: "settings-label", children: "Refresh interval" }),
+            /* @__PURE__ */ u4(
+              IntervalStepper,
+              {
+                value: interval,
+                min: row.minInterval,
+                ariaLabel: `${row.label} refresh interval seconds`,
+                onChange: (next) => patch(row.key, { refresh_interval: next })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "settings-helper", children: intervalLabel(interval) }),
+          row.hasLookback && /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+            /* @__PURE__ */ u4("label", { class: "settings-label", for: `settings-polling-${row.key}-lookback`, children: "Lookback days" }),
+            /* @__PURE__ */ u4(
+              "input",
+              {
+                id: `settings-polling-${row.key}-lookback`,
+                type: "number",
+                class: "settings-input num settings-input--narrow",
+                value: groupAny.lookback_days,
+                min: MIN_LOOKBACK,
+                max: MAX_LOOKBACK,
+                step: 1,
+                onInput: (e4) => {
+                  const raw = Number.parseFloat(e4.target.value);
+                  patch(row.key, { lookback_days: clampLookback(raw) });
+                }
+              }
+            )
+          ] }),
+          row.key === "agent_status" && /* @__PURE__ */ u4(S, { children: [
+            /* @__PURE__ */ u4("div", { class: "settings-row settings-row--toggle", children: [
+              /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-polling-agent-status-claude", children: "Claude provider" }),
+              /* @__PURE__ */ u4(
+                "input",
+                {
+                  id: "settings-polling-agent-status-claude",
+                  type: "checkbox",
+                  checked: draft.agent_status.claude_enabled,
+                  onChange: (e4) => patch("agent_status", {
+                    claude_enabled: e4.target.checked
+                  })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ u4("div", { class: "settings-row settings-row--toggle", children: [
+              /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-polling-agent-status-openai", children: "OpenAI provider" }),
+              /* @__PURE__ */ u4(
+                "input",
+                {
+                  id: "settings-polling-agent-status-openai",
+                  type: "checkbox",
+                  checked: draft.agent_status.openai_enabled,
+                  onChange: (e4) => patch("agent_status", {
+                    openai_enabled: e4.target.checked
+                  })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+              /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-polling-agent-status-severity", children: "Alert min severity" }),
+              /* @__PURE__ */ u4(
+                "select",
+                {
+                  id: "settings-polling-agent-status-severity",
+                  class: "settings-input",
+                  value: draft.agent_status.alert_min_severity,
+                  onChange: (e4) => patch("agent_status", {
+                    alert_min_severity: e4.target.value
+                  }),
+                  children: SEVERITY_OPTIONS.map((s4) => /* @__PURE__ */ u4("option", { value: s4, children: s4 }, s4))
+                }
+              )
+            ] })
+          ] }),
+          row.key === "aggregator" && /* @__PURE__ */ u4("div", { class: "settings-row settings-row--toggle", children: [
+            /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-polling-aggregator-spike", children: "Spike webhook" }),
+            /* @__PURE__ */ u4(
+              "input",
+              {
+                id: "settings-polling-aggregator-spike",
+                type: "checkbox",
+                checked: draft.aggregator.spike_webhook,
+                onChange: (e4) => patch("aggregator", {
+                  spike_webhook: e4.target.checked
+                })
+              }
+            )
+          ] })
+        ] })
+      ] }, row.key);
+    }) });
+  }
+
+  // src/ui/components/settings/StatuslineBlocksSection.tsx
+  function patchStatusline(p5) {
+    const draft = settingsDraft.value;
+    if (!draft) return;
+    settingsDraft.value = { ...draft, statusline: { ...draft.statusline, ...p5 } };
+  }
+  function patchBlocks(p5) {
+    const draft = settingsDraft.value;
+    if (!draft) return;
+    settingsDraft.value = { ...draft, blocks: { ...draft.blocks, ...p5 } };
+  }
+  function thresholdHint(value, kind) {
+    if (kind === "fraction") {
+      if (value < 0) return "must be >= 0";
+      if (value > 1) return "must be <= 1.0";
+    } else {
+      if (value <= 0) return "must be > 0";
+    }
+    return null;
+  }
+  function ThresholdInput({ id, label, value, kind, step, onChange }) {
+    const hint = thresholdHint(value, kind);
+    return /* @__PURE__ */ u4("div", { class: "settings-threshold", children: [
+      /* @__PURE__ */ u4("label", { class: "settings-label", for: id, children: label }),
+      /* @__PURE__ */ u4(
+        "input",
+        {
+          id,
+          type: "number",
+          class: "settings-input num",
+          value,
+          step,
+          onInput: (e4) => {
+            const raw = Number.parseFloat(e4.target.value);
+            if (Number.isFinite(raw)) onChange(raw);
+          }
+        }
+      ),
+      hint && /* @__PURE__ */ u4("div", { class: "settings-hint settings-hint--error", children: hint })
+    ] });
+  }
+  function StatuslineBlocksSection() {
+    const draft = settingsDraft.value;
+    if (!draft) return null;
+    const sl = draft.statusline;
+    const bl = draft.blocks;
+    return /* @__PURE__ */ u4("div", { class: "settings-section", children: [
+      /* @__PURE__ */ u4("div", { class: "settings-card", children: [
+        /* @__PURE__ */ u4("h3", { class: "settings-subtitle", children: "Statusline thresholds" }),
+        /* @__PURE__ */ u4("div", { class: "settings-grid-2x2", children: [
+          /* @__PURE__ */ u4(
+            ThresholdInput,
+            {
+              id: "settings-statusline-context-low",
+              label: "Context low",
+              value: sl.context_low_threshold,
+              kind: "fraction",
+              step: 0.01,
+              onChange: (v4) => patchStatusline({ context_low_threshold: v4 })
+            }
+          ),
+          /* @__PURE__ */ u4(
+            ThresholdInput,
+            {
+              id: "settings-statusline-context-medium",
+              label: "Context medium",
+              value: sl.context_medium_threshold,
+              kind: "fraction",
+              step: 0.01,
+              onChange: (v4) => patchStatusline({ context_medium_threshold: v4 })
+            }
+          ),
+          /* @__PURE__ */ u4(
+            ThresholdInput,
+            {
+              id: "settings-statusline-burn-normal",
+              label: "Burn-rate normal max",
+              value: sl.burn_rate_normal_max,
+              kind: "positive",
+              step: 0.1,
+              onChange: (v4) => patchStatusline({ burn_rate_normal_max: v4 })
+            }
+          ),
+          /* @__PURE__ */ u4(
+            ThresholdInput,
+            {
+              id: "settings-statusline-burn-moderate",
+              label: "Burn-rate moderate max",
+              value: sl.burn_rate_moderate_max,
+              kind: "positive",
+              step: 0.1,
+              onChange: (v4) => patchStatusline({ burn_rate_moderate_max: v4 })
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-card", children: [
+        /* @__PURE__ */ u4("h3", { class: "settings-subtitle", children: "Blocks" }),
+        /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+          /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-blocks-token-limit", children: "Token limit" }),
+          /* @__PURE__ */ u4("div", { class: "settings-input-group", children: [
+            /* @__PURE__ */ u4(
+              "input",
+              {
+                id: "settings-blocks-token-limit",
+                type: "number",
+                class: "settings-input num",
+                value: bl.token_limit ?? "",
+                placeholder: "auto",
+                min: 0,
+                step: 1,
+                onInput: (e4) => {
+                  const v4 = e4.target.value.trim();
+                  if (v4 === "") {
+                    patchBlocks({ token_limit: null });
+                    return;
+                  }
+                  const parsed = Number.parseInt(v4, 10);
+                  if (Number.isFinite(parsed) && parsed >= 0) {
+                    patchBlocks({ token_limit: parsed });
+                  }
+                }
+              }
+            ),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "settings-clear-btn",
+                "aria-label": "Clear token limit",
+                disabled: bl.token_limit == null,
+                onClick: () => patchBlocks({ token_limit: null }),
+                children: "[CLEAR]"
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+          /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-blocks-session-length", children: "Session length (hours)" }),
+          /* @__PURE__ */ u4("div", { class: "settings-input-group", children: [
+            /* @__PURE__ */ u4(
+              "input",
+              {
+                id: "settings-blocks-session-length",
+                type: "number",
+                class: "settings-input num",
+                value: bl.session_length_hours ?? "",
+                placeholder: "auto",
+                min: 0,
+                step: 0.5,
+                onInput: (e4) => {
+                  const v4 = e4.target.value.trim();
+                  if (v4 === "") {
+                    patchBlocks({ session_length_hours: null });
+                    return;
+                  }
+                  const parsed = Number.parseFloat(v4);
+                  if (Number.isFinite(parsed) && parsed >= 0) {
+                    patchBlocks({ session_length_hours: parsed });
+                  }
+                }
+              }
+            ),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "settings-clear-btn",
+                "aria-label": "Clear session length",
+                disabled: bl.session_length_hours == null,
+                onClick: () => patchBlocks({ session_length_hours: null }),
+                children: "[CLEAR]"
+              }
+            )
+          ] })
+        ] })
+      ] })
+    ] });
+  }
+
+  // src/ui/components/settings/SettingsModal.tsx
+  var SECTIONS = [
+    { key: "display", label: "Display", description: "Currency, locale, and number compaction.", comingSoon: false },
+    { key: "polling", label: "Polling", description: "How often live data sources are refreshed.", comingSoon: false },
+    { key: "statusline_blocks", label: "Statusline & blocks", description: "Threshold tuning and block sizing.", comingSoon: false },
+    { key: "webhooks", label: "Webhooks", description: "Notify external systems on events.", comingSoon: true },
+    { key: "aliases", label: "Project aliases", description: "Map project slugs to display names.", comingSoon: true },
+    { key: "pricing", label: "Pricing overrides", description: "Custom rates for specific models.", comingSoon: true }
+  ];
+  function isDirty(server, draft) {
+    if (!server || !draft) return false;
+    return JSON.stringify(server) !== JSON.stringify(draft);
+  }
+  function diffPatch(server, draft) {
+    const patch2 = {};
+    const keys = [
+      "display",
+      "oauth",
+      "claude_admin",
+      "openai",
+      "agent_status",
+      "aggregator",
+      "blocks",
+      "statusline",
+      "webhooks",
+      "project_aliases",
+      "pricing"
+    ];
+    for (const key of keys) {
+      if (JSON.stringify(server[key]) !== JSON.stringify(draft[key])) {
+        if (key === "webhooks") {
+          const { url_present: _drop, ...rest } = draft.webhooks;
+          void _drop;
+          patch2.webhooks = rest;
+        } else {
+          patch2[key] = draft[key];
+        }
+      }
+    }
+    return patch2;
+  }
+  function closeModal2(force = false) {
+    const dirty = isDirty(settingsServer.value, settingsDraft.value);
+    if (dirty && !force) {
+      const ok = window.confirm("Discard unsaved changes?");
+      if (!ok) return;
+    }
+    settingsModalOpen.value = false;
+    settingsDraft.value = settingsServer.value;
+    if (/^#\/settings\b/.test(window.location.hash)) {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }
+  function SettingsModal({ onDataReload }) {
+    const [loadError, setLoadError] = d2(null);
+    const [loading, setLoading] = d2(false);
+    const fetchSettings = q2(async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const r4 = await fetch("/api/settings");
+        if (!r4.ok) throw new Error(`HTTP ${r4.status}`);
+        const body = await r4.json();
+        settingsServer.value = body;
+        settingsDraft.value = body;
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+    y2(() => {
+      void fetchSettings();
+    }, [fetchSettings]);
+    y2(() => {
+      const handler = (e4) => {
+        if (e4.key === "Escape") closeModal2();
+      };
+      window.addEventListener("keydown", handler);
+      return () => window.removeEventListener("keydown", handler);
+    }, []);
+    async function handleSave() {
+      const server = settingsServer.value;
+      const draft = settingsDraft.value;
+      if (!server || !draft) return;
+      const patch2 = diffPatch(server, draft);
+      if (Object.keys(patch2).length === 0) return;
+      settingsInFlight.value = true;
+      try {
+        const r4 = await fetch("/api/settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch2)
+        });
+        if (!r4.ok) {
+          let msg = `HTTP ${r4.status}`;
+          try {
+            const body = await r4.json();
+            if (body.error) msg = body.error;
+          } catch {
+          }
+          setStatus("settings", "error", msg, 6e3);
+          return;
+        }
+        const updated = await r4.json();
+        settingsServer.value = updated;
+        settingsDraft.value = updated;
+        setStatus("settings", "success", "SAVED", 2500);
+        void onDataReload(true);
+      } catch (err) {
+        setStatus("settings", "error", err instanceof Error ? err.message : String(err), 6e3);
+      } finally {
+        settingsInFlight.value = false;
+      }
+    }
+    const dirty = isDirty(settingsServer.value, settingsDraft.value);
+    const inFlight2 = settingsInFlight.value;
+    const activeKey = settingsActiveSection.value;
+    const activeMeta = SECTIONS.find((s4) => s4.key === activeKey) ?? SECTIONS[0];
+    function renderSection2() {
+      if (loading) {
+        return /* @__PURE__ */ u4("div", { class: "settings-loading", children: "Loading settings\u2026" });
+      }
+      if (loadError) {
+        return /* @__PURE__ */ u4("div", { class: "settings-error-panel", children: [
+          /* @__PURE__ */ u4("div", { children: [
+            "[ERROR: ",
+            loadError,
+            "]"
+          ] }),
+          /* @__PURE__ */ u4("button", { type: "button", class: "settings-btn", onClick: () => void fetchSettings(), children: "[Retry]" })
+        ] });
+      }
+      if (!settingsDraft.value) return null;
+      switch (activeKey) {
+        case "display":
+          return /* @__PURE__ */ u4(DisplaySection, {});
+        case "polling":
+          return /* @__PURE__ */ u4(PollingSection, {});
+        case "statusline_blocks":
+          return /* @__PURE__ */ u4(StatuslineBlocksSection, {});
+        default:
+          return /* @__PURE__ */ u4("div", { class: "settings-loading", children: "Coming soon." });
+      }
+    }
+    return /* @__PURE__ */ u4("div", { class: "settings-overlay", onClick: () => closeModal2(), children: /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "settings-modal",
+        onClick: (e4) => e4.stopPropagation(),
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": "Settings",
+        children: [
+          /* @__PURE__ */ u4("nav", { class: "settings-rail", "aria-label": "Settings sections", children: [
+            /* @__PURE__ */ u4("h2", { class: "settings-rail-title", children: "Settings" }),
+            /* @__PURE__ */ u4("ul", { class: "settings-rail-list", children: SECTIONS.map((s4) => {
+              const isActive = s4.key === activeKey && !s4.comingSoon;
+              return /* @__PURE__ */ u4("li", { children: /* @__PURE__ */ u4(
+                "button",
+                {
+                  type: "button",
+                  class: `settings-rail-item${isActive ? " settings-rail-item--active" : ""}`,
+                  disabled: s4.comingSoon,
+                  "aria-current": isActive ? "page" : void 0,
+                  onClick: () => {
+                    if (!s4.comingSoon) settingsActiveSection.value = s4.key;
+                  },
+                  children: [
+                    /* @__PURE__ */ u4("span", { children: s4.label }),
+                    s4.comingSoon && /* @__PURE__ */ u4("span", { class: "settings-rail-suffix", children: "[Coming soon]" })
+                  ]
+                }
+              ) }, s4.key);
+            }) })
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "settings-pane", children: [
+            /* @__PURE__ */ u4("header", { class: "settings-pane-header", children: [
+              /* @__PURE__ */ u4("div", { children: [
+                /* @__PURE__ */ u4("h3", { class: "settings-pane-title", children: activeMeta.label }),
+                /* @__PURE__ */ u4("p", { class: "settings-pane-desc", children: activeMeta.description })
+              ] }),
+              /* @__PURE__ */ u4(
+                "button",
+                {
+                  type: "button",
+                  class: "settings-close",
+                  "aria-label": "Close",
+                  onClick: () => closeModal2(),
+                  children: "[X]"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ u4("div", { class: "settings-pane-body", children: renderSection2() }),
+            /* @__PURE__ */ u4("footer", { class: "settings-pane-footer", children: [
+              /* @__PURE__ */ u4(
+                "button",
+                {
+                  type: "button",
+                  class: "settings-btn",
+                  onClick: () => closeModal2(),
+                  children: "[Cancel]"
+                }
+              ),
+              /* @__PURE__ */ u4("div", { class: "settings-footer-status", children: /* @__PURE__ */ u4(InlineStatus, { placement: "settings", inline: true }) }),
+              /* @__PURE__ */ u4(
+                "button",
+                {
+                  type: "button",
+                  class: "settings-btn settings-btn--primary",
+                  disabled: !dirty || inFlight2,
+                  onClick: () => void handleSave(),
+                  children: inFlight2 ? "[Saving\u2026]" : "[Save]"
+                }
+              )
+            ] })
+          ] })
+        ]
+      }
+    ) });
+  }
+
   // src/ui/components/ImportsPanel.tsx
   function ImportsPanel({ onReload }) {
     const imports = archiveImports.value;
@@ -1565,65 +2287,6 @@
     ] });
   }
 
-  // src/ui/components/InlineStatus.tsx
-  var LABEL_MAP = {
-    success: "OK",
-    error: "ERROR",
-    loading: "LOADING",
-    info: "INFO"
-  };
-  var COLOR_MAP = {
-    success: "var(--success)",
-    error: "var(--accent)",
-    loading: "var(--text-secondary)",
-    info: "var(--text-secondary)"
-  };
-  function InlineStatus({ placement, inline = false, dismissable = true }) {
-    const entry = statusByPlacement.value[placement];
-    if (!entry) return null;
-    const label = LABEL_MAP[entry.kind];
-    const color = COLOR_MAP[entry.kind];
-    const content = entry.message ? `[${label}: ${entry.message}]` : `[${label}]`;
-    const baseStyle = {
-      fontFamily: "var(--font-mono)",
-      fontSize: "11px",
-      letterSpacing: "0.08em",
-      textTransform: "uppercase",
-      color,
-      animation: "fadeUp 0.15s ease-out",
-      display: inline ? "inline-flex" : "flex",
-      alignItems: "center",
-      gap: "8px",
-      padding: inline ? "0" : "8px 16px",
-      border: inline ? "none" : `1px solid ${color}`,
-      borderRadius: inline ? "0" : "4px",
-      background: inline ? "transparent" : "var(--surface)"
-    };
-    return /* @__PURE__ */ u4("div", { role: entry.kind === "error" ? "alert" : "status", style: baseStyle, children: [
-      /* @__PURE__ */ u4("span", { children: content }),
-      dismissable && entry.kind !== "loading" && /* @__PURE__ */ u4(
-        "button",
-        {
-          type: "button",
-          onClick: () => clearStatus(placement),
-          "aria-label": "Dismiss",
-          style: {
-            background: "transparent",
-            border: "none",
-            color,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            fontSize: "inherit",
-            letterSpacing: "inherit",
-            padding: "0 4px",
-            opacity: 0.7
-          },
-          children: "[X]"
-        }
-      )
-    ] });
-  }
-
   // src/ui/lib/agents.ts
   var ENC = encodeURIComponent;
   async function jsonOrThrow(res) {
@@ -1703,10 +2366,10 @@
       window.addEventListener("keydown", handler);
       return () => window.removeEventListener("keydown", handler);
     }, []);
-    function updateRow(rawRole, patch) {
+    function updateRow(rawRole, patch2) {
       setRowStates((prev) => ({
         ...prev,
-        [rawRole]: { ...prev[rawRole], ...patch }
+        [rawRole]: { ...prev[rawRole], ...patch2 }
       }));
     }
     async function handleSave(rawRole) {
@@ -5701,6 +6364,24 @@
             },
             "aria-label": "Open backup and snapshots",
             children: "[BACKUP]"
+          }
+        ),
+        !isMobile && /* @__PURE__ */ u4(
+          "button",
+          {
+            type: "button",
+            class: "header-button header-button--icon",
+            onClick: () => {
+              settingsModalOpen.value = true;
+              if (!/^#\/settings\b/.test(window.location.hash)) {
+                history.replaceState(null, "", `${window.location.pathname}${window.location.search}#/settings`);
+              }
+            },
+            "aria-label": "Open settings",
+            children: /* @__PURE__ */ u4("svg", { "aria-hidden": "true", width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", children: [
+              /* @__PURE__ */ u4("circle", { cx: "12", cy: "12", r: "3" }),
+              /* @__PURE__ */ u4("path", { d: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" })
+            ] })
           }
         ),
         /* @__PURE__ */ u4(
@@ -19747,6 +20428,26 @@ ${row.project}` : row.project;
   }
   window.addEventListener("hashchange", applyBackupHash);
   applyBackupHash();
+  var settingsModalMount = document.getElementById("settings-modal-mount");
+  if (settingsModalMount && dashboardRuntime) {
+    let SettingsModalRoot = function() {
+      if (!settingsModalOpen.value) return null;
+      return /* @__PURE__ */ u4(SettingsModal, { onDataReload: dashboardRuntime.loadData });
+    };
+    SettingsModalRoot2 = SettingsModalRoot;
+    settingsModalOpen.subscribe(() => {
+      R(/* @__PURE__ */ u4(SettingsModalRoot, {}), settingsModalMount);
+    });
+  }
+  var SettingsModalRoot2;
+  function readSettingsFromHash() {
+    return /^#\/settings\b/.test(window.location.hash);
+  }
+  function applySettingsHash() {
+    settingsModalOpen.value = readSettingsFromHash();
+  }
+  window.addEventListener("hashchange", applySettingsHash);
+  applySettingsHash();
   var widgetGridMount = document.getElementById("widget-grid-mount");
   if (widgetGridMount && dashboardRuntime) {
     let renderGridManager = function() {

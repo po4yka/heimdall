@@ -21,6 +21,7 @@ const EMPTY_STATUS = {
   'agent-registry': null,
   'layout-save': null,
   'project-registry': null,
+  settings: null,
 };
 
 beforeEach(() => {

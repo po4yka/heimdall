@@ -704,9 +704,13 @@ async fn fetch_live_provider_response(
     } else {
         None
     };
+    let aggregator_enabled = {
+        let live = state.settings.read().await;
+        live.aggregator.enabled
+    };
     let community_signal = if startup {
         cached_community_signal(state).await
-    } else if state.aggregator_config.enabled {
+    } else if aggregator_enabled {
         refresh_community_signal(state).await.ok().flatten()
     } else {
         None
@@ -805,10 +809,12 @@ async fn cached_or_unavailable_claude_usage(state: &Arc<AppState>) -> UsageWindo
 }
 
 async fn cached_community_signal(state: &Arc<AppState>) -> Option<CommunitySignal> {
-    if !state.aggregator_config.enabled {
-        return None;
+    {
+        let live = state.settings.read().await;
+        if !live.aggregator.enabled {
+            return None;
+        }
     }
-
     let cache = state.aggregator_cache.read().await;
     cache.as_ref().map(|(_, signal)| signal.clone())
 }
@@ -1028,6 +1034,35 @@ mod tests {
     }
 
     fn test_state() -> Arc<AppState> {
+        let live = crate::config::LiveSettings {
+            display: crate::config::Display::default(),
+            oauth: crate::config::OAuthConfig {
+                enabled: false,
+                refresh_interval: 60,
+            },
+            claude_admin: crate::config::ClaudeAdminConfig {
+                enabled: false,
+                admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+                refresh_interval: 300,
+                lookback_days: 30,
+            },
+            openai: crate::config::OpenAiConfig {
+                enabled: false,
+                admin_key_env: "OPENAI_ADMIN_KEY".into(),
+                refresh_interval: 60,
+                lookback_days: 30,
+            },
+            agent_status: crate::config::AgentStatusConfig::default(),
+            aggregator: crate::config::AggregatorConfig::default(),
+            webhooks: crate::config::WebhookConfig::default(),
+            blocks: crate::config::BlocksConfig {
+                token_limit: None,
+                session_length_hours: Some(5.0),
+                session_length_by_provider: std::collections::HashMap::new(),
+            },
+            statusline: crate::config::StatuslineConfig::default(),
+            project_aliases: std::collections::HashMap::new(),
+        };
         Arc::new(AppState {
             host: "127.0.0.1".into(),
             port: 0,
@@ -1065,6 +1100,7 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(live)),
         })
     }
 

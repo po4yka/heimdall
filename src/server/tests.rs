@@ -155,7 +155,101 @@ mod tests {
         ))
     }
 
+    /// Mirror direct field mutations on `state` (oauth_enabled, intervals, …)
+    /// into the live `LiveSettings` snapshot so consumers that now read the
+    /// snapshot see the test's overrides. Call after mutating
+    /// `state.oauth_*` / `state.openai_*` / `state.claude_admin_*` /
+    /// `state.agent_status_config` / `state.aggregator_config` /
+    /// `state.webhook_config` (works on either `&AppState` or `&Arc<AppState>`
+    /// since the inner `RwLock` is interior-mutable).
+    async fn sync_live_settings(state: &AppState) {
+        let mut live = state.settings.write().await;
+        live.oauth = crate::config::OAuthConfig {
+            enabled: state.oauth_enabled,
+            refresh_interval: state.oauth_refresh_interval,
+        };
+        live.claude_admin = crate::config::ClaudeAdminConfig {
+            enabled: state.claude_admin_enabled,
+            admin_key_env: state.claude_admin_key_env.clone(),
+            refresh_interval: state.claude_admin_refresh_interval,
+            lookback_days: state.claude_admin_lookback_days,
+        };
+        live.openai = crate::config::OpenAiConfig {
+            enabled: state.openai_enabled,
+            admin_key_env: state.openai_admin_key_env.clone(),
+            refresh_interval: state.openai_refresh_interval,
+            lookback_days: state.openai_lookback_days,
+        };
+        live.agent_status = state.agent_status_config.clone();
+        live.aggregator = state.aggregator_config.clone();
+        live.webhooks = state.webhook_config.clone();
+    }
+
+    /// Build a default `LiveSettings` matching the legacy direct fields used
+    /// by every inline `AppState` constructor below. Tests that mutate the
+    /// snapshot can clone-and-replace it before passing into the state.
+    pub(crate) fn default_live_settings() -> crate::config::LiveSettings {
+        crate::config::LiveSettings {
+            display: crate::config::Display::default(),
+            oauth: crate::config::OAuthConfig {
+                enabled: false,
+                refresh_interval: 60,
+            },
+            claude_admin: crate::config::ClaudeAdminConfig {
+                enabled: false,
+                admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+                refresh_interval: 300,
+                lookback_days: 30,
+            },
+            openai: crate::config::OpenAiConfig {
+                enabled: false,
+                admin_key_env: "OPENAI_ADMIN_KEY".into(),
+                refresh_interval: 300,
+                lookback_days: 30,
+            },
+            agent_status: AgentStatusConfig::default(),
+            aggregator: AggregatorConfig::default(),
+            webhooks: WebhookConfig::default(),
+            blocks: crate::config::BlocksConfig {
+                token_limit: None,
+                session_length_hours: Some(5.0),
+                session_length_by_provider: std::collections::HashMap::new(),
+            },
+            statusline: crate::config::StatuslineConfig::default(),
+            project_aliases: std::collections::HashMap::new(),
+        }
+    }
+
     fn base_state(db_path: std::path::PathBuf, projects_dir: std::path::PathBuf) -> AppState {
+        let live = crate::config::LiveSettings {
+            display: crate::config::Display::default(),
+            oauth: crate::config::OAuthConfig {
+                enabled: false,
+                refresh_interval: 60,
+            },
+            claude_admin: crate::config::ClaudeAdminConfig {
+                enabled: false,
+                admin_key_env: "ANTHROPIC_ADMIN_KEY".into(),
+                refresh_interval: 300,
+                lookback_days: 30,
+            },
+            openai: crate::config::OpenAiConfig {
+                enabled: false,
+                admin_key_env: "OPENAI_ADMIN_KEY".into(),
+                refresh_interval: 300,
+                lookback_days: 30,
+            },
+            agent_status: AgentStatusConfig::default(),
+            aggregator: AggregatorConfig::default(),
+            webhooks: WebhookConfig::default(),
+            blocks: crate::config::BlocksConfig {
+                token_limit: None,
+                session_length_hours: Some(5.0),
+                session_length_by_provider: std::collections::HashMap::new(),
+            },
+            statusline: crate::config::StatuslineConfig::default(),
+            project_aliases: std::collections::HashMap::new(),
+        };
         AppState {
             host: "127.0.0.1".into(),
             port: 0,
@@ -193,6 +287,7 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(live)),
         }
     }
 
@@ -1471,6 +1566,7 @@ mod tests {
         raw_state.aggregator_config.enabled = true;
         raw_state.webhook_config.cost_threshold = Some(50.0);
         let state = Arc::new(raw_state);
+        sync_live_settings(&state).await;
 
         {
             let mut oauth_cache = state.oauth_cache.write().await;
@@ -1785,6 +1881,7 @@ mod tests {
         state.oauth_cache =
             tokio::sync::RwLock::new(Some((std::time::Instant::now(), cached.clone())));
         let state = Arc::new(state);
+        sync_live_settings(&state).await;
 
         let fetch_count = Arc::new(AtomicUsize::new(0));
         let returned = crate::server::api::refresh_usage_windows_with(
@@ -1828,6 +1925,7 @@ mod tests {
             cached,
         )));
         let state = Arc::new(state);
+        sync_live_settings(&state).await;
 
         let fetch_count = Arc::new(AtomicUsize::new(0));
         let returned = crate::server::api::refresh_usage_windows_with(
@@ -1878,6 +1976,7 @@ mod tests {
             cached.clone(),
         )));
         let state = Arc::new(state);
+        sync_live_settings(&state).await;
 
         let fetch_count = Arc::new(AtomicUsize::new(0));
         let returned = crate::server::api::refresh_usage_windows_with(
@@ -1920,6 +2019,7 @@ mod tests {
         let mut state = base_state(db_path, projects);
         state.oauth_enabled = true;
         let state = Arc::new(state);
+        sync_live_settings(&state).await;
 
         let returned = crate::server::api::refresh_usage_windows_with(
             &state,
@@ -1953,12 +2053,14 @@ mod tests {
         state.oauth_enabled = true;
         state.oauth_refresh_interval = 3600;
         state.oauth_cache = tokio::sync::RwLock::new(Some((std::time::Instant::now(), cached)));
+        let state = Arc::new(state);
+        sync_live_settings(&state).await;
         let app = Router::new()
             .route(
                 "/api/usage-windows",
                 get(crate::server::api::api_usage_windows),
             )
-            .with_state(Arc::new(state));
+            .with_state(state);
 
         let resp = app
             .oneshot(
@@ -2817,6 +2919,7 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(default_live_settings())),
         });
 
         let html = assets::render_dashboard();
@@ -2999,6 +3102,7 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(default_live_settings())),
         });
 
         let snapshot = AgentStatusSnapshot {
@@ -3097,6 +3201,7 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(default_live_settings())),
         });
 
         let fetch_count = Arc::new(AtomicUsize::new(0));
@@ -3332,7 +3437,9 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(default_live_settings())),
         });
+        sync_live_settings(&state).await;
 
         let html = crate::server::assets::render_dashboard();
         let app = Router::new()
@@ -3445,7 +3552,9 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(default_live_settings())),
         });
+        sync_live_settings(&state).await;
 
         let html = crate::server::assets::render_dashboard();
         let app = Router::new()
@@ -3522,6 +3631,7 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(default_live_settings())),
         });
         let html = assets::render_dashboard();
         Router::new()
@@ -3782,6 +3892,7 @@ mod tests {
             live_provider_cache: tokio::sync::RwLock::new(None),
             live_provider_refresh_lock: tokio::sync::Mutex::new(()),
             version_cache: crate::server::version_check::new_cache(),
+            settings: std::sync::Arc::new(tokio::sync::RwLock::new(default_live_settings())),
         });
         let app = Router::new()
             .route(
@@ -4283,9 +4394,11 @@ mod tests {
         state.openai_enabled = true;
         state.openai_refresh_interval = 3600;
         state.openai_cache = tokio::sync::RwLock::new(Some((std::time::Instant::now(), cached)));
+        let state = Arc::new(state);
+        sync_live_settings(&state).await;
         let app = Router::new()
             .route("/api/data", get(crate::server::api::api_data))
-            .with_state(Arc::new(state));
+            .with_state(state);
 
         let resp = app
             .oneshot(
@@ -5285,5 +5398,287 @@ mod tests {
             "redacted URL leaked into response: {}",
             serialised
         );
+    }
+
+    // ── Settings UI M2 (`PATCH /api/settings`) ─────────────────────────────
+
+    /// Issue a PATCH against the live router and parse the response. Holds
+    /// the HEIMDALL_CONFIG mutex via the caller.
+    async fn settings_patch_request(
+        app: Router,
+        body: serde_json::Value,
+    ) -> (StatusCode, serde_json::Value) {
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/api/settings")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = resp.status();
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let parsed: serde_json::Value = if bytes.is_empty() {
+            serde_json::Value::Null
+        } else {
+            serde_json::from_slice(&bytes)
+                .unwrap_or_else(|_| serde_json::json!({"_raw": String::from_utf8_lossy(&bytes)}))
+        };
+        (status, parsed)
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_patch_applies_display_currency() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(&cfg_path, r#"{"display": {"currency": "USD"}}"#).unwrap();
+        settings_set_test_config_env(&cfg_path);
+
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let (status, parsed) =
+            settings_patch_request(app, serde_json::json!({"display": {"currency": "EUR"}})).await;
+
+        settings_remove_test_config_env();
+
+        assert_eq!(status, StatusCode::OK, "body: {parsed}");
+        assert_eq!(parsed["display"]["currency"].as_str(), Some("EUR"));
+
+        let raw = std::fs::read_to_string(&cfg_path).unwrap();
+        let on_disk: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(on_disk["display"]["currency"].as_str(), Some("EUR"));
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_patch_clamps_oauth_interval() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(&cfg_path, r#"{}"#).unwrap();
+        settings_set_test_config_env(&cfg_path);
+
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let (status, parsed) =
+            settings_patch_request(app, serde_json::json!({"oauth": {"refresh_interval": 5}}))
+                .await;
+
+        settings_remove_test_config_env();
+
+        assert_eq!(status, StatusCode::OK, "body: {parsed}");
+        assert_eq!(parsed["oauth"]["refresh_interval"].as_u64(), Some(30));
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_patch_rejects_inverted_thresholds() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(&cfg_path, r#"{}"#).unwrap();
+        settings_set_test_config_env(&cfg_path);
+
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let (status, parsed) = settings_patch_request(
+            app,
+            serde_json::json!({
+                "statusline": {
+                    "context_low_threshold": 0.9,
+                    "context_medium_threshold": 0.5
+                }
+            }),
+        )
+        .await;
+
+        settings_remove_test_config_env();
+
+        assert_eq!(status, StatusCode::BAD_REQUEST, "body: {parsed}");
+        let err = parsed["error"].as_str().unwrap_or("").to_lowercase();
+        assert!(
+            err.contains("low") || err.contains("medium"),
+            "expected low/medium hint in error: {err}"
+        );
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_patch_rejects_invalid_currency() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(&cfg_path, r#"{}"#).unwrap();
+        settings_set_test_config_env(&cfg_path);
+
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let (status, parsed) =
+            settings_patch_request(app, serde_json::json!({"display": {"currency": "ZZZ"}})).await;
+
+        settings_remove_test_config_env();
+
+        assert_eq!(status, StatusCode::BAD_REQUEST, "body: {parsed}");
+        let err = parsed["error"].as_str().unwrap_or("");
+        assert!(
+            err.contains("currency"),
+            "expected currency mention in error: {err}"
+        );
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_patch_url_set_and_clear() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(&cfg_path, r#"{}"#).unwrap();
+        settings_set_test_config_env(&cfg_path);
+
+        let (db_path, projects) = setup_test_db(&tmp);
+        let options = test_options(db_path, projects);
+        let state = build_state(&options, tokio::sync::broadcast::channel::<String>(16).0);
+        let app = build_router(state.clone());
+
+        // Set
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/api/settings")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"webhooks": {"url": "https://hooks.example.com/in"}})
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["webhooks"]["url_present"].as_bool(), Some(true));
+
+        // Clear via explicit null
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/api/settings")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"webhooks": {"url": null}}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["webhooks"]["url_present"].as_bool(), Some(false));
+
+        settings_remove_test_config_env();
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_patch_preserves_unknown_keys() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(
+            &cfg_path,
+            r#"{
+                "macos_only": {"merge_icons": true, "browser": "chrome"},
+                "display": {"currency": "USD"}
+            }"#,
+        )
+        .unwrap();
+        settings_set_test_config_env(&cfg_path);
+
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let (status, _parsed) =
+            settings_patch_request(app, serde_json::json!({"display": {"currency": "EUR"}})).await;
+
+        settings_remove_test_config_env();
+
+        assert_eq!(status, StatusCode::OK);
+
+        let raw = std::fs::read_to_string(&cfg_path).unwrap();
+        let on_disk: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(on_disk["macos_only"]["merge_icons"].as_bool(), Some(true));
+        assert_eq!(on_disk["macos_only"]["browser"].as_str(), Some("chrome"));
+        assert_eq!(on_disk["display"]["currency"].as_str(), Some("EUR"));
+    }
+
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_patch_publishes_to_live_snapshot() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(&cfg_path, r#"{}"#).unwrap();
+        settings_set_test_config_env(&cfg_path);
+
+        let (db_path, projects) = setup_test_db(&tmp);
+        let options = test_options(db_path, projects);
+        let state = build_state(&options, tokio::sync::broadcast::channel::<String>(16).0);
+        let app = build_router(state.clone());
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/api/settings")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"oauth": {"refresh_interval": 120}}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        settings_remove_test_config_env();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let live = state.settings.read().await;
+        assert_eq!(live.oauth.refresh_interval, 120);
     }
 }

@@ -120,7 +120,12 @@ pub(super) async fn build_local_notification_state(
     community_signal: Option<&crate::status_aggregator::models::CommunitySignal>,
 ) -> Result<LocalNotificationState> {
     let generated_at = chrono::Utc::now().to_rfc3339();
-    let cost_threshold_usd = state.webhook_config.cost_threshold;
+    // Snapshot live settings once; the read guard is dropped before any DB or
+    // network awaits below.
+    let (cost_threshold_usd, aggregator_enabled) = {
+        let live = state.settings.read().await;
+        (live.webhooks.cost_threshold, live.aggregator.enabled)
+    };
     let mut conditions = Vec::new();
 
     if let Some(session) = claude_usage.and_then(|usage| usage.session.as_ref()) {
@@ -161,7 +166,7 @@ pub(super) async fn build_local_notification_state(
         ));
     }
 
-    if state.aggregator_config.enabled
+    if aggregator_enabled
         && let Some(signal) = community_signal
         && signal.enabled
     {

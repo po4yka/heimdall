@@ -1,5 +1,6 @@
 import { render } from 'preact';
 import { BackupModal } from './components/BackupModal';
+import { SettingsModal } from './components/settings/SettingsModal';
 import { ImportsPanel } from './components/ImportsPanel';
 import { WebCapturesPanel } from './components/WebCapturesPanel';
 import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
@@ -26,6 +27,7 @@ import {
   projectSearchQuery,
   registryByUuid,
   selectedProjectUuid,
+  settingsModalOpen,
   webConversations,
   companionHeartbeat,
   rawData,
@@ -159,6 +161,28 @@ function applyBackupHash(): void {
 }
 window.addEventListener('hashchange', applyBackupHash);
 applyBackupHash();
+
+// Settings modal — same render-on-signal-change pattern as BackupModal,
+// plus a `#/settings` hash route so users can deep-link to it.
+const settingsModalMount = document.getElementById('settings-modal-mount');
+if (settingsModalMount && dashboardRuntime) {
+  function SettingsModalRoot() {
+    if (!settingsModalOpen.value) return null;
+    return <SettingsModal onDataReload={dashboardRuntime!.loadData} />;
+  }
+  settingsModalOpen.subscribe(() => {
+    render(<SettingsModalRoot />, settingsModalMount);
+  });
+}
+
+function readSettingsFromHash(): boolean {
+  return /^#\/settings\b/.test(window.location.hash);
+}
+function applySettingsHash(): void {
+  settingsModalOpen.value = readSettingsFromHash();
+}
+window.addEventListener('hashchange', applySettingsHash);
+applySettingsHash();
 
 // Mount all screen grids into #widget-grid-mount.
 // The ScreenGridManager shows only the active screen's grid; others are hidden.

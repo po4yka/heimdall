@@ -18,7 +18,7 @@ use crate::tz::TzParams;
 use crate::agent_status;
 use crate::agent_status::models::AgentStatusSnapshot;
 use crate::claude_admin;
-use crate::config::{AgentStatusConfig, AggregatorConfig, WebhookConfig};
+use crate::config::{AgentStatusConfig, AggregatorConfig, LiveSettings, WebhookConfig};
 use crate::live_providers;
 use crate::models::ClaudeAdminSummary;
 use crate::models::ClaudeUsageResponse;
@@ -107,6 +107,11 @@ pub struct AppState {
     pub live_provider_refresh_lock: Mutex<()>,
     /// Version-check cache: current + latest release info polled from GitHub.
     pub version_cache: crate::server::version_check::VersionCache,
+    /// Hot-reloadable subset of `Config`. Background tasks read through this
+    /// snapshot on each iteration so `PATCH /api/settings` propagates without
+    /// a process restart. The legacy direct fields above are kept as the
+    /// startup-resolved fallback (host/port/db_path are restart-only anyway).
+    pub settings: Arc<RwLock<LiveSettings>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -854,14 +859,25 @@ where
     G: FnOnce() -> Gfut,
     Gfut: std::future::Future<Output = ClaudeAdminSummary>,
 {
-    if !state.oauth_enabled && !state.claude_admin_enabled {
+    // Read live settings once per call so PATCH propagates without restart.
+    // Drop the guard before any `.await` to avoid holding it across yields.
+    let (oauth_enabled, oauth_refresh_interval, claude_admin_enabled) = {
+        let live = state.settings.read().await;
+        (
+            live.oauth.enabled,
+            live.oauth.refresh_interval,
+            live.claude_admin.enabled,
+        )
+    };
+
+    if !oauth_enabled && !claude_admin_enabled {
         return UsageWindowsResponse::unavailable();
     }
 
     {
         let cache = state.oauth_cache.read().await;
         if let Some((fetched_at, ref data)) = *cache
-            && fetched_at.elapsed().as_secs() < state.oauth_refresh_interval
+            && fetched_at.elapsed().as_secs() < oauth_refresh_interval
         {
             return data.clone();
         }
@@ -871,20 +887,20 @@ where
     {
         let cache = state.oauth_cache.read().await;
         if let Some((fetched_at, ref data)) = *cache
-            && fetched_at.elapsed().as_secs() < state.oauth_refresh_interval
+            && fetched_at.elapsed().as_secs() < oauth_refresh_interval
         {
             return data.clone();
         }
     }
 
-    let oauth_resp = if state.oauth_enabled {
+    let oauth_resp = if oauth_enabled {
         fetcher().await
     } else {
         UsageWindowsResponse::unavailable()
     };
     let resp = if oauth_resp.available {
         oauth_resp
-    } else if state.claude_admin_enabled {
+    } else if claude_admin_enabled {
         let admin = admin_fetcher().await;
         if admin.error.is_none() {
             UsageWindowsResponse::from_admin_fallback(admin)
@@ -1728,14 +1744,21 @@ where
     F: FnOnce(AgentStatusConfig, Option<String>) -> Fut,
     Fut: std::future::Future<Output = Result<(AgentStatusSnapshot, Option<String>), StatusCode>>,
 {
-    if !state.agent_status_config.enabled {
+    // Snapshot the current live agent_status config once per call. Drop the
+    // guard before awaiting so the read lock isn't held across yields.
+    let live_agent_status = {
+        let live = state.settings.read().await;
+        live.agent_status.clone()
+    };
+
+    if !live_agent_status.enabled {
         return Ok(AgentStatusSnapshot::default());
     }
 
     {
         let cache = state.agent_status_cache.read().await;
         if let Some((fetched_at, ref data, _)) = *cache
-            && fetched_at.elapsed().as_secs() < state.agent_status_config.refresh_interval
+            && fetched_at.elapsed().as_secs() < live_agent_status.refresh_interval
         {
             return Ok(data.clone());
         }
@@ -1745,13 +1768,13 @@ where
     {
         let cache = state.agent_status_cache.read().await;
         if let Some((fetched_at, ref data, _)) = *cache
-            && fetched_at.elapsed().as_secs() < state.agent_status_config.refresh_interval
+            && fetched_at.elapsed().as_secs() < live_agent_status.refresh_interval
         {
             return Ok(data.clone());
         }
     }
 
-    let config = state.agent_status_config.clone();
+    let config = live_agent_status.clone();
     let cached_etag = {
         let cache = state.agent_status_cache.read().await;
         cache.as_ref().and_then(|(_, _, etag)| etag.clone())
@@ -2452,14 +2475,19 @@ pub async fn api_community_signal(
 pub(crate) async fn refresh_community_signal(
     state: &Arc<AppState>,
 ) -> Result<Option<CommunitySignal>, StatusCode> {
-    if !state.aggregator_config.enabled {
+    // Live-snapshot read; guard dropped before any `.await`.
+    let live_aggregator = {
+        let live = state.settings.read().await;
+        live.aggregator.clone()
+    };
+    if !live_aggregator.enabled {
         return Ok(None);
     }
 
     {
         let cache = state.aggregator_cache.read().await;
         if let Some((fetched_at, ref data)) = *cache
-            && fetched_at.elapsed().as_secs() < state.aggregator_config.refresh_interval
+            && fetched_at.elapsed().as_secs() < live_aggregator.refresh_interval
         {
             return Ok(Some(data.clone()));
         }
@@ -2469,13 +2497,13 @@ pub(crate) async fn refresh_community_signal(
     {
         let cache = state.aggregator_cache.read().await;
         if let Some((fetched_at, ref data)) = *cache
-            && fetched_at.elapsed().as_secs() < state.aggregator_config.refresh_interval
+            && fetched_at.elapsed().as_secs() < live_aggregator.refresh_interval
         {
             return Ok(Some(data.clone()));
         }
     }
 
-    let config = state.aggregator_config.clone();
+    let config = live_aggregator.clone();
     let signal = tokio::task::spawn_blocking(move || status_aggregator::poll(&config))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -3098,6 +3126,133 @@ pub async fn settings_get(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     Ok(Json(response))
+}
+
+/// Body returned for client-facing settings errors. The shape is stable
+/// (`{"error": "<field>: <msg>"}`) so the UI can pluck it without parsing.
+/// Webhook URLs are never echoed even when they trigger validation —
+/// `ValidationError` messages describe the issue without quoting the value.
+#[derive(Debug, Serialize)]
+pub struct SettingsErrorBody {
+    pub error: String,
+}
+
+/// `PATCH /api/settings` — apply a deeply-optional patch to the config and
+/// publish the result into the live snapshot for hot-reload.
+///
+/// Validation rules live on `Config::apply_patch`. Out-of-range numeric
+/// values are silently clamped; structural errors (bad currency, inverted
+/// thresholds, malformed URL) return `400 Bad Request` with a JSON body.
+///
+/// Pipeline:
+///   1. Loopback guard.
+///   2. Decode body (small payloads, ≤ 64 KiB).
+///   3. spawn_blocking: read config + raw root → apply patch → atomic write
+///      preserving Swift-only top-level keys.
+///   4. Publish `LiveSettings::from_config(&cfg)` into `state.settings`.
+///   5. Return the fresh `SettingsResponse` (URL redacted as in GET).
+pub async fn settings_patch(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<crate::config::SettingsResponse>, (StatusCode, Json<SettingsErrorBody>)> {
+    enforce_loopback_request(&request).map_err(|status| {
+        (
+            status,
+            Json(SettingsErrorBody {
+                error: "loopback only".into(),
+            }),
+        )
+    })?;
+
+    let body_bytes = axum::body::to_bytes(request.into_body(), 64 * 1024)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(SettingsErrorBody {
+                    error: "request body too large".into(),
+                }),
+            )
+        })?;
+
+    let patch: crate::config::SettingsPatch = serde_json::from_slice(&body_bytes).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(SettingsErrorBody {
+                error: format!("invalid request body: {e}"),
+            }),
+        )
+    })?;
+
+    let host = state.host.clone();
+    let port = state.port;
+    let db_path = state.db_path.clone();
+
+    let result = tokio::task::spawn_blocking(move || -> Result<
+        (crate::config::Config, crate::config::SettingsResponse),
+        SettingsPatchError,
+    > {
+        let path = crate::config::resolve_config_path().unwrap_or_else(|| {
+            // No config file yet — write to the canonical XDG path.
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join(".config")
+                .join("heimdall")
+                .join("config.json")
+        });
+        let (mut cfg, root) =
+            crate::config_io::read_config_root(&path).map_err(SettingsPatchError::Io)?;
+        cfg.apply_patch(patch)
+            .map_err(SettingsPatchError::Validation)?;
+        crate::config_io::write_config_atomic_preserving(&path, &cfg, &root)
+            .map_err(SettingsPatchError::Io)?;
+        let response = cfg.to_settings_response(&host, port, &db_path);
+        Ok((cfg, response))
+    })
+    .await
+    .map_err(|e| {
+        tracing::warn!("settings_patch spawn_blocking join error: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(SettingsErrorBody {
+                error: "internal error".into(),
+            }),
+        )
+    })?;
+
+    let (cfg, response) = match result {
+        Ok(pair) => pair,
+        Err(SettingsPatchError::Validation(err)) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(SettingsErrorBody {
+                    error: err.to_string(),
+                }),
+            ));
+        }
+        Err(SettingsPatchError::Io(err)) => {
+            tracing::warn!("settings_patch IO error: {}", err);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(SettingsErrorBody {
+                    error: "failed to write config".into(),
+                }),
+            ));
+        }
+    };
+
+    {
+        let mut live = state.settings.write().await;
+        *live = LiveSettings::from_config(&cfg);
+    }
+
+    Ok(Json(response))
+}
+
+#[derive(Debug)]
+enum SettingsPatchError {
+    Validation(crate::config::ValidationError),
+    Io(anyhow::Error),
 }
 
 // ---------------------------------------------------------------------------

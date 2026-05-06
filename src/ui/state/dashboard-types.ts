@@ -678,6 +678,64 @@ export interface CodexPlanSection {
   history: CodexPlanDailyRow[];
 }
 
+// ── Settings (M1 backend → M2 web UI) ─────────────────────────────────
+// Mirrors src/config.rs `SettingsResponse` curated payload. snake_case
+// matches the wire shape so we can pass it through unchanged.
+export interface SettingsResponse {
+  display: { currency: string | null; locale: string | null; compact: boolean | null };
+  oauth: { enabled: boolean; refresh_interval: number };
+  claude_admin: { enabled: boolean; refresh_interval: number; lookback_days: number };
+  openai: { enabled: boolean; refresh_interval: number; lookback_days: number };
+  agent_status: {
+    enabled: boolean; refresh_interval: number;
+    claude_enabled: boolean; openai_enabled: boolean;
+    alert_min_severity: 'minor' | 'major' | 'critical';
+  };
+  aggregator: { enabled: boolean; refresh_interval: number; spike_webhook: boolean };
+  blocks: { token_limit: number | null; session_length_hours: number | null };
+  statusline: {
+    context_low_threshold: number; context_medium_threshold: number;
+    burn_rate_normal_max: number; burn_rate_moderate_max: number;
+  };
+  webhooks: {
+    url_present: boolean;
+    cost_threshold: number | null;
+    session_depleted: boolean;
+    agent_status: boolean;
+    spike_webhook: boolean;
+    cap_changes: boolean;
+    agent_stop_reason: boolean;
+    agent_stop_reason_filter: string[] | null;
+  };
+  project_aliases: { entries: Array<{ slug: string; display_name: string }> };
+  pricing: { overrides: Array<{ model: string; input: number; output: number; cache_write: number | null; cache_read: number | null }> };
+  read_only: {
+    host: string; port: number; db_path: string;
+    pricing_source: { source: string | null; refresh_hours: number | null };
+    claude_admin_key_env: string;
+    openai_admin_key_env: string;
+    aggregator_key_env_var: string;
+  };
+}
+
+export type SettingsSectionKey =
+  | 'display' | 'polling' | 'statusline_blocks'
+  | 'webhooks' | 'aliases' | 'pricing';
+
+export type SettingsPatch = Partial<{
+  display: Partial<SettingsResponse['display']>;
+  oauth: Partial<SettingsResponse['oauth']>;
+  claude_admin: Partial<SettingsResponse['claude_admin']>;
+  openai: Partial<SettingsResponse['openai']>;
+  agent_status: Partial<SettingsResponse['agent_status']>;
+  aggregator: Partial<SettingsResponse['aggregator']>;
+  blocks: Partial<SettingsResponse['blocks']>;
+  statusline: Partial<SettingsResponse['statusline']>;
+  webhooks: Partial<Omit<SettingsResponse['webhooks'], 'url_present'>> & { url?: string | null };
+  project_aliases: SettingsResponse['project_aliases'];
+  pricing: SettingsResponse['pricing'];
+}>;
+
 // Feature 3: Today view types
 export interface TodayHourRow {
   hour: number;

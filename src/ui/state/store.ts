@@ -1,6 +1,6 @@
 import { computed, signal } from '@preact/signals';
 import type { PaginationState, VisibilityState } from '@tanstack/table-core';
-import type { DashboardData, ProjectRegistryRow, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse, CostReconciliationResponse, VersionInfo, TodayResponse } from './types';
+import type { DashboardData, ProjectRegistryRow, RangeKey, BucketKey, SessionRow, ProjectAgg, BillingBlocksResponse, ContextWindowResponse, CostReconciliationResponse, VersionInfo, TodayResponse, SettingsResponse, SettingsSectionKey } from './types';
 
 // ── Core data ────────────────────────────────────────────────────────
 export const rawData = signal<DashboardData | null>(null);
@@ -112,7 +112,7 @@ export const rescanDisabled = signal<boolean>(false);
 export const themeMode = signal<'dark' | 'light'>('dark');
 
 // ── Inline status (replaces toasts) ──────────────────────────────────
-export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal' | 'snapshot' | 'agent-registry' | 'layout-save' | 'project-registry';
+export type StatusPlacement = 'global' | 'rate-windows' | 'rescan' | 'header-refresh' | 'agent-status' | 'community-signal' | 'snapshot' | 'agent-registry' | 'layout-save' | 'project-registry' | 'settings';
 export type StatusKind = 'success' | 'error' | 'loading' | 'info';
 
 export interface StatusEntry {
@@ -131,6 +131,7 @@ export const statusByPlacement = signal<Record<StatusPlacement, StatusEntry | nu
   'agent-registry': null,
   'layout-save': null,
   'project-registry': null,
+  'settings': null,
 });
 
 // ── Agent telemetry UI state ─────────────────────────────────────────
@@ -139,6 +140,17 @@ export const registryModalOpen = signal<{ project: string } | null>(null);
 // hash route. Replaces the old top-level `backup` tab.
 export const backupModalOpen = signal<boolean>(false);
 export const setupBannerDismissed = signal(false);
+
+// ── Settings modal (M2) ──────────────────────────────────────────────
+// Modal open flag, server-side response (last loaded), local draft, in-flight
+// PATCH guard, and the active section in the left rail. Mirrors the
+// backupModalOpen pattern but adds a draft/server pair so the modal can
+// compute `dirty` without losing user input on re-renders.
+export const settingsModalOpen = signal<boolean>(false);
+export const settingsServer = signal<SettingsResponse | null>(null);
+export const settingsDraft = signal<SettingsResponse | null>(null);
+export const settingsInFlight = signal<boolean>(false);
+export const settingsActiveSection = signal<SettingsSectionKey>('display');
 
 // ── Project management state ────────────────────────────────────────
 /**

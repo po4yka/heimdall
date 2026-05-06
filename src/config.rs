@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use thiserror::Error;
 use tracing::debug;
 
 /// Top-level Heimdall configuration.
@@ -957,6 +958,768 @@ impl Config {
                 openai_admin_key_env: self.openai.admin_key_env.clone(),
                 aggregator_key_env_var: self.aggregator.key_env_var.clone(),
             },
+        }
+    }
+}
+
+// ── Settings UI patch types (M2: PATCH /api/settings) ────────────────────
+//
+// `SettingsPatch` mirrors `SettingsResponse` but every field is deeply
+// optional so the caller can patch one leaf without restating the rest.
+// `apply_patch` runs validation/clamping, then mutates `Config` in place.
+//
+// Webhook URL uses a custom `UrlPatch` deserializer that interprets:
+//   - omitted field            → preserve existing URL
+//   - `"url": null`            → clear the URL (set to None)
+//   - `"url": "https://..."`   → replace with new URL
+//
+// `project_aliases.entries` and `pricing.overrides` use replacement
+// semantics — the whole list is swapped out atomically when present.
+
+/// Errors returned by [`Config::apply_patch`].
+#[derive(Debug, Error)]
+pub enum ValidationError {
+    /// Numeric value outside the accepted range.
+    #[error("{field}: {msg}")]
+    OutOfRange {
+        /// Dotted-path identifier of the offending field.
+        field: String,
+        /// Human-readable explanation (no secrets).
+        msg: String,
+    },
+    /// Value failed structural validation (regex / format / cross-field rule).
+    #[error("{field}: {msg}")]
+    Invalid {
+        /// Dotted-path identifier of the offending field.
+        field: String,
+        /// Human-readable explanation (no secrets).
+        msg: String,
+    },
+}
+
+impl ValidationError {
+    /// Build an `OutOfRange` error. Currently unused — all numeric range
+    /// violations clamp silently per the M2 plan — but kept for future
+    /// validators that need a soft-rejection path (e.g. when the patch
+    /// includes a value the caller expects to round-trip exactly).
+    #[allow(dead_code)]
+    pub(crate) fn out_of_range(field: impl Into<String>, msg: impl Into<String>) -> Self {
+        Self::OutOfRange {
+            field: field.into(),
+            msg: msg.into(),
+        }
+    }
+
+    fn invalid(field: impl Into<String>, msg: impl Into<String>) -> Self {
+        Self::Invalid {
+            field: field.into(),
+            msg: msg.into(),
+        }
+    }
+}
+
+/// Tristate setter for `webhooks.url`. JSON encoding:
+///   - field omitted: caller leaves the existing URL untouched
+///   - `null`:        clear the existing URL
+///   - `"<url>"`:     replace with the given URL
+#[derive(Debug)]
+pub enum UrlPatch {
+    /// Clear the URL (`null` in JSON).
+    Clear,
+    /// Replace the URL with the given value.
+    Set(String),
+}
+
+impl<'de> Deserialize<'de> for UrlPatch {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt: Option<String> = Option::deserialize(deserializer)?;
+        Ok(match opt {
+            None => UrlPatch::Clear,
+            Some(s) => UrlPatch::Set(s),
+        })
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DisplayPatch {
+    pub currency: Option<String>,
+    /// Wrapped in `Option<Option<...>>` so the caller can explicitly null the
+    /// locale via `"locale": null` (set to None) versus omitting the field.
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub locale: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub compact: Option<Option<bool>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct OAuthPatch {
+    pub enabled: Option<bool>,
+    pub refresh_interval: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ClaudeAdminPatch {
+    pub enabled: Option<bool>,
+    pub refresh_interval: Option<u64>,
+    pub lookback_days: Option<i64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct OpenAiPatch {
+    pub enabled: Option<bool>,
+    pub refresh_interval: Option<u64>,
+    pub lookback_days: Option<i64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AgentStatusPatch {
+    pub enabled: Option<bool>,
+    pub refresh_interval: Option<u64>,
+    pub claude_enabled: Option<bool>,
+    pub openai_enabled: Option<bool>,
+    pub alert_min_severity: Option<AlertSeverity>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AggregatorPatch {
+    pub enabled: Option<bool>,
+    pub refresh_interval: Option<u64>,
+    pub spike_webhook: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct BlocksPatch {
+    /// Outer Option = field omitted vs present; inner Option = explicit null
+    /// (clear) vs concrete value.
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub token_limit: Option<Option<i64>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub session_length_hours: Option<Option<f64>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct StatuslinePatch {
+    pub context_low_threshold: Option<f64>,
+    pub context_medium_threshold: Option<f64>,
+    pub burn_rate_normal_max: Option<f64>,
+    pub burn_rate_moderate_max: Option<f64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WebhooksPatch {
+    /// 3-state setter: omitted preserves, `null` clears, string sets.
+    /// `deserialize_some` lifts the inner deserialization into `Some(...)`
+    /// so the field-present-with-null case (`UrlPatch::Clear`) survives.
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub url: Option<UrlPatch>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub cost_threshold: Option<Option<f64>>,
+    pub session_depleted: Option<bool>,
+    pub agent_status: Option<bool>,
+    pub spike_webhook: Option<bool>,
+    pub cap_changes: Option<bool>,
+    pub agent_stop_reason: Option<bool>,
+    /// `null` clears the override (revert to hardcoded default), array sets it.
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub agent_stop_reason_filter: Option<Option<Vec<String>>>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProjectAliasesPatch {
+    /// Replacement semantics: when present, the whole alias list is replaced.
+    pub entries: Option<Vec<ProjectAliasInput>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectAliasInput {
+    pub slug: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct PricingPatch {
+    /// Replacement semantics: when present, the whole override map is replaced.
+    pub overrides: Option<Vec<PricingEntryInput>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PricingEntryInput {
+    pub model: String,
+    pub input: f64,
+    pub output: f64,
+    #[serde(default)]
+    pub cache_write: Option<f64>,
+    #[serde(default)]
+    pub cache_read: Option<f64>,
+}
+
+/// Top-level deeply-optional patch sent to `PATCH /api/settings`.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SettingsPatch {
+    pub display: Option<DisplayPatch>,
+    pub oauth: Option<OAuthPatch>,
+    pub claude_admin: Option<ClaudeAdminPatch>,
+    pub openai: Option<OpenAiPatch>,
+    pub agent_status: Option<AgentStatusPatch>,
+    pub aggregator: Option<AggregatorPatch>,
+    pub blocks: Option<BlocksPatch>,
+    pub statusline: Option<StatuslinePatch>,
+    pub webhooks: Option<WebhooksPatch>,
+    pub project_aliases: Option<ProjectAliasesPatch>,
+    pub pricing: Option<PricingPatch>,
+}
+
+/// Custom deserializer that wraps any value (including `null`) into
+/// `Some(...)`, distinguishing "field present with null" from "field omitted".
+fn deserialize_some<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+const REFRESH_INTERVAL_MIN: u64 = 30;
+const REFRESH_INTERVAL_MAX: u64 = 86_400;
+const AGGREGATOR_REFRESH_MIN: u64 = 60;
+const LOOKBACK_DAYS_MIN: i64 = 1;
+const LOOKBACK_DAYS_MAX: i64 = 365;
+const SESSION_HOURS_MAX: f64 = 168.0;
+const WEBHOOK_URL_MAX_LEN: usize = 2048;
+const NAME_MAX_LEN: usize = 256;
+
+fn clamp_refresh_interval(value: u64) -> u64 {
+    value.clamp(REFRESH_INTERVAL_MIN, REFRESH_INTERVAL_MAX)
+}
+
+fn clamp_aggregator_refresh(value: u64) -> u64 {
+    value.clamp(AGGREGATOR_REFRESH_MIN, REFRESH_INTERVAL_MAX)
+}
+
+fn clamp_lookback_days(value: i64) -> i64 {
+    value.clamp(LOOKBACK_DAYS_MIN, LOOKBACK_DAYS_MAX)
+}
+
+fn validate_webhook_url(url: &str) -> Result<(), ValidationError> {
+    if url.len() > WEBHOOK_URL_MAX_LEN {
+        return Err(ValidationError::invalid(
+            "webhooks.url",
+            format!(
+                "URL must be at most {WEBHOOK_URL_MAX_LEN} characters (got {})",
+                url.len()
+            ),
+        ));
+    }
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err(ValidationError::invalid(
+            "webhooks.url",
+            "URL must start with http:// or https://",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_locale(s: &str) -> Result<(), ValidationError> {
+    // BCP-47 subset: 2-3 lowercase letters, optional -XX uppercase region.
+    let bytes = s.as_bytes();
+    let n = bytes.len();
+    if !(n == 2 || n == 3 || n == 5 || n == 6) {
+        return Err(ValidationError::invalid(
+            "display.locale",
+            "expected BCP-47 form like 'en' or 'en-US'",
+        ));
+    }
+    // Language part
+    let lang_len = if n == 5 || (n == 6 && bytes[3] == b'-') {
+        if bytes[2] == b'-' { 2 } else { 3 }
+    } else {
+        n
+    };
+    if lang_len != 2 && lang_len != 3 {
+        return Err(ValidationError::invalid(
+            "display.locale",
+            "expected BCP-47 form like 'en' or 'en-US'",
+        ));
+    }
+    for &b in &bytes[..lang_len] {
+        if !b.is_ascii_lowercase() {
+            return Err(ValidationError::invalid(
+                "display.locale",
+                "language code must be 2-3 lowercase letters",
+            ));
+        }
+    }
+    if lang_len == n {
+        return Ok(());
+    }
+    if bytes[lang_len] != b'-' {
+        return Err(ValidationError::invalid(
+            "display.locale",
+            "expected '-' between language and region",
+        ));
+    }
+    let region = &bytes[lang_len + 1..];
+    if region.len() != 2 || !region.iter().all(|b| b.is_ascii_uppercase()) {
+        return Err(ValidationError::invalid(
+            "display.locale",
+            "region must be 2 uppercase letters",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_currency(code: &str) -> Result<(), ValidationError> {
+    if code.len() != 3 || !code.bytes().all(|b| b.is_ascii_alphabetic()) {
+        return Err(ValidationError::invalid(
+            "display.currency",
+            "expected 3 ASCII letters (ISO 4217)",
+        ));
+    }
+    if !crate::currency::is_known_currency_code(code) {
+        return Err(ValidationError::invalid(
+            "display.currency",
+            "unknown currency code",
+        ));
+    }
+    Ok(())
+}
+
+impl Config {
+    /// Apply a [`SettingsPatch`] to this config, validating and clamping each
+    /// field. Returns `Err(ValidationError)` on the first violation, leaving
+    /// the config unmodified.
+    ///
+    /// Clamping rules silently bound out-of-range numeric values (e.g.
+    /// `oauth.refresh_interval` < 30 → 30). Inversion rules (low ≥ medium)
+    /// reject because the caller clearly intended specific values.
+    pub fn apply_patch(&mut self, patch: SettingsPatch) -> Result<(), ValidationError> {
+        // Validate everything first; only mutate after all checks pass so a
+        // single bad field doesn't leave the config partially patched.
+        if let Some(ref display) = patch.display
+            && let Some(ref currency) = display.currency
+        {
+            validate_currency(currency)?;
+        }
+        if let Some(ref display) = patch.display
+            && let Some(Some(ref locale)) = display.locale
+        {
+            validate_locale(locale)?;
+        }
+        if let Some(ref statusline) = patch.statusline {
+            let resolved_low = statusline
+                .context_low_threshold
+                .unwrap_or(self.statusline.context_low_threshold);
+            let resolved_med = statusline
+                .context_medium_threshold
+                .unwrap_or(self.statusline.context_medium_threshold);
+            if statusline.context_low_threshold.is_some()
+                && !(resolved_low > 0.0 && resolved_low < 1.0)
+            {
+                return Err(ValidationError::invalid(
+                    "statusline.context_low_threshold",
+                    "must be in (0.0, 1.0)",
+                ));
+            }
+            if statusline.context_medium_threshold.is_some()
+                && !(resolved_med > 0.0 && resolved_med < 1.0)
+            {
+                return Err(ValidationError::invalid(
+                    "statusline.context_medium_threshold",
+                    "must be in (0.0, 1.0)",
+                ));
+            }
+            if (statusline.context_low_threshold.is_some()
+                || statusline.context_medium_threshold.is_some())
+                && resolved_low >= resolved_med
+            {
+                return Err(ValidationError::invalid(
+                    "statusline.context_low_threshold",
+                    "low threshold must be strictly less than medium threshold",
+                ));
+            }
+            let resolved_normal = statusline
+                .burn_rate_normal_max
+                .unwrap_or(self.statusline.burn_rate_normal_max);
+            let resolved_moderate = statusline
+                .burn_rate_moderate_max
+                .unwrap_or(self.statusline.burn_rate_moderate_max);
+            if statusline.burn_rate_normal_max.is_some() && resolved_normal <= 0.0 {
+                return Err(ValidationError::invalid(
+                    "statusline.burn_rate_normal_max",
+                    "must be greater than 0",
+                ));
+            }
+            if statusline.burn_rate_moderate_max.is_some() && resolved_moderate <= 0.0 {
+                return Err(ValidationError::invalid(
+                    "statusline.burn_rate_moderate_max",
+                    "must be greater than 0",
+                ));
+            }
+            if (statusline.burn_rate_normal_max.is_some()
+                || statusline.burn_rate_moderate_max.is_some())
+                && resolved_normal >= resolved_moderate
+            {
+                return Err(ValidationError::invalid(
+                    "statusline.burn_rate_normal_max",
+                    "normal_max must be strictly less than moderate_max",
+                ));
+            }
+        }
+        if let Some(ref blocks) = patch.blocks {
+            if let Some(Some(n)) = blocks.token_limit
+                && n <= 0
+            {
+                return Err(ValidationError::invalid(
+                    "blocks.token_limit",
+                    "must be greater than 0",
+                ));
+            }
+            if let Some(Some(h)) = blocks.session_length_hours
+                && !(h > 0.0 && h <= SESSION_HOURS_MAX)
+            {
+                return Err(ValidationError::invalid(
+                    "blocks.session_length_hours",
+                    "must be in (0, 168]",
+                ));
+            }
+        }
+        if let Some(ref webhooks) = patch.webhooks {
+            if let Some(UrlPatch::Set(ref url)) = webhooks.url {
+                validate_webhook_url(url)?;
+            }
+            if let Some(Some(threshold)) = webhooks.cost_threshold
+                && threshold <= 0.0
+            {
+                return Err(ValidationError::invalid(
+                    "webhooks.cost_threshold",
+                    "must be greater than 0",
+                ));
+            }
+        }
+        if let Some(ref aliases) = patch.project_aliases
+            && let Some(ref entries) = aliases.entries
+        {
+            for entry in entries {
+                if entry.slug.is_empty() {
+                    return Err(ValidationError::invalid(
+                        "project_aliases.entries[].slug",
+                        "must not be empty",
+                    ));
+                }
+                if entry.slug.len() > NAME_MAX_LEN {
+                    return Err(ValidationError::invalid(
+                        "project_aliases.entries[].slug",
+                        format!("must be at most {NAME_MAX_LEN} characters"),
+                    ));
+                }
+                if entry.display_name.is_empty() {
+                    return Err(ValidationError::invalid(
+                        "project_aliases.entries[].display_name",
+                        "must not be empty",
+                    ));
+                }
+                if entry.display_name.len() > NAME_MAX_LEN {
+                    return Err(ValidationError::invalid(
+                        "project_aliases.entries[].display_name",
+                        format!("must be at most {NAME_MAX_LEN} characters"),
+                    ));
+                }
+            }
+        }
+        if let Some(ref pricing) = patch.pricing
+            && let Some(ref overrides) = pricing.overrides
+        {
+            for entry in overrides {
+                if entry.model.is_empty() {
+                    return Err(ValidationError::invalid(
+                        "pricing.overrides[].model",
+                        "must not be empty",
+                    ));
+                }
+                if entry.model.len() > NAME_MAX_LEN {
+                    return Err(ValidationError::invalid(
+                        "pricing.overrides[].model",
+                        format!("must be at most {NAME_MAX_LEN} characters"),
+                    ));
+                }
+                if entry.input < 0.0 {
+                    return Err(ValidationError::invalid(
+                        "pricing.overrides[].input",
+                        "must be >= 0",
+                    ));
+                }
+                if entry.output < 0.0 {
+                    return Err(ValidationError::invalid(
+                        "pricing.overrides[].output",
+                        "must be >= 0",
+                    ));
+                }
+                if let Some(v) = entry.cache_write
+                    && v < 0.0
+                {
+                    return Err(ValidationError::invalid(
+                        "pricing.overrides[].cache_write",
+                        "must be >= 0",
+                    ));
+                }
+                if let Some(v) = entry.cache_read
+                    && v < 0.0
+                {
+                    return Err(ValidationError::invalid(
+                        "pricing.overrides[].cache_read",
+                        "must be >= 0",
+                    ));
+                }
+            }
+        }
+
+        // All validation passed — apply mutations.
+        if let Some(display) = patch.display {
+            if let Some(currency) = display.currency {
+                self.display.currency = Some(currency.to_ascii_uppercase());
+            }
+            if let Some(locale) = display.locale {
+                self.display.locale = locale;
+            }
+            if let Some(compact) = display.compact {
+                self.display.compact = compact;
+            }
+        }
+        if let Some(oauth) = patch.oauth {
+            if let Some(enabled) = oauth.enabled {
+                self.oauth.enabled = enabled;
+            }
+            if let Some(interval) = oauth.refresh_interval {
+                self.oauth.refresh_interval = clamp_refresh_interval(interval);
+            }
+        }
+        if let Some(ca) = patch.claude_admin {
+            if let Some(enabled) = ca.enabled {
+                self.claude_admin.enabled = enabled;
+            }
+            if let Some(interval) = ca.refresh_interval {
+                self.claude_admin.refresh_interval = clamp_refresh_interval(interval);
+            }
+            if let Some(days) = ca.lookback_days {
+                self.claude_admin.lookback_days = clamp_lookback_days(days);
+            }
+        }
+        if let Some(oa) = patch.openai {
+            if let Some(enabled) = oa.enabled {
+                self.openai.enabled = enabled;
+            }
+            if let Some(interval) = oa.refresh_interval {
+                self.openai.refresh_interval = clamp_refresh_interval(interval);
+            }
+            if let Some(days) = oa.lookback_days {
+                self.openai.lookback_days = clamp_lookback_days(days);
+            }
+        }
+        if let Some(ag) = patch.agent_status {
+            if let Some(enabled) = ag.enabled {
+                self.agent_status.enabled = enabled;
+            }
+            if let Some(interval) = ag.refresh_interval {
+                self.agent_status.refresh_interval = clamp_refresh_interval(interval);
+            }
+            if let Some(claude) = ag.claude_enabled {
+                self.agent_status.claude_enabled = claude;
+            }
+            if let Some(openai) = ag.openai_enabled {
+                self.agent_status.openai_enabled = openai;
+            }
+            if let Some(severity) = ag.alert_min_severity {
+                self.agent_status.alert_min_severity = severity;
+            }
+        }
+        if let Some(agg) = patch.aggregator {
+            if let Some(enabled) = agg.enabled {
+                self.aggregator.enabled = enabled;
+            }
+            if let Some(interval) = agg.refresh_interval {
+                self.aggregator.refresh_interval = clamp_aggregator_refresh(interval);
+            }
+            if let Some(spike) = agg.spike_webhook {
+                self.aggregator.spike_webhook = spike;
+            }
+        }
+        if let Some(blocks) = patch.blocks {
+            if let Some(token_limit) = blocks.token_limit {
+                self.blocks.token_limit = token_limit;
+            }
+            if let Some(hours) = blocks.session_length_hours {
+                self.blocks.session_length_hours = hours;
+            }
+        }
+        if let Some(sl) = patch.statusline {
+            if let Some(low) = sl.context_low_threshold {
+                self.statusline.context_low_threshold = low;
+            }
+            if let Some(med) = sl.context_medium_threshold {
+                self.statusline.context_medium_threshold = med;
+            }
+            if let Some(normal) = sl.burn_rate_normal_max {
+                self.statusline.burn_rate_normal_max = normal;
+            }
+            if let Some(moderate) = sl.burn_rate_moderate_max {
+                self.statusline.burn_rate_moderate_max = moderate;
+            }
+        }
+        if let Some(wh) = patch.webhooks {
+            if let Some(url_patch) = wh.url {
+                self.webhooks.url = match url_patch {
+                    UrlPatch::Clear => None,
+                    UrlPatch::Set(url) => Some(url),
+                };
+            }
+            if let Some(threshold) = wh.cost_threshold {
+                self.webhooks.cost_threshold = threshold;
+            }
+            if let Some(b) = wh.session_depleted {
+                self.webhooks.session_depleted = b;
+            }
+            if let Some(b) = wh.agent_status {
+                self.webhooks.agent_status = b;
+            }
+            if let Some(b) = wh.spike_webhook {
+                self.webhooks.spike_webhook = b;
+            }
+            if let Some(b) = wh.cap_changes {
+                self.webhooks.cap_changes = b;
+            }
+            if let Some(b) = wh.agent_stop_reason {
+                self.webhooks.agent_stop_reason = b;
+            }
+            if let Some(filter) = wh.agent_stop_reason_filter {
+                self.webhooks.agent_stop_reason_filter = filter;
+            }
+        }
+        if let Some(aliases) = patch.project_aliases
+            && let Some(entries) = aliases.entries
+        {
+            self.project_aliases = entries
+                .into_iter()
+                .map(|e| (e.slug, e.display_name))
+                .collect();
+        }
+        if let Some(pricing) = patch.pricing
+            && let Some(overrides) = pricing.overrides
+        {
+            self.pricing = overrides
+                .into_iter()
+                .map(|e| {
+                    (
+                        e.model,
+                        PricingOverride {
+                            input: e.input,
+                            output: e.output,
+                            cache_write: e.cache_write,
+                            cache_read: e.cache_read,
+                        },
+                    )
+                })
+                .collect();
+        }
+
+        // Re-clamp existing on-disk values that the patch did not touch so the
+        // caller cannot end up with stale out-of-range data on round-trip.
+        self.oauth.refresh_interval = clamp_refresh_interval(self.oauth.refresh_interval);
+        self.claude_admin.refresh_interval =
+            clamp_refresh_interval(self.claude_admin.refresh_interval);
+        self.claude_admin.lookback_days = clamp_lookback_days(self.claude_admin.lookback_days);
+        self.openai.refresh_interval = clamp_refresh_interval(self.openai.refresh_interval);
+        self.openai.lookback_days = clamp_lookback_days(self.openai.lookback_days);
+        self.agent_status.refresh_interval =
+            clamp_refresh_interval(self.agent_status.refresh_interval);
+        self.aggregator.refresh_interval =
+            clamp_aggregator_refresh(self.aggregator.refresh_interval);
+
+        Ok(())
+    }
+}
+
+/// Hot-reloadable subset of `Config`. Only the fields background tasks
+/// consume at runtime are carried here — everything else is read on demand
+/// from disk, so the snapshot stays small and clone-cheap.
+#[derive(Debug, Clone)]
+pub struct LiveSettings {
+    pub display: Display,
+    pub oauth: OAuthConfig,
+    pub claude_admin: ClaudeAdminConfig,
+    pub openai: OpenAiConfig,
+    pub agent_status: AgentStatusConfig,
+    pub aggregator: AggregatorConfig,
+    pub webhooks: WebhookConfig,
+    pub blocks: BlocksConfig,
+    pub statusline: StatuslineConfig,
+    pub project_aliases: HashMap<String, String>,
+}
+
+impl LiveSettings {
+    /// Snapshot the live-relevant subset of `cfg`.
+    pub fn from_config(cfg: &Config) -> Self {
+        Self {
+            display: cfg.display.clone(),
+            oauth: cfg.oauth.clone(),
+            claude_admin: cfg.claude_admin.clone(),
+            openai: cfg.openai.clone(),
+            agent_status: cfg.agent_status.clone(),
+            aggregator: cfg.aggregator.clone(),
+            webhooks: cfg.webhooks.clone(),
+            blocks: cfg.blocks.clone(),
+            statusline: cfg.statusline.clone(),
+            project_aliases: cfg.project_aliases.clone(),
+        }
+    }
+}
+
+// `OAuthConfig`, `ClaudeAdminConfig`, `OpenAiConfig` need `Clone` for
+// `LiveSettings::from_config` — implement them manually because the structs
+// already derive `Debug, Deserialize, Serialize, JsonSchema` but not `Clone`.
+impl Clone for OAuthConfig {
+    fn clone(&self) -> Self {
+        Self {
+            enabled: self.enabled,
+            refresh_interval: self.refresh_interval,
+        }
+    }
+}
+
+impl Clone for ClaudeAdminConfig {
+    fn clone(&self) -> Self {
+        Self {
+            enabled: self.enabled,
+            admin_key_env: self.admin_key_env.clone(),
+            refresh_interval: self.refresh_interval,
+            lookback_days: self.lookback_days,
+        }
+    }
+}
+
+impl Clone for OpenAiConfig {
+    fn clone(&self) -> Self {
+        Self {
+            enabled: self.enabled,
+            admin_key_env: self.admin_key_env.clone(),
+            refresh_interval: self.refresh_interval,
+            lookback_days: self.lookback_days,
         }
     }
 }

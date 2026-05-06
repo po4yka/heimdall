@@ -272,16 +272,31 @@ fn apply_rate(
 /// fallback when a non-test caller materialises.
 #[cfg(test)]
 fn hardcoded_currencies() -> Vec<String> {
-    let mut v: Vec<String> = [
-        "AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF", "IDR", "ILS",
-        "INR", "ISK", "JPY", "KRW", "MXN", "MYR", "NOK", "NZD", "PHP", "PLN", "RON", "SEK", "SGD",
-        "THB", "TRY", "ZAR",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect();
+    let mut v: Vec<String> = KNOWN_CURRENCY_CODES
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
     v.sort();
     v
+}
+
+/// Static set of ISO 4217 codes recognised by heimdall. USD is always allowed
+/// (the storage currency). Used by Settings UI validation to reject typos
+/// without round-tripping the Frankfurter cache.
+pub const KNOWN_CURRENCY_CODES: &[&str] = &[
+    "AUD", "BRL", "CAD", "CHF", "CNY", "CZK", "DKK", "EUR", "GBP", "HKD", "HUF", "IDR", "ILS",
+    "INR", "ISK", "JPY", "KRW", "MXN", "MYR", "NOK", "NZD", "PHP", "PLN", "RON", "SEK", "SGD",
+    "THB", "TRY", "USD", "ZAR",
+];
+
+/// True when `code` is a 3-letter ISO 4217 code from heimdall's known set.
+/// Case-insensitive. USD is always known.
+pub fn is_known_currency_code(code: &str) -> bool {
+    if code.len() != 3 {
+        return false;
+    }
+    let upper = code.to_ascii_uppercase();
+    KNOWN_CURRENCY_CODES.iter().any(|c| *c == upper)
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
