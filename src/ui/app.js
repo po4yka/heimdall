@@ -9834,13 +9834,13 @@
   function signalLevelStyle(level) {
     switch (level) {
       case "spike":
-        return { label: "SPIKE", color: "var(--accent)" };
+        return { label: "[Spike]", color: "var(--accent)" };
       case "elevated":
-        return { label: "ELEVATED", color: "var(--text-primary)" };
+        return { label: "[Elevated]", color: "var(--text-primary)" };
       case "normal":
-        return { label: "NORMAL", color: "var(--text-secondary)" };
+        return { label: "[Normal]", color: "var(--text-secondary)" };
       default:
-        return { label: "UNKNOWN", color: "var(--text-secondary)" };
+        return { label: "[Unknown]", color: "var(--text-secondary)" };
     }
   }
   function CommunitySignalRow({ label, signals }) {
@@ -9879,7 +9879,7 @@
             marginBottom: "8px"
           },
           children: [
-            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent Status" }),
+            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent status" }),
             hasData && /* @__PURE__ */ u4(
               "button",
               {
@@ -9915,7 +9915,7 @@
       /* @__PURE__ */ u4(ProviderRow, { name: "Claude", status: snapshot.claude, expanded }),
       /* @__PURE__ */ u4(ProviderRow, { name: "OpenAI / Codex", status: snapshot.openai, expanded }),
       communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && /* @__PURE__ */ u4("div", { style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }, children: [
-        /* @__PURE__ */ u4("div", { style: { fontSize: "11px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", marginBottom: "6px", letterSpacing: "0.06em" }, children: "COMMUNITY SIGNAL" }),
+        /* @__PURE__ */ u4("div", { style: { fontSize: "var(--font-size-tertiary)", fontFamily: "var(--font-sans)", color: "var(--text-secondary)", marginBottom: "6px", letterSpacing: 0 }, children: "Community signal" }),
         /* @__PURE__ */ u4(CommunitySignalRow, { label: "Claude", signals: communitySignal.claude }),
         /* @__PURE__ */ u4(CommunitySignalRow, { label: "OpenAI", signals: communitySignal.openai }),
         communitySignal.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "4px", fontFamily: "var(--font-mono)" }, children: [
@@ -12936,11 +12936,7 @@ ${row.project}` : row.project;
       ] }),
       /* @__PURE__ */ u4("div", { class: "subscription-quota-divider" }),
       /* @__PURE__ */ u4("div", { class: "subscription-quota-section", children: [
-        /* @__PURE__ */ u4("div", { class: "subscription-quota-section-label", children: [
-          "Estimated",
-          " ",
-          /* @__PURE__ */ u4("small", { style: { fontSize: "9px", letterSpacing: "0.08em", color: "var(--text-disabled)", textTransform: "uppercase" }, children: "estimated" })
-        ] }),
+        /* @__PURE__ */ u4("div", { class: "subscription-quota-section-label", children: "Estimated" }),
         !hasEstimates && /* @__PURE__ */ u4("div", { class: "subscription-quota-empty", children: "Insufficient data \u2014 utilization too low to derive a token cap." }),
         estimated.map((w5) => {
           const dim = w5.confidence < 0.3;
@@ -14992,7 +14988,7 @@ ${row.project}` : row.project;
     }
   }
   function stateLabel(state) {
-    return state.toUpperCase();
+    return `[${state.charAt(0).toUpperCase()}${state.slice(1)}]`;
   }
   function blockRunoutLabel(block) {
     const quota = block.quota;
@@ -15017,11 +15013,11 @@ ${row.project}` : row.project;
           {
             style: {
               border: "1px solid var(--border-visible)",
-              borderRadius: "999px",
-              padding: "4px 8px",
+              borderRadius: "var(--radius-pill)",
+              padding: "2px 8px",
               fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              letterSpacing: "0.08em",
+              fontSize: "var(--font-size-tertiary)",
+              letterSpacing: 0,
               color: stateTone(provider.visual_state)
             },
             children: stateLabel(provider.visual_state)
@@ -15030,24 +15026,24 @@ ${row.project}` : row.project;
       ] }),
       hasAdminFallback ? /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "12px" }, children: [
         /* @__PURE__ */ u4("div", { children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Active Users Today" }),
-          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmt(provider.claude_admin?.today_active_users ?? 0) })
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Active users today" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "var(--font-size-value)" }, children: fmt(provider.claude_admin?.today_active_users ?? 0) })
         ] }),
         /* @__PURE__ */ u4("div", { children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Sessions Today" }),
-          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmt(provider.claude_admin?.today_sessions ?? 0) })
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Sessions today" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "var(--font-size-value)" }, children: fmt(provider.claude_admin?.today_sessions ?? 0) })
         ] }),
         /* @__PURE__ */ u4("div", { children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Accepted Lines" }),
-          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmt(provider.claude_admin?.lookback_lines_accepted ?? 0) }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Accepted lines" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "var(--font-size-value)" }, children: fmt(provider.claude_admin?.lookback_lines_accepted ?? 0) }),
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
             provider.claude_admin?.lookback_days ?? 0,
             "d window"
           ] })
         ] }),
         /* @__PURE__ */ u4("div", { children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Estimated Spend" }),
-          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: fmtCostCompact(provider.claude_admin?.lookback_estimated_cost_usd ?? 0) }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Estimated spend" }),
+          /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "var(--font-size-value)" }, children: fmtCostCompact(provider.claude_admin?.lookback_estimated_cost_usd ?? 0) }),
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: provider.claude_admin?.data_latency_note })
         ] })
       ] }) : /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "12px" }, children: [provider.primary, provider.secondary].filter(Boolean).map((window2, index) => /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "6px" }, children: [

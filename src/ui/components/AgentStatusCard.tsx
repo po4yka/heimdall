@@ -179,10 +179,10 @@ function ProviderRow({ name, status, expanded }: ProviderRowProps) {
 /** Map a SignalLevel to a display label and color. */
 function signalLevelStyle(level: SignalLevel): { label: string; color: string } {
   switch (level) {
-    case 'spike':    return { label: 'SPIKE',    color: 'var(--accent)' };
-    case 'elevated': return { label: 'ELEVATED', color: 'var(--text-primary)' };
-    case 'normal':   return { label: 'NORMAL',   color: 'var(--text-secondary)' };
-    default:         return { label: 'UNKNOWN',  color: 'var(--text-secondary)' };
+    case 'spike':    return { label: '[Spike]',    color: 'var(--accent)' };
+    case 'elevated': return { label: '[Elevated]', color: 'var(--text-primary)' };
+    case 'normal':   return { label: '[Normal]',   color: 'var(--text-secondary)' };
+    default:         return { label: '[Unknown]',  color: 'var(--text-secondary)' };
   }
 }
 
@@ -233,7 +233,7 @@ export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardPr
             marginBottom: '8px',
           }}
         >
-          <div class="stat-label">Agent Status</div>
+          <div class="stat-label">Agent status</div>
           {hasData && (
             <button
               type="button"
@@ -268,8 +268,8 @@ export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardPr
 
         {communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && (
           <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
-            <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: '6px', letterSpacing: '0.06em' }}>
-              COMMUNITY SIGNAL
+            <div style={{ fontSize: 'var(--font-size-tertiary)', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)', marginBottom: '6px', letterSpacing: 0 }}>
+              Community signal
             </div>
             <CommunitySignalRow label="Claude" signals={communitySignal.claude} />
             <CommunitySignalRow label="OpenAI" signals={communitySignal.openai} />

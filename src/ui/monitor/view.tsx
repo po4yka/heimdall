@@ -86,7 +86,9 @@ function stateTone(state: LiveMonitorProvider['visual_state']): string {
 }
 
 function stateLabel(state: LiveMonitorProvider['visual_state']): string {
-  return state.toUpperCase();
+  // Sentence-case bracket label per the design skill ("uppercase reserved
+  // for <th> only"). The pill border + tone still encode severity.
+  return `[${state.charAt(0).toUpperCase()}${state.slice(1)}]`;
 }
 
 function blockRunoutLabel(block: LiveMonitorBlock): string | null {
@@ -112,11 +114,11 @@ function ProviderLaneCard({ provider }: { provider: LiveMonitorProvider }) {
         <div
           style={{
             border: '1px solid var(--border-visible)',
-            borderRadius: '999px',
-            padding: '4px 8px',
+            borderRadius: 'var(--radius-pill)',
+            padding: '2px 8px',
             fontFamily: 'var(--font-mono)',
-            fontSize: '10px',
-            letterSpacing: '0.08em',
+            fontSize: 'var(--font-size-tertiary)',
+            letterSpacing: 0,
             color: stateTone(provider.visual_state),
           }}
         >
@@ -127,21 +129,21 @@ function ProviderLaneCard({ provider }: { provider: LiveMonitorProvider }) {
       {hasAdminFallback ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: '12px' }}>
           <div>
-            <div class="stat-label">Active Users Today</div>
-            <div class="stat-value" style={{ fontSize: '20px' }}>{fmt(provider.claude_admin?.today_active_users ?? 0)}</div>
+            <div class="stat-label">Active users today</div>
+            <div class="stat-value" style={{ fontSize: 'var(--font-size-value)' }}>{fmt(provider.claude_admin?.today_active_users ?? 0)}</div>
           </div>
           <div>
-            <div class="stat-label">Sessions Today</div>
-            <div class="stat-value" style={{ fontSize: '20px' }}>{fmt(provider.claude_admin?.today_sessions ?? 0)}</div>
+            <div class="stat-label">Sessions today</div>
+            <div class="stat-value" style={{ fontSize: 'var(--font-size-value)' }}>{fmt(provider.claude_admin?.today_sessions ?? 0)}</div>
           </div>
           <div>
-            <div class="stat-label">Accepted Lines</div>
-            <div class="stat-value" style={{ fontSize: '20px' }}>{fmt(provider.claude_admin?.lookback_lines_accepted ?? 0)}</div>
+            <div class="stat-label">Accepted lines</div>
+            <div class="stat-value" style={{ fontSize: 'var(--font-size-value)' }}>{fmt(provider.claude_admin?.lookback_lines_accepted ?? 0)}</div>
             <div class="stat-sub">{provider.claude_admin?.lookback_days ?? 0}d window</div>
           </div>
           <div>
-            <div class="stat-label">Estimated Spend</div>
-            <div class="stat-value" style={{ fontSize: '20px' }}>{fmtCostCompact(provider.claude_admin?.lookback_estimated_cost_usd ?? 0)}</div>
+            <div class="stat-label">Estimated spend</div>
+            <div class="stat-value" style={{ fontSize: 'var(--font-size-value)' }}>{fmtCostCompact(provider.claude_admin?.lookback_estimated_cost_usd ?? 0)}</div>
             <div class="stat-sub">{provider.claude_admin?.data_latency_note}</div>
           </div>
         </div>

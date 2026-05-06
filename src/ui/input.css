@@ -1595,58 +1595,59 @@
  */
 .subscription-quota-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
 }
 
 .subscription-quota-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 20px;
-  border-radius: 12px;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-2);
 }
 
 .subscription-quota-header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .subscription-quota-title {
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: 0;
 }
 
 .subscription-quota-plan {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-tertiary);
   color: var(--text-secondary);
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .subscription-quota-section-label {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--font-size-tertiary);
   color: var(--text-secondary);
-  margin-bottom: 8px;
-  letter-spacing: 0.04em;
+  margin-bottom: var(--space-1);
+  letter-spacing: 0;
 }
 
 .subscription-quota-tag {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  padding: 1px 6px;
-  margin-left: 6px;
+  font-size: var(--font-size-tertiary);
+  letter-spacing: 0;
+  padding: 1px var(--space-2);
+  margin-left: var(--space-2);
   color: var(--text-secondary);
   background: var(--surface-raised);
-  border-radius: 4px;
+  border-radius: var(--radius-1);
 }
 
 .subscription-quota-row {
@@ -1656,28 +1657,29 @@
     "label value"
     "bar bar"
     "sub sub";
-  column-gap: 12px;
-  row-gap: 4px;
-  padding: 8px 0;
+  column-gap: var(--space-3);
+  row-gap: 2px;
+  padding: var(--space-1) 0;
 }
 
 .subscription-quota-row + .subscription-quota-row {
-  border-top: 1px dashed var(--border);
+  margin-top: var(--space-1);
 }
 
 .subscription-quota-row-label {
   grid-area: label;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   color: var(--text-primary);
+  letter-spacing: 0;
 }
 
 .subscription-quota-row-value {
   grid-area: value;
   font-family: var(--font-mono);
   font-feature-settings: "tnum";
-  font-size: 13px;
-  color: var(--text-primary);
+  font-size: var(--font-size-body);
+  color: var(--text-display);
   text-align: right;
 }
 
@@ -1700,21 +1702,22 @@
 .subscription-quota-row-sub {
   grid-area: sub;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-tertiary);
   color: var(--text-secondary);
+  letter-spacing: 0;
 }
 
 .subscription-quota-divider {
   height: 1px;
   background: var(--border);
-  margin: 4px 0;
+  margin: var(--space-1) 0;
 }
 
 .subscription-quota-empty {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-tertiary);
   color: var(--text-secondary);
-  padding: 8px 0;
+  padding: var(--space-1) 0;
 }
 
 .subscription-history-card {

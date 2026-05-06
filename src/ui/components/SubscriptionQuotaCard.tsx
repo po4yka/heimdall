@@ -89,10 +89,7 @@ export function SubscriptionQuotaCard({ snapshot }: SubscriptionQuotaCardProps) 
       <div class="subscription-quota-divider" />
 
       <div class="subscription-quota-section">
-        <div class="subscription-quota-section-label">
-          Estimated{' '}
-          <small style={{ fontSize: '9px', letterSpacing: '0.08em', color: 'var(--text-disabled)', textTransform: 'uppercase' }}>estimated</small>
-        </div>
+        <div class="subscription-quota-section-label">Estimated</div>
         {!hasEstimates && (
           <div class="subscription-quota-empty">
             Insufficient data — utilization too low to derive a token cap.

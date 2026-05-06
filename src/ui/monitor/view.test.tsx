@@ -261,8 +261,8 @@ describe('renderLiveMonitorView', () => {
 
     const text = collectText(renderLiveMonitorView()).join(' ');
     expect(text).toContain('Source: admin');
-    expect(text).toContain('Active Users Today');
-    expect(text).toContain('Accepted Lines');
+    expect(text).toContain('Active users today');
+    expect(text).toContain('Accepted lines');
     expect(text).toContain('Acme Org');
   });
 });
