@@ -359,6 +359,11 @@ function initGrid(gridRoot: HTMLElement, layout: ScreenLayout): GridStack {
       resizable: { handles: 'se' },
       disableDrag: true,
       disableResize: true,
+      // Auto-resize every widget to fit its rendered content height,
+      // eliminating internal v-scrollbars. Pairs with `.widget-body`
+      // using `overflow: visible` (input.css). GridStack still rounds
+      // up to whole cellHeight rows.
+      sizeToContent: true,
     },
     gridRoot
   );

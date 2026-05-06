@@ -1844,11 +1844,14 @@
   transition: border-color 0.15s;
 }
 
-/* Widget body fills remaining space */
+/* Widget body fills remaining space.
+   overflow: visible lets cards expand to their natural height; GridStack's
+   sizeToContent (set in WidgetGrid.tsx) measures the content and resizes
+   the grid row count so the widget renders at full size with no v-scrollbar. */
 .widget-body {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 
 /* Chrome row: drag handle + remove button — hidden unless in edit mode */
