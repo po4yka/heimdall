@@ -152,6 +152,9 @@ export const settingsDraft = signal<SettingsResponse | null>(null);
 export const settingsInFlight = signal<boolean>(false);
 export const settingsActiveSection = signal<SettingsSectionKey>('display');
 
+/** Cmd-K / Ctrl-K command palette visibility. */
+export const commandPaletteOpen = signal<boolean>(false);
+
 // ── Project management state ────────────────────────────────────────
 /**
  * Currently-selected project UUID, populated from `#/project/<uuid>` hash.

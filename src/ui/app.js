@@ -1113,6 +1113,7 @@
   var settingsDraft = y3(null);
   var settingsInFlight = y3(false);
   var settingsActiveSection = y3("display");
+  var commandPaletteOpen = y3(false);
   var selectedProjectUuid = y3(null);
   var projectsRegistry = y3([]);
   var registryByUuid = g2(
@@ -7662,6 +7663,355 @@
         }
       ) })
     ] }) });
+  }
+
+  // src/ui/lib/commands.ts
+  var TAB_LABELS = {
+    overview: "Overview",
+    activity: "Activity",
+    breakdowns: "Breakdowns",
+    tables: "Sessions",
+    projects: "Projects"
+  };
+  function navigateToTab(tab) {
+    activeDashboardTab.value = tab;
+  }
+  function scrollToWidget(widgetId) {
+    const el = document.querySelector(`.grid-stack-item[gs-id="${widgetId}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("widget-flash");
+    window.setTimeout(() => el.classList.remove("widget-flash"), 1200);
+  }
+  function widgetCommands() {
+    const screen = activeDashboardTab.value;
+    const defs = widgetsForScreen(screen);
+    return defs.map((def) => ({
+      id: `widget:${def.id}`,
+      group: "widget",
+      label: def.title,
+      hint: def.description,
+      searchTerms: `${def.title} ${def.description ?? ""} ${def.id}`.toLowerCase(),
+      run: () => scrollToWidget(def.id)
+    }));
+  }
+  function sessionCommands() {
+    const sessions = rawData.value?.sessions_all ?? [];
+    return sessions.slice(0, 50).map((s4) => {
+      const label = s4.title || s4.display_name || s4.session_id;
+      const subtitle = `${s4.model} \xB7 ${s4.project || "\u2014"}`;
+      return {
+        id: `session:${s4.session_id}`,
+        group: "session",
+        label,
+        hint: subtitle,
+        searchTerms: `${label} ${subtitle} ${s4.session_id}`.toLowerCase(),
+        run: () => {
+          navigateToTab("tables");
+          window.setTimeout(() => {
+            const row = document.querySelector(
+              `tr[data-session-id="${s4.session_id}"]`
+            );
+            if (row) {
+              row.scrollIntoView({ behavior: "smooth", block: "center" });
+              row.classList.add("widget-flash");
+              window.setTimeout(() => row.classList.remove("widget-flash"), 1200);
+            }
+          }, 80);
+        }
+      };
+    });
+  }
+  function projectCommands() {
+    const sessions = rawData.value?.sessions_all ?? [];
+    const seen = /* @__PURE__ */ new Map();
+    for (const s4 of sessions) {
+      const existing = seen.get(s4.project);
+      if (existing) {
+        existing.sessions += 1;
+        existing.cost += s4.cost;
+      } else {
+        seen.set(s4.project, {
+          project: s4.project,
+          display: s4.custom_label || s4.display_name || s4.project,
+          sessions: 1,
+          cost: s4.cost
+        });
+      }
+    }
+    return [...seen.values()].sort((a4, b4) => b4.cost - a4.cost).slice(0, 50).map((p5) => ({
+      id: `project:${p5.project}`,
+      group: "project",
+      label: p5.display,
+      hint: `${p5.sessions.toLocaleString()} sessions \xB7 $${p5.cost.toFixed(2)}`,
+      searchTerms: `${p5.project} ${p5.display}`.toLowerCase(),
+      run: () => {
+        navigateToTab("projects");
+      }
+    }));
+  }
+  function modelCommands() {
+    const models = rawData.value?.all_models ?? [];
+    return models.map((m5) => ({
+      id: `model:${m5}`,
+      group: "model",
+      label: m5,
+      hint: "Toggle model filter",
+      searchTerms: m5.toLowerCase(),
+      run: () => {
+        const next = new Set(selectedModels.value);
+        if (next.has(m5)) next.delete(m5);
+        else next.add(m5);
+        selectedModels.value = next;
+      }
+    }));
+  }
+  function actionCommands(ctx) {
+    return [
+      {
+        id: "action:rescan",
+        group: "action",
+        label: "Rescan",
+        hint: "Re-scan transcripts and refresh dashboard",
+        searchTerms: "rescan refresh sync reload",
+        run: () => {
+          void ctx.triggerRescan();
+        }
+      },
+      {
+        id: "action:settings",
+        group: "action",
+        label: "Open settings",
+        searchTerms: "settings preferences config",
+        run: () => {
+          settingsModalOpen.value = true;
+        }
+      },
+      {
+        id: "action:backup",
+        group: "action",
+        label: "Open backup and snapshots",
+        searchTerms: "backup snapshot export",
+        run: () => {
+          backupModalOpen.value = true;
+        }
+      },
+      {
+        id: "action:edit-layout",
+        group: "action",
+        label: editMode.value ? "Exit edit layout" : "Edit layout",
+        searchTerms: "edit layout customize widgets rearrange",
+        run: () => {
+          editMode.value = !editMode.value;
+        }
+      },
+      {
+        id: "action:theme",
+        group: "action",
+        label: themeMode.value === "dark" ? "Switch to light theme" : "Switch to dark theme",
+        searchTerms: "theme dark light mode",
+        run: () => ctx.toggleTheme()
+      },
+      {
+        id: "action:open-monitor",
+        group: "action",
+        label: "Open live monitor",
+        hint: "Real-time provider lanes",
+        searchTerms: "live monitor real-time provider",
+        run: () => {
+          window.location.href = "/monitor";
+        }
+      }
+    ];
+  }
+  function navigationCommands() {
+    return Object.keys(TAB_LABELS).map((tab) => ({
+      id: `nav:${tab}`,
+      group: "navigate",
+      label: `Go to ${TAB_LABELS[tab]}`,
+      searchTerms: `${TAB_LABELS[tab]} tab navigate go to`.toLowerCase(),
+      run: () => navigateToTab(tab)
+    }));
+  }
+  function buildCommands(ctx) {
+    return [
+      ...navigationCommands(),
+      ...actionCommands(ctx),
+      ...widgetCommands(),
+      ...sessionCommands(),
+      ...projectCommands(),
+      ...modelCommands()
+    ];
+  }
+  function filterCommands(commands, query) {
+    const q4 = query.trim().toLowerCase();
+    if (!q4) return commands;
+    const tokens = q4.split(/\s+/).filter(Boolean);
+    return commands.filter((c4) => {
+      const hay = `${c4.label} ${c4.searchTerms}`.toLowerCase();
+      return tokens.every((t4) => hay.includes(t4));
+    });
+  }
+
+  // src/ui/components/CommandPalette.tsx
+  var GROUP_LABEL = {
+    navigate: "Navigate",
+    widget: "Widgets",
+    session: "Sessions",
+    project: "Projects",
+    model: "Models",
+    action: "Actions"
+  };
+  var GROUP_ORDER = [
+    "navigate",
+    "action",
+    "widget",
+    "session",
+    "project",
+    "model"
+  ];
+  function CommandPalette({ triggerRescan, toggleTheme: toggleTheme2 }) {
+    const open = commandPaletteOpen.value;
+    const [query, setQuery] = d2("");
+    const [highlight, setHighlight] = d2(0);
+    const inputRef = A2(null);
+    const listRef = A2(null);
+    const commands = T2(
+      () => open ? buildCommands({ triggerRescan, toggleTheme: toggleTheme2 }) : [],
+      [open, triggerRescan, toggleTheme2]
+    );
+    const filtered = T2(
+      () => filterCommands(commands, query),
+      [commands, query]
+    );
+    y2(() => {
+      if (!open) return;
+      setQuery("");
+      setHighlight(0);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    }, [open]);
+    y2(() => {
+      if (highlight >= filtered.length) {
+        setHighlight(Math.max(0, filtered.length - 1));
+      }
+    }, [filtered.length, highlight]);
+    y2(() => {
+      if (!open) return;
+      const el = listRef.current?.querySelector(
+        `[data-cmd-index="${highlight}"]`
+      );
+      el?.scrollIntoView({ block: "nearest" });
+    }, [highlight, open]);
+    if (!open) return null;
+    const close = () => {
+      commandPaletteOpen.value = false;
+    };
+    const onKeyDown = (e4) => {
+      if (e4.key === "Escape") {
+        e4.preventDefault();
+        close();
+        return;
+      }
+      if (e4.key === "ArrowDown") {
+        e4.preventDefault();
+        setHighlight((h5) => Math.min(filtered.length - 1, h5 + 1));
+        return;
+      }
+      if (e4.key === "ArrowUp") {
+        e4.preventDefault();
+        setHighlight((h5) => Math.max(0, h5 - 1));
+        return;
+      }
+      if (e4.key === "Enter") {
+        e4.preventDefault();
+        const cmd = filtered[highlight];
+        if (cmd) {
+          cmd.run();
+          close();
+        }
+      }
+    };
+    const grouped = /* @__PURE__ */ new Map();
+    for (const cmd of filtered) {
+      const list = grouped.get(cmd.group) ?? [];
+      list.push(cmd);
+      grouped.set(cmd.group, list);
+    }
+    let runningIndex = -1;
+    const flatIndex = /* @__PURE__ */ new Map();
+    for (const cmd of filtered) {
+      runningIndex++;
+      flatIndex.set(cmd.id, runningIndex);
+    }
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "cmd-palette-overlay",
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": "Command palette",
+        onClick: (e4) => {
+          if (e4.target === e4.currentTarget) close();
+        },
+        children: /* @__PURE__ */ u4("div", { class: "cmd-palette", onKeyDown, children: [
+          /* @__PURE__ */ u4("div", { class: "cmd-palette__input-row", children: [
+            /* @__PURE__ */ u4("span", { class: "cmd-palette__prompt", children: "[>" }),
+            /* @__PURE__ */ u4(
+              "input",
+              {
+                ref: inputRef,
+                class: "cmd-palette__input",
+                type: "text",
+                placeholder: "Search\u2026",
+                value: query,
+                onInput: (e4) => setQuery(e4.currentTarget.value),
+                autoComplete: "off",
+                spellcheck: false,
+                enterKeyHint: "go"
+              }
+            ),
+            /* @__PURE__ */ u4("span", { class: "cmd-palette__hint", children: "[esc]" })
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "cmd-palette__list", ref: listRef, children: [
+            filtered.length === 0 && /* @__PURE__ */ u4("div", { class: "cmd-palette__empty", children: "No results" }),
+            GROUP_ORDER.map((group) => {
+              const items = grouped.get(group);
+              if (!items || items.length === 0) return null;
+              return /* @__PURE__ */ u4("div", { class: "cmd-palette__group", children: [
+                /* @__PURE__ */ u4("div", { class: "cmd-palette__group-label", children: GROUP_LABEL[group] }),
+                items.map((cmd) => {
+                  const idx = flatIndex.get(cmd.id) ?? 0;
+                  const isActive = idx === highlight;
+                  return /* @__PURE__ */ u4(
+                    "button",
+                    {
+                      type: "button",
+                      "data-cmd-index": idx,
+                      class: `cmd-palette__row${isActive ? " is-active" : ""}`,
+                      onMouseEnter: () => setHighlight(idx),
+                      onClick: () => {
+                        cmd.run();
+                        close();
+                      },
+                      children: [
+                        /* @__PURE__ */ u4("span", { class: "cmd-palette__row-label", children: cmd.label }),
+                        cmd.hint && /* @__PURE__ */ u4("span", { class: "cmd-palette__row-hint", children: cmd.hint })
+                      ]
+                    },
+                    cmd.id
+                  );
+                })
+              ] }, group);
+            })
+          ] }),
+          /* @__PURE__ */ u4("div", { class: "cmd-palette__footer", children: [
+            /* @__PURE__ */ u4("span", { children: "\u2191\u2193 to move" }),
+            /* @__PURE__ */ u4("span", { children: "\u21B5 to run" }),
+            /* @__PURE__ */ u4("span", { children: "esc to close" })
+          ] })
+        ] })
+      }
+    );
   }
 
   // src/ui/components/FilterBar.tsx
@@ -21777,6 +22127,35 @@ ${row.project}` : row.project;
   }
   window.addEventListener("hashchange", applySettingsHash);
   applySettingsHash();
+  var commandPaletteMount = document.getElementById("command-palette-mount");
+  if (commandPaletteMount && dashboardRuntime) {
+    let CommandPaletteRoot = function() {
+      return /* @__PURE__ */ u4(
+        CommandPalette,
+        {
+          triggerRescan: triggerRescanFromPalette,
+          toggleTheme
+        }
+      );
+    };
+    CommandPaletteRoot2 = CommandPaletteRoot;
+    const triggerRescanFromPalette = () => {
+      const btn = document.getElementById("rescan-btn");
+      if (btn instanceof HTMLButtonElement && !btn.disabled) btn.click();
+    };
+    commandPaletteOpen.subscribe(() => {
+      R(/* @__PURE__ */ u4(CommandPaletteRoot, {}), commandPaletteMount);
+    });
+    R(/* @__PURE__ */ u4(CommandPaletteRoot, {}), commandPaletteMount);
+    window.addEventListener("keydown", (e4) => {
+      const meta = e4.metaKey || e4.ctrlKey;
+      if (!meta) return;
+      if (e4.key !== "k" && e4.key !== "K") return;
+      e4.preventDefault();
+      commandPaletteOpen.value = !commandPaletteOpen.value;
+    });
+  }
+  var CommandPaletteRoot2;
   var widgetGridMount = document.getElementById("widget-grid-mount");
   if (widgetGridMount && dashboardRuntime) {
     let renderGridManager = function() {

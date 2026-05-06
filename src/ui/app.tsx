@@ -7,6 +7,8 @@ import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
 import { ProjectsRegistry } from './components/projects/ProjectsRegistry';
 import { DashboardTabs } from './components/DashboardTabs';
 import { SavedViewsBar } from './components/SavedViewsBar';
+import { CommandPalette } from './components/CommandPalette';
+import { commandPaletteOpen } from './state/store';
 import { currentLayoutByScreen } from './widgets/apply-layout';
 import { FilterBar } from './components/FilterBar';
 import { Footer } from './components/Footer';
@@ -194,6 +196,36 @@ function applySettingsHash(): void {
 }
 window.addEventListener('hashchange', applySettingsHash);
 applySettingsHash();
+
+// Command palette (Cmd-K / Ctrl-K) — reactive render + global keybinding.
+const commandPaletteMount = document.getElementById('command-palette-mount');
+if (commandPaletteMount && dashboardRuntime) {
+  const triggerRescanFromPalette = () => {
+    const btn = document.getElementById('rescan-btn');
+    if (btn instanceof HTMLButtonElement && !btn.disabled) btn.click();
+  };
+  function CommandPaletteRoot() {
+    return (
+      <CommandPalette
+        triggerRescan={triggerRescanFromPalette}
+        toggleTheme={toggleTheme}
+      />
+    );
+  }
+  commandPaletteOpen.subscribe(() => {
+    render(<CommandPaletteRoot />, commandPaletteMount);
+  });
+  // Initial render so the subscribe path doesn't miss the first toggle.
+  render(<CommandPaletteRoot />, commandPaletteMount);
+
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    const meta = e.metaKey || e.ctrlKey;
+    if (!meta) return;
+    if (e.key !== 'k' && e.key !== 'K') return;
+    e.preventDefault();
+    commandPaletteOpen.value = !commandPaletteOpen.value;
+  });
+}
 
 // Mount all screen grids into #widget-grid-mount.
 // The ScreenGridManager shows only the active screen's grid; others are hidden.
