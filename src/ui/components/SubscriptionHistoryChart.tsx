@@ -103,6 +103,21 @@ function buildOptions(
     }))
     .filter(p => Number.isFinite(p.x as number));
 
+  // Span the X-axis across both the series data and the changelog timeline
+  // so policy markers stay on-canvas even when the user's local history
+  // only covers the last few days. Without this, ApexCharts auto-fits to
+  // the series range and clips the annotations entirely.
+  const seriesXValues: number[] = [];
+  for (const s of series) {
+    for (const p of s.data) seriesXValues.push(p.x);
+  }
+  const annotationXValues = annotationPoints.map(p => p.x as number);
+  const allX = [...seriesXValues, ...annotationXValues];
+  const xMin = allX.length ? Math.min(...allX) : undefined;
+  const xMax = allX.length
+    ? Math.max(...allX, Date.now())
+    : undefined;
+
   const opts: ApexOptions = {
     chart: {
       type: 'line',
@@ -136,6 +151,8 @@ function buildOptions(
     },
     xaxis: {
       type: 'datetime',
+      ...(xMin !== undefined ? { min: xMin } : {}),
+      ...(xMax !== undefined ? { max: xMax } : {}),
       labels: {
         style: { colors: textSecondary, fontFamily: 'var(--font-mono)', fontSize: '11px' },
       },
@@ -161,7 +178,10 @@ function buildOptions(
           Number.isFinite(val) ? `${val.toLocaleString('en-US')} tokens` : '—',
       },
     },
-    markers: { size: 0, strokeWidth: 0, hover: { size: 4 } },
+    // Show data points as small markers — line strokes can't render with a
+    // single observation per series (which is the common case for users with
+    // only a few days of local history).
+    markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
     dataLabels: { enabled: false },
   };
   if (annotationPoints.length > 0) {

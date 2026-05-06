@@ -11724,6 +11724,14 @@ ${row.project}` : row.project;
         }
       }
     })).filter((p5) => Number.isFinite(p5.x));
+    const seriesXValues = [];
+    for (const s4 of series) {
+      for (const p5 of s4.data) seriesXValues.push(p5.x);
+    }
+    const annotationXValues = annotationPoints.map((p5) => p5.x);
+    const allX = [...seriesXValues, ...annotationXValues];
+    const xMin = allX.length ? Math.min(...allX) : void 0;
+    const xMax = allX.length ? Math.max(...allX, Date.now()) : void 0;
     const opts = {
       chart: {
         type: "line",
@@ -11757,6 +11765,8 @@ ${row.project}` : row.project;
       },
       xaxis: {
         type: "datetime",
+        ...xMin !== void 0 ? { min: xMin } : {},
+        ...xMax !== void 0 ? { max: xMax } : {},
         labels: {
           style: { colors: textSecondary, fontFamily: "var(--font-mono)", fontSize: "11px" }
         },
@@ -11781,7 +11791,10 @@ ${row.project}` : row.project;
           formatter: (val) => Number.isFinite(val) ? `${val.toLocaleString("en-US")} tokens` : "\u2014"
         }
       },
-      markers: { size: 0, strokeWidth: 0, hover: { size: 4 } },
+      // Show data points as small markers — line strokes can't render with a
+      // single observation per series (which is the common case for users with
+      // only a few days of local history).
+      markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
       dataLabels: { enabled: false }
     };
     if (annotationPoints.length > 0) {
