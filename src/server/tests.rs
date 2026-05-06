@@ -157,6 +157,8 @@ mod tests {
 
     fn base_state(db_path: std::path::PathBuf, projects_dir: std::path::PathBuf) -> AppState {
         AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path,
             projects_dirs: Some(vec![projects_dir]),
             oauth_enabled: false,
@@ -2775,6 +2777,8 @@ mod tests {
         };
 
         let state = Arc::new(AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path,
             projects_dirs: Some(vec![projects]),
             oauth_enabled: false,
@@ -2959,6 +2963,8 @@ mod tests {
         };
 
         let state = Arc::new(AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path: db_path.clone(),
             projects_dirs: Some(vec![projects]),
             oauth_enabled: false,
@@ -3055,6 +3061,8 @@ mod tests {
         };
 
         let state = Arc::new(AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path,
             projects_dirs: Some(vec![projects]),
             oauth_enabled: false,
@@ -3288,6 +3296,8 @@ mod tests {
         };
 
         let state = Arc::new(crate::server::api::AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path,
             projects_dirs: Some(vec![projects]),
             oauth_enabled: false,
@@ -3396,6 +3406,8 @@ mod tests {
         };
 
         let state = Arc::new(crate::server::api::AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path,
             projects_dirs: Some(vec![projects]),
             oauth_enabled: false,
@@ -3474,6 +3486,8 @@ mod tests {
         token_limit: Option<i64>,
     ) -> Router {
         let state = Arc::new(AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path,
             projects_dirs: Some(vec![projects_dir]),
             oauth_enabled: false,
@@ -3732,6 +3746,8 @@ mod tests {
         let (db_path, projects) = setup_test_db(&tmp);
         // Build a custom AppState with session_length_hours = 2.5
         let state = Arc::new(AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path,
             projects_dirs: Some(vec![projects]),
             oauth_enabled: false,
@@ -5074,5 +5090,200 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // ── Settings UI M1 (read-only `GET /api/settings`) ──────────────────────
+
+    /// SAFETY note: `set_var`/`remove_var` are only safe while holding
+    /// `crate::config::HEIMDALL_CONFIG_MUTEX`, which serialises all callers
+    /// across the test suite. Both `settings_*` tests below acquire that
+    /// guard for their entire body.
+    fn settings_set_test_config_env(path: &std::path::Path) {
+        unsafe { std::env::set_var("HEIMDALL_CONFIG", path) };
+    }
+
+    fn settings_remove_test_config_env() {
+        unsafe { std::env::remove_var("HEIMDALL_CONFIG") };
+    }
+
+    // env-var serialisation across spawn_blocking requires holding the guard over `.await`
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_get_returns_curated_response() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(
+            &cfg_path,
+            r#"{
+                "display": {"currency": "EUR", "compact": true},
+                "oauth": {"enabled": false, "refresh_interval": 120},
+                "claude_admin": {"enabled": true, "refresh_interval": 600, "lookback_days": 14, "admin_key_env": "MY_ANTHROPIC_KEY"},
+                "openai": {"enabled": false, "refresh_interval": 900, "lookback_days": 7, "admin_key_env": "MY_OPENAI_KEY"},
+                "agent_status": {"enabled": true, "refresh_interval": 75, "claude_enabled": true, "openai_enabled": false, "alert_min_severity": "critical"},
+                "blocks": {"token_limit": 2000000, "session_length_hours": 6.0},
+                "statusline": {"context_low_threshold": 0.4, "context_medium_threshold": 0.85, "burn_rate_normal_max": 5000.0, "burn_rate_moderate_max": 12000.0},
+                "project_aliases": {"-zzz-last": "Zzz", "-aaa-first": "Aaa"},
+                "pricing": {"my-model": {"input": 1.0, "output": 2.0}}
+            }"#,
+        )
+        .unwrap();
+
+        settings_set_test_config_env(&cfg_path);
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/settings")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let status = resp.status();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+
+        settings_remove_test_config_env();
+
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "body: {:?}",
+            String::from_utf8_lossy(&body)
+        );
+        let parsed: serde_json::Value = serde_json::from_slice(&body).expect("response is JSON");
+
+        // All sections present
+        for section in [
+            "display",
+            "oauth",
+            "claude_admin",
+            "openai",
+            "agent_status",
+            "aggregator",
+            "blocks",
+            "statusline",
+            "webhooks",
+            "project_aliases",
+            "pricing",
+            "read_only",
+        ] {
+            assert!(
+                parsed.get(section).is_some(),
+                "section '{}' missing from response: {}",
+                section,
+                parsed
+            );
+        }
+
+        // Field-level round-trip
+        assert_eq!(parsed["display"]["currency"].as_str(), Some("EUR"));
+        assert_eq!(parsed["display"]["compact"].as_bool(), Some(true));
+        assert_eq!(parsed["oauth"]["enabled"].as_bool(), Some(false));
+        assert_eq!(parsed["oauth"]["refresh_interval"].as_u64(), Some(120));
+        assert_eq!(parsed["claude_admin"]["lookback_days"].as_i64(), Some(14));
+        assert_eq!(parsed["openai"]["refresh_interval"].as_u64(), Some(900));
+        assert_eq!(
+            parsed["agent_status"]["alert_min_severity"].as_str(),
+            Some("critical")
+        );
+        assert_eq!(parsed["blocks"]["token_limit"].as_i64(), Some(2_000_000));
+        assert!(
+            (parsed["statusline"]["context_low_threshold"]
+                .as_f64()
+                .unwrap()
+                - 0.4)
+                .abs()
+                < 1e-9
+        );
+
+        // Project aliases sorted by slug
+        let aliases = parsed["project_aliases"]["entries"].as_array().unwrap();
+        assert_eq!(aliases.len(), 2);
+        assert_eq!(aliases[0]["slug"].as_str(), Some("-aaa-first"));
+        assert_eq!(aliases[1]["slug"].as_str(), Some("-zzz-last"));
+
+        // Read-only fields surfaced
+        assert_eq!(parsed["read_only"]["host"].as_str(), Some("127.0.0.1"));
+        assert_eq!(parsed["read_only"]["port"].as_u64(), Some(0));
+        assert_eq!(
+            parsed["read_only"]["claude_admin_key_env"].as_str(),
+            Some("MY_ANTHROPIC_KEY")
+        );
+        assert_eq!(
+            parsed["read_only"]["openai_admin_key_env"].as_str(),
+            Some("MY_OPENAI_KEY")
+        );
+
+        // Pricing override carried through and shaped as a sorted Vec
+        let overrides = parsed["pricing"]["overrides"].as_array().unwrap();
+        assert_eq!(overrides.len(), 1);
+        assert_eq!(overrides[0]["model"].as_str(), Some("my-model"));
+        assert!((overrides[0]["input"].as_f64().unwrap() - 1.0).abs() < 1e-9);
+    }
+
+    // env-var serialisation across spawn_blocking requires holding the guard over `.await`
+    #[allow(clippy::await_holding_lock)]
+    #[tokio::test]
+    async fn settings_get_redacts_webhook_url() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        let tmp = TempDir::new().unwrap();
+        let cfg_path = tmp.path().join("config.json");
+        std::fs::write(
+            &cfg_path,
+            r#"{
+                "webhooks": {
+                    "url": "https://example.com/hook",
+                    "session_depleted": true,
+                    "cost_threshold": 25.5
+                }
+            }"#,
+        )
+        .unwrap();
+
+        settings_set_test_config_env(&cfg_path);
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/settings")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let status = resp.status();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+
+        settings_remove_test_config_env();
+
+        assert_eq!(status, StatusCode::OK);
+        let parsed: serde_json::Value = serde_json::from_slice(&body).expect("response is JSON");
+
+        assert_eq!(parsed["webhooks"]["url_present"].as_bool(), Some(true));
+        assert!(
+            parsed["webhooks"].get("url").is_none(),
+            "webhooks.url field must not appear in response"
+        );
+        assert_eq!(parsed["webhooks"]["session_depleted"].as_bool(), Some(true));
+
+        let serialised = serde_json::to_string(&parsed).expect("re-serialise");
+        assert!(
+            !serialised.contains("example.com"),
+            "redacted URL leaked into response: {}",
+            serialised
+        );
     }
 }

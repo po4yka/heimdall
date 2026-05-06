@@ -200,6 +200,7 @@
 		E2A49A36ACF633F183D36F1D /* SourceResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 980BEA5AE42AAD34548CACB8 /* SourceResolver.swift */; };
 		E2BDA2273233844414741159 /* ToolErrorsFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA13F7708FD0C817427B3A4B /* ToolErrorsFeatureModel.swift */; };
 		E3A184841498E5629D8B3127 /* WebDashboardScraper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B98C3D563055204D6857EA6D /* WebDashboardScraper.swift */; };
+		E41958651F9C88E28B1C7790 /* ConfigStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFB40F9B1D47AC3FEFE61993 /* ConfigStoreTests.swift */; };
 		E5086EF3FF0A881F2FE3B881 /* AppSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7B53EADE369DC61E852C2A /* AppSessionStore.swift */; };
 		E83F2CD543A9D5C6B73B7AAE /* UserDefaultsCloudSyncStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC62D93CA7B8BCC6788FBD3 /* UserDefaultsCloudSyncStateStore.swift */; };
 		E93936CF92F2F9D53A8A4494 /* HeimdallDomain.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6DD3582B86CA2DDB6BDD805A /* HeimdallDomain.framework */; };
@@ -634,6 +635,7 @@
 		BA351F2E960150EDB5A66009 /* WidgetCenterReloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetCenterReloader.swift; sourceTree = "<group>"; };
 		BA7B53EADE369DC61E852C2A /* AppSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSessionStore.swift; sourceTree = "<group>"; };
 		BDE6092BE7A5430C1B2F686F /* VersionDistributionDonut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionDistributionDonut.swift; sourceTree = "<group>"; };
+		BFB40F9B1D47AC3FEFE61993 /* ConfigStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStoreTests.swift; sourceTree = "<group>"; };
 		BFC41770A1C8C49E0E812AC4 /* WidgetSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshotStore.swift; sourceTree = "<group>"; };
 		BFFC68372427AC8C62AEC3F5 /* SessionsTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsTable.swift; sourceTree = "<group>"; };
 		C14F28DABC92E15A17291475 /* WebDashboardScraperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebDashboardScraperTests.swift; sourceTree = "<group>"; };
@@ -980,6 +982,7 @@
 				192919572CC8C844C5277D95 /* CloudKitAccountObserverTests.swift */,
 				39EE70F6F8642941D57B0958 /* CloudKitRetryPolicyTests.swift */,
 				1D22DF05F8CE9A0D9E8E9D47 /* CloudKitSyncEngineStateStoreTests.swift */,
+				BFB40F9B1D47AC3FEFE61993 /* ConfigStoreTests.swift */,
 				8BC377795B018241788AF38F /* FixtureLoader.swift */,
 				FAD70857478C17CFBBD84C83 /* HeimdallAPIClientContractVersionTests.swift */,
 				156085A4611B3040D8A4CFBC /* HeimdallAPIClientTests.swift */,
@@ -1747,6 +1750,7 @@
 				A55416DB31A2A8211CAE4D2B /* CloudKitSnapshotSyncStore.swift in Sources */,
 				B3C5FFBD0BEB50F0E47D4246 /* CloudKitSyncEngineStateStore.swift in Sources */,
 				A77D6B0836E693FD5677E943 /* CloudKitSyncEngineStateStoreTests.swift in Sources */,
+				E41958651F9C88E28B1C7790 /* ConfigStoreTests.swift in Sources */,
 				29F74E343DD404EAF3A340DE /* FixtureLoader.swift in Sources */,
 				D774C73A6745C028485E9285 /* HeimdallAPIClientContractVersionTests.swift in Sources */,
 				C759872B5B786E00912BE88D /* HeimdallAPIClientTests.swift in Sources */,

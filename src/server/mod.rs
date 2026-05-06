@@ -62,6 +62,8 @@ pub(crate) fn build_state(
     scan_event_tx: tokio::sync::broadcast::Sender<String>,
 ) -> Arc<AppState> {
     Arc::new(AppState {
+        host: options.host.clone(),
+        port: options.port,
         db_path: options.db_path.clone(),
         projects_dirs: options.projects_dirs.clone(),
         oauth_enabled: options.oauth_enabled,
@@ -184,6 +186,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             "/api/agents/unclassified-global",
             get(api::agent_unclassified_global),
         )
+        .route("/api/settings", get(api::settings_get))
         .route(
             "/api/agents/{project_id}/registry",
             get(api::agent_registry_list),

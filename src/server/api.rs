@@ -57,6 +57,11 @@ use crate::status_aggregator::models::CommunitySignal;
 use crate::webhooks::{self, WebhookState};
 
 pub struct AppState {
+    /// Bound host (loopback or whatever Config::host resolved to). Used by
+    /// `/api/settings` to surface the live bind address as a `read_only` field.
+    pub host: String,
+    /// Bound port. See `host`.
+    pub port: u16,
     pub db_path: PathBuf,
     pub projects_dirs: Option<Vec<PathBuf>>,
     pub oauth_enabled: bool,
@@ -3055,6 +3060,43 @@ pub async fn agent_unclassified_global(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(response))
+}
+
+/// `GET /api/settings` — curated, secret-redacted view of `Config` for the
+/// in-app Settings UI (M1: read-only foundation).
+///
+/// Loopback-guarded. Reads the resolved config path on a blocking pool so the
+/// async runtime is never stalled on disk I/O. Falls back to `Config::default()`
+/// when no config file exists, matching the loader's behaviour.
+pub async fn settings_get(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+) -> Result<Json<crate::config::SettingsResponse>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let host = state.host.clone();
+    let port = state.port;
+    let db_path = state.db_path.clone();
+    let response =
+        tokio::task::spawn_blocking(move || -> anyhow::Result<crate::config::SettingsResponse> {
+            let cfg = match crate::config::resolve_config_path() {
+                Some(path) => {
+                    let (cfg, _root) = crate::config_io::read_config_root(&path)?;
+                    cfg
+                }
+                None => crate::config::Config::default(),
+            };
+            Ok(cfg.to_settings_response(&host, port, &db_path))
+        })
+        .await
+        .map_err(|e| {
+            tracing::warn!("settings_get spawn_blocking join error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
+        .map_err(|e| {
+            tracing::warn!("settings_get failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     Ok(Json(response))
 }
 

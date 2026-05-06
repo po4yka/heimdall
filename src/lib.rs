@@ -11,6 +11,7 @@ pub mod analytics;
 pub mod archive;
 pub mod claude_admin;
 pub mod config;
+pub mod config_io;
 pub mod currency;
 pub mod db;
 pub mod export;

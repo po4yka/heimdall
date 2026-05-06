@@ -714,6 +714,253 @@ pub fn load_config_from(path: &Path) -> Config {
     }
 }
 
+// ── Settings UI response types (M1: read-only curated subset) ────────────
+//
+// These types form the contract returned by `GET /api/settings`. They are a
+// curated, secret-redacted view of `Config`: the URL inside `WebhookConfig`
+// is replaced by a `url_present: bool`, env-var *names* (not values) are
+// surfaced under `read_only`, and `HashMap` collections are flattened into
+// stably-sorted `Vec`s for predictable UI rendering.
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct SettingsResponse {
+    pub display: DisplaySettings,
+    pub oauth: OAuthSettings,
+    pub claude_admin: ClaudeAdminSettings,
+    pub openai: OpenAiSettings,
+    pub agent_status: AgentStatusSettings,
+    pub aggregator: AggregatorSettings,
+    pub blocks: BlocksSettings,
+    pub statusline: StatuslineSettings,
+    pub webhooks: WebhookSettings,
+    pub project_aliases: ProjectAliasesSettings,
+    pub pricing: PricingSettings,
+    pub read_only: ReadOnlySettings,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct DisplaySettings {
+    pub currency: Option<String>,
+    pub locale: Option<String>,
+    pub compact: Option<bool>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct OAuthSettings {
+    pub enabled: bool,
+    pub refresh_interval: u64,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ClaudeAdminSettings {
+    pub enabled: bool,
+    pub refresh_interval: u64,
+    pub lookback_days: i64,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct OpenAiSettings {
+    pub enabled: bool,
+    pub refresh_interval: u64,
+    pub lookback_days: i64,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct AgentStatusSettings {
+    pub enabled: bool,
+    pub refresh_interval: u64,
+    pub claude_enabled: bool,
+    pub openai_enabled: bool,
+    pub alert_min_severity: AlertSeverity,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct AggregatorSettings {
+    pub enabled: bool,
+    pub refresh_interval: u64,
+    pub spike_webhook: bool,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct BlocksSettings {
+    pub token_limit: Option<i64>,
+    pub session_length_hours: Option<f64>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct StatuslineSettings {
+    pub context_low_threshold: f64,
+    pub context_medium_threshold: f64,
+    pub burn_rate_normal_max: f64,
+    pub burn_rate_moderate_max: f64,
+}
+
+/// Webhook settings exposed to the dashboard.
+///
+/// `url_present` is the redacted view of `WebhookConfig::url` — the actual URL
+/// is never serialised over the wire. PATCH (M2+) carries a 3-state setter to
+/// preserve / clear / replace the URL without ever round-tripping it.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct WebhookSettings {
+    pub url_present: bool,
+    pub cost_threshold: Option<f64>,
+    pub session_depleted: bool,
+    pub agent_status: bool,
+    pub spike_webhook: bool,
+    pub cap_changes: bool,
+    pub agent_stop_reason: bool,
+    pub agent_stop_reason_filter: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ProjectAliasEntry {
+    pub slug: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ProjectAliasesSettings {
+    /// Sorted by `slug` for stable UI rendering.
+    pub entries: Vec<ProjectAliasEntry>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PricingEntry {
+    pub model: String,
+    pub input: f64,
+    pub output: f64,
+    pub cache_write: Option<f64>,
+    pub cache_read: Option<f64>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PricingSettings {
+    /// Sorted by `model` for stable UI rendering.
+    pub overrides: Vec<PricingEntry>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct PricingSourceSettings {
+    pub source: Option<String>,
+    pub refresh_hours: Option<u32>,
+}
+
+/// Restart-required fields surfaced inert in the UI.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct ReadOnlySettings {
+    pub host: String,
+    pub port: u16,
+    pub db_path: String,
+    pub pricing_source: PricingSourceSettings,
+    pub claude_admin_key_env: String,
+    pub openai_admin_key_env: String,
+    pub aggregator_key_env_var: String,
+}
+
+impl Config {
+    /// Build the curated, secret-redacted settings response for the dashboard.
+    ///
+    /// `host`, `port`, `db_path` are passed in because they live on the live
+    /// `AppState` (resolved from CLI flags, env vars, *or* config file in that
+    /// precedence order) — `Config` alone cannot reproduce the bound address.
+    pub fn to_settings_response(&self, host: &str, port: u16, db_path: &Path) -> SettingsResponse {
+        let mut alias_entries: Vec<ProjectAliasEntry> = self
+            .project_aliases
+            .iter()
+            .map(|(slug, display_name)| ProjectAliasEntry {
+                slug: slug.clone(),
+                display_name: display_name.clone(),
+            })
+            .collect();
+        alias_entries.sort_by(|a, b| a.slug.cmp(&b.slug));
+
+        let mut pricing_entries: Vec<PricingEntry> = self
+            .pricing
+            .iter()
+            .map(|(model, p)| PricingEntry {
+                model: model.clone(),
+                input: p.input,
+                output: p.output,
+                cache_write: p.cache_write,
+                cache_read: p.cache_read,
+            })
+            .collect();
+        pricing_entries.sort_by(|a, b| a.model.cmp(&b.model));
+
+        SettingsResponse {
+            display: DisplaySettings {
+                currency: self.display.currency.clone(),
+                locale: self.display.locale.clone(),
+                compact: self.display.compact,
+            },
+            oauth: OAuthSettings {
+                enabled: self.oauth.enabled,
+                refresh_interval: self.oauth.refresh_interval,
+            },
+            claude_admin: ClaudeAdminSettings {
+                enabled: self.claude_admin.enabled,
+                refresh_interval: self.claude_admin.refresh_interval,
+                lookback_days: self.claude_admin.lookback_days,
+            },
+            openai: OpenAiSettings {
+                enabled: self.openai.enabled,
+                refresh_interval: self.openai.refresh_interval,
+                lookback_days: self.openai.lookback_days,
+            },
+            agent_status: AgentStatusSettings {
+                enabled: self.agent_status.enabled,
+                refresh_interval: self.agent_status.refresh_interval,
+                claude_enabled: self.agent_status.claude_enabled,
+                openai_enabled: self.agent_status.openai_enabled,
+                alert_min_severity: self.agent_status.alert_min_severity.clone(),
+            },
+            aggregator: AggregatorSettings {
+                enabled: self.aggregator.enabled,
+                refresh_interval: self.aggregator.refresh_interval,
+                spike_webhook: self.aggregator.spike_webhook,
+            },
+            blocks: BlocksSettings {
+                token_limit: self.blocks.token_limit,
+                session_length_hours: self.blocks.session_length_hours,
+            },
+            statusline: StatuslineSettings {
+                context_low_threshold: self.statusline.context_low_threshold,
+                context_medium_threshold: self.statusline.context_medium_threshold,
+                burn_rate_normal_max: self.statusline.burn_rate_normal_max,
+                burn_rate_moderate_max: self.statusline.burn_rate_moderate_max,
+            },
+            webhooks: WebhookSettings {
+                url_present: self.webhooks.url.is_some(),
+                cost_threshold: self.webhooks.cost_threshold,
+                session_depleted: self.webhooks.session_depleted,
+                agent_status: self.webhooks.agent_status,
+                spike_webhook: self.webhooks.spike_webhook,
+                cap_changes: self.webhooks.cap_changes,
+                agent_stop_reason: self.webhooks.agent_stop_reason,
+                agent_stop_reason_filter: self.webhooks.agent_stop_reason_filter.clone(),
+            },
+            project_aliases: ProjectAliasesSettings {
+                entries: alias_entries,
+            },
+            pricing: PricingSettings {
+                overrides: pricing_entries,
+            },
+            read_only: ReadOnlySettings {
+                host: host.to_string(),
+                port,
+                db_path: db_path.display().to_string(),
+                pricing_source: PricingSourceSettings {
+                    source: self.pricing_source.source.clone(),
+                    refresh_hours: self.pricing_source.refresh_hours,
+                },
+                claude_admin_key_env: self.claude_admin.admin_key_env.clone(),
+                openai_admin_key_env: self.openai.admin_key_env.clone(),
+                aggregator_key_env_var: self.aggregator.key_env_var.clone(),
+            },
+        }
+    }
+}
+
 /// Process-wide mutex for tests that mutate the `HEIMDALL_CONFIG` environment
 /// variable. Rust's default test harness runs tests in parallel threads, and
 /// `set_var`/`remove_var` are process-global — without serialisation one test's

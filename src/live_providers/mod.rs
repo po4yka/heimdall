@@ -1029,6 +1029,8 @@ mod tests {
 
     fn test_state() -> Arc<AppState> {
         Arc::new(AppState {
+            host: "127.0.0.1".into(),
+            port: 0,
             db_path: std::path::PathBuf::from("/tmp/heimdall-live-provider-tests.db"),
             projects_dirs: None,
             oauth_enabled: false,
