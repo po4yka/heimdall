@@ -76,6 +76,13 @@
     --duration-base: 200ms;
     --ease-default: cubic-bezier(0.16, 1, 0.3, 1);
 
+    /* Loading skeletons. Both stops are derived from --text-primary so
+       the system works in dark and light modes without per-theme
+       overrides; the 6%/14% mix follows the existing accent-subtle
+       precedent. */
+    --skeleton-bg: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    --skeleton-highlight: color-mix(in srgb, var(--text-primary) 14%, transparent);
+
     color-scheme: dark;
   }
 
@@ -3620,3 +3627,97 @@ tr:hover .pin-star.is-unpinned,
   opacity: 0.85;
 }
 .pin-star:disabled { cursor: wait; }
+
+/* ── Loading skeletons / shimmer ─────────────────────────────────────
+ * Single shimmer keyframe used by every Skeleton variant (Skeleton.tsx),
+ * by the .widget-body initial-load placeholder, and by SpinnerInline.
+ * prefers-reduced-motion drops the animation to a flat tint while
+ * keeping the placeholder visible.
+ */
+.skeleton {
+  background: linear-gradient(
+    100deg,
+    var(--skeleton-bg) 30%,
+    var(--skeleton-highlight) 50%,
+    var(--skeleton-bg) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-1);
+}
+
+@keyframes shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    background: var(--skeleton-bg);
+  }
+}
+
+/* Initial-load grid coverage. WidgetGrid stamps data-loading="1" on
+   every new .widget-body during mount; setSectionVisibility clears the
+   attribute on first render. The pseudo-element is shape-agnostic so
+   widgets that haven't been migrated to per-shape skeletons still get
+   feedback while their first response is in flight. */
+.widget-body[data-loading="1"] {
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: var(--space-3);
+}
+.widget-body[data-loading="1"]::before {
+  content: '';
+  flex: 1;
+  min-height: 64px;
+  background: linear-gradient(
+    100deg,
+    var(--skeleton-bg) 30%,
+    var(--skeleton-highlight) 50%,
+    var(--skeleton-bg) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-2);
+}
+@media (prefers-reduced-motion: reduce) {
+  .widget-body[data-loading="1"]::before {
+    animation: none;
+    background: var(--skeleton-bg);
+  }
+}
+
+/* Inline three-dot spinner — for in-button or in-status-line use where
+   a full skeleton block would be too heavy. The dots cycle through the
+   shimmer's two stops via staggered animation-delays. */
+.spinner-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+}
+.spinner-inline__dot {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  animation: spinner-pulse 1.2s ease-in-out infinite;
+}
+.spinner-inline__dot:nth-child(2) { animation-delay: 0.15s; }
+.spinner-inline__dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes spinner-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.85); }
+  40%           { opacity: 1;   transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner-inline__dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}
