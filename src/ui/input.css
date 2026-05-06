@@ -2460,6 +2460,56 @@
   color: var(--accent);
 }
 
+/* ── WebhooksSection (M3) ─────────────────────────────────── */
+
+.settings-webhook-url-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.settings-webhook-url-editor .settings-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Destructive variant of the clear button — uses semantic accent red. */
+.settings-clear-btn--destructive:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.settings-clear-btn--destructive:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  opacity: 0.8;
+}
+
+/* Vertical stack for event toggle cards. */
+.settings-toggle-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-toggle-stack-item {
+  /* inherits .settings-card layout */
+}
+
+/* Muted card for disabled stop-reason filter. */
+.settings-card--muted {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Monospace inline span for code-like values in help text. */
+.settings-mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
 @media (max-width: 720px) {
   .settings-modal {
     flex-direction: column;

@@ -1969,12 +1969,263 @@
     ] });
   }
 
+  // src/ui/components/settings/WebhooksSection.tsx
+  function patchWebhooks(p5) {
+    const draft = settingsDraft.value;
+    if (!draft) return;
+    settingsDraft.value = {
+      ...draft,
+      webhooks: { ...draft.webhooks, ...p5 }
+    };
+  }
+  function EventToggle({ id, label, help, checked, onChange, disabled }) {
+    return /* @__PURE__ */ u4("div", { class: `settings-card settings-toggle-stack-item${disabled ? " settings-toggle-stack-item--disabled" : ""}`, children: [
+      /* @__PURE__ */ u4("div", { class: "settings-row settings-row--toggle", children: [
+        /* @__PURE__ */ u4("label", { class: "settings-label", for: id, children: label }),
+        /* @__PURE__ */ u4(
+          "input",
+          {
+            id,
+            type: "checkbox",
+            checked,
+            disabled,
+            onChange: (e4) => onChange(e4.target.checked)
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-helper", children: help })
+    ] });
+  }
+  function WebhooksSection({ onUrlIntentChange }) {
+    const draft = settingsDraft.value;
+    if (!draft) return null;
+    const { webhooks } = draft;
+    const urlPresent = webhooks.url_present;
+    const [editing, setEditing] = d2(false);
+    const [urlInput, setUrlInput] = d2("");
+    function handleSetUrl() {
+      setUrlInput("");
+      setEditing(true);
+    }
+    function handleSaveUrl() {
+      const trimmed = urlInput.trim();
+      if (!trimmed) return;
+      onUrlIntentChange({ kind: "set", value: trimmed });
+      const current = settingsDraft.value;
+      if (current) {
+        settingsDraft.value = {
+          ...current,
+          webhooks: { ...current.webhooks, url_present: true }
+        };
+      }
+      setEditing(false);
+      setUrlInput("");
+    }
+    function handleCancelUrl() {
+      setEditing(false);
+      setUrlInput("");
+    }
+    function handleClearUrl() {
+      onUrlIntentChange({ kind: "clear" });
+      const current = settingsDraft.value;
+      if (current) {
+        settingsDraft.value = {
+          ...current,
+          webhooks: { ...current.webhooks, url_present: false }
+        };
+      }
+    }
+    const costThreshold = webhooks.cost_threshold;
+    const costInputVal = costThreshold !== null && costThreshold !== void 0 ? String(costThreshold) : "";
+    function handleCostInput(raw) {
+      const trimmed = raw.trim();
+      if (trimmed === "") {
+        patchWebhooks({ cost_threshold: null });
+        return;
+      }
+      const n3 = parseFloat(trimmed);
+      if (Number.isFinite(n3) && n3 > 0) {
+        patchWebhooks({ cost_threshold: n3 });
+      }
+    }
+    const filterArr = webhooks.agent_stop_reason_filter ?? [];
+    const filterStr = filterArr.join(", ");
+    const agentStopEnabled = webhooks.agent_stop_reason;
+    function handleFilterInput(raw) {
+      const parts = raw.split(",").map((s4) => s4.trim()).filter(Boolean);
+      patchWebhooks({ agent_stop_reason_filter: parts.length === 0 ? null : parts });
+    }
+    return /* @__PURE__ */ u4("div", { class: "settings-section", children: [
+      /* @__PURE__ */ u4("div", { class: "settings-card", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+          /* @__PURE__ */ u4("label", { class: "settings-label", children: "Webhook URL" }),
+          /* @__PURE__ */ u4("div", { class: "settings-input-group", children: [
+            /* @__PURE__ */ u4("span", { class: "settings-helper", style: "margin-top:0", children: [
+              "URL configured: ",
+              urlPresent ? "yes" : "no"
+            ] }),
+            !editing && /* @__PURE__ */ u4(S, { children: [
+              /* @__PURE__ */ u4(
+                "button",
+                {
+                  type: "button",
+                  class: "settings-clear-btn",
+                  onClick: handleSetUrl,
+                  children: "[Set URL]"
+                }
+              ),
+              /* @__PURE__ */ u4(
+                "button",
+                {
+                  type: "button",
+                  class: "settings-clear-btn settings-clear-btn--destructive",
+                  disabled: !urlPresent,
+                  onClick: handleClearUrl,
+                  children: "[Clear URL]"
+                }
+              )
+            ] })
+          ] })
+        ] }),
+        editing && /* @__PURE__ */ u4("div", { class: "settings-webhook-url-editor", children: [
+          /* @__PURE__ */ u4(
+            "input",
+            {
+              type: "url",
+              class: "settings-input",
+              placeholder: "https://hooks.example.com/...",
+              value: urlInput,
+              onInput: (e4) => {
+                setUrlInput(e4.target.value);
+              },
+              onKeyDown: (e4) => {
+                if (e4.key === "Enter") handleSaveUrl();
+                if (e4.key === "Escape") handleCancelUrl();
+              },
+              ref: (el) => {
+                if (el) el.focus();
+              }
+            }
+          ),
+          /* @__PURE__ */ u4("button", { type: "button", class: "settings-btn settings-btn--primary", onClick: handleSaveUrl, children: "[Save]" }),
+          /* @__PURE__ */ u4("button", { type: "button", class: "settings-btn", onClick: handleCancelUrl, children: "[Cancel]" })
+        ] }),
+        /* @__PURE__ */ u4("div", { class: "settings-helper", children: esc("Webhook events POST a JSON body to this URL. Heimdall never sends the configured URL back to the browser; only \u201CURL configured: yes/no\u201D is exposed. Set or clear it from this Mac to update.") })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-card", children: [
+        /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+          /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-webhook-cost-threshold", children: "Cost threshold (USD)" }),
+          /* @__PURE__ */ u4("div", { class: "settings-input-group", children: [
+            /* @__PURE__ */ u4(
+              "input",
+              {
+                id: "settings-webhook-cost-threshold",
+                type: "number",
+                class: "settings-input num settings-input--narrow",
+                value: costInputVal,
+                min: "0.01",
+                step: "0.01",
+                placeholder: "\u2014",
+                onInput: (e4) => handleCostInput(e4.target.value)
+              }
+            ),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "settings-clear-btn",
+                disabled: costThreshold === null || costThreshold === void 0,
+                onClick: () => patchWebhooks({ cost_threshold: null }),
+                children: "[CLEAR]"
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ u4("div", { class: "settings-helper", children: "Fire a webhook when daily cost crosses this amount." })
+      ] }),
+      /* @__PURE__ */ u4("div", { class: "settings-toggle-stack", children: [
+        /* @__PURE__ */ u4(
+          EventToggle,
+          {
+            id: "settings-webhook-session-depleted",
+            label: "Session depleted",
+            help: "Fire when an active session crosses the rate-limit ceiling.",
+            checked: webhooks.session_depleted,
+            onChange: (v4) => patchWebhooks({ session_depleted: v4 })
+          }
+        ),
+        /* @__PURE__ */ u4(
+          EventToggle,
+          {
+            id: "settings-webhook-agent-status",
+            label: "Agent status",
+            help: "Fire on Claude / OpenAI status transitions.",
+            checked: webhooks.agent_status,
+            onChange: (v4) => patchWebhooks({ agent_status: v4 })
+          }
+        ),
+        /* @__PURE__ */ u4(
+          EventToggle,
+          {
+            id: "settings-webhook-spike",
+            label: "Community spike",
+            help: "Fire when a third-party aggregator reports a Claude or OpenAI outage spike (only when official status is below Major).",
+            checked: webhooks.spike_webhook,
+            onChange: (v4) => patchWebhooks({ spike_webhook: v4 })
+          }
+        ),
+        /* @__PURE__ */ u4(
+          EventToggle,
+          {
+            id: "settings-webhook-cap-changes",
+            label: "Subscription cap changes",
+            help: "Fire when estimated Claude Code or Codex caps shift materially.",
+            checked: webhooks.cap_changes,
+            onChange: (v4) => patchWebhooks({ cap_changes: v4 })
+          }
+        ),
+        /* @__PURE__ */ u4(
+          EventToggle,
+          {
+            id: "settings-webhook-agent-stop-reason",
+            label: "Subagent stop reason",
+            help: "Fire when a subagent exits with a stop_reason on the allowlist below.",
+            checked: webhooks.agent_stop_reason,
+            onChange: (v4) => patchWebhooks({ agent_stop_reason: v4 })
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u4("div", { class: `settings-card${!agentStopEnabled ? " settings-card--muted" : ""}`, children: [
+        /* @__PURE__ */ u4("div", { class: "settings-row", children: [
+          /* @__PURE__ */ u4("label", { class: "settings-label", for: "settings-webhook-stop-reason-filter", children: "Stop-reason allowlist" }),
+          /* @__PURE__ */ u4(
+            "input",
+            {
+              id: "settings-webhook-stop-reason-filter",
+              type: "text",
+              class: "settings-input",
+              value: filterStr,
+              placeholder: "max_tokens, refusal",
+              disabled: !agentStopEnabled,
+              onInput: (e4) => handleFilterInput(e4.target.value)
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u4("div", { class: "settings-helper", children: [
+          "Comma-separated. Empty = use default (",
+          /* @__PURE__ */ u4("span", { class: "settings-mono", children: "max_tokens, refusal" }),
+          ")."
+        ] })
+      ] })
+    ] });
+  }
+
   // src/ui/components/settings/SettingsModal.tsx
   var SECTIONS = [
     { key: "display", label: "Display", description: "Currency, locale, and number compaction.", comingSoon: false },
     { key: "polling", label: "Polling", description: "How often live data sources are refreshed.", comingSoon: false },
     { key: "statusline_blocks", label: "Statusline & blocks", description: "Threshold tuning and block sizing.", comingSoon: false },
-    { key: "webhooks", label: "Webhooks", description: "Notify external systems on events.", comingSoon: true },
+    { key: "webhooks", label: "Webhooks", description: "Notify external systems on events.", comingSoon: false },
     { key: "aliases", label: "Project aliases", description: "Map project slugs to display names.", comingSoon: true },
     { key: "pricing", label: "Pricing overrides", description: "Custom rates for specific models.", comingSoon: true }
   ];
@@ -1982,7 +2233,7 @@
     if (!server || !draft) return false;
     return JSON.stringify(server) !== JSON.stringify(draft);
   }
-  function diffPatch(server, draft) {
+  function diffPatch(server, draft, urlIntent) {
     const patch2 = {};
     const keys = [
       "display",
@@ -2002,11 +2253,28 @@
         if (key === "webhooks") {
           const { url_present: _drop, ...rest } = draft.webhooks;
           void _drop;
-          patch2.webhooks = rest;
+          const webhookPatch = { ...rest };
+          if (urlIntent.kind === "set") {
+            webhookPatch.url = urlIntent.value;
+          } else if (urlIntent.kind === "clear") {
+            webhookPatch.url = null;
+          }
+          patch2.webhooks = webhookPatch;
         } else {
           patch2[key] = draft[key];
         }
       }
+    }
+    if (!patch2.webhooks && urlIntent.kind !== "unchanged") {
+      const { url_present: _drop, ...rest } = draft.webhooks;
+      void _drop;
+      const webhookPatch = { ...rest };
+      if (urlIntent.kind === "set") {
+        webhookPatch.url = urlIntent.value;
+      } else if (urlIntent.kind === "clear") {
+        webhookPatch.url = null;
+      }
+      patch2.webhooks = webhookPatch;
     }
     return patch2;
   }
@@ -2025,6 +2293,7 @@
   function SettingsModal({ onDataReload }) {
     const [loadError, setLoadError] = d2(null);
     const [loading, setLoading] = d2(false);
+    const [urlIntent, setUrlIntent] = d2({ kind: "unchanged" });
     const fetchSettings = q2(async () => {
       setLoading(true);
       setLoadError(null);
@@ -2034,6 +2303,7 @@
         const body = await r4.json();
         settingsServer.value = body;
         settingsDraft.value = body;
+        setUrlIntent({ kind: "unchanged" });
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -2054,7 +2324,7 @@
       const server = settingsServer.value;
       const draft = settingsDraft.value;
       if (!server || !draft) return;
-      const patch2 = diffPatch(server, draft);
+      const patch2 = diffPatch(server, draft, urlIntent);
       if (Object.keys(patch2).length === 0) return;
       settingsInFlight.value = true;
       try {
@@ -2076,6 +2346,7 @@
         const updated = await r4.json();
         settingsServer.value = updated;
         settingsDraft.value = updated;
+        setUrlIntent({ kind: "unchanged" });
         setStatus("settings", "success", "SAVED", 2500);
         void onDataReload(true);
       } catch (err) {
@@ -2084,7 +2355,7 @@
         settingsInFlight.value = false;
       }
     }
-    const dirty = isDirty(settingsServer.value, settingsDraft.value);
+    const dirty = isDirty(settingsServer.value, settingsDraft.value) || urlIntent.kind !== "unchanged";
     const inFlight2 = settingsInFlight.value;
     const activeKey = settingsActiveSection.value;
     const activeMeta = SECTIONS.find((s4) => s4.key === activeKey) ?? SECTIONS[0];
@@ -2110,6 +2381,13 @@
           return /* @__PURE__ */ u4(PollingSection, {});
         case "statusline_blocks":
           return /* @__PURE__ */ u4(StatuslineBlocksSection, {});
+        case "webhooks":
+          return /* @__PURE__ */ u4(
+            WebhooksSection,
+            {
+              onUrlIntentChange: setUrlIntent
+            }
+          );
         default:
           return /* @__PURE__ */ u4("div", { class: "settings-loading", children: "Coming soon." });
       }

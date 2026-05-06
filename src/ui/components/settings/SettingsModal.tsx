@@ -12,6 +12,8 @@ import { InlineStatus } from '../InlineStatus';
 import { DisplaySection } from './DisplaySection';
 import { PollingSection } from './PollingSection';
 import { StatuslineBlocksSection } from './StatuslineBlocksSection';
+import { WebhooksSection } from './WebhooksSection';
+import type { UrlIntent } from './WebhooksSection';
 
 interface SettingsModalProps {
   onDataReload: (force?: boolean) => Promise<void>;
@@ -29,7 +31,7 @@ const SECTIONS: SectionMeta[] = [
   { key: 'display', label: 'Display', description: 'Currency, locale, and number compaction.', comingSoon: false },
   { key: 'polling', label: 'Polling', description: 'How often live data sources are refreshed.', comingSoon: false },
   { key: 'statusline_blocks', label: 'Statusline & blocks', description: 'Threshold tuning and block sizing.', comingSoon: false },
-  { key: 'webhooks', label: 'Webhooks', description: 'Notify external systems on events.', comingSoon: true },
+  { key: 'webhooks', label: 'Webhooks', description: 'Notify external systems on events.', comingSoon: false },
   { key: 'aliases', label: 'Project aliases', description: 'Map project slugs to display names.', comingSoon: true },
   { key: 'pricing', label: 'Pricing overrides', description: 'Custom rates for specific models.', comingSoon: true },
 ];
@@ -42,8 +44,12 @@ function isDirty(server: SettingsResponse | null, draft: SettingsResponse | null
 /** Compute a sparse SettingsPatch containing only sections whose stringified
  *  form differs between draft and server. Only sections present in M2 may
  *  change today; the diff still iterates the full top-level keyset so future
- *  milestones get this for free. */
-function diffPatch(server: SettingsResponse, draft: SettingsResponse): SettingsPatch {
+ *  milestones get this for free.
+ *
+ *  urlIntent is passed explicitly because the webhook URL is never round-tripped
+ *  through the draft (server returns url_present:bool, not the URL string itself).
+ *  The intent encodes whether the user set or cleared the URL this session. */
+function diffPatch(server: SettingsResponse, draft: SettingsResponse, urlIntent: UrlIntent): SettingsPatch {
   const patch: SettingsPatch = {};
   type SectionKey = keyof SettingsResponse;
   // Iterate keys defensively — `read_only` is server-derived and can't be
@@ -65,17 +71,37 @@ function diffPatch(server: SettingsResponse, draft: SettingsResponse): SettingsP
     if (JSON.stringify(server[key]) !== JSON.stringify(draft[key])) {
       // We send the *full* sub-object on diff; the server can interpret it as
       // a Partial since SettingsPatch types each section as Partial<...>.
-      // For webhooks we strip `url_present` (server-derived) — `url` would be
-      // sent if M3 added an editor; M2 doesn't touch webhooks at all.
+      // For webhooks we strip `url_present` (server-derived) and inject the
+      // URL intent from the section's local state.
       if (key === 'webhooks') {
         const { url_present: _drop, ...rest } = draft.webhooks;
         void _drop;
-        patch.webhooks = rest;
+        const webhookPatch: SettingsPatch['webhooks'] = { ...rest };
+        if (urlIntent.kind === 'set') {
+          webhookPatch.url = urlIntent.value;
+        } else if (urlIntent.kind === 'clear') {
+          webhookPatch.url = null;
+        }
+        // kind === 'unchanged': omit url field entirely
+        patch.webhooks = webhookPatch;
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (patch as any)[key] = draft[key];
       }
     }
+  }
+  // Also emit webhooks patch if only the url intent changed (url_present unchanged
+  // in draft but user explicitly set/cleared the URL).
+  if (!patch.webhooks && urlIntent.kind !== 'unchanged') {
+    const { url_present: _drop, ...rest } = draft.webhooks;
+    void _drop;
+    const webhookPatch: SettingsPatch['webhooks'] = { ...rest };
+    if (urlIntent.kind === 'set') {
+      webhookPatch.url = urlIntent.value;
+    } else if (urlIntent.kind === 'clear') {
+      webhookPatch.url = null;
+    }
+    patch.webhooks = webhookPatch;
   }
   return patch;
 }
@@ -96,6 +122,10 @@ function closeModal(force = false): void {
 export function SettingsModal({ onDataReload }: SettingsModalProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // URL intent tracks whether the user explicitly set or cleared the webhook URL
+  // this session. It is separate from the draft because url_present is a bool
+  // (server never returns the URL string) so we cannot diff it normally.
+  const [urlIntent, setUrlIntent] = useState<UrlIntent>({ kind: 'unchanged' });
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
@@ -106,6 +136,7 @@ export function SettingsModal({ onDataReload }: SettingsModalProps) {
       const body = (await r.json()) as SettingsResponse;
       settingsServer.value = body;
       settingsDraft.value = body;
+      setUrlIntent({ kind: 'unchanged' });
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -128,7 +159,7 @@ export function SettingsModal({ onDataReload }: SettingsModalProps) {
     const server = settingsServer.value;
     const draft = settingsDraft.value;
     if (!server || !draft) return;
-    const patch = diffPatch(server, draft);
+    const patch = diffPatch(server, draft, urlIntent);
     if (Object.keys(patch).length === 0) return;
 
     settingsInFlight.value = true;
@@ -152,6 +183,7 @@ export function SettingsModal({ onDataReload }: SettingsModalProps) {
       const updated = (await r.json()) as SettingsResponse;
       settingsServer.value = updated;
       settingsDraft.value = updated;
+      setUrlIntent({ kind: 'unchanged' });
       setStatus('settings', 'success', 'SAVED', 2500);
       // Refresh dependent panels (currency, costs, etc.) after a save.
       void onDataReload(true);
@@ -162,7 +194,7 @@ export function SettingsModal({ onDataReload }: SettingsModalProps) {
     }
   }
 
-  const dirty = isDirty(settingsServer.value, settingsDraft.value);
+  const dirty = isDirty(settingsServer.value, settingsDraft.value) || urlIntent.kind !== 'unchanged';
   const inFlight = settingsInFlight.value;
   const activeKey = settingsActiveSection.value;
   const activeMeta = SECTIONS.find((s) => s.key === activeKey) ?? SECTIONS[0]!;
@@ -188,6 +220,11 @@ export function SettingsModal({ onDataReload }: SettingsModalProps) {
       case 'display': return <DisplaySection />;
       case 'polling': return <PollingSection />;
       case 'statusline_blocks': return <StatuslineBlocksSection />;
+      case 'webhooks': return (
+        <WebhooksSection
+          onUrlIntentChange={setUrlIntent}
+        />
+      );
       default: return (
         <div class="settings-loading">Coming soon.</div>
       );
