@@ -15,6 +15,8 @@ struct AppShellView: View {
     @Bindable var shell: AppShellModel
     @Bindable var overview: OverviewFeatureModel
     @Bindable var liveMonitor: LiveMonitorFeatureModel
+    @Bindable var filters: DashboardFiltersModel
+    @Bindable var savedViews: SavedViewsModel
     let helperPort: Int
     let providerModel: (ProviderID) -> ProviderFeatureModel
 
@@ -23,43 +25,71 @@ struct AppShellView: View {
             WindowSidebar(shell: self.shell)
             .navigationTitle("Heimdall")
         } detail: {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    switch self.shell.navigationSelection {
-                    case .overview:
-                        WindowOverviewView(
-                            overview: self.overview,
-                            shell: self.shell,
-                            providerModel: self.providerModel
-                        )
-                    case .liveMonitor:
-                        WindowLiveMonitorView(model: self.liveMonitor, helperPort: self.helperPort)
-                    case .provider(let provider):
-                        WindowProviderView(
-                            model: self.providerModel(provider),
-                            onErrorTap: { toolName in
-                                self.shell.navigationSelection = .toolErrors(toolName: toolName)
-                            }
-                        )
-                    case .toolErrors(let toolName):
-                        WindowToolErrorsView(
-                            toolName: toolName,
-                            port: self.helperPort,
-                            onBack: { self.shell.navigationSelection = .overview }
-                        )
-                    }
+            VStack(spacing: 0) {
+                let activeGroups = self.filters.activeGroups(for: self.shell.navigationSelection)
+                if !activeGroups.isEmpty {
+                    DashboardFilterBar(filters: self.filters, tab: self.shell.navigationSelection)
+                    Divider()
+                    SavedViewsBar(model: self.savedViews, filters: self.filters)
+                    Divider()
                 }
-                .padding(24)
-                .frame(maxWidth: AppShellLayout.overviewMaxWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .background(Color(nsColor: .windowBackgroundColor))
-            .onAppear { self.syncLiveMonitorActivity() }
-            .onChange(of: self.shell.navigationSelection) { _, _ in
-                self.syncLiveMonitorActivity()
-            }
-            .onChange(of: self.scenePhase) { _, _ in
-                self.syncLiveMonitorActivity()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        switch self.shell.navigationSelection {
+                        case .overview:
+                            WindowOverviewView(
+                                overview: self.overview,
+                                shell: self.shell,
+                                providerModel: self.providerModel
+                            )
+                        case .today:
+                            WindowPlaceholderView(title: "Today", systemImage: "sun.max",
+                                                  subtitle: "Today's usage — coming in Phase 2")
+                        case .activity:
+                            WindowPlaceholderView(title: "Activity", systemImage: "chart.line.uptrend.xyaxis",
+                                                  subtitle: "Trends & charts — coming in Phase 3")
+                        case .agents:
+                            WindowPlaceholderView(title: "Agents", systemImage: "person.3",
+                                                  subtitle: "Agent activity — coming in Phase 4")
+                        case .costModels:
+                            WindowPlaceholderView(title: "Cost & Models", systemImage: "dollarsign.circle",
+                                                  subtitle: "Cost breakdowns — coming in Phase 4")
+                        case .sessions:
+                            WindowPlaceholderView(title: "Sessions", systemImage: "list.bullet.rectangle",
+                                                  subtitle: "Session tables — coming in Phase 5")
+                        case .projects:
+                            WindowPlaceholderView(title: "Projects", systemImage: "folder",
+                                                  subtitle: "Project registry — coming in Phase 5")
+                        case .liveMonitor:
+                            WindowLiveMonitorView(model: self.liveMonitor, helperPort: self.helperPort)
+                        case .provider(let provider):
+                            WindowProviderView(
+                                model: self.providerModel(provider),
+                                onErrorTap: { toolName in
+                                    self.shell.navigationSelection = .toolErrors(toolName: toolName)
+                                }
+                            )
+                        case .toolErrors(let toolName):
+                            WindowToolErrorsView(
+                                toolName: toolName,
+                                port: self.helperPort,
+                                onBack: { self.shell.navigationSelection = .overview }
+                            )
+                        }
+                    }
+                    .padding(24)
+                    .frame(maxWidth: AppShellLayout.overviewMaxWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .background(Color(nsColor: .windowBackgroundColor))
+                .onAppear { self.syncLiveMonitorActivity() }
+                .onChange(of: self.shell.navigationSelection) { _, _ in
+                    self.syncLiveMonitorActivity()
+                }
+                .onChange(of: self.scenePhase) { _, _ in
+                    self.syncLiveMonitorActivity()
+                }
             }
         }
         .toolbar {
@@ -73,7 +103,7 @@ struct AppShellView: View {
                             await self.liveMonitor.refresh()
                         case .provider(let provider):
                             await self.providerModel(provider).refresh()
-                        case .toolErrors:
+                        case .today, .activity, .agents, .costModels, .sessions, .projects, .toolErrors:
                             break
                         }
                     }
@@ -110,7 +140,7 @@ struct AppShellView: View {
             return self.liveMonitor.isRefreshing
         case .provider(let provider):
             return self.providerModel(provider).isBusy
-        case .toolErrors:
+        case .today, .activity, .agents, .costModels, .sessions, .projects, .toolErrors:
             return false
         }
     }
@@ -120,6 +150,31 @@ struct AppShellView: View {
             isSelected: self.shell.navigationSelection == .liveMonitor,
             appIsActive: self.scenePhase == .active
         )
+    }
+}
+
+private struct WindowPlaceholderView: View {
+    let title: String
+    let systemImage: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: self.systemImage)
+                .font(.system(size: 40, weight: .light))
+                .foregroundStyle(.tertiary)
+            VStack(spacing: 6) {
+                Text(self.title)
+                    .font(.title2.weight(.semibold))
+                Text(self.subtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 320)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 64)
     }
 }
 
@@ -167,6 +222,8 @@ private struct WindowOverviewView: View {
                 isRetrying: projection.isRefreshing
             )
 
+            WindowOverviewStatsRow(projection: projection)
+
             if let aggregate = self.overview.syncedAggregate {
                 WindowOverviewCloudSyncSection(aggregate: aggregate, state: self.overview.cloudSyncState)
             }
@@ -178,6 +235,10 @@ private struct WindowOverviewView: View {
                     self.shell.selectNavigation(.provider(provider))
                 }
             )
+
+            WindowOverviewCacheSection(items: projection.items)
+
+            WindowOverviewSubagentSection(items: projection.items)
 
             WindowOverviewActivitySection(projection: projection)
         }
@@ -365,6 +426,187 @@ private struct WindowOverviewActivitySection: View {
         }
     }
 }
+
+// MARK: - Phase 1: Stats row, cache efficiency, subagent sections
+
+private struct WindowOverviewStatsRow: View {
+    let projection: OverviewMenuProjection
+
+    private var combined30dCostUSD: Double {
+        self.projection.items.compactMap { $0.last30DaysCostUSD }.reduce(0, +)
+    }
+
+    private var combined30dTokens: Int {
+        self.projection.items.compactMap { $0.last30DaysBreakdown?.total }.reduce(0, +)
+    }
+
+    private var combinedCacheHitRate: Double? {
+        let pairs = self.projection.items.compactMap { item -> (Double, Int)? in
+            guard let rate = item.cacheHitRate30d,
+                  let tokens = item.last30DaysBreakdown?.total,
+                  tokens > 0 else { return nil }
+            return (rate, tokens)
+        }
+        guard !pairs.isEmpty else { return nil }
+        let totalTokens = pairs.map { $0.1 }.reduce(0, +)
+        guard totalTokens > 0 else { return nil }
+        return pairs.map { $0.0 * Double($0.1) }.reduce(0, +) / Double(totalTokens)
+    }
+
+    var body: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible()), GridItem(.flexible()),
+                GridItem(.flexible()), GridItem(.flexible())
+            ],
+            spacing: 12
+        ) {
+            WindowOverviewKpiTile(label: "30-day spend", value: FormatHelpers.formatUSD(self.combined30dCostUSD))
+            WindowOverviewKpiTile(label: "Today", value: FormatHelpers.formatUSD(self.projection.combinedTodayCostUSD))
+            WindowOverviewKpiTile(label: "30-day tokens", value: Self.compactTokens(self.combined30dTokens))
+            if let rate = self.combinedCacheHitRate {
+                WindowOverviewKpiTile(label: "Cache hit rate", value: String(format: "%.1f%%", rate * 100))
+            } else {
+                WindowOverviewKpiTile(label: "Cache hit rate", value: "—")
+            }
+        }
+    }
+
+    private static func compactTokens(_ value: Int) -> String {
+        let d = Double(value)
+        if value >= 1_000_000_000 { return String(format: "%.1fB", d / 1_000_000_000) }
+        if value >= 1_000_000     { return String(format: "%.1fM", d / 1_000_000) }
+        if value >= 1_000         { return String(format: "%.1fK", d / 1_000) }
+        return "\(value)"
+    }
+}
+
+private struct WindowOverviewKpiTile: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(self.label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            Text(self.value)
+                .font(.title3.weight(.semibold).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .menuCardBackground(opacity: 0.04, cornerRadius: 12)
+    }
+}
+
+private struct WindowOverviewCacheSection: View {
+    let items: [ProviderMenuProjection]
+
+    private var cacheItems: [ProviderMenuProjection] {
+        self.items.filter { $0.cacheHitRate30d != nil || ($0.cacheSavings30dUSD ?? 0) > 0 }
+    }
+
+    var body: some View {
+        if !self.cacheItems.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                WindowSectionHeader(
+                    title: "Cache efficiency",
+                    subtitle: "Token cache hit rate and savings over 30 days"
+                )
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: AppShellLayout.analyticsCardMinimumWidth), spacing: 16)],
+                    spacing: 16
+                ) {
+                    ForEach(self.cacheItems) { item in
+                        WindowOverviewCacheCard(item: item)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct WindowOverviewCacheCard: View {
+    let item: ProviderMenuProjection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(self.item.title)
+                    .font(.headline)
+                Spacer()
+                Image(systemName: "bolt.fill")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+
+            HStack(spacing: 20) {
+                if let rate = self.item.cacheHitRate30d {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Hit rate")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Text(String(format: "%.1f%%", rate * 100))
+                            .font(.title3.weight(.semibold).monospacedDigit())
+                    }
+                }
+                if let savings = self.item.cacheSavings30dUSD, savings > 0 {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Savings")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Text(FormatHelpers.formatUSD(savings))
+                            .font(.title3.weight(.semibold).monospacedDigit())
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .menuCardBackground(opacity: 0.04, cornerRadius: 16)
+    }
+}
+
+private struct WindowOverviewSubagentSection: View {
+    let items: [ProviderMenuProjection]
+
+    private var agentItems: [(title: String, breakdown: ProviderSubagentBreakdown)] {
+        self.items.compactMap { item in
+            guard let breakdown = item.subagentBreakdown, breakdown.totalTurns > 0 else { return nil }
+            return (title: item.title, breakdown: breakdown)
+        }
+    }
+
+    var body: some View {
+        if !self.agentItems.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                WindowSectionHeader(
+                    title: "Subagents",
+                    subtitle: "Parallel sidechain agent activity over 30 days"
+                )
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: AppShellLayout.analyticsCardMinimumWidth), spacing: 16)],
+                    spacing: 16
+                ) {
+                    ForEach(self.agentItems, id: \.title) { entry in
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(entry.title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .padding(.top, 8)
+                            SubagentSummaryCard(breakdown: entry.breakdown)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - End Phase 1
 
 private struct WindowLiveMonitorView: View {
     @Bindable var model: LiveMonitorFeatureModel

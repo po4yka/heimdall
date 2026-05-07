@@ -11,6 +11,8 @@ public final class AppModel {
     public let overview: OverviewFeatureModel
     public let liveMonitor: LiveMonitorFeatureModel
     public let settings: SettingsFeatureModel
+    public let filters: DashboardFiltersModel
+    public let savedViews: SavedViewsModel
 
     private let refreshCoordinator: RefreshCoordinator
     private let providerRepository: ProviderRepository
@@ -30,6 +32,8 @@ public final class AppModel {
 
         self.sessionStore = sessionStore
         self.shell = AppShellModel(sessionStore: sessionStore)
+        self.filters = DashboardFiltersModel()
+        self.savedViews = SavedViewsModel()
         self.overview = OverviewFeatureModel(
             sessionStore: sessionStore,
             repository: providerRepository,
