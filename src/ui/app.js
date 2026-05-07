@@ -7416,7 +7416,10 @@
       defaultSize: { w: 4, h: 1 },
       minW: 2,
       minH: 1,
-      render: mount("today-date-picker-mount")
+      render: (el) => {
+        el.id = "today-date-picker-mount";
+        invokeMountCallback("today-date-picker-mount", el);
+      }
     },
     {
       id: "today-kpis-mount",
@@ -13835,13 +13838,13 @@ ${row.project}` : row.project;
     "sessions-mount": "tables",
     "project-cost-mount": "tables",
     "projects-registry": "projects",
-    "today-date-picker-mount": "activity",
-    "today-kpis-mount": "activity",
-    "today-hour-timeline-mount": "activity",
-    "today-hour-heatstrip-mount": "activity",
-    "today-days-hours-30-mount": "activity",
-    "today-days-hours-7-mount": "activity",
-    "today-weekday-hour-mount": "activity"
+    "today-date-picker-mount": "today",
+    "today-kpis-mount": "today",
+    "today-hour-timeline-mount": "today",
+    "today-hour-heatstrip-mount": "today",
+    "today-days-hours-30-mount": "today",
+    "today-days-hours-7-mount": "today",
+    "today-weekday-hour-mount": "today"
   };
   var SECTION_DISPLAY_MODE = {
     "usage-windows": "grid",
@@ -13903,6 +13906,11 @@ ${row.project}` : row.project;
       const hasContent = container.dataset["hasContent"] !== "0";
       const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? "";
       container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : "none";
+    }
+  }
+  function clearTodayWidgets() {
+    for (const id of Object.keys(SECTION_TAB_MAP).filter((k4) => SECTION_TAB_MAP[k4] === "today")) {
+      setSectionVisibility(id, false);
     }
   }
   function renderEstimationMeta(confidenceBreakdown, billingModeBreakdown, pricingVersions) {
@@ -14816,8 +14824,15 @@ ${row.project}` : row.project;
         if (data) renderTodayView(data, handleDateChange);
       });
     }
+    registerMountCallback("today-date-picker-mount", () => {
+      queueMicrotask(() => {
+        if (todayData.value && activeDashboardTab.value === "today") {
+          renderTodayView(todayData.value, handleDateChange);
+        }
+      });
+    });
     function maybeLoadToday() {
-      if (activeDashboardTab.value !== "activity") return;
+      if (activeDashboardTab.value !== "today") return;
       void loadToday(selectedDate.value, currentTimezoneOffsetMinutes()).then((data) => {
         if (data) renderTodayView(data, handleDateChange);
       });
@@ -14826,10 +14841,12 @@ ${row.project}` : row.project;
       applyFilter,
       handleDashboardTabChange(tab) {
         if (activeDashboardTab.value === tab) return;
+        const prevTab = activeDashboardTab.value;
         activeDashboardTab.value = tab;
         syncDashboardUrl();
+        if (prevTab === "today") clearTodayWidgets();
         refreshSectionVisibility();
-        if (tab === "activity") {
+        if (tab === "today") {
           if (todayData.value) {
             renderTodayView(todayData.value, handleDateChange);
           } else {

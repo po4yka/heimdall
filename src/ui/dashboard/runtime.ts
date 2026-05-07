@@ -1,5 +1,6 @@
 import { downloadCSV } from '../lib/csv';
 import { clearStatus, setStatus } from '../lib/status';
+import { registerMountCallback } from '../widgets/mount-registry';
 import type {
   AgentStatusSnapshot,
   BillingBlocksResponse,
@@ -29,6 +30,7 @@ import {
   type DashboardTab,
 } from '../state/store';
 import {
+  clearTodayWidgets,
   refreshSectionVisibility,
   renderActivityHeatmap,
   renderAgentStatus,
@@ -475,9 +477,20 @@ export function createDashboardRuntime(): DashboardRuntime {
     });
   }
 
+  // When the activity grid first creates the today-date-picker-mount element
+  // (async layout fetch), re-render all today widgets if data already arrived.
+  // queueMicrotask defers past the grid's init loop so all today widget IDs
+  // are set before renderTodayView queries them with getElementById.
+  registerMountCallback('today-date-picker-mount', () => {
+    queueMicrotask(() => {
+      if (todayData.value && activeDashboardTab.value === 'today') {
+        renderTodayView(todayData.value, handleDateChange);
+      }
+    });
+  });
+
   function maybeLoadToday(): void {
-    // Today widgets now live on the Activity tab.
-    if (activeDashboardTab.value !== 'activity') return;
+    if (activeDashboardTab.value !== 'today') return;
     void loadToday(selectedDate.value, currentTimezoneOffsetMinutes()).then(data => {
       if (data) renderTodayView(data, handleDateChange);
     });
@@ -487,10 +500,14 @@ export function createDashboardRuntime(): DashboardRuntime {
     applyFilter,
     handleDashboardTabChange(tab: DashboardTab): void {
       if (activeDashboardTab.value === tab) return;
+      const prevTab = activeDashboardTab.value;
       activeDashboardTab.value = tab;
       syncDashboardUrl();
+      // Hide today widget grid items when leaving the Today tab so they don't
+      // bleed into Activity (both share the same activity screen grid).
+      if (prevTab === 'today') clearTodayWidgets();
       refreshSectionVisibility();
-      if (tab === 'activity') {
+      if (tab === 'today') {
         // Re-render today widgets if data already available, otherwise fetch.
         if (todayData.value) {
           renderTodayView(todayData.value, handleDateChange);

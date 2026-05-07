@@ -112,13 +112,13 @@ const SECTION_TAB_MAP: Record<string, DashboardTab> = {
   'sessions-mount': 'tables',
   'project-cost-mount': 'tables',
   'projects-registry': 'projects',
-  'today-date-picker-mount': 'activity',
-  'today-kpis-mount': 'activity',
-  'today-hour-timeline-mount': 'activity',
-  'today-hour-heatstrip-mount': 'activity',
-  'today-days-hours-30-mount': 'activity',
-  'today-days-hours-7-mount': 'activity',
-  'today-weekday-hour-mount': 'activity',
+  'today-date-picker-mount': 'today',
+  'today-kpis-mount': 'today',
+  'today-hour-timeline-mount': 'today',
+  'today-hour-heatstrip-mount': 'today',
+  'today-days-hours-30-mount': 'today',
+  'today-days-hours-7-mount': 'today',
+  'today-weekday-hour-mount': 'today',
 };
 
 const SECTION_DISPLAY_MODE: Record<string, string> = {
@@ -224,6 +224,13 @@ export function refreshSectionVisibility(): void {
     const hasContent = container.dataset['hasContent'] !== '0';
     const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? '';
     container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : 'none';
+  }
+}
+
+/** Hide all today widget grid items (called when switching away from the Today tab). */
+export function clearTodayWidgets(): void {
+  for (const id of Object.keys(SECTION_TAB_MAP).filter(k => SECTION_TAB_MAP[k] === 'today')) {
+    setSectionVisibility(id, false);
   }
 }
 

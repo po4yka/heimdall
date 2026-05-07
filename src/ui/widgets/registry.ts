@@ -553,7 +553,13 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     defaultSize: { w: 4, h: 1 },
     minW: 2,
     minH: 1,
-    render: mount('today-date-picker-mount'),
+    render: (el: HTMLElement) => {
+      el.id = 'today-date-picker-mount';
+      // Notify runtime so it can render today widgets when the grid is ready.
+      // This handles the race where /api/today resolves before the async grid
+      // layout fetch completes and the widget body elements are created.
+      invokeMountCallback('today-date-picker-mount', el);
+    },
   },
   {
     id: 'today-kpis-mount',
