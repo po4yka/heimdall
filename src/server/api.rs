@@ -1011,8 +1011,9 @@ where
 pub async fn api_claude_usage(
     State(state): State<Arc<AppState>>,
     request: Request,
-) -> Result<Json<Value>, StatusCode> {
-    enforce_loopback_request(&request)?;
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    enforce_loopback_request(&request)
+        .map_err(|s| (s, Json(serde_json::json!({"error": "forbidden"}))))?;
     let db_path = state.db_path.clone();
     let response = tokio::task::spawn_blocking(move || -> anyhow::Result<ClaudeUsageResponse> {
         let conn = db::open_db(&db_path)?;
@@ -1020,10 +1021,11 @@ pub async fn api_claude_usage(
         db::get_latest_claude_usage_response(&conn)
     })
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
 
-    let value = serde_json::to_value(response).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let value = serde_json::to_value(response)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
     Ok(Json(value))
 }
 
@@ -1926,8 +1928,9 @@ pub async fn api_heatmap(
     State(state): State<Arc<AppState>>,
     Query(params): Query<HeatmapParams>,
     request: Request,
-) -> Result<Json<Value>, StatusCode> {
-    enforce_loopback_request(&request)?;
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    enforce_loopback_request(&request)
+        .map_err(|s| (s, Json(serde_json::json!({"error": "forbidden"}))))?;
     let _db_guard = state.db_lock.lock().await;
     let db_path = state.db_path.clone();
     let period = params.period.unwrap_or_else(|| "month".to_string());
@@ -1946,8 +1949,8 @@ pub async fn api_heatmap(
         Ok((cells, total_cost_nanos, active_days))
     })
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
 
     let (cells, total_cost_nanos, active_days) = result;
     let max_cost_nanos = cells.iter().map(|c| c.cost_nanos).max().unwrap_or(0);
@@ -1964,7 +1967,8 @@ pub async fn api_heatmap(
         tz_offset_min,
     };
 
-    let value = serde_json::to_value(resp).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let value = serde_json::to_value(resp)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
     Ok(Json(value))
 }
 
@@ -2013,10 +2017,14 @@ pub async fn api_stream(
 pub async fn api_billing_blocks(
     State(state): State<Arc<AppState>>,
     request: Request,
-) -> Result<Json<Value>, StatusCode> {
-    enforce_loopback_request(&request)?;
-    let response = load_billing_blocks_response(&state).await?;
-    let value = serde_json::to_value(response).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    enforce_loopback_request(&request)
+        .map_err(|s| (s, Json(serde_json::json!({"error": "forbidden"}))))?;
+    let response = load_billing_blocks_response(&state)
+        .await
+        .map_err(|s| (s, Json(serde_json::json!({"error": "internal server error"}))))?;
+    let value = serde_json::to_value(response)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
     Ok(Json(value))
 }
 

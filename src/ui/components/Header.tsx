@@ -101,14 +101,14 @@ export function Header({
 
   return (
     <header ref={headerRef}>
-      <h1 title={versionTitle}>
-        <span class="header-logo-mark">
+      <h1 title={versionTitle} aria-label="Heimdall">
+        <span class="header-logo-mark" aria-hidden="true">
           <span class="header-logo-mark__pre">Code</span>
           {' '}
           <span class="header-logo-mark__post">Usage</span>
         </span>
         {planLabel && (
-          <span class="header-plan-badge" aria-live="polite">
+          <span class="header-plan-badge" aria-hidden="true">
             {planLabel}
           </span>
         )}

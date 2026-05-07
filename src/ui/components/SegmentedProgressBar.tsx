@@ -56,7 +56,7 @@ export function SegmentedProgressBar({
     >
       <div
         class="segmented-bar__fill"
-        style={{ width: `${pct}%`, background: fillColor }}
+        style={{ width: `${pct}%`, background: fillColor, minWidth: pct > 0 ? '8px' : '0' }}
       />
     </div>
   );

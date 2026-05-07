@@ -54,7 +54,7 @@ export const archiveImports = signal<ImportMeta[]>([]);
 
 // ── Filter state ─────────────────────────────────────────────────────
 export type ProviderFilter = 'claude' | 'codex' | 'both';
-export type DashboardTab = 'overview' | 'activity' | 'breakdowns' | 'tables' | 'projects';
+export type DashboardTab = 'overview' | 'activity' | 'breakdowns' | 'tables' | 'projects' | 'today' | 'agents';
 
 // ── Feature 3: Today view state ───────────────────────────────────────────────
 /// null means "resolve today server-side"; a YYYY-MM-DD string pins a specific day.
@@ -212,19 +212,15 @@ function readRangeFromUrl(): RangeKey {
 
 function readDashboardTab(): DashboardTab {
   const p = readSearchParam(DASHBOARD_TAB_PARAM);
-  // Backwards-compat for legacy URLs: `today` was folded into `activity`,
-  // `backup` was moved to a header-launched modal (see #/backup hash route).
-  if (p === 'today') return 'activity';
   if (p === 'backup') {
     // Side effect: write the `#/backup` hash so the existing hash-route
-    // listener in app.tsx picks it up and opens the modal. Mirrors the
-    // landing surface of the new URL form (`?tab=overview#/backup`).
+    // listener in app.tsx picks it up and opens the modal.
     if (typeof window !== 'undefined' && !/^#\/backup\b/.test(window.location.hash)) {
       history.replaceState(null, '', window.location.pathname + window.location.search + '#/backup');
     }
     return 'overview';
   }
-  return (['overview', 'activity', 'breakdowns', 'tables', 'projects'] as DashboardTab[]).includes(p as DashboardTab)
+  return (['overview', 'activity', 'breakdowns', 'tables', 'projects', 'today', 'agents'] as DashboardTab[]).includes(p as DashboardTab)
     ? (p as DashboardTab)
     : 'overview';
 }
@@ -270,10 +266,12 @@ function isDefaultModelSelection(allModels: string[]): boolean {
 
 // ── Phase 18: data-load state ─────────────────────────────────────────
 // 'idle'       — no fetch in progress; data (if any) is current.
-// 'refreshing' — a subsequent fetch is in progress; old data remains
-//                visible so the UI does not flash blank.
+// 'refreshing' — a fetch is in progress; on the first load rawData is
+//                null; on subsequent loads old data remains visible.
 export type LoadState = 'idle' | 'refreshing';
-export const loadState = signal<LoadState>('idle');
+// Start in 'refreshing' so ScreenGridManager shows the skeleton before
+// the first fetch completes rather than flashing the error state.
+export const loadState = signal<LoadState>('refreshing');
 
 // ── Phase 16: Version donut metric selector ──────────────────────────
 export type VersionMetric = 'cost' | 'calls' | 'tokens';
@@ -320,6 +318,25 @@ function readFiltersExpanded(): boolean {
 }
 
 export const activeDashboardTab = signal<DashboardTab>(readDashboardTab());
+
+// Maps sidebar tabs to the underlying widget-grid screen. 'today' and 'agents'
+// reuse existing screens whose layouts already contain the relevant widgets
+// (today→activity, agents→breakdowns), avoiding duplicate DOM mount IDs.
+export function tabToScreen(tab: DashboardTab): import('../widgets/registry').DashboardScreen {
+  if (tab === 'today') return 'activity';
+  if (tab === 'agents') return 'breakdowns';
+  return tab as import('../widgets/registry').DashboardScreen;
+}
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem('heimdall:sidebarCollapsed') === 'true';
+  } catch {
+    return false;
+  }
+}
+export const sidebarCollapsed = signal<boolean>(readSidebarCollapsed());
+
 export const agent_status_expanded = signal<boolean>(readAgentStatusExpanded());
 export const official_sync_expanded = signal<boolean>(readOfficialSyncExpanded());
 export const mobile_filters_expanded = signal<boolean>(readFiltersExpanded());
@@ -361,9 +378,9 @@ export function syncDashboardUrl(): void {
   const params = new URLSearchParams();
 
   if (activeDashboardTab.value !== 'overview') params.set(DASHBOARD_TAB_PARAM, activeDashboardTab.value);
-  // Today widgets now live on the Activity tab; preserve a pinned date in
-  // the URL when the user is on Activity (where the date picker lives).
-  if (activeDashboardTab.value === 'activity' && selectedDate.value) {
+  // Preserve a pinned date when on either the 'today' or 'activity' tab
+  // (both tabs surface today-related widgets / date picker).
+  if ((activeDashboardTab.value === 'today' || activeDashboardTab.value === 'activity') && selectedDate.value) {
     params.set(TODAY_DATE_PARAM, selectedDate.value);
   }
   if (selectedRange.value !== '30d') params.set('range', selectedRange.value);

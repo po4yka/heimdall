@@ -1302,15 +1302,15 @@ mod tests {
 
         assert_eq!(data.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(usage.unwrap_err(), StatusCode::FORBIDDEN);
-        assert_eq!(claude_usage.unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(claude_usage.unwrap_err().0, StatusCode::FORBIDDEN);
         assert_eq!(live.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(refresh.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(history.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(mobile_snapshot.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(live_monitor.unwrap_err(), StatusCode::FORBIDDEN);
-        assert_eq!(heatmap.unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(heatmap.unwrap_err().0, StatusCode::FORBIDDEN);
         assert!(matches!(stream, Err(StatusCode::FORBIDDEN)));
-        assert_eq!(billing_blocks.unwrap_err(), StatusCode::FORBIDDEN);
+        assert_eq!(billing_blocks.unwrap_err().0, StatusCode::FORBIDDEN);
         assert_eq!(context_window.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(cost_reconciliation.unwrap_err(), StatusCode::FORBIDDEN);
         assert_eq!(agent_status.unwrap_err(), StatusCode::FORBIDDEN);

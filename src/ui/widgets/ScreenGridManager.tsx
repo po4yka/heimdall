@@ -8,9 +8,9 @@
  * Only the active screen's grid is visible. Tab changes are handled by
  * subscribing to the `activeDashboardTab` signal.
  */
-import { useEffect } from 'preact/hooks';
 import { WidgetGrid } from './WidgetGrid';
-import { activeDashboardTab } from '../state/store';
+import { activeDashboardTab, tabToScreen, loadState, rawData } from '../state/store';
+import { ChartSkeleton } from '../components/_primitives/Skeleton';
 import type { DashboardScreen } from './registry';
 
 const ALL_SCREENS: DashboardScreen[] = [
@@ -22,13 +22,9 @@ const ALL_SCREENS: DashboardScreen[] = [
 ];
 
 export function ScreenGridManager() {
-  const activeScreen = activeDashboardTab.value as DashboardScreen;
-
-  useEffect(() => {
-    // When the tab changes, refresh visibility of all grid roots.
-    // The WidgetGrid components are always mounted; visibility is CSS-driven.
-    // (The signal subscription triggers a re-render, so activeScreen is current.)
-  }, [activeScreen]);
+  const activeScreen = tabToScreen(activeDashboardTab.value);
+  const isLoading = loadState.value === 'refreshing' && rawData.value === null;
+  const isError = loadState.value === 'idle' && rawData.value === null;
 
   return (
     <>
@@ -39,6 +35,18 @@ export function ScreenGridManager() {
           data-screen={screen}
           style={{ display: screen === activeScreen ? '' : 'none' }}
         >
+          {screen === activeScreen && isLoading && (
+            <div class="screen-skeleton-overlay" aria-live="polite" aria-busy="true">
+              <ChartSkeleton />
+              <ChartSkeleton />
+              <ChartSkeleton />
+            </div>
+          )}
+          {screen === activeScreen && isError && (
+            <div role="alert" aria-live="assertive" style={{ padding: '24px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              [ERROR: FAILED TO LOAD DATA — CHECK SERVER LOGS]
+            </div>
+          )}
           <WidgetGrid screen={screen} />
         </div>
       ))}

@@ -46,7 +46,7 @@ function ProviderRow({ name, status, expanded }: ProviderRowProps) {
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0', gap: '8px' }}>
         <IndicatorDot indicator="none" />
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', flex: 1 }}>{name}</span>
-        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>unavailable</span>
+        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }} title="Status API unreachable">unavailable</span>
       </div>
     );
   }

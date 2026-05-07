@@ -1143,14 +1143,13 @@
   }
   function readDashboardTab() {
     const p5 = readSearchParam(DASHBOARD_TAB_PARAM);
-    if (p5 === "today") return "activity";
     if (p5 === "backup") {
       if (typeof window !== "undefined" && !/^#\/backup\b/.test(window.location.hash)) {
         history.replaceState(null, "", window.location.pathname + window.location.search + "#/backup");
       }
       return "overview";
     }
-    return ["overview", "activity", "breakdowns", "tables", "projects"].includes(p5) ? p5 : "overview";
+    return ["overview", "activity", "breakdowns", "tables", "projects", "today", "agents"].includes(p5) ? p5 : "overview";
   }
   function readProviderFromUrl() {
     const p5 = readSearchParam("provider");
@@ -1183,7 +1182,7 @@
     if (selectedModels.value.size !== allModels.length) return false;
     return allModels.every((model) => selectedModels.value.has(model));
   }
-  var loadState = y3("idle");
+  var loadState = y3("refreshing");
   function readVersionMetric() {
     const p5 = new URLSearchParams(window.location.search).get("version_metric");
     return ["cost", "calls", "tokens"].includes(p5) ? p5 : "cost";
@@ -1212,6 +1211,19 @@
     return p5 === "1" || p5 === "true";
   }
   var activeDashboardTab = y3(readDashboardTab());
+  function tabToScreen(tab) {
+    if (tab === "today") return "activity";
+    if (tab === "agents") return "breakdowns";
+    return tab;
+  }
+  function readSidebarCollapsed() {
+    try {
+      return localStorage.getItem("heimdall:sidebarCollapsed") === "true";
+    } catch {
+      return false;
+    }
+  }
+  var sidebarCollapsed = y3(readSidebarCollapsed());
   var agent_status_expanded = y3(readAgentStatusExpanded());
   var official_sync_expanded = y3(readOfficialSyncExpanded());
   var mobile_filters_expanded = y3(readFiltersExpanded());
@@ -1248,7 +1260,7 @@
     const allModels = rawData.value?.all_models ?? [];
     const params = new URLSearchParams();
     if (activeDashboardTab.value !== "overview") params.set(DASHBOARD_TAB_PARAM, activeDashboardTab.value);
-    if (activeDashboardTab.value === "activity" && selectedDate.value) {
+    if ((activeDashboardTab.value === "today" || activeDashboardTab.value === "activity") && selectedDate.value) {
       params.set(TODAY_DATE_PARAM, selectedDate.value);
     }
     if (selectedRange.value !== "30d") params.set("range", selectedRange.value);
@@ -1417,6 +1429,37 @@
       withSub && /* @__PURE__ */ u4(Skeleton, { width: "50%", height: "var(--font-size-tertiary)" })
     ] }) });
   }
+  function ChartSkeleton({ tall = false, bars = 12 }) {
+    const heights = ["55%", "80%", "40%", "95%", "65%", "50%", "75%", "35%", "90%", "60%", "45%", "85%"];
+    const height = tall ? "var(--chart-h-lg)" : "var(--chart-h-md)";
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "chart-wrap",
+        "aria-busy": "true",
+        style: {
+          height,
+          display: "flex",
+          alignItems: "flex-end",
+          gap: "var(--space-1)",
+          padding: "var(--space-3)"
+        },
+        children: Array.from({ length: bars }).map((_4, i4) => /* @__PURE__ */ u4(
+          "span",
+          {
+            class: "skeleton",
+            style: {
+              flex: 1,
+              height: heights[i4 % heights.length],
+              borderRadius: "var(--radius-1) var(--radius-1) 0 0",
+              display: "block"
+            }
+          },
+          i4
+        ))
+      }
+    );
+  }
   function TableSkeleton({ rows: rows2 = 6, columns: columns7 = 4 }) {
     return /* @__PURE__ */ u4("table", { "aria-busy": "true", style: { width: "100%" }, children: [
       /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: Array.from({ length: columns7 }).map((_4, i4) => /* @__PURE__ */ u4("th", { children: /* @__PURE__ */ u4(Skeleton, { width: "60%", height: "var(--font-size-tertiary)" }) }, i4)) }) }),
@@ -1580,7 +1623,7 @@
             padding: "0 4px",
             opacity: 0.7
           },
-          children: "[X]"
+          children: "Dismiss"
         }
       )
     ] });
@@ -6778,32 +6821,108 @@
     ] });
   }
 
-  // src/ui/components/DashboardTabs.tsx
-  var TABS = [
-    { key: "overview", label: "Overview" },
-    { key: "activity", label: "Activity" },
-    { key: "breakdowns", label: "Breakdowns" },
-    // Internal screen id stays `tables` so saved layouts and `?tab=tables`
-    // bookmarks keep working — only the visible label changed (2026-05-05).
-    { key: "tables", label: "Sessions" },
-    { key: "projects", label: "Projects" }
+  // src/ui/components/Sidebar.tsx
+  var NAV_ITEMS = [
+    { key: "overview", label: "Overview", abbr: "OV" },
+    { key: "today", label: "Today", abbr: "TD" },
+    { key: "activity", label: "Activity", abbr: "AC" },
+    { key: "agents", label: "Agents", abbr: "AG" },
+    { key: "breakdowns", label: "Cost & Models", abbr: "C$" },
+    { key: "tables", label: "Sessions", abbr: "SS" },
+    { key: "projects", label: "Projects", abbr: "PR" }
   ];
-  function DashboardTabs({ onTabChange }) {
-    return /* @__PURE__ */ u4("nav", { id: "dashboard-tabs", role: "tablist", "aria-label": "Dashboard sections", children: TABS.map((tab) => {
-      const active = activeDashboardTab.value === tab.key;
-      return /* @__PURE__ */ u4(
-        "button",
-        {
-          type: "button",
-          role: "tab",
-          class: `dashboard-tab${active ? " active" : ""}`,
-          "aria-selected": active,
-          onClick: () => onTabChange(tab.key),
-          children: tab.label
-        },
-        tab.key
-      );
-    }) });
+  function Sidebar() {
+    const collapsed = sidebarCollapsed.value;
+    const activeTab = activeDashboardTab.value;
+    y2(() => {
+      if (collapsed) {
+        document.documentElement.dataset["sidebarCollapsed"] = "";
+      } else {
+        delete document.documentElement.dataset["sidebarCollapsed"];
+      }
+    }, [collapsed]);
+    const handleNavClick = (tab) => {
+      activeDashboardTab.value = tab;
+      syncDashboardUrl();
+    };
+    const toggleCollapsed = () => {
+      sidebarCollapsed.value = !collapsed;
+      try {
+        localStorage.setItem("heimdall:sidebarCollapsed", String(!collapsed));
+      } catch {
+      }
+    };
+    return /* @__PURE__ */ u4(
+      "nav",
+      {
+        class: `sidebar${collapsed ? " sidebar--collapsed" : ""}`,
+        "aria-label": "Dashboard navigation",
+        children: [
+          /* @__PURE__ */ u4("ul", { class: "sidebar__nav", role: "list", children: NAV_ITEMS.map((item) => {
+            const active = activeTab === item.key;
+            return /* @__PURE__ */ u4("li", { children: /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: `sidebar__item${active ? " sidebar__item--active" : ""}`,
+                "aria-current": active ? "page" : void 0,
+                title: collapsed ? item.label : void 0,
+                onClick: () => handleNavClick(item.key),
+                children: [
+                  /* @__PURE__ */ u4("span", { class: "sidebar__abbr", "aria-hidden": "true", children: item.abbr }),
+                  !collapsed && /* @__PURE__ */ u4("span", { class: "sidebar__label", children: item.label })
+                ]
+              }
+            ) }, item.key);
+          }) }),
+          /* @__PURE__ */ u4("div", { class: "sidebar__footer", children: [
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "sidebar__icon-btn",
+                "aria-label": "Settings",
+                title: "Settings",
+                onClick: () => {
+                  settingsModalOpen.value = true;
+                },
+                children: [
+                  /* @__PURE__ */ u4("span", { "aria-hidden": "true", children: "\u2699" }),
+                  !collapsed && /* @__PURE__ */ u4("span", { class: "sidebar__label", children: "Settings" })
+                ]
+              }
+            ),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "sidebar__icon-btn",
+                "aria-label": "Backup",
+                title: "Backup",
+                onClick: () => {
+                  backupModalOpen.value = true;
+                },
+                children: [
+                  /* @__PURE__ */ u4("span", { "aria-hidden": "true", children: "\u2299" }),
+                  !collapsed && /* @__PURE__ */ u4("span", { class: "sidebar__label", children: "Backup" })
+                ]
+              }
+            ),
+            /* @__PURE__ */ u4(
+              "button",
+              {
+                type: "button",
+                class: "sidebar__collapse-btn",
+                "aria-label": collapsed ? "Expand sidebar" : "Collapse sidebar",
+                title: collapsed ? "Expand sidebar" : "Collapse sidebar",
+                onClick: toggleCollapsed,
+                children: /* @__PURE__ */ u4("span", { "aria-hidden": "true", children: collapsed ? "\xBB" : "\xAB" })
+              }
+            )
+          ] })
+        ]
+      }
+    );
   }
 
   // src/ui/widgets/apply-layout.ts
@@ -7616,7 +7735,7 @@
   function SavedViewsBar({ getCurrentLayout }) {
     void savedViewsToken.value;
     void activeViewToken.value;
-    const screen = activeDashboardTab.value;
+    const screen = tabToScreen(activeDashboardTab.value);
     const views = listViews(screen);
     const activeId = getActiveViewId(screen);
     const [savingName, setSavingName] = d2(null);
@@ -7715,7 +7834,9 @@
   // src/ui/lib/commands.ts
   var TAB_LABELS = {
     overview: "Overview",
+    today: "Today",
     activity: "Activity",
+    agents: "Agents",
     breakdowns: "Breakdowns",
     tables: "Sessions",
     projects: "Projects"
@@ -7731,7 +7852,7 @@
     window.setTimeout(() => el.classList.remove("widget-flash"), 1200);
   }
   function widgetCommands() {
-    const screen = activeDashboardTab.value;
+    const screen = tabToScreen(activeDashboardTab.value);
     const defs = widgetsForScreen(screen);
     return defs.map((def) => ({
       id: `widget:${def.id}`,
@@ -8062,6 +8183,18 @@
   }
 
   // src/ui/components/FilterBar.tsx
+  function shortModelName(full) {
+    return full.replace(/^claude-/, "").replace(/-\d{8}$/, "");
+  }
+  var SECTION_FILTER_GROUPS = {
+    overview: ["range", "bucket"],
+    today: [],
+    activity: ["range", "bucket", "provider", "models"],
+    agents: ["range", "provider"],
+    breakdowns: ["range", "bucket", "provider", "models"],
+    tables: ["range", "provider", "models", "project-search"],
+    projects: ["project-search"]
+  };
   var RANGES = ["7d", "30d", "90d", "all"];
   var RANGE_LABEL = {
     "7d": "7d",
@@ -8146,6 +8279,8 @@
       onFilterChange();
     };
     const hasCodexData = rawData.value?.provider_breakdown?.some((p5) => p5.provider === "codex") ?? false;
+    const activeGroups = SECTION_FILTER_GROUPS[activeDashboardTab.value] ?? Object.values(SECTION_FILTER_GROUPS).flat();
+    const show = (group) => activeGroups.includes(group);
     const onSearchInput = (e4) => {
       const value = e4.currentTarget.value;
       projectSearchQuery.value = value.toLowerCase().trim();
@@ -8199,7 +8334,7 @@
             )
           ] }),
           /* @__PURE__ */ u4("div", { id: "filter-sections", class: "filter-sections", children: [
-            /* @__PURE__ */ u4("div", { class: "filter-group", children: [
+            show("range") && /* @__PURE__ */ u4("div", { class: "filter-group", children: [
               /* @__PURE__ */ u4("span", { class: "filter-group__label", children: "Range" }),
               /* @__PURE__ */ u4("div", { class: "segmented", role: "group", "aria-label": "Date range", children: RANGES.map((range) => /* @__PURE__ */ u4(
                 "button",
@@ -8213,7 +8348,7 @@
                 range
               )) })
             ] }),
-            /* @__PURE__ */ u4("div", { class: "filter-group", children: [
+            show("bucket") && /* @__PURE__ */ u4("div", { class: "filter-group", children: [
               /* @__PURE__ */ u4("span", { class: "filter-group__label", children: "Bucket" }),
               /* @__PURE__ */ u4("div", { class: "segmented", role: "group", "aria-label": "Chart bucket", children: BUCKETS.map((bucket) => /* @__PURE__ */ u4(
                 "button",
@@ -8227,7 +8362,7 @@
                 bucket
               )) })
             ] }),
-            hasCodexData && /* @__PURE__ */ u4("div", { class: "filter-group", children: [
+            show("provider") && hasCodexData && /* @__PURE__ */ u4("div", { class: "filter-group", children: [
               /* @__PURE__ */ u4("span", { class: "filter-group__label", children: "Provider" }),
               /* @__PURE__ */ u4("div", { class: "segmented", role: "group", "aria-label": "Provider", children: PROVIDERS.map((provider) => /* @__PURE__ */ u4(
                 "button",
@@ -8241,7 +8376,7 @@
                 provider
               )) })
             ] }),
-            /* @__PURE__ */ u4("div", { class: "filter-group filter-group--chip", children: [
+            show("models") && /* @__PURE__ */ u4("div", { class: "filter-group filter-group--chip", children: [
               /* @__PURE__ */ u4(
                 "button",
                 {
@@ -8296,7 +8431,7 @@
                                 "aria-label": model
                               }
                             ),
-                            /* @__PURE__ */ u4("span", { class: "filter-popover__row-text", children: model })
+                            /* @__PURE__ */ u4("span", { class: "filter-popover__row-text", children: shortModelName(model) })
                           ]
                         },
                         model
@@ -8306,7 +8441,7 @@
                 }
               )
             ] }),
-            /* @__PURE__ */ u4("div", { class: "filter-group filter-group--search", children: [
+            show("project-search") && /* @__PURE__ */ u4("div", { class: "filter-group filter-group--search", children: [
               /* @__PURE__ */ u4("label", { for: "project-search", class: "filter-group__label", children: "Project" }),
               /* @__PURE__ */ u4(
                 "input",
@@ -8489,13 +8624,13 @@
     const updateUrl = info?.update_available ? info.latest_url : null;
     const planLabel2 = planBadge.value;
     return /* @__PURE__ */ u4("header", { ref: headerRef, children: [
-      /* @__PURE__ */ u4("h1", { title: versionTitle, children: [
-        /* @__PURE__ */ u4("span", { class: "header-logo-mark", children: [
+      /* @__PURE__ */ u4("h1", { title: versionTitle, "aria-label": "Heimdall", children: [
+        /* @__PURE__ */ u4("span", { class: "header-logo-mark", "aria-hidden": "true", children: [
           /* @__PURE__ */ u4("span", { class: "header-logo-mark__pre", children: "Code" }),
           " ",
           /* @__PURE__ */ u4("span", { class: "header-logo-mark__post", children: "Usage" })
         ] }),
-        planLabel2 && /* @__PURE__ */ u4("span", { class: "header-plan-badge", "aria-live": "polite", children: planLabel2 })
+        planLabel2 && /* @__PURE__ */ u4("span", { class: "header-plan-badge", "aria-hidden": "true", children: planLabel2 })
       ] }),
       /* @__PURE__ */ u4("div", { class: "meta", children: metaText.value }),
       /* @__PURE__ */ u4("div", { class: "header-actions", children: [
@@ -9771,7 +9906,7 @@
       return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
         /* @__PURE__ */ u4(IndicatorDot, { indicator: "none" }),
         /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
-        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: "unavailable" })
+        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, title: "Status API unreachable", children: "unavailable" })
       ] });
     }
     const incidentCount = status.active_incidents.length;
@@ -10109,7 +10244,7 @@
           "div",
           {
             class: "segmented-bar__fill",
-            style: { width: `${pct}%`, background: fillColor }
+            style: { width: `${pct}%`, background: fillColor, minWidth: pct > 0 ? "8px" : "0" }
           }
         )
       }
@@ -22033,16 +22168,24 @@ ${row.project}` : row.project;
     "projects"
   ];
   function ScreenGridManager() {
-    const activeScreen = activeDashboardTab.value;
-    y2(() => {
-    }, [activeScreen]);
+    const activeScreen = tabToScreen(activeDashboardTab.value);
+    const isLoading = loadState.value === "refreshing" && rawData.value === null;
+    const isError = loadState.value === "idle" && rawData.value === null;
     return /* @__PURE__ */ u4(S, { children: ALL_SCREENS.map((screen) => /* @__PURE__ */ u4(
       "div",
       {
         class: "screen-grid-wrapper",
         "data-screen": screen,
         style: { display: screen === activeScreen ? "" : "none" },
-        children: /* @__PURE__ */ u4(WidgetGrid, { screen })
+        children: [
+          screen === activeScreen && isLoading && /* @__PURE__ */ u4("div", { class: "screen-skeleton-overlay", "aria-live": "polite", "aria-busy": "true", children: [
+            /* @__PURE__ */ u4(ChartSkeleton, {}),
+            /* @__PURE__ */ u4(ChartSkeleton, {}),
+            /* @__PURE__ */ u4(ChartSkeleton, {})
+          ] }),
+          screen === activeScreen && isError && /* @__PURE__ */ u4("div", { role: "alert", "aria-live": "assertive", style: { padding: "24px", fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-secondary)" }, children: "[ERROR: FAILED TO LOAD DATA \u2014 CHECK SERVER LOGS]" }),
+          /* @__PURE__ */ u4(WidgetGrid, { screen })
+        ]
       },
       screen
     )) });
@@ -22120,17 +22263,14 @@ ${row.project}` : row.project;
       filterBarMount
     );
   }
+  var sidebarMount = document.getElementById("sidebar-mount");
+  if (sidebarMount) {
+    R(/* @__PURE__ */ u4(Sidebar, {}), sidebarMount);
+  }
   var dashboardTabsMount = document.getElementById("dashboard-tabs-mount");
   if (dashboardTabsMount && dashboardRuntime) {
-    const onTabChange = dashboardRuntime.handleDashboardTabChange;
-    const getCurrentLayout = () => currentLayoutByScreen.value[activeDashboardTab.value] ?? null;
-    R(
-      /* @__PURE__ */ u4(S, { children: [
-        /* @__PURE__ */ u4(DashboardTabs, { onTabChange }),
-        /* @__PURE__ */ u4(SavedViewsBar, { getCurrentLayout })
-      ] }),
-      dashboardTabsMount
-    );
+    const getCurrentLayout = () => currentLayoutByScreen.value[tabToScreen(activeDashboardTab.value)] ?? null;
+    R(/* @__PURE__ */ u4(SavedViewsBar, { getCurrentLayout }), dashboardTabsMount);
   }
   var footerEl = document.querySelector("footer");
   if (footerEl?.parentElement) {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
+  activeDashboardTab,
   rawData,
   selectedModels,
   selectedRange,
@@ -7,9 +8,27 @@ import {
   selectedBucket,
   projectSearchQuery,
   mobile_filters_expanded,
+  type DashboardTab,
   type ProviderFilter,
 } from '../state/store';
 import type { RangeKey, BucketKey } from '../state/types';
+
+export function shortModelName(full: string): string {
+  // Strip 'claude-' prefix, then remove long date suffixes like '-20251001'
+  return full.replace(/^claude-/, '').replace(/-\d{8}$/, '');
+}
+
+type FilterGroup = 'range' | 'bucket' | 'provider' | 'models' | 'project-search';
+
+const SECTION_FILTER_GROUPS: Record<DashboardTab, FilterGroup[]> = {
+  overview:   ['range', 'bucket'],
+  today:      [],
+  activity:   ['range', 'bucket', 'provider', 'models'],
+  agents:     ['range', 'provider'],
+  breakdowns: ['range', 'bucket', 'provider', 'models'],
+  tables:     ['range', 'provider', 'models', 'project-search'],
+  projects:   ['project-search'],
+};
 
 const RANGES: RangeKey[] = ['7d', '30d', '90d', 'all'];
 const RANGE_LABEL: Record<RangeKey, string> = {
@@ -112,6 +131,8 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
   };
 
   const hasCodexData = rawData.value?.provider_breakdown?.some(p => p.provider === 'codex') ?? false;
+  const activeGroups = SECTION_FILTER_GROUPS[activeDashboardTab.value] ?? Object.values(SECTION_FILTER_GROUPS).flat();
+  const show = (group: FilterGroup) => activeGroups.includes(group);
 
   const onSearchInput = (e: Event) => {
     const value = (e.currentTarget as HTMLInputElement).value;
@@ -172,41 +193,45 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
       </div>
 
       <div id="filter-sections" class="filter-sections">
-        <div class="filter-group">
-          <span class="filter-group__label">Range</span>
-          <div class="segmented" role="group" aria-label="Date range">
-            {RANGES.map(range => (
-              <button
-                key={range}
-                class={`segmented__item${selectedRange.value === range ? ' is-active' : ''}`}
-                type="button"
-                data-range={range}
-                onClick={() => setRange(range)}
-              >
-                {RANGE_LABEL[range]}
-              </button>
-            ))}
+        {show('range') && (
+          <div class="filter-group">
+            <span class="filter-group__label">Range</span>
+            <div class="segmented" role="group" aria-label="Date range">
+              {RANGES.map(range => (
+                <button
+                  key={range}
+                  class={`segmented__item${selectedRange.value === range ? ' is-active' : ''}`}
+                  type="button"
+                  data-range={range}
+                  onClick={() => setRange(range)}
+                >
+                  {RANGE_LABEL[range]}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div class="filter-group">
-          <span class="filter-group__label">Bucket</span>
-          <div class="segmented" role="group" aria-label="Chart bucket">
-            {BUCKETS.map(bucket => (
-              <button
-                key={bucket}
-                class={`segmented__item${selectedBucket.value === bucket ? ' is-active' : ''}`}
-                type="button"
-                data-bucket={bucket}
-                onClick={() => setBucket(bucket)}
-              >
-                {BUCKET_LABEL[bucket]}
-              </button>
-            ))}
+        {show('bucket') && (
+          <div class="filter-group">
+            <span class="filter-group__label">Bucket</span>
+            <div class="segmented" role="group" aria-label="Chart bucket">
+              {BUCKETS.map(bucket => (
+                <button
+                  key={bucket}
+                  class={`segmented__item${selectedBucket.value === bucket ? ' is-active' : ''}`}
+                  type="button"
+                  data-bucket={bucket}
+                  onClick={() => setBucket(bucket)}
+                >
+                  {BUCKET_LABEL[bucket]}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {hasCodexData && (
+        {show('provider') && hasCodexData && (
           <div class="filter-group">
             <span class="filter-group__label">Provider</span>
             <div class="segmented" role="group" aria-label="Provider">
@@ -225,7 +250,7 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
           </div>
         )}
 
-        <div class="filter-group filter-group--chip">
+        {show('models') && <div class="filter-group filter-group--chip">
           <button
             ref={chipRef}
             type="button"
@@ -270,36 +295,38 @@ export function FilterBar({ onFilterChange, onURLUpdate }: FilterBarProps) {
                         }
                         aria-label={model}
                       />
-                      <span class="filter-popover__row-text">{model}</span>
+                      <span class="filter-popover__row-text">{shortModelName(model)}</span>
                     </label>
                   );
                 })}
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
-        <div class="filter-group filter-group--search">
-          <label for="project-search" class="filter-group__label">Project</label>
-          <input
-            type="text"
-            id="project-search"
-            name="project-search"
-            placeholder="Search projects…"
-            aria-label="Filter by project name"
-            autoComplete="off"
-            spellcheck={false}
-            enterKeyHint="search"
-            value={projectSearchQuery.value}
-            onInput={onSearchInput}
-            class="project-search-input"
-          />
-          {projectSearchQuery.value && (
-            <button class="filter-link" id="project-clear-btn" type="button" onClick={clearSearch}>
-              Clear
-            </button>
-          )}
-        </div>
+        {show('project-search') && (
+          <div class="filter-group filter-group--search">
+            <label for="project-search" class="filter-group__label">Project</label>
+            <input
+              type="text"
+              id="project-search"
+              name="project-search"
+              placeholder="Search projects…"
+              aria-label="Filter by project name"
+              autoComplete="off"
+              spellcheck={false}
+              enterKeyHint="search"
+              value={projectSearchQuery.value}
+              onInput={onSearchInput}
+              class="project-search-input"
+            />
+            {projectSearchQuery.value && (
+              <button class="filter-link" id="project-clear-btn" type="button" onClick={clearSearch}>
+                Clear
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

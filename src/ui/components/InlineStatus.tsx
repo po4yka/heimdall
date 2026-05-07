@@ -65,7 +65,7 @@ export function InlineStatus({ placement, inline = false, dismissable = true }: 
             opacity: 0.7,
           }}
         >
-          [X]
+          Dismiss
         </button>
       )}
     </div>

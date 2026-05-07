@@ -11,6 +11,7 @@
  */
 import {
   activeDashboardTab,
+  tabToScreen,
   themeMode,
   editMode,
   backupModalOpen,
@@ -41,7 +42,9 @@ export interface Command {
 
 const TAB_LABELS: Record<DashboardTab, string> = {
   overview: 'Overview',
+  today: 'Today',
   activity: 'Activity',
+  agents: 'Agents',
   breakdowns: 'Breakdowns',
   tables: 'Sessions',
   projects: 'Projects',
@@ -63,7 +66,7 @@ function scrollToWidget(widgetId: string): void {
 }
 
 function widgetCommands(): Command[] {
-  const screen: DashboardScreen = activeDashboardTab.value;
+  const screen: DashboardScreen = tabToScreen(activeDashboardTab.value);
   const defs = widgetsForScreen(screen);
   return defs.map((def: WidgetDef) => ({
     id: `widget:${def.id}`,

@@ -7,7 +7,7 @@
  * an inline rename input.
  */
 import { useEffect, useState } from 'preact/hooks';
-import { activeDashboardTab } from '../state/store';
+import { activeDashboardTab, tabToScreen } from '../state/store';
 import { pendingLayoutApply } from '../widgets/apply-layout';
 import {
   listViews,
@@ -30,7 +30,7 @@ export function SavedViewsBar({ getCurrentLayout }: SavedViewsBarProps) {
   void savedViewsToken.value;
   void activeViewToken.value;
 
-  const screen = activeDashboardTab.value;
+  const screen = tabToScreen(activeDashboardTab.value);
   const views = listViews(screen);
   const activeId = getActiveViewId(screen);
   const [savingName, setSavingName] = useState<string | null>(null);

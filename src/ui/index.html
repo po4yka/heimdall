@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0A0A0A" id="theme-color-meta">
 <meta name="description" content="Local dashboard for AI coding session analytics, token usage, costs, tools, and project activity.">
-<title>Usage</title>
+<title>Heimdall</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -17,33 +17,38 @@
 <body>
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <div id="header-mount"></div>
-<div id="dashboard-tabs-mount" style="max-width:1400px;margin:12px auto 0;padding:0 24px"></div>
-<div id="filter-bar-mount"></div>
-<div id="inline-status-global" style="max-width:1400px;margin:12px auto 0;padding:0 24px"></div>
-<div id="empty-state-mount" style="max-width:1400px;margin:0 auto;padding:0 24px"></div>
+<div class="app-shell">
+  <div id="sidebar-mount"></div>
+  <div class="app-shell__content">
+    <div id="dashboard-tabs-mount" style="max-width:1400px;margin:12px auto 0;padding:0 24px"></div>
+    <div id="filter-bar-mount"></div>
+    <div id="inline-status-global" style="max-width:1400px;margin:12px auto 0;padding:0 24px"></div>
+    <div id="empty-state-mount" style="max-width:1400px;margin:0 auto;padding:0 24px"></div>
 
-<main id="main-content" tabindex="-1">
-  <!-- Feature 2: GridStack-managed widget grids, one per tab -->
-  <div id="widget-grid-mount"></div>
+    <main id="main-content" tabindex="-1">
+      <!-- GridStack-managed widget grids, one per tab -->
+      <div id="widget-grid-mount"></div>
 
-  <!-- Agent registry modal mount (always present, renders nothing when closed) -->
-  <div id="agent-registry-modal-mount"></div>
+      <!-- Agent registry modal mount (always present, renders nothing when closed) -->
+      <div id="agent-registry-modal-mount"></div>
 
-  <!-- Backup/snapshot modal mount (opened from Header [BACKUP] button or #/backup hash) -->
-  <div id="backup-modal-mount"></div>
+      <!-- Backup/snapshot modal mount (opened from Header [BACKUP] button or #/backup hash) -->
+      <div id="backup-modal-mount"></div>
 
-  <!-- Settings modal mount (opened from Header gear button or #/settings hash) -->
-  <div id="settings-modal-mount"></div>
+      <!-- Settings modal mount (opened from Header gear button or #/settings hash) -->
+      <div id="settings-modal-mount"></div>
 
-  <!-- Command palette mount (Cmd-K / Ctrl-K) -->
-  <div id="command-palette-mount"></div>
+      <!-- Command palette mount (Cmd-K / Ctrl-K) -->
+      <div id="command-palette-mount"></div>
 
-  <!-- Imports tab -->
-  <div class="bento-full" id="imports-panel" style="display:none"></div>
+      <!-- Imports tab -->
+      <div class="bento-full" id="imports-panel" style="display:none"></div>
 
-  <!-- Web captures tab -->
-  <div class="bento-full" id="web-captures-panel" style="display:none"></div>
-</main>
+      <!-- Web captures tab -->
+      <div class="bento-full" id="web-captures-panel" style="display:none"></div>
+    </main>
+  </div>
+</div>
 
 <footer role="contentinfo">
   <div class="footer-content">

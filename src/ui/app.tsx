@@ -5,7 +5,7 @@ import { ImportsPanel } from './components/ImportsPanel';
 import { WebCapturesPanel } from './components/WebCapturesPanel';
 import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
 import { ProjectsRegistry } from './components/projects/ProjectsRegistry';
-import { DashboardTabs } from './components/DashboardTabs';
+import { Sidebar } from './components/Sidebar';
 import { SavedViewsBar } from './components/SavedViewsBar';
 import { CommandPalette } from './components/CommandPalette';
 import { commandPaletteOpen } from './state/store';
@@ -37,6 +37,7 @@ import {
   rawData,
   registryModalOpen,
   syncDashboardUrl,
+  tabToScreen,
   type WebConversationSummary,
   type CompanionHeartbeat,
 } from './state/store';
@@ -117,18 +118,16 @@ if (filterBarMount && dashboardRuntime) {
   );
 }
 
+const sidebarMount = document.getElementById('sidebar-mount');
+if (sidebarMount) {
+  render(<Sidebar />, sidebarMount);
+}
+
 const dashboardTabsMount = document.getElementById('dashboard-tabs-mount');
 if (dashboardTabsMount && dashboardRuntime) {
-  const onTabChange = dashboardRuntime.handleDashboardTabChange;
   const getCurrentLayout = () =>
-    currentLayoutByScreen.value[activeDashboardTab.value] ?? null;
-  render(
-    <>
-      <DashboardTabs onTabChange={onTabChange} />
-      <SavedViewsBar getCurrentLayout={getCurrentLayout} />
-    </>,
-    dashboardTabsMount
-  );
+    currentLayoutByScreen.value[tabToScreen(activeDashboardTab.value)] ?? null;
+  render(<SavedViewsBar getCurrentLayout={getCurrentLayout} />, dashboardTabsMount);
 }
 
 const footerEl = document.querySelector('footer');
