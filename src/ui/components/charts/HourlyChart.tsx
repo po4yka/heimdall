@@ -6,7 +6,6 @@ export function HourlyChart({ data }: { data: HourlyRow[] }) {
   if (!data.length) return null;
 
   const maxTurns = Math.max(...data.map(d => d.turns), 1);
-  const emptyColor = cssVar('--border');
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -21,7 +20,7 @@ export function HourlyChart({ data }: { data: HourlyRow[] }) {
           // Opacity ladder: non-zero bars scale 40% -> 100% with magnitude.
           const background = turns > 0
             ? withAlpha('--text-display', 0.4 + (pct / 100) * 0.6)
-            : emptyColor;
+            : cssVar('--border');
           return (
             <div
               key={h}
@@ -40,7 +39,7 @@ export function HourlyChart({ data }: { data: HourlyRow[] }) {
         {Array.from({ length: 24 }, (_, h) => (
           <span
             key={h}
-            class="muted"
+
             style={{
               flex: 1,
               fontFamily: 'var(--font-mono)',

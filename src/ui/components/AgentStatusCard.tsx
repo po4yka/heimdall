@@ -1,6 +1,8 @@
 import type { AgentStatusSnapshot, ProviderStatus, StatusIndicator, CommunitySignal, ServiceSignal, SignalLevel } from '../state/types';
 import { agent_status_expanded, syncDashboardUrl } from '../state/store';
 
+const fmtUtc = (ts: string) => ts.slice(0, 19).replace('T', ' ');
+
 interface AgentStatusCardProps {
   snapshot: AgentStatusSnapshot;
   communitySignal?: CommunitySignal | null;
@@ -243,7 +245,6 @@ export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardPr
         flexDirection: 'column',
       }}
     >
-      {/* Header */}
       <div
         style={{
           display: 'flex',
@@ -281,11 +282,9 @@ export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardPr
         )}
       </div>
 
-      {/* Provider rows */}
       <ProviderRow name="Claude"         status={snapshot.claude} expanded={expanded} isLast={false} />
       <ProviderRow name="OpenAI / Codex" status={snapshot.openai} expanded={expanded} isLast />
 
-      {/* Community signal */}
       {hasCommunity && communitySignal && (
         <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
           <div
@@ -311,7 +310,7 @@ export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardPr
                 opacity: 0.6,
               }}
             >
-              Crowd data {communitySignal.fetched_at.slice(0, 19).replace('T', ' ')} UTC
+              Crowd data {fmtUtc(communitySignal.fetched_at)} UTC
             </div>
           )}
         </div>
@@ -329,7 +328,7 @@ export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardPr
             opacity: 0.6,
           }}
         >
-          Last checked {snapshot.fetched_at.slice(0, 19).replace('T', ' ')} UTC
+          Last checked {fmtUtc(snapshot.fetched_at)} UTC
         </div>
       )}
     </div>

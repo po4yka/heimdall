@@ -9886,6 +9886,7 @@
   }
 
   // src/ui/components/AgentStatusCard.tsx
+  var fmtUtc = (ts) => ts.slice(0, 19).replace("T", " ");
   function IndicatorDot({ indicator }) {
     const isAlert = indicator === "major" || indicator === "critical";
     const isMinor = indicator === "minor";
@@ -10168,7 +10169,7 @@
                 },
                 children: [
                   "Crowd data ",
-                  communitySignal.fetched_at.slice(0, 19).replace("T", " "),
+                  fmtUtc(communitySignal.fetched_at),
                   " UTC"
                 ]
               }
@@ -10187,7 +10188,7 @@
               },
               children: [
                 "Last checked ",
-                snapshot.fetched_at.slice(0, 19).replace("T", " "),
+                fmtUtc(snapshot.fetched_at),
                 " UTC"
               ]
             }
@@ -10726,14 +10727,13 @@
   function HourlyChart({ data }) {
     if (!data.length) return null;
     const maxTurns = Math.max(...data.map((d5) => d5.turns), 1);
-    const emptyColor = cssVar("--border");
     return /* @__PURE__ */ u4("div", { style: { height: "100%", display: "flex", flexDirection: "column" }, children: [
       /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: "0", marginBottom: "12px" }, children: "Activity by Hour of Day" }),
       /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", flex: 1, minHeight: "60px" }, children: Array.from({ length: 24 }, (_4, h5) => {
         const row = data.find((d5) => d5.hour === h5);
         const turns = row?.turns ?? 0;
         const pct = turns / maxTurns * 100;
-        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct / 100 * 0.6) : emptyColor;
+        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct / 100 * 0.6) : cssVar("--border");
         return /* @__PURE__ */ u4(
           "div",
           {
@@ -10751,7 +10751,6 @@
       /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "2px", marginTop: "6px" }, children: Array.from({ length: 24 }, (_4, h5) => /* @__PURE__ */ u4(
         "span",
         {
-          class: "muted",
           style: {
             flex: 1,
             fontFamily: "var(--font-mono)",
