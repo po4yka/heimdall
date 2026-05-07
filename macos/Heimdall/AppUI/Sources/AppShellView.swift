@@ -19,6 +19,8 @@ struct AppShellView: View {
     @Bindable var activity: ActivityFeatureModel
     @Bindable var agents: AgentsFeatureModel
     @Bindable var costModels: CostModelsFeatureModel
+    @Bindable var sessions: SessionsFeatureModel
+    @Bindable var projects: ProjectsFeatureModel
     @Bindable var filters: DashboardFiltersModel
     @Bindable var savedViews: SavedViewsModel
     let helperPort: Int
@@ -56,11 +58,9 @@ struct AppShellView: View {
                         case .costModels:
                             WindowCostModelsView(model: self.costModels)
                         case .sessions:
-                            WindowPlaceholderView(title: "Sessions", systemImage: "list.bullet.rectangle",
-                                                  subtitle: "Session tables — coming in Phase 5")
+                            WindowSessionsView(model: self.sessions)
                         case .projects:
-                            WindowPlaceholderView(title: "Projects", systemImage: "folder",
-                                                  subtitle: "Project registry — coming in Phase 5")
+                            WindowProjectsView(model: self.projects)
                         case .liveMonitor:
                             WindowLiveMonitorView(model: self.liveMonitor, helperPort: self.helperPort)
                         case .provider(let provider):
@@ -111,7 +111,11 @@ struct AppShellView: View {
                             await self.agents.refreshAll()
                         case .costModels:
                             await self.costModels.refreshAll()
-                        case .sessions, .projects, .toolErrors:
+                        case .sessions:
+                            await self.sessions.refreshAll()
+                        case .projects:
+                            await self.projects.refreshAll()
+                        case .toolErrors:
                             break
                         }
                     }
@@ -156,7 +160,11 @@ struct AppShellView: View {
             return self.agents.isRefreshing
         case .costModels:
             return self.costModels.isRefreshing
-        case .sessions, .projects, .toolErrors:
+        case .sessions:
+            return self.sessions.isRefreshing
+        case .projects:
+            return self.projects.isRefreshing
+        case .toolErrors:
             return false
         }
     }

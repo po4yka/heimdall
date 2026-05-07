@@ -96,6 +96,8 @@ public struct HeimdallScenes: Scene {
                 activity: self.model.activity,
                 agents: self.model.agents,
                 costModels: self.model.costModels,
+                sessions: self.model.sessions,
+                projects: self.model.projects,
                 filters: self.model.filters,
                 savedViews: self.model.savedViews,
                 helperPort: self.model.config.helperPort,
