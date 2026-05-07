@@ -13819,14 +13819,14 @@ ${row.project}` : row.project;
     "project-chart-card": "activity",
     "hourly-chart": "activity",
     "activity-heatmap": "activity",
-    "subagent-summary": "breakdowns",
-    "agent-setup-banner": "breakdowns",
-    "agent-kpis-row": "breakdowns",
-    "agent-timeline": "breakdowns",
-    "agent-distribution": "breakdowns",
-    "agent-top-sessions": "breakdowns",
-    "agent-spawn-batches": "breakdowns",
-    "agent-tool-spectrum": "breakdowns",
+    "subagent-summary": "agents",
+    "agent-setup-banner": "agents",
+    "agent-kpis-row": "agents",
+    "agent-timeline": "agents",
+    "agent-distribution": "agents",
+    "agent-top-sessions": "agents",
+    "agent-spawn-batches": "agents",
+    "agent-tool-spectrum": "agents",
     "entrypoint-breakdown": "breakdowns",
     "service-tiers": "breakdowns",
     "tool-summary": "breakdowns",
@@ -14852,6 +14852,17 @@ ${row.project}` : row.project;
         if (data) renderTodayView(data, handleDateChange);
       });
     }
+    let prevActiveTab = activeDashboardTab.value;
+    activeDashboardTab.subscribe((tab) => {
+      const prev = prevActiveTab;
+      prevActiveTab = tab;
+      if (prev === "today") clearTodayWidgets();
+      refreshSectionVisibility();
+      if (tab === "today") {
+        if (todayData.value) renderTodayView(todayData.value, handleDateChange);
+        else maybeLoadToday();
+      }
+    });
     return {
       applyFilter,
       handleDashboardTabChange(tab) {

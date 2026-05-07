@@ -496,6 +496,21 @@ export function createDashboardRuntime(): DashboardRuntime {
     });
   }
 
+  // React to tab changes from any source (Sidebar signal mutation, URL popstate, etc.).
+  // The Sidebar sets activeDashboardTab directly without calling handleDashboardTabChange,
+  // so this subscription is the authoritative place for tab-switch side effects.
+  let prevActiveTab: DashboardTab = activeDashboardTab.value;
+  activeDashboardTab.subscribe((tab) => {
+    const prev = prevActiveTab;
+    prevActiveTab = tab;
+    if (prev === 'today') clearTodayWidgets();
+    refreshSectionVisibility();
+    if (tab === 'today') {
+      if (todayData.value) renderTodayView(todayData.value, handleDateChange);
+      else maybeLoadToday();
+    }
+  });
+
   return {
     applyFilter,
     handleDashboardTabChange(tab: DashboardTab): void {
