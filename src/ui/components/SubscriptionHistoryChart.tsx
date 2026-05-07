@@ -75,48 +75,29 @@ function buildOptions(
   const textPrimary = resolveCssVar('--text-primary', '#0a0a0a');
   const textSecondary = resolveCssVar('--text-secondary', '#666666');
   const borderColor = resolveCssVar('--border', '#e0e0e0');
-  const annotationFill = textPrimary;
-  const annotationStroke = resolveCssVar('--bg', '#ffffff');
-  const annotationLabelBg = resolveCssVar('--surface-elevated', '#ffffff');
 
-  // Build changelog points (markers on x-axis).
-  const annotationPoints = changelog
+  // Changelog events as vertical dashed lines — no text labels since the
+  // list below the chart already shows the full description. This avoids
+  // the overlapping-label banner produced by points annotations.
+  const annotationsX = changelog
     .filter(entry => provider === 'all' || entry.provider === provider)
     .map(entry => ({
       x: Date.parse(`${entry.date}T12:00:00Z`),
-      y: null,
-      marker: {
-        size: 4,
-        fillColor: annotationFill,
-        strokeColor: annotationStroke,
-        radius: 0,
-      },
-      label: {
-        text: entry.title,
-        style: {
-          color: annotationFill,
-          background: annotationLabelBg,
-          fontFamily: 'var(--font-mono)',
-          fontSize: '10px',
-        },
-      },
+      borderColor: textSecondary,
+      strokeDashArray: 3,
     }))
-    .filter(p => Number.isFinite(p.x as number));
+    .filter(a => Number.isFinite(a.x));
 
-  // Span the X-axis across both the series data and the changelog timeline
-  // so policy markers stay on-canvas even when the user's local history
-  // only covers the last few days. Without this, ApexCharts auto-fits to
-  // the series range and clips the annotations entirely.
   const seriesXValues: number[] = [];
   for (const s of series) {
     for (const p of s.data) seriesXValues.push(p.x);
   }
-  const annotationXValues = annotationPoints.map(p => p.x as number);
+  // Also include changelog dates so annotations stay on-canvas even when
+  // local history is shorter than the full policy timeline.
+  const annotationXValues = annotationsX.map(a => a.x);
   const allX = [...seriesXValues, ...annotationXValues];
   const xMin = allX.length ? Math.min(...allX) : undefined;
-  const xMax = allX.length
-    ? Math.max(...allX, Date.now())
-    : undefined;
+  const xMax = allX.length ? Math.max(...allX, Date.now()) : undefined;
 
   const opts: ApexOptions = {
     chart: {
@@ -147,7 +128,7 @@ function buildOptions(
       position: 'top',
       labels: { colors: textPrimary, fontFamily: 'var(--font-mono)' },
       itemMargin: { horizontal: 12, vertical: 4 },
-      markers: { width: 12, height: 12 },
+      markers: { width: 20, height: 2, radius: 0 },
     },
     xaxis: {
       type: 'datetime',
@@ -184,8 +165,8 @@ function buildOptions(
     markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
     dataLabels: { enabled: false },
   };
-  if (annotationPoints.length > 0) {
-    opts.annotations = { points: annotationPoints };
+  if (annotationsX.length > 0) {
+    opts.annotations = { xaxis: annotationsX };
   }
   return opts;
 }

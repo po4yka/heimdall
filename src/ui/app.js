@@ -13212,33 +13212,16 @@ ${row.project}` : row.project;
     const textPrimary = resolveCssVar("--text-primary", "#0a0a0a");
     const textSecondary = resolveCssVar("--text-secondary", "#666666");
     const borderColor = resolveCssVar("--border", "#e0e0e0");
-    const annotationFill = textPrimary;
-    const annotationStroke = resolveCssVar("--bg", "#ffffff");
-    const annotationLabelBg = resolveCssVar("--surface-elevated", "#ffffff");
-    const annotationPoints = changelog.filter((entry) => provider === "all" || entry.provider === provider).map((entry) => ({
+    const annotationsX = changelog.filter((entry) => provider === "all" || entry.provider === provider).map((entry) => ({
       x: Date.parse(`${entry.date}T12:00:00Z`),
-      y: null,
-      marker: {
-        size: 4,
-        fillColor: annotationFill,
-        strokeColor: annotationStroke,
-        radius: 0
-      },
-      label: {
-        text: entry.title,
-        style: {
-          color: annotationFill,
-          background: annotationLabelBg,
-          fontFamily: "var(--font-mono)",
-          fontSize: "10px"
-        }
-      }
-    })).filter((p5) => Number.isFinite(p5.x));
+      borderColor: textSecondary,
+      strokeDashArray: 3
+    })).filter((a4) => Number.isFinite(a4.x));
     const seriesXValues = [];
     for (const s4 of series) {
       for (const p5 of s4.data) seriesXValues.push(p5.x);
     }
-    const annotationXValues = annotationPoints.map((p5) => p5.x);
+    const annotationXValues = annotationsX.map((a4) => a4.x);
     const allX = [...seriesXValues, ...annotationXValues];
     const xMin = allX.length ? Math.min(...allX) : void 0;
     const xMax = allX.length ? Math.max(...allX, Date.now()) : void 0;
@@ -13271,7 +13254,7 @@ ${row.project}` : row.project;
         position: "top",
         labels: { colors: textPrimary, fontFamily: "var(--font-mono)" },
         itemMargin: { horizontal: 12, vertical: 4 },
-        markers: { width: 12, height: 12 }
+        markers: { width: 20, height: 2, radius: 0 }
       },
       xaxis: {
         type: "datetime",
@@ -13307,8 +13290,8 @@ ${row.project}` : row.project;
       markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
       dataLabels: { enabled: false }
     };
-    if (annotationPoints.length > 0) {
-      opts.annotations = { points: annotationPoints };
+    if (annotationsX.length > 0) {
+      opts.annotations = { xaxis: annotationsX };
     }
     return opts;
   }

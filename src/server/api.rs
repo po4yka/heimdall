@@ -467,6 +467,72 @@ pub(crate) async fn build_subscription_quota_section(
             .await
             .unwrap_or_default();
 
+        // Backfill historical rate_window_history from the turns table when
+        // the current history is sparse (< 30 hourly rows), so new users see
+        // meaningful chart coverage from their first dashboard load. The task
+        // is fire-and-forget: the current response uses already-loaded history;
+        // backfilled rows appear on the next refresh. Idempotent by design.
+        {
+            let sparse = history
+                .iter()
+                .filter(|r| r.provider == snapshot.provider && r.estimated_cap_tokens.is_some())
+                .count()
+                < 30;
+            if sparse {
+                let db_bf = db_path_for_observed.clone();
+                let prov_bf = provider_str.clone();
+                // Collect (window_type, model_pattern, smoothed_cap) for each
+                // estimated window that has a usable cap value.
+                let specs: Vec<(String, Option<&'static str>, i64)> = estimates
+                    .iter()
+                    .filter_map(|e| {
+                        let cap =
+                            e.smoothed_cap_tokens.unwrap_or(e.estimated_cap_tokens);
+                        if cap <= 0 {
+                            return None;
+                        }
+                        let pattern: Option<&'static str> = match e.kind.as_str() {
+                            "seven_day_opus" => Some("%opus%"),
+                            "seven_day_sonnet" => Some("%sonnet%"),
+                            _ => None,
+                        };
+                        Some((e.kind.clone(), pattern, cap))
+                    })
+                    .collect();
+                if !specs.is_empty() {
+                    tokio::task::spawn(async move {
+                        let _ = tokio::task::spawn_blocking(move || {
+                            let conn = db::open_db(&db_bf).ok()?;
+                            db::init_db(&conn).ok()?;
+                            for (window_type, model_pattern, cap) in specs {
+                                match db::backfill_rate_window_history_from_turns(
+                                    &conn,
+                                    &prov_bf,
+                                    &window_type,
+                                    model_pattern,
+                                    cap,
+                                ) {
+                                    Ok(n) if n > 0 => tracing::info!(
+                                        target: "quota.backfill",
+                                        provider = %prov_bf,
+                                        window_type = %window_type,
+                                        rows = n,
+                                        "backfilled rate_window_history from turns"
+                                    ),
+                                    Err(e) => tracing::warn!(
+                                        "quota.backfill: {prov_bf}/{window_type}: {e}"
+                                    ),
+                                    _ => {}
+                                }
+                            }
+                            Some(())
+                        })
+                        .await;
+                    });
+                }
+            }
+        }
+
         if emit_cap_webhooks_from_section {
             let service_label = provider_service_label(&snapshot.provider);
             maybe_send_cap_change_webhooks(

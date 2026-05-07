@@ -2637,6 +2637,129 @@ pub fn load_rate_window_history(
     Ok(rows)
 }
 
+/// Back-fill `rate_window_history` from the `turns` table for days where no
+/// real observation exists yet. Uses `reference_cap_tokens` (the current
+/// smoothed cap estimate) to compute approximate `used_percent` so the
+/// subscription-cap history chart shows utilisation context before the first
+/// live snapshot was recorded.
+///
+/// Rows are inserted with `source_kind = 'backfill'` and `confidence = 0.35`
+/// so downstream callers can distinguish them from real OAuth observations.
+/// The function is idempotent: it skips days that already have a backfill
+/// entry for `(provider, window_type)` and never overwrites rows from real
+/// observations.
+pub fn backfill_rate_window_history_from_turns(
+    conn: &Connection,
+    provider: &str,
+    window_type: &str,
+    model_pattern: Option<&str>,
+    reference_cap_tokens: i64,
+) -> rusqlite::Result<usize> {
+    if reference_cap_tokens <= 0 {
+        return Ok(0);
+    }
+
+    // Find the earliest real (non-backfill) observation for this window so we
+    // never overwrite periods that are already covered by live snapshots.
+    let earliest_real: Option<String> = conn
+        .query_row(
+            "SELECT date(MIN(timestamp)) FROM rate_window_history
+             WHERE provider = ?1 AND window_type = ?2 AND source_kind != 'backfill'",
+            rusqlite::params![provider, window_type],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+
+    // Daily token sums from the turns table for the last 90 days.
+    // Two branches avoid dynamic SQL for the optional model-name filter.
+    let daily: Vec<(String, i64)> = if let Some(pattern) = model_pattern {
+        let mut stmt = conn.prepare(
+            "SELECT date(timestamp),
+                    COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens
+                        + cache_creation_tokens + reasoning_output_tokens), 0)
+             FROM turns
+             WHERE provider = ?1
+               AND timestamp >= datetime('now', '-90 days')
+               AND lower(model) LIKE ?2
+             GROUP BY date(timestamp)
+             HAVING SUM(input_tokens + output_tokens + cache_read_tokens
+                        + cache_creation_tokens + reasoning_output_tokens) > 0
+             ORDER BY date(timestamp) ASC",
+        )?;
+        collect_warn(
+            stmt.query_map(rusqlite::params![provider, pattern], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?,
+            "backfill_rwh: daily row",
+        )
+    } else {
+        let mut stmt = conn.prepare(
+            "SELECT date(timestamp),
+                    COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens
+                        + cache_creation_tokens + reasoning_output_tokens), 0)
+             FROM turns
+             WHERE provider = ?1
+               AND timestamp >= datetime('now', '-90 days')
+             GROUP BY date(timestamp)
+             HAVING SUM(input_tokens + output_tokens + cache_read_tokens
+                        + cache_creation_tokens + reasoning_output_tokens) > 0
+             ORDER BY date(timestamp) ASC",
+        )?;
+        collect_warn(
+            stmt.query_map(rusqlite::params![provider], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?,
+            "backfill_rwh: daily row",
+        )
+    };
+
+    let mut inserted = 0usize;
+    for (day, observed) in daily {
+        // Stop when we reach a day covered by real observations.
+        if let Some(ref earliest) = earliest_real {
+            if day.as_str() >= earliest.as_str() {
+                continue;
+            }
+        }
+
+        // Idempotency: skip days that already have a backfill row.
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM rate_window_history
+                 WHERE provider = ?1 AND window_type = ?2
+                   AND date(timestamp) = ?3 AND source_kind = 'backfill'",
+                rusqlite::params![provider, window_type, day],
+                |row| row.get::<_, i64>(0).map(|n| n > 0),
+            )
+            .unwrap_or(true);
+
+        if !exists {
+            let ts = format!("{day}T12:00:00Z");
+            let used_pct =
+                (observed as f64 / reference_cap_tokens as f64).min(1.0) * 100.0;
+            conn.execute(
+                "INSERT INTO rate_window_history
+                    (timestamp, window_type, used_percent, resets_at,
+                     source_kind, source_path, provider, plan,
+                     observed_tokens, estimated_cap_tokens, confidence)
+                 VALUES (?1, ?2, ?3, NULL, 'backfill', '', ?4, NULL, ?5, ?6, 0.35)",
+                rusqlite::params![
+                    ts,
+                    window_type,
+                    used_pct,
+                    provider,
+                    observed,
+                    reference_cap_tokens,
+                ],
+            )?;
+            inserted += 1;
+        }
+    }
+
+    Ok(inserted)
+}
+
 pub struct ClaudeUsageRunInsert<'a> {
     pub status: &'a str,
     pub exit_code: Option<i32>,
