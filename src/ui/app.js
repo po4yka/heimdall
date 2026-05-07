@@ -6939,7 +6939,10 @@
   }
   function invokeMountCallback(mountId, el) {
     const cb = callbacks.get(mountId);
-    if (cb) cb(el);
+    if (cb) {
+      cb(el);
+      delete el.dataset["loading"];
+    }
   }
 
   // src/ui/widgets/registry.ts
@@ -13865,7 +13868,7 @@ ${row.project}` : row.project;
     const container = $2(sectionId);
     if (!container) return;
     container.dataset["hasContent"] = hasContent ? "1" : "0";
-    const widgetBody = container.closest(".widget-body");
+    const widgetBody = container.closest(".widget-body") ?? (container.closest(".grid-stack-item") ? container : null);
     if (widgetBody) {
       delete widgetBody.dataset["loading"];
       const gridItem = widgetBody.closest(".grid-stack-item");
@@ -15822,7 +15825,7 @@ ${row.project}` : row.project;
   function getTheme() {
     const stored = localStorage.getItem("theme");
     if (stored === "light" || stored === "dark") return stored;
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    return "light";
   }
   function applyTheme(theme) {
     if (theme === "light") {

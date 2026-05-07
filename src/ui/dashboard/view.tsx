@@ -159,7 +159,12 @@ export function setSectionVisibility(
   // empty grid cell — the card border still draws as a blank rectangle.
   // Toggle display on the .grid-stack-item ancestor so empty-data widgets
   // disappear instead of leaving a hollow card.
-  const widgetBody = container.closest('.widget-body');
+  // Some render functions overwrite .widget-body className (e.g. to 'card bento-2
+  // chart-card'), so closest('.widget-body') returns null even though the container
+  // IS the widget body carrying data-loading="1". Fall back: any element inside a
+  // .grid-stack-item is grid-managed and the container itself is the body element.
+  const widgetBody = container.closest('.widget-body') ??
+    (container.closest('.grid-stack-item') ? container : null);
   if (widgetBody) {
     // Initial-load shimmer (Phase 2 of the loaders work): WidgetGrid
     // stamps data-loading="1" on every new .widget-body so the empty

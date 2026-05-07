@@ -25,5 +25,8 @@ export function registerMountCallback(mountId: string, cb: MountCallback): void 
 /** Invoke the registered callback for `mountId`, if any. */
 export function invokeMountCallback(mountId: string, el: HTMLElement): void {
   const cb = callbacks.get(mountId);
-  if (cb) cb(el);
+  if (cb) {
+    cb(el);
+    delete el.dataset['loading'];
+  }
 }
