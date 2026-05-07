@@ -15,3 +15,6 @@ macos/Heimdall/Heimdall.xcodeproj/project.xcworkspace/xcuserdata/
 macos/Heimdall/Heimdall.xcodeproj/xcuserdata/
 extensions/heimdall-companion/node_modules/
 extensions/heimdall-companion/dist/
+
+# Debug screenshots from dev tooling
+src/ui/screenshots/
