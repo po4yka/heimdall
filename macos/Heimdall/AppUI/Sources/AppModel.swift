@@ -10,6 +10,7 @@ public final class AppModel {
     public let shell: AppShellModel
     public let overview: OverviewFeatureModel
     public let liveMonitor: LiveMonitorFeatureModel
+    public let today: TodayFeatureModel
     public let settings: SettingsFeatureModel
     public let filters: DashboardFiltersModel
     public let savedViews: SavedViewsModel
@@ -34,6 +35,7 @@ public final class AppModel {
         self.shell = AppShellModel(sessionStore: sessionStore)
         self.filters = DashboardFiltersModel()
         self.savedViews = SavedViewsModel()
+        self.today = TodayFeatureModel(helperPort: sessionStore.config.helperPort)
         self.overview = OverviewFeatureModel(
             sessionStore: sessionStore,
             repository: providerRepository,

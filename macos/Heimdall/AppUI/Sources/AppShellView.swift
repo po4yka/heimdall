@@ -15,6 +15,7 @@ struct AppShellView: View {
     @Bindable var shell: AppShellModel
     @Bindable var overview: OverviewFeatureModel
     @Bindable var liveMonitor: LiveMonitorFeatureModel
+    @Bindable var today: TodayFeatureModel
     @Bindable var filters: DashboardFiltersModel
     @Bindable var savedViews: SavedViewsModel
     let helperPort: Int
@@ -44,8 +45,7 @@ struct AppShellView: View {
                                 providerModel: self.providerModel
                             )
                         case .today:
-                            WindowPlaceholderView(title: "Today", systemImage: "sun.max",
-                                                  subtitle: "Today's usage — coming in Phase 2")
+                            WindowTodayView(model: self.today)
                         case .activity:
                             WindowPlaceholderView(title: "Activity", systemImage: "chart.line.uptrend.xyaxis",
                                                   subtitle: "Trends & charts — coming in Phase 3")
@@ -103,7 +103,9 @@ struct AppShellView: View {
                             await self.liveMonitor.refresh()
                         case .provider(let provider):
                             await self.providerModel(provider).refresh()
-                        case .today, .activity, .agents, .costModels, .sessions, .projects, .toolErrors:
+                        case .today:
+                            await self.today.load()
+                        case .activity, .agents, .costModels, .sessions, .projects, .toolErrors:
                             break
                         }
                     }
@@ -140,7 +142,9 @@ struct AppShellView: View {
             return self.liveMonitor.isRefreshing
         case .provider(let provider):
             return self.providerModel(provider).isBusy
-        case .today, .activity, .agents, .costModels, .sessions, .projects, .toolErrors:
+        case .today:
+            return self.today.isLoading
+        case .activity, .agents, .costModels, .sessions, .projects, .toolErrors:
             return false
         }
     }
@@ -481,7 +485,7 @@ private struct WindowOverviewStatsRow: View {
     }
 }
 
-private struct WindowOverviewKpiTile: View {
+struct WindowOverviewKpiTile: View {
     let label: String
     let value: String
 
@@ -1356,7 +1360,7 @@ private struct SidebarNavigationRow: View {
     }
 }
 
-private struct WindowSectionHeader: View {
+struct WindowSectionHeader: View {
     let title: String
     let subtitle: String
 
@@ -3048,7 +3052,7 @@ enum WindowProviderHeaderSubtitle {
     }
 }
 
-private struct WindowHeader<Trailing: View>: View {
+struct WindowHeader<Trailing: View>: View {
     let title: String
     let subtitle: String
     let issue: WindowHeaderIssuePresentation?

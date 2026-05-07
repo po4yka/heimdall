@@ -92,6 +92,7 @@ public struct HeimdallScenes: Scene {
                 shell: self.model.shell,
                 overview: self.model.overview,
                 liveMonitor: self.model.liveMonitor,
+                today: self.model.today,
                 filters: self.model.filters,
                 savedViews: self.model.savedViews,
                 helperPort: self.model.config.helperPort,
