@@ -11,6 +11,7 @@ public final class AppModel {
     public let overview: OverviewFeatureModel
     public let liveMonitor: LiveMonitorFeatureModel
     public let today: TodayFeatureModel
+    public let activity: ActivityFeatureModel
     public let settings: SettingsFeatureModel
     public let filters: DashboardFiltersModel
     public let savedViews: SavedViewsModel
@@ -36,11 +37,13 @@ public final class AppModel {
         self.filters = DashboardFiltersModel()
         self.savedViews = SavedViewsModel()
         self.today = TodayFeatureModel(helperPort: sessionStore.config.helperPort)
-        self.overview = OverviewFeatureModel(
+        let overview = OverviewFeatureModel(
             sessionStore: sessionStore,
             repository: providerRepository,
             refreshCoordinator: refreshCoordinator
         )
+        self.overview = overview
+        self.activity = ActivityFeatureModel(overview: overview)
         self.liveMonitor = LiveMonitorFeatureModel(
             sessionStore: sessionStore,
             clientFactory: runtime.liveMonitorClientFactory

@@ -16,6 +16,7 @@ struct AppShellView: View {
     @Bindable var overview: OverviewFeatureModel
     @Bindable var liveMonitor: LiveMonitorFeatureModel
     @Bindable var today: TodayFeatureModel
+    @Bindable var activity: ActivityFeatureModel
     @Bindable var filters: DashboardFiltersModel
     @Bindable var savedViews: SavedViewsModel
     let helperPort: Int
@@ -47,8 +48,7 @@ struct AppShellView: View {
                         case .today:
                             WindowTodayView(model: self.today)
                         case .activity:
-                            WindowPlaceholderView(title: "Activity", systemImage: "chart.line.uptrend.xyaxis",
-                                                  subtitle: "Trends & charts — coming in Phase 3")
+                            WindowActivityView(model: self.activity)
                         case .agents:
                             WindowPlaceholderView(title: "Agents", systemImage: "person.3",
                                                   subtitle: "Agent activity — coming in Phase 4")
@@ -105,7 +105,9 @@ struct AppShellView: View {
                             await self.providerModel(provider).refresh()
                         case .today:
                             await self.today.load()
-                        case .activity, .agents, .costModels, .sessions, .projects, .toolErrors:
+                        case .activity:
+                            await self.activity.refreshAll()
+                        case .agents, .costModels, .sessions, .projects, .toolErrors:
                             break
                         }
                     }
@@ -144,7 +146,9 @@ struct AppShellView: View {
             return self.providerModel(provider).isBusy
         case .today:
             return self.today.isLoading
-        case .activity, .agents, .costModels, .sessions, .projects, .toolErrors:
+        case .activity:
+            return self.activity.isRefreshing
+        case .agents, .costModels, .sessions, .projects, .toolErrors:
             return false
         }
     }
