@@ -9,7 +9,7 @@
  * subscribing to the `activeDashboardTab` signal.
  */
 import { WidgetGrid } from './WidgetGrid';
-import { activeDashboardTab, tabToScreen, loadState, rawData } from '../state/store';
+import { activeDashboardTab, tabToScreen, rawData } from '../state/store';
 import { ChartSkeleton } from '../components/_primitives/Skeleton';
 import type { DashboardScreen } from './registry';
 
@@ -23,8 +23,10 @@ const ALL_SCREENS: DashboardScreen[] = [
 
 export function ScreenGridManager() {
   const activeScreen = tabToScreen(activeDashboardTab.value);
-  const isLoading = loadState.value === 'refreshing' && rawData.value === null;
-  const isError = loadState.value === 'idle' && rawData.value === null;
+  // Show skeleton while rawData hasn't arrived yet (initial page load only).
+  // loadState is only set to 'refreshing' when rawData is already non-null,
+  // so the correct signal for "no data yet" is rawData itself.
+  const isLoading = rawData.value === null;
 
   return (
     <>
@@ -40,11 +42,6 @@ export function ScreenGridManager() {
               <ChartSkeleton />
               <ChartSkeleton />
               <ChartSkeleton />
-            </div>
-          )}
-          {screen === activeScreen && isError && (
-            <div role="alert" aria-live="assertive" style={{ padding: '24px', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              [ERROR: FAILED TO LOAD DATA — CHECK SERVER LOGS]
             </div>
           )}
           <WidgetGrid screen={screen} />

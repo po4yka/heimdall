@@ -13902,10 +13902,25 @@ ${row.project}` : row.project;
     for (const [sectionId, tab] of Object.entries(SECTION_TAB_MAP)) {
       const container = $2(sectionId);
       if (!container) continue;
-      if (container.closest(".widget-body")) continue;
+      const tabMatches = tab === activeDashboardTab.value;
+      if (container.closest(".grid-stack-item")) {
+        const widgetBody = container.closest(".widget-body") ?? container;
+        const gridItem = widgetBody.closest(".grid-stack-item");
+        if (gridItem) {
+          if (!tabMatches) {
+            gridItem.style.display = "none";
+          } else {
+            const hasContent2 = container.dataset["hasContent"] !== "0";
+            const widgetId = gridItem.getAttribute("gs-id") ?? "";
+            const overridden = widgetId ? isOverridden(widgetId) : false;
+            if (hasContent2 || overridden) gridItem.style.display = "";
+          }
+        }
+        continue;
+      }
       const hasContent = container.dataset["hasContent"] !== "0";
       const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? "";
-      container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : "none";
+      container.style.display = hasContent && tabMatches ? displayMode : "none";
     }
   }
   function clearTodayWidgets() {
@@ -22174,8 +22189,7 @@ ${row.project}` : row.project;
   ];
   function ScreenGridManager() {
     const activeScreen = tabToScreen(activeDashboardTab.value);
-    const isLoading = loadState.value === "refreshing" && rawData.value === null;
-    const isError = loadState.value === "idle" && rawData.value === null;
+    const isLoading = rawData.value === null;
     return /* @__PURE__ */ u4(S, { children: ALL_SCREENS.map((screen) => /* @__PURE__ */ u4(
       "div",
       {
@@ -22188,7 +22202,6 @@ ${row.project}` : row.project;
             /* @__PURE__ */ u4(ChartSkeleton, {}),
             /* @__PURE__ */ u4(ChartSkeleton, {})
           ] }),
-          screen === activeScreen && isError && /* @__PURE__ */ u4("div", { role: "alert", "aria-live": "assertive", style: { padding: "24px", fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-secondary)" }, children: "[ERROR: FAILED TO LOAD DATA \u2014 CHECK SERVER LOGS]" }),
           /* @__PURE__ */ u4(WidgetGrid, { screen })
         ]
       },

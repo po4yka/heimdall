@@ -219,11 +219,32 @@ export function refreshSectionVisibility(): void {
   for (const [sectionId, tab] of Object.entries(SECTION_TAB_MAP)) {
     const container = $(sectionId);
     if (!container) continue;
-    // Grid-managed elements: visibility is controlled by ScreenGridManager.
-    if (container.closest('.widget-body')) continue;
+    const tabMatches = tab === activeDashboardTab.value;
+
+    // Grid-managed widgets live inside a .grid-stack-item. Two cases:
+    //   (a) render fn preserved .widget-body → container itself carries the class
+    //   (b) render fn overwrote className → no .widget-body but still inside .grid-stack-item
+    // In both cases we must hide/show the .grid-stack-item, not just the container,
+    // otherwise the wrapper card border renders as an empty box on the wrong tab.
+    if (container.closest('.grid-stack-item')) {
+      const widgetBody = container.closest('.widget-body') ?? container;
+      const gridItem = widgetBody.closest('.grid-stack-item') as HTMLElement | null;
+      if (gridItem) {
+        if (!tabMatches) {
+          gridItem.style.display = 'none';
+        } else {
+          const hasContent = container.dataset['hasContent'] !== '0';
+          const widgetId = gridItem.getAttribute('gs-id') ?? '';
+          const overridden = widgetId ? isOverridden(widgetId) : false;
+          if (hasContent || overridden) gridItem.style.display = '';
+        }
+      }
+      continue;
+    }
+
     const hasContent = container.dataset['hasContent'] !== '0';
     const displayMode = SECTION_DISPLAY_MODE[sectionId] ?? '';
-    container.style.display = hasContent && tab === activeDashboardTab.value ? displayMode : 'none';
+    container.style.display = hasContent && tabMatches ? displayMode : 'none';
   }
 }
 
