@@ -59,6 +59,10 @@
 		495CB7C69F8B4EF157B25E26 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = C96AF691B9EF24FDA1BE9B47 /* main.swift */; };
 		49765D749B5C1FE0FFDE1AA6 /* LiveMonitorPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD836E600517F1D404B9E1FA /* LiveMonitorPresentationTests.swift */; };
 		4A8FECB7C88A5B6CE4199365 /* SavedViewsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A88AF053819225538400BA5A /* SavedViewsModel.swift */; };
+		31B27085EFC541D08423A708 /* AgentsFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA39BF0EBF354B8CBA72081F /* AgentsFeatureModel.swift */; };
+		FD85E2D1210642E0BEABAD91 /* WindowAgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F677AAC530B044AC9518E70F /* WindowAgentsView.swift */; };
+		6AF5319F2EEA432E9A08EDC6 /* CostModelsFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E53A8C068569449093F3FFD7 /* CostModelsFeatureModel.swift */; };
+		EC26761D7908472581239202 /* WindowCostModelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E990A2643274355B939F955 /* WindowCostModelsView.swift */; };
 		824B8B76D8E64D72ABEF97FB /* TodayFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD8A70BD5ECB47EEBB54D2D9 /* TodayFeatureModel.swift */; };
 		33F5F8F33B9D41BE90712E3F /* WindowTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA59B7542E454EFD84913364 /* WindowTodayView.swift */; };
 		AEB31394DB1C41228E85C663 /* ActivityFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50EC9FA8F1B246FE876594B8 /* ActivityFeatureModel.swift */; };
@@ -574,6 +578,10 @@
 		46443A111BF7FAAC9BDD8B08 /* ProviderFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderFeatureModel.swift; sourceTree = "<group>"; };
 		46B8183C15D3B9A427BF5379 /* ModelDistributionDonut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDistributionDonut.swift; sourceTree = "<group>"; };
 		4751B69FC85199BBB5DDF5D9 /* DashboardFiltersModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardFiltersModel.swift; sourceTree = "<group>"; };
+		EA39BF0EBF354B8CBA72081F /* AgentsFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsFeatureModel.swift; sourceTree = "<group>"; };
+		F677AAC530B044AC9518E70F /* WindowAgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAgentsView.swift; sourceTree = "<group>"; };
+		E53A8C068569449093F3FFD7 /* CostModelsFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CostModelsFeatureModel.swift; sourceTree = "<group>"; };
+		8E990A2643274355B939F955 /* WindowCostModelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCostModelsView.swift; sourceTree = "<group>"; };
 		AD8A70BD5ECB47EEBB54D2D9 /* TodayFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayFeatureModel.swift; sourceTree = "<group>"; };
 		AA59B7542E454EFD84913364 /* WindowTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTodayView.swift; sourceTree = "<group>"; };
 		50EC9FA8F1B246FE876594B8 /* ActivityFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityFeatureModel.swift; sourceTree = "<group>"; };
@@ -929,6 +937,10 @@
 				20219CB528FF69CE9FA4675D /* LiveMonitorTimeFormatter.swift */,
 				B528BD8A44913B12965FF41E /* MenuBarMeterRenderer.swift */,
 				9268190866125BAC18D64413 /* OverviewFeatureModel.swift */,
+				EA39BF0EBF354B8CBA72081F /* AgentsFeatureModel.swift */,
+				F677AAC530B044AC9518E70F /* WindowAgentsView.swift */,
+				E53A8C068569449093F3FFD7 /* CostModelsFeatureModel.swift */,
+				8E990A2643274355B939F955 /* WindowCostModelsView.swift */,
 				AD8A70BD5ECB47EEBB54D2D9 /* TodayFeatureModel.swift */,
 				AA59B7542E454EFD84913364 /* WindowTodayView.swift */,
 				50EC9FA8F1B246FE876594B8 /* ActivityFeatureModel.swift */,
@@ -1595,6 +1607,10 @@
 				6B54B78F346D023EAE973CC4 /* ModelDistributionDonut.swift in Sources */,
 				F949AC71730361ED8B4AA1CD /* ModelFamilyHistoryChart.swift in Sources */,
 				931D74FB31B5A565BC6587CF /* OverviewFeatureModel.swift in Sources */,
+				31B27085EFC541D08423A708 /* AgentsFeatureModel.swift in Sources */,
+				FD85E2D1210642E0BEABAD91 /* WindowAgentsView.swift in Sources */,
+				6AF5319F2EEA432E9A08EDC6 /* CostModelsFeatureModel.swift in Sources */,
+				EC26761D7908472581239202 /* WindowCostModelsView.swift in Sources */,
 				824B8B76D8E64D72ABEF97FB /* TodayFeatureModel.swift in Sources */,
 				33F5F8F33B9D41BE90712E3F /* WindowTodayView.swift in Sources */,
 				AEB31394DB1C41228E85C663 /* ActivityFeatureModel.swift in Sources */,

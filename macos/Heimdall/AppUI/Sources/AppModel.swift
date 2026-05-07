@@ -12,6 +12,8 @@ public final class AppModel {
     public let liveMonitor: LiveMonitorFeatureModel
     public let today: TodayFeatureModel
     public let activity: ActivityFeatureModel
+    public let agents: AgentsFeatureModel
+    public let costModels: CostModelsFeatureModel
     public let settings: SettingsFeatureModel
     public let filters: DashboardFiltersModel
     public let savedViews: SavedViewsModel
@@ -44,6 +46,8 @@ public final class AppModel {
         )
         self.overview = overview
         self.activity = ActivityFeatureModel(overview: overview)
+        self.agents = AgentsFeatureModel(overview: overview)
+        self.costModels = CostModelsFeatureModel(overview: overview)
         self.liveMonitor = LiveMonitorFeatureModel(
             sessionStore: sessionStore,
             clientFactory: runtime.liveMonitorClientFactory

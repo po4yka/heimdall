@@ -94,6 +94,8 @@ public struct HeimdallScenes: Scene {
                 liveMonitor: self.model.liveMonitor,
                 today: self.model.today,
                 activity: self.model.activity,
+                agents: self.model.agents,
+                costModels: self.model.costModels,
                 filters: self.model.filters,
                 savedViews: self.model.savedViews,
                 helperPort: self.model.config.helperPort,

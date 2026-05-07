@@ -17,6 +17,8 @@ struct AppShellView: View {
     @Bindable var liveMonitor: LiveMonitorFeatureModel
     @Bindable var today: TodayFeatureModel
     @Bindable var activity: ActivityFeatureModel
+    @Bindable var agents: AgentsFeatureModel
+    @Bindable var costModels: CostModelsFeatureModel
     @Bindable var filters: DashboardFiltersModel
     @Bindable var savedViews: SavedViewsModel
     let helperPort: Int
@@ -50,11 +52,9 @@ struct AppShellView: View {
                         case .activity:
                             WindowActivityView(model: self.activity)
                         case .agents:
-                            WindowPlaceholderView(title: "Agents", systemImage: "person.3",
-                                                  subtitle: "Agent activity — coming in Phase 4")
+                            WindowAgentsView(model: self.agents)
                         case .costModels:
-                            WindowPlaceholderView(title: "Cost & Models", systemImage: "dollarsign.circle",
-                                                  subtitle: "Cost breakdowns — coming in Phase 4")
+                            WindowCostModelsView(model: self.costModels)
                         case .sessions:
                             WindowPlaceholderView(title: "Sessions", systemImage: "list.bullet.rectangle",
                                                   subtitle: "Session tables — coming in Phase 5")
@@ -107,7 +107,11 @@ struct AppShellView: View {
                             await self.today.load()
                         case .activity:
                             await self.activity.refreshAll()
-                        case .agents, .costModels, .sessions, .projects, .toolErrors:
+                        case .agents:
+                            await self.agents.refreshAll()
+                        case .costModels:
+                            await self.costModels.refreshAll()
+                        case .sessions, .projects, .toolErrors:
                             break
                         }
                     }
@@ -148,7 +152,11 @@ struct AppShellView: View {
             return self.today.isLoading
         case .activity:
             return self.activity.isRefreshing
-        case .agents, .costModels, .sessions, .projects, .toolErrors:
+        case .agents:
+            return self.agents.isRefreshing
+        case .costModels:
+            return self.costModels.isRefreshing
+        case .sessions, .projects, .toolErrors:
             return false
         }
     }
