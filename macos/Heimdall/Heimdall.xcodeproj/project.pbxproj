@@ -67,6 +67,11 @@
 		BE57BDE384CA465CA0CFDB8D /* WindowSessionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10163DA4246D4D6F93F79733 /* WindowSessionsView.swift */; };
 		BC27FB4D9CD14A408D3BCE4E /* ProjectsFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC0C937D186443783F5FFAA /* ProjectsFeatureModel.swift */; };
 		1F9DBF3095EC410F8EBC205D /* WindowProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1BEB73F8B7744A9807F42C9 /* WindowProjectsView.swift */; };
+		AA89F68AB23440259B8267C7 /* BackupFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B2D94E0B4D4D1499588DCE /* BackupFeatureModel.swift */; };
+		1ADDC119A1F64BB38ABA9324 /* BackupSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84EEC94527B74B61A28F1E4D /* BackupSheet.swift */; };
+		0D8D4CB916284B69A158BF06 /* AgentRegistrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 147982EF1DF54ECC84043C47 /* AgentRegistrySheet.swift */; };
+		884BD33C74434F4B8EFD60F9 /* CommandPaletteModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4952EB7D558C438F94A79EFA /* CommandPaletteModel.swift */; };
+		37CD13AC13294C5BB55D031C /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD22D50122104D22BC4CDF25 /* CommandPaletteView.swift */; };
 		824B8B76D8E64D72ABEF97FB /* TodayFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD8A70BD5ECB47EEBB54D2D9 /* TodayFeatureModel.swift */; };
 		33F5F8F33B9D41BE90712E3F /* WindowTodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA59B7542E454EFD84913364 /* WindowTodayView.swift */; };
 		AEB31394DB1C41228E85C663 /* ActivityFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50EC9FA8F1B246FE876594B8 /* ActivityFeatureModel.swift */; };
@@ -590,6 +595,11 @@
 		10163DA4246D4D6F93F79733 /* WindowSessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSessionsView.swift; sourceTree = "<group>"; };
 		4CC0C937D186443783F5FFAA /* ProjectsFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsFeatureModel.swift; sourceTree = "<group>"; };
 		E1BEB73F8B7744A9807F42C9 /* WindowProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowProjectsView.swift; sourceTree = "<group>"; };
+		E5B2D94E0B4D4D1499588DCE /* BackupFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupFeatureModel.swift; sourceTree = "<group>"; };
+		84EEC94527B74B61A28F1E4D /* BackupSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSheet.swift; sourceTree = "<group>"; };
+		147982EF1DF54ECC84043C47 /* AgentRegistrySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentRegistrySheet.swift; sourceTree = "<group>"; };
+		4952EB7D558C438F94A79EFA /* CommandPaletteModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteModel.swift; sourceTree = "<group>"; };
+		CD22D50122104D22BC4CDF25 /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
 		AD8A70BD5ECB47EEBB54D2D9 /* TodayFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayFeatureModel.swift; sourceTree = "<group>"; };
 		AA59B7542E454EFD84913364 /* WindowTodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTodayView.swift; sourceTree = "<group>"; };
 		50EC9FA8F1B246FE876594B8 /* ActivityFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityFeatureModel.swift; sourceTree = "<group>"; };
@@ -953,6 +963,11 @@
 				10163DA4246D4D6F93F79733 /* WindowSessionsView.swift */,
 				4CC0C937D186443783F5FFAA /* ProjectsFeatureModel.swift */,
 				E1BEB73F8B7744A9807F42C9 /* WindowProjectsView.swift */,
+				E5B2D94E0B4D4D1499588DCE /* BackupFeatureModel.swift */,
+				84EEC94527B74B61A28F1E4D /* BackupSheet.swift */,
+				147982EF1DF54ECC84043C47 /* AgentRegistrySheet.swift */,
+				4952EB7D558C438F94A79EFA /* CommandPaletteModel.swift */,
+				CD22D50122104D22BC4CDF25 /* CommandPaletteView.swift */,
 				AD8A70BD5ECB47EEBB54D2D9 /* TodayFeatureModel.swift */,
 				AA59B7542E454EFD84913364 /* WindowTodayView.swift */,
 				50EC9FA8F1B246FE876594B8 /* ActivityFeatureModel.swift */,
@@ -1627,6 +1642,11 @@
 				BE57BDE384CA465CA0CFDB8D /* WindowSessionsView.swift in Sources */,
 				BC27FB4D9CD14A408D3BCE4E /* ProjectsFeatureModel.swift in Sources */,
 				1F9DBF3095EC410F8EBC205D /* WindowProjectsView.swift in Sources */,
+				AA89F68AB23440259B8267C7 /* BackupFeatureModel.swift in Sources */,
+				1ADDC119A1F64BB38ABA9324 /* BackupSheet.swift in Sources */,
+				0D8D4CB916284B69A158BF06 /* AgentRegistrySheet.swift in Sources */,
+				884BD33C74434F4B8EFD60F9 /* CommandPaletteModel.swift in Sources */,
+				37CD13AC13294C5BB55D031C /* CommandPaletteView.swift in Sources */,
 				824B8B76D8E64D72ABEF97FB /* TodayFeatureModel.swift in Sources */,
 				33F5F8F33B9D41BE90712E3F /* WindowTodayView.swift in Sources */,
 				AEB31394DB1C41228E85C663 /* ActivityFeatureModel.swift in Sources */,

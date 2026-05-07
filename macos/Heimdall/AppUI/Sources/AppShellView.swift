@@ -21,7 +21,14 @@ struct AppShellView: View {
     @Bindable var costModels: CostModelsFeatureModel
     @Bindable var sessions: SessionsFeatureModel
     @Bindable var projects: ProjectsFeatureModel
+    @Bindable var backup: BackupFeatureModel
     @Bindable var filters: DashboardFiltersModel
+
+    @State private var showingBackup = false
+    @State private var showingImports = false
+    @State private var showingWebCaptures = false
+    @State private var showingCommandPalette = false
+    @State private var paletteModel = CommandPaletteModel()
     @Bindable var savedViews: SavedViewsModel
     let helperPort: Int
     let providerModel: (ProviderID) -> ProviderFeatureModel
@@ -131,16 +138,47 @@ struct AppShellView: View {
                 .help("Open Heimdall settings")
                 .accessibilityLabel("Open Heimdall settings")
 
-                Button {
-                    if let url = URL(string: "http://127.0.0.1:\(self.helperPort)") {
-                        NSWorkspace.shared.open(url)
-                    }
+                Menu {
+                    Button("Backup & Snapshots") { self.showingBackup = true }
+                    Button("Imports") { self.showingImports = true }
+                    Button("Web Captures") { self.showingWebCaptures = true }
+                    Divider()
+                    Button("Command Palette") { self.showingCommandPalette = true }
+                        .keyboardShortcut("k", modifiers: .command)
                 } label: {
-                    Text("Web Dashboard")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .help("Open the local Heimdall web dashboard")
-                .accessibilityLabel("Open the local Heimdall web dashboard")
+                .help("More actions")
+
+                // Hidden ⌘K trigger so the shortcut works without opening the menu
+                Button { self.showingCommandPalette = true } label: { EmptyView() }
+                    .keyboardShortcut("k", modifiers: .command)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .accessibilityHidden(true)
             }
+        }
+        .sheet(isPresented: self.$showingBackup) {
+            BackupSheet(model: self.backup)
+        }
+        .sheet(isPresented: self.$showingImports) {
+            ImportsSheet(helperPort: self.helperPort)
+        }
+        .sheet(isPresented: self.$showingWebCaptures) {
+            WebCapturesSheet(helperPort: self.helperPort)
+        }
+        .sheet(isPresented: self.$showingCommandPalette) {
+            CommandPaletteView(model: self.paletteModel)
+                .onAppear {
+                    self.paletteModel.prepare(
+                        shell: self.shell,
+                        sessions: self.sessions.recentSessions,
+                        projects: self.projects.byProject,
+                        models: self.costModels.byModel,
+                        onOpenSettings: {},
+                        onOpenBackup: { self.showingBackup = true }
+                    )
+                }
         }
     }
 

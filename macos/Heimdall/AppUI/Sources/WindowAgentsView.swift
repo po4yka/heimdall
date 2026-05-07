@@ -3,6 +3,7 @@ import SwiftUI
 
 struct WindowAgentsView: View {
     @Bindable var model: AgentsFeatureModel
+    @State private var showingRegistry = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -13,7 +14,10 @@ struct WindowAgentsView: View {
                 onRetry: { Task { await self.model.refreshAll() } },
                 isRetrying: self.model.isRefreshing
             ) {
-                EmptyView()
+                Button("Agent registry") { self.showingRegistry = true }
+                    .sheet(isPresented: self.$showingRegistry) {
+                        AgentRegistrySheet(model: self.model)
+                    }
             }
 
             if self.model.hasAgentData {
