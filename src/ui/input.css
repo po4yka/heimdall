@@ -1266,17 +1266,17 @@
     gap: var(--space-2);
   }
 
-  /* KPI-card mount points: SECTION_DISPLAY_MODE in dashboard/view.tsx sets
-     `display: grid` inline on these containers, but without an explicit
-     `grid-template-columns` they collapse to a single column and each
-     stat card stretches to the widget's full width. The 120px minmax
-     lets a 1×1 widget host 2-3 KPIs side-by-side instead of stretching
-     a single tile across the entire row. */
+  /* KPI-card mount points: must declare display:grid here so the layout
+     applies inside GridStack widgets too — setSectionVisibility returns
+     early in the widget path without setting container.style.display.
+     The 120px minmax lets a widget host 2-3 KPIs side-by-side instead
+     of stretching a single tile across the entire row. */
   #stats-row,
   #usage-windows,
   #agent-kpis-row,
   #codex-plan-kpi-mount,
   #today-kpis-mount {
+    display: grid;
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: var(--space-2);
     align-items: stretch;

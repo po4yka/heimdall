@@ -57,21 +57,21 @@ function makeActivityWidgets(): PlacedWidget[] {
     // Today block — drilldown for the selected date.
     { i: 'today-date-picker-mount',    x: 0, y: 0,  w: 4, h: 1 },
     { i: 'today-kpis-mount',           x: 0, y: 1,  w: 4, h: 1 },
-    { i: 'today-hour-timeline-mount',  x: 0, y: 2,  w: 4, h: 3 },
-    { i: 'today-hour-heatstrip-mount', x: 0, y: 5,  w: 4, h: 2 },
-    { i: 'today-days-hours-30-mount',  x: 0, y: 7,  w: 4, h: 4 },
-    { i: 'today-days-hours-7-mount',   x: 0, y: 11, w: 4, h: 3 },
-    { i: 'today-weekday-hour-mount',   x: 0, y: 14, w: 4, h: 3 },
+    { i: 'today-hour-timeline-mount',  x: 0, y: 2,  w: 4, h: 2 },
+    { i: 'today-hour-heatstrip-mount', x: 0, y: 4,  w: 4, h: 1 },
+    { i: 'today-days-hours-30-mount',  x: 0, y: 5,  w: 4, h: 4 },
+    { i: 'today-days-hours-7-mount',   x: 0, y: 9,  w: 4, h: 2 },
+    { i: 'today-weekday-hour-mount',   x: 0, y: 11, w: 4, h: 2 },
     // Range block — applies the dashboard filter strip.
     // Codex plan history — full width
-    { i: 'codex-plan-history-mount',   x: 0, y: 17, w: 4, h: 3 },
+    { i: 'codex-plan-history-mount',   x: 0, y: 13, w: 4, h: 3 },
     // Charts row: daily (2 wide) | model (1) | project (1)
-    { i: 'daily-chart-card',           x: 0, y: 20, w: 2, h: 3, minW: 1, minH: 2 },
-    { i: 'model-chart-card',           x: 2, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
-    { i: 'project-chart-card',         x: 3, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
+    { i: 'daily-chart-card',           x: 0, y: 16, w: 2, h: 3, minW: 1, minH: 2 },
+    { i: 'model-chart-card',           x: 2, y: 16, w: 1, h: 3, minW: 1, minH: 2 },
+    { i: 'project-chart-card',         x: 3, y: 16, w: 1, h: 3, minW: 1, minH: 2 },
     // Hourly chart (2 wide) then activity heatmap full width
-    { i: 'hourly-chart',               x: 0, y: 23, w: 2, h: 3, minW: 1, minH: 2 },
-    { i: 'activity-heatmap',           x: 0, y: 26, w: 4, h: 2, minW: 2, minH: 2 },
+    { i: 'hourly-chart',               x: 0, y: 19, w: 2, h: 2, minW: 1, minH: 2 },
+    { i: 'activity-heatmap',           x: 0, y: 21, w: 4, h: 2, minW: 2, minH: 2 },
   ];
   return widgets;
 }

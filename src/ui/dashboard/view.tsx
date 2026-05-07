@@ -705,7 +705,7 @@ export function renderTodayView(
   renderSection(
     'today-hour-timeline-mount',
     true,
-    <div style={{ padding: '20px' }}>
+    <div style={{ padding: '20px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       <div class="section-title" style={{ marginBottom: '12px' }}>Hour timeline — {data.day}</div>
       <HourTimeline hours={data.hours} />
     </div>

@@ -7561,21 +7561,21 @@
       // Today block — drilldown for the selected date.
       { i: "today-date-picker-mount", x: 0, y: 0, w: 4, h: 1 },
       { i: "today-kpis-mount", x: 0, y: 1, w: 4, h: 1 },
-      { i: "today-hour-timeline-mount", x: 0, y: 2, w: 4, h: 3 },
-      { i: "today-hour-heatstrip-mount", x: 0, y: 5, w: 4, h: 2 },
-      { i: "today-days-hours-30-mount", x: 0, y: 7, w: 4, h: 4 },
-      { i: "today-days-hours-7-mount", x: 0, y: 11, w: 4, h: 3 },
-      { i: "today-weekday-hour-mount", x: 0, y: 14, w: 4, h: 3 },
+      { i: "today-hour-timeline-mount", x: 0, y: 2, w: 4, h: 2 },
+      { i: "today-hour-heatstrip-mount", x: 0, y: 4, w: 4, h: 1 },
+      { i: "today-days-hours-30-mount", x: 0, y: 5, w: 4, h: 4 },
+      { i: "today-days-hours-7-mount", x: 0, y: 9, w: 4, h: 2 },
+      { i: "today-weekday-hour-mount", x: 0, y: 11, w: 4, h: 2 },
       // Range block — applies the dashboard filter strip.
       // Codex plan history — full width
-      { i: "codex-plan-history-mount", x: 0, y: 17, w: 4, h: 3 },
+      { i: "codex-plan-history-mount", x: 0, y: 13, w: 4, h: 3 },
       // Charts row: daily (2 wide) | model (1) | project (1)
-      { i: "daily-chart-card", x: 0, y: 20, w: 2, h: 3, minW: 1, minH: 2 },
-      { i: "model-chart-card", x: 2, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
-      { i: "project-chart-card", x: 3, y: 20, w: 1, h: 3, minW: 1, minH: 2 },
+      { i: "daily-chart-card", x: 0, y: 16, w: 2, h: 3, minW: 1, minH: 2 },
+      { i: "model-chart-card", x: 2, y: 16, w: 1, h: 3, minW: 1, minH: 2 },
+      { i: "project-chart-card", x: 3, y: 16, w: 1, h: 3, minW: 1, minH: 2 },
       // Hourly chart (2 wide) then activity heatmap full width
-      { i: "hourly-chart", x: 0, y: 23, w: 2, h: 3, minW: 1, minH: 2 },
-      { i: "activity-heatmap", x: 0, y: 26, w: 4, h: 2, minW: 2, minH: 2 }
+      { i: "hourly-chart", x: 0, y: 19, w: 2, h: 2, minW: 1, minH: 2 },
+      { i: "activity-heatmap", x: 0, y: 21, w: 4, h: 2, minW: 2, minH: 2 }
     ];
     return widgets;
   }
@@ -9057,9 +9057,9 @@
     const maxCost = Math.max(...hours.map((h5) => h5.cost_nanos), 1);
     const totalCost = hours.reduce((s4, h5) => s4 + h5.cost_nanos, 0);
     if (totalCost === 0) {
-      return /* @__PURE__ */ u4("div", { class: "today-empty-state", children: /* @__PURE__ */ u4("span", { children: "No activity for this day" }) });
+      return /* @__PURE__ */ u4("div", { class: "today-empty-state", style: { flex: 1 }, children: /* @__PURE__ */ u4("span", { children: "No activity for this day" }) });
     }
-    return /* @__PURE__ */ u4("div", { children: [
+    return /* @__PURE__ */ u4("div", { style: { flex: 1, display: "flex", flexDirection: "column" }, children: [
       /* @__PURE__ */ u4(
         "div",
         {
@@ -9067,7 +9067,8 @@
             display: "flex",
             alignItems: "flex-end",
             gap: "2px",
-            height: "80px"
+            flex: 1,
+            minHeight: "60px"
           },
           children: hours.map((h5) => {
             const pct = h5.cost_nanos / maxCost * 100;
@@ -9888,141 +9889,164 @@
   function IndicatorDot({ indicator }) {
     const isAlert = indicator === "major" || indicator === "critical";
     const isMinor = indicator === "minor";
-    const color = isAlert ? "var(--accent)" : "var(--text-secondary)";
-    const opacity = isAlert ? 1 : isMinor ? 0.6 : 0.3;
     return /* @__PURE__ */ u4(
       "span",
       {
         "aria-hidden": "true",
         style: {
           display: "inline-block",
-          width: "10px",
-          height: "10px",
+          width: "8px",
+          height: "8px",
           borderRadius: "50%",
-          backgroundColor: color,
-          opacity,
-          marginRight: "8px",
-          flexShrink: 0
+          flexShrink: 0,
+          backgroundColor: isAlert ? "var(--accent)" : "var(--text-secondary)",
+          opacity: isAlert ? 1 : isMinor ? 0.5 : 0.25
         }
       }
     );
   }
-  function ProviderRow({ name, status, expanded }) {
-    if (!status) {
-      return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
-        /* @__PURE__ */ u4(IndicatorDot, { indicator: "none" }),
-        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
-        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, title: "Status API unreachable", children: "unavailable" })
-      ] });
-    }
-    const incidentCount = status.active_incidents.length;
-    return /* @__PURE__ */ u4("div", { children: [
-      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", padding: "8px 0", gap: "8px" }, children: [
-        /* @__PURE__ */ u4(IndicatorDot, { indicator: status.indicator }),
-        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "13px", flex: 1 }, children: name }),
-        /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontSize: "12px" }, children: status.description }),
-        incidentCount > 0 && /* @__PURE__ */ u4(
-          "span",
-          {
-            style: {
-              fontFamily: "var(--font-mono)",
-              fontSize: "11px",
-              color: status.indicator === "major" || status.indicator === "critical" ? "var(--accent)" : "var(--text-secondary)",
-              marginLeft: "8px"
-            },
-            children: [
-              "(",
-              incidentCount,
-              " active)"
-            ]
-          }
-        ),
-        /* @__PURE__ */ u4(
-          "a",
-          {
-            href: status.page_url,
-            target: "_blank",
-            rel: "noopener noreferrer",
-            style: {
-              color: "var(--text-secondary)",
-              fontSize: "11px",
-              marginLeft: "4px",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minWidth: "24px",
-              minHeight: "24px"
-            },
-            "aria-label": `${name} status page`,
-            children: "\u2197"
-          }
-        )
-      ] }),
-      expanded && /* @__PURE__ */ u4("div", { style: { paddingLeft: "18px", paddingBottom: "8px" }, children: [
-        status.components.length > 0 && /* @__PURE__ */ u4("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse", marginBottom: "8px" }, children: [
-          /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { style: { color: "var(--text-secondary)" }, children: [
-            /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Component" }),
-            /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 0", fontWeight: 500 }, children: "Status" })
-          ] }) }),
-          /* @__PURE__ */ u4("tbody", { children: status.components.map((c4, i4) => {
-            const fmt2 = (v4) => v4 != null ? `${(v4 * 100).toFixed(2)}%` : "--";
-            const has30 = c4.uptime_30d != null;
-            const has7 = c4.uptime_7d != null;
-            const showUptime = has30 || has7;
-            return /* @__PURE__ */ u4(S, { children: [
-              /* @__PURE__ */ u4("tr", { children: [
-                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: c4.name }),
-                /* @__PURE__ */ u4("td", { style: { padding: "2px 0", color: "var(--text-secondary)" }, children: c4.status.replace(/_/g, " ") })
-              ] }, i4),
-              showUptime && /* @__PURE__ */ u4("tr", { children: /* @__PURE__ */ u4("td", { colSpan: 2, style: { padding: "0 0 4px 0" }, children: /* @__PURE__ */ u4("span", { style: {
-                fontFamily: "var(--font-mono)",
-                fontSize: "11px",
-                letterSpacing: "0.04em"
-              }, children: [
-                /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: "30D " }),
-                /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_30d) }),
-                /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: " \xB7 7D " }),
-                /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_7d) })
-              ] }) }) }, `${i4}-uptime`)
-            ] });
-          }) })
-        ] }),
-        status.active_incidents.map((inc, i4) => /* @__PURE__ */ u4(
-          "div",
-          {
-            style: {
-              fontSize: "12px",
-              color: "var(--text-secondary)",
-              marginBottom: "4px",
-              paddingLeft: "4px",
-              borderLeft: "2px solid var(--border)"
-            },
-            children: [
-              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)" }, children: inc.shortlink ? /* @__PURE__ */ u4(
+  function ProviderRow({ name, status, expanded, isLast }) {
+    const indicator = status?.indicator ?? "none";
+    const isAlert = indicator === "major" || indicator === "critical";
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        style: {
+          borderBottom: isLast ? "none" : "1px solid var(--border)",
+          paddingBottom: isLast ? 0 : "10px",
+          marginBottom: isLast ? 0 : "10px"
+        },
+        children: [
+          /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", gap: "10px" }, children: [
+            /* @__PURE__ */ u4(IndicatorDot, { indicator }),
+            /* @__PURE__ */ u4(
+              "span",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  flex: 1,
+                  color: "var(--text-primary)"
+                },
+                children: name
+              }
+            ),
+            !status ? /* @__PURE__ */ u4(
+              "span",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "11px",
+                  color: "var(--text-secondary)",
+                  opacity: 0.6
+                },
+                title: "Status API unreachable",
+                children: "unavailable"
+              }
+            ) : /* @__PURE__ */ u4(S, { children: [
+              /* @__PURE__ */ u4(
+                "span",
+                {
+                  style: {
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "11px",
+                    color: isAlert ? "var(--accent)" : "var(--text-secondary)"
+                  },
+                  children: [
+                    status.description,
+                    status.active_incidents.length > 0 && /* @__PURE__ */ u4("span", { style: { opacity: 0.7 }, children: [
+                      " ",
+                      "(",
+                      status.active_incidents.length,
+                      ")"
+                    ] })
+                  ]
+                }
+              ),
+              /* @__PURE__ */ u4(
                 "a",
                 {
-                  href: inc.shortlink,
+                  href: status.page_url,
                   target: "_blank",
                   rel: "noopener noreferrer",
-                  style: { color: "inherit", textDecoration: "underline" },
-                  children: inc.name
+                  style: {
+                    color: "var(--text-secondary)",
+                    fontSize: "11px",
+                    opacity: 0.5,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    lineHeight: 1,
+                    flexShrink: 0,
+                    textDecoration: "none"
+                  },
+                  "aria-label": `${name} status page`,
+                  children: "\u2197"
                 }
-              ) : inc.name }),
-              " ",
-              /* @__PURE__ */ u4("span", { style: { opacity: 0.7 }, children: [
-                "[",
-                inc.impact,
-                "] ",
-                inc.status,
-                " \u2014 ",
-                inc.started_at.slice(0, 16).replace("T", " ")
-              ] })
-            ]
-          },
-          i4
-        ))
-      ] })
-    ] });
+              )
+            ] })
+          ] }),
+          expanded && status && /* @__PURE__ */ u4("div", { style: { paddingLeft: "18px", paddingTop: "8px" }, children: [
+            status.components.length > 0 && /* @__PURE__ */ u4("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse", marginBottom: "8px" }, children: [
+              /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { style: { color: "var(--text-secondary)" }, children: [
+                /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 8px 2px 0", fontWeight: 500 }, children: "Component" }),
+                /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 0", fontWeight: 500 }, children: "Status" })
+              ] }) }),
+              /* @__PURE__ */ u4("tbody", { children: status.components.map((c4, i4) => {
+                const fmt2 = (v4) => v4 != null ? `${(v4 * 100).toFixed(2)}%` : "--";
+                const showUptime = c4.uptime_30d != null || c4.uptime_7d != null;
+                return /* @__PURE__ */ u4(S, { children: [
+                  /* @__PURE__ */ u4("tr", { children: [
+                    /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: c4.name }),
+                    /* @__PURE__ */ u4("td", { style: { padding: "2px 0", color: "var(--text-secondary)" }, children: c4.status.replace(/_/g, " ") })
+                  ] }, i4),
+                  showUptime && /* @__PURE__ */ u4("tr", { children: /* @__PURE__ */ u4("td", { colSpan: 2, style: { padding: "0 0 4px 0" }, children: /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", letterSpacing: "0.04em" }, children: [
+                    /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: "30D " }),
+                    /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_30d) }),
+                    /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)" }, children: " \xB7 7D " }),
+                    /* @__PURE__ */ u4("span", { style: { color: "var(--text-primary)" }, children: fmt2(c4.uptime_7d) })
+                  ] }) }) }, `${i4}-uptime`)
+                ] });
+              }) })
+            ] }),
+            status.active_incidents.map((inc, i4) => /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontSize: "12px",
+                  color: "var(--text-secondary)",
+                  marginBottom: "4px",
+                  paddingLeft: "4px",
+                  borderLeft: "2px solid var(--border)"
+                },
+                children: [
+                  /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)" }, children: inc.shortlink ? /* @__PURE__ */ u4(
+                    "a",
+                    {
+                      href: inc.shortlink,
+                      target: "_blank",
+                      rel: "noopener noreferrer",
+                      style: { color: "inherit", textDecoration: "underline" },
+                      children: inc.name
+                    }
+                  ) : inc.name }),
+                  " ",
+                  /* @__PURE__ */ u4("span", { style: { opacity: 0.7 }, children: [
+                    "[",
+                    inc.impact,
+                    "] ",
+                    inc.status,
+                    " \u2014 ",
+                    inc.started_at.slice(0, 16).replace("T", " ")
+                  ] })
+                ]
+              },
+              i4
+            ))
+          ] })
+        ]
+      }
+    );
   }
   function signalLevelStyle(level) {
     switch (level) {
@@ -10051,7 +10075,7 @@
           href: first.source_url,
           target: "_blank",
           rel: "noopener noreferrer",
-          style: { color: "var(--text-secondary)", fontSize: "11px" },
+          style: { color: "var(--text-secondary)", fontSize: "11px", opacity: 0.5 },
           "aria-label": `${label} community signal source`,
           children: "\u2197"
         }
@@ -10061,68 +10085,116 @@
   function AgentStatusCard({ snapshot, communitySignal }) {
     const expanded = agent_status_expanded.value;
     const hasData = snapshot.claude != null || snapshot.openai != null;
-    return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { minWidth: "300px" }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4(
-        "div",
-        {
-          style: {
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "8px"
-          },
-          children: [
-            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent status" }),
-            hasData && /* @__PURE__ */ u4(
-              "button",
+    const hasCommunity = !!(communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0));
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        class: "card",
+        style: {
+          minWidth: "300px",
+          display: "flex",
+          flexDirection: "column"
+        },
+        children: [
+          /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "12px"
+              },
+              children: [
+                /* @__PURE__ */ u4("div", { class: "stat-label", style: { margin: 0 }, children: "Agent status" }),
+                hasData && /* @__PURE__ */ u4(
+                  "button",
+                  {
+                    type: "button",
+                    onClick: () => {
+                      agent_status_expanded.value = !expanded;
+                      syncDashboardUrl();
+                    },
+                    style: {
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--text-secondary)",
+                      fontSize: "11px",
+                      fontFamily: "var(--font-mono)",
+                      padding: "4px 0 4px 8px",
+                      opacity: 0.7
+                    },
+                    "aria-expanded": expanded,
+                    children: [
+                      /* @__PURE__ */ u4("span", { "aria-hidden": "true", style: { fontSize: "9px" }, children: expanded ? "\u25B2" : "\u25BC" }),
+                      /* @__PURE__ */ u4("span", { children: expanded ? "Collapse" : "Expand" })
+                    ]
+                  }
+                )
+              ]
+            }
+          ),
+          /* @__PURE__ */ u4(ProviderRow, { name: "Claude", status: snapshot.claude, expanded, isLast: false }),
+          /* @__PURE__ */ u4(ProviderRow, { name: "OpenAI / Codex", status: snapshot.openai, expanded, isLast: true }),
+          hasCommunity && communitySignal && /* @__PURE__ */ u4("div", { style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }, children: [
+            /* @__PURE__ */ u4(
+              "div",
               {
-                type: "button",
-                onClick: () => {
-                  agent_status_expanded.value = !expanded;
-                  syncDashboardUrl();
-                },
                 style: {
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "4px",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
+                  fontSize: "var(--font-size-tertiary)",
+                  fontFamily: "var(--font-sans)",
                   color: "var(--text-secondary)",
-                  fontSize: "11px",
-                  fontFamily: "var(--font-mono)",
-                  minHeight: "32px",
-                  padding: "6px 8px"
+                  marginBottom: "6px",
+                  letterSpacing: 0
                 },
-                "aria-expanded": expanded,
+                children: "Community signal"
+              }
+            ),
+            /* @__PURE__ */ u4(CommunitySignalRow, { label: "Claude", signals: communitySignal.claude }),
+            /* @__PURE__ */ u4(CommunitySignalRow, { label: "OpenAI", signals: communitySignal.openai }),
+            communitySignal.fetched_at && /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontSize: "10px",
+                  color: "var(--text-secondary)",
+                  marginTop: "4px",
+                  fontFamily: "var(--font-mono)",
+                  opacity: 0.6
+                },
                 children: [
-                  /* @__PURE__ */ u4("span", { "aria-hidden": "true", children: expanded ? "\u25B2" : "\u25BC" }),
-                  /* @__PURE__ */ u4("span", { children: expanded ? "Collapse" : "Expand" })
+                  "Crowd data ",
+                  communitySignal.fetched_at.slice(0, 19).replace("T", " "),
+                  " UTC"
                 ]
               }
             )
-          ]
-        }
-      ),
-      /* @__PURE__ */ u4(ProviderRow, { name: "Claude", status: snapshot.claude, expanded }),
-      /* @__PURE__ */ u4(ProviderRow, { name: "OpenAI / Codex", status: snapshot.openai, expanded }),
-      communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && /* @__PURE__ */ u4("div", { style: { marginTop: "12px", borderTop: "1px solid var(--border)", paddingTop: "8px" }, children: [
-        /* @__PURE__ */ u4("div", { style: { fontSize: "var(--font-size-tertiary)", fontFamily: "var(--font-sans)", color: "var(--text-secondary)", marginBottom: "6px", letterSpacing: 0 }, children: "Community signal" }),
-        /* @__PURE__ */ u4(CommunitySignalRow, { label: "Claude", signals: communitySignal.claude }),
-        /* @__PURE__ */ u4(CommunitySignalRow, { label: "OpenAI", signals: communitySignal.openai }),
-        communitySignal.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "4px", fontFamily: "var(--font-mono)" }, children: [
-          "Crowd data ",
-          communitySignal.fetched_at.slice(0, 19).replace("T", " "),
-          " UTC"
-        ] })
-      ] }),
-      snapshot.fetched_at && /* @__PURE__ */ u4("div", { style: { fontSize: "10px", color: "var(--text-secondary)", marginTop: "8px", fontFamily: "var(--font-mono)" }, children: [
-        "Last checked ",
-        snapshot.fetched_at.slice(0, 19).replace("T", " "),
-        " UTC"
-      ] })
-    ] }) });
+          ] }),
+          snapshot.fetched_at && /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                marginTop: "auto",
+                paddingTop: "12px",
+                fontSize: "10px",
+                color: "var(--text-secondary)",
+                fontFamily: "var(--font-mono)",
+                opacity: 0.6
+              },
+              children: [
+                "Last checked ",
+                snapshot.fetched_at.slice(0, 19).replace("T", " "),
+                " UTC"
+              ]
+            }
+          )
+        ]
+      }
+    );
   }
 
   // src/ui/components/shared/InlineRankBar.tsx
@@ -10655,9 +10727,9 @@
     if (!data.length) return null;
     const maxTurns = Math.max(...data.map((d5) => d5.turns), 1);
     const emptyColor = cssVar("--border");
-    return /* @__PURE__ */ u4("div", { children: [
+    return /* @__PURE__ */ u4("div", { style: { height: "100%", display: "flex", flexDirection: "column" }, children: [
       /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: "0", marginBottom: "12px" }, children: "Activity by Hour of Day" }),
-      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", height: "80px" }, children: Array.from({ length: 24 }, (_4, h5) => {
+      /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", flex: 1, minHeight: "60px" }, children: Array.from({ length: 24 }, (_4, h5) => {
         const row = data.find((d5) => d5.hour === h5);
         const turns = row?.turns ?? 0;
         const pct = turns / maxTurns * 100;
@@ -14287,7 +14359,7 @@ ${row.project}` : row.project;
     renderSection(
       "today-hour-timeline-mount",
       true,
-      /* @__PURE__ */ u4("div", { style: { padding: "20px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { padding: "20px", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column" }, children: [
         /* @__PURE__ */ u4("div", { class: "section-title", style: { marginBottom: "12px" }, children: [
           "Hour timeline \u2014 ",
           data.day

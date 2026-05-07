@@ -9,11 +9,11 @@ export function HourlyChart({ data }: { data: HourlyRow[] }) {
   const emptyColor = cssVar('--border');
 
   return (
-    <div>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div class="section-title" style={{ padding: '0', marginBottom: '12px' }}>
         Activity by Hour of Day
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '80px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', flex: 1, minHeight: '60px' }}>
         {Array.from({ length: 24 }, (_, h) => {
           const row = data.find(d => d.hour === h);
           const turns = row?.turns ?? 0;

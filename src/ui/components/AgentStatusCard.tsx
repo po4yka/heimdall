@@ -6,29 +6,21 @@ interface AgentStatusCardProps {
   communitySignal?: CommunitySignal | null;
 }
 
-/** Monochrome dot at three opacity levels; red only for Major/Critical. */
 function IndicatorDot({ indicator }: { indicator: StatusIndicator }) {
   const isAlert = indicator === 'major' || indicator === 'critical';
   const isMinor = indicator === 'minor';
-
-  const color = isAlert
-    ? 'var(--accent)'
-    : 'var(--text-secondary)';
-
-  const opacity = isAlert ? 1.0 : isMinor ? 0.6 : 0.3;
 
   return (
     <span
       aria-hidden="true"
       style={{
         display: 'inline-block',
-        width: '10px',
-        height: '10px',
+        width: '8px',
+        height: '8px',
         borderRadius: '50%',
-        backgroundColor: color,
-        opacity,
-        marginRight: '8px',
         flexShrink: 0,
+        backgroundColor: isAlert ? 'var(--accent)' : 'var(--text-secondary)',
+        opacity: isAlert ? 1 : isMinor ? 0.5 : 0.25,
       }}
     />
   );
@@ -38,63 +30,87 @@ interface ProviderRowProps {
   name: string;
   status: ProviderStatus | null | undefined;
   expanded: boolean;
+  isLast: boolean;
 }
 
-function ProviderRow({ name, status, expanded }: ProviderRowProps) {
-  if (!status) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0', gap: '8px' }}>
-        <IndicatorDot indicator="none" />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', flex: 1 }}>{name}</span>
-        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }} title="Status API unreachable">unavailable</span>
-      </div>
-    );
-  }
-
-  const incidentCount = status.active_incidents.length;
+function ProviderRow({ name, status, expanded, isLast }: ProviderRowProps) {
+  const indicator: StatusIndicator = status?.indicator ?? 'none';
+  const isAlert = indicator === 'major' || indicator === 'critical';
 
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0', gap: '8px' }}>
-        <IndicatorDot indicator={status.indicator} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', flex: 1 }}>{name}</span>
-        <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{status.description}</span>
-        {incidentCount > 0 && (
+    <div
+      style={{
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+        paddingBottom: isLast ? 0 : '10px',
+        marginBottom: isLast ? 0 : '10px',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <IndicatorDot indicator={indicator} />
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '13px',
+            fontWeight: 500,
+            flex: 1,
+            color: 'var(--text-primary)',
+          }}
+        >
+          {name}
+        </span>
+
+        {!status ? (
           <span
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '11px',
-              color: status.indicator === 'major' || status.indicator === 'critical'
-                ? 'var(--accent)'
-                : 'var(--text-secondary)',
-              marginLeft: '8px',
+              color: 'var(--text-secondary)',
+              opacity: 0.6,
             }}
+            title="Status API unreachable"
           >
-            ({incidentCount} active)
+            unavailable
           </span>
+        ) : (
+          <>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '11px',
+                color: isAlert ? 'var(--accent)' : 'var(--text-secondary)',
+              }}
+            >
+              {status.description}
+              {status.active_incidents.length > 0 && (
+                <span style={{ opacity: 0.7 }}>
+                  {' '}({status.active_incidents.length})
+                </span>
+              )}
+            </span>
+            <a
+              href={status.page_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: 'var(--text-secondary)',
+                fontSize: '11px',
+                opacity: 0.5,
+                display: 'inline-flex',
+                alignItems: 'center',
+                lineHeight: 1,
+                flexShrink: 0,
+                textDecoration: 'none',
+              }}
+              aria-label={`${name} status page`}
+            >
+              ↗
+            </a>
+          </>
         )}
-        <a
-          href={status.page_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            color: 'var(--text-secondary)',
-            fontSize: '11px',
-            marginLeft: '4px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minWidth: '24px',
-            minHeight: '24px',
-          }}
-          aria-label={`${name} status page`}
-        >
-          ↗
-        </a>
       </div>
 
-      {expanded && (
-        <div style={{ paddingLeft: '18px', paddingBottom: '8px' }}>
+      {expanded && status && (
+        <div style={{ paddingLeft: '18px', paddingTop: '8px' }}>
           {status.components.length > 0 && (
             <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse', marginBottom: '8px' }}>
               <thead>
@@ -107,9 +123,7 @@ function ProviderRow({ name, status, expanded }: ProviderRowProps) {
                 {status.components.map((c, i) => {
                   const fmt = (v: number | null | undefined) =>
                     v != null ? `${(v * 100).toFixed(2)}%` : '--';
-                  const has30 = c.uptime_30d != null;
-                  const has7 = c.uptime_7d != null;
-                  const showUptime = has30 || has7;
+                  const showUptime = c.uptime_30d != null || c.uptime_7d != null;
                   return (
                     <>
                       <tr key={i}>
@@ -119,11 +133,7 @@ function ProviderRow({ name, status, expanded }: ProviderRowProps) {
                       {showUptime && (
                         <tr key={`${i}-uptime`}>
                           <td colSpan={2} style={{ padding: '0 0 4px 0' }}>
-                            <span style={{
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: '11px',
-                              letterSpacing: '0.04em',
-                            }}>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', letterSpacing: '0.04em' }}>
                               <span style={{ color: 'var(--text-secondary)' }}>30D </span>
                               <span style={{ color: 'var(--text-primary)' }}>{fmt(c.uptime_30d)}</span>
                               <span style={{ color: 'var(--text-secondary)' }}> · 7D </span>
@@ -176,7 +186,6 @@ function ProviderRow({ name, status, expanded }: ProviderRowProps) {
   );
 }
 
-/** Map a SignalLevel to a display label and color. */
 function signalLevelStyle(level: SignalLevel): { label: string; color: string } {
   switch (level) {
     case 'spike':    return { label: '[Spike]',    color: 'var(--accent)' };
@@ -195,7 +204,6 @@ function CommunitySignalRow({ label, signals }: CommunitySignalRowProps) {
   const first = signals[0];
   if (!first) return null;
 
-  // Worst level across all slugs for this provider.
   const levelOrder: SignalLevel[] = ['spike', 'elevated', 'normal', 'unknown'];
   const worstLevel: SignalLevel = levelOrder.find(l => signals.some(s => s.level === l)) ?? 'unknown';
   const { label: levelLabel, color } = signalLevelStyle(worstLevel);
@@ -208,7 +216,7 @@ function CommunitySignalRow({ label, signals }: CommunitySignalRowProps) {
         href={first.source_url}
         target="_blank"
         rel="noopener noreferrer"
-        style={{ color: 'var(--text-secondary)', fontSize: '11px' }}
+        style={{ color: 'var(--text-secondary)', fontSize: '11px', opacity: 0.5 }}
         aria-label={`${label} community signal source`}
       >
         ↗
@@ -219,74 +227,111 @@ function CommunitySignalRow({ label, signals }: CommunitySignalRowProps) {
 
 export function AgentStatusCard({ snapshot, communitySignal }: AgentStatusCardProps) {
   const expanded = agent_status_expanded.value;
-
   const hasData = snapshot.claude != null || snapshot.openai != null;
 
+  const hasCommunity = !!(
+    communitySignal?.enabled &&
+    (communitySignal.claude.length > 0 || communitySignal.openai.length > 0)
+  );
+
   return (
-    <div class="card stat-card" style={{ minWidth: '300px' }}>
-      <div class="stat-content">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '8px',
-          }}
-        >
-          <div class="stat-label">Agent status</div>
-          {hasData && (
-            <button
-              type="button"
-              onClick={() => {
-                agent_status_expanded.value = !expanded;
-                syncDashboardUrl();
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-secondary)',
-                fontSize: '11px',
-                fontFamily: 'var(--font-mono)',
-                minHeight: '32px',
-                padding: '6px 8px',
-              }}
-              aria-expanded={expanded}
-            >
-              <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
-              <span>{expanded ? 'Collapse' : 'Expand'}</span>
-            </button>
-          )}
-        </div>
-
-        <ProviderRow name="Claude" status={snapshot.claude} expanded={expanded} />
-        <ProviderRow name="OpenAI / Codex" status={snapshot.openai} expanded={expanded} />
-
-        {communitySignal?.enabled && (communitySignal.claude.length > 0 || communitySignal.openai.length > 0) && (
-          <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
-            <div style={{ fontSize: 'var(--font-size-tertiary)', fontFamily: 'var(--font-sans)', color: 'var(--text-secondary)', marginBottom: '6px', letterSpacing: 0 }}>
-              Community signal
-            </div>
-            <CommunitySignalRow label="Claude" signals={communitySignal.claude} />
-            <CommunitySignalRow label="OpenAI" signals={communitySignal.openai} />
-            {communitySignal.fetched_at && (
-              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
-                Crowd data {communitySignal.fetched_at.slice(0, 19).replace('T', ' ')} UTC
-              </div>
-            )}
-          </div>
-        )}
-
-        {snapshot.fetched_at && (
-          <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '8px', fontFamily: 'var(--font-mono)' }}>
-            Last checked {snapshot.fetched_at.slice(0, 19).replace('T', ' ')} UTC
-          </div>
+    <div
+      class="card"
+      style={{
+        minWidth: '300px',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '12px',
+        }}
+      >
+        <div class="stat-label" style={{ margin: 0 }}>Agent status</div>
+        {hasData && (
+          <button
+            type="button"
+            onClick={() => {
+              agent_status_expanded.value = !expanded;
+              syncDashboardUrl();
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              fontSize: '11px',
+              fontFamily: 'var(--font-mono)',
+              padding: '4px 0 4px 8px',
+              opacity: 0.7,
+            }}
+            aria-expanded={expanded}
+          >
+            <span aria-hidden="true" style={{ fontSize: '9px' }}>{expanded ? '▲' : '▼'}</span>
+            <span>{expanded ? 'Collapse' : 'Expand'}</span>
+          </button>
         )}
       </div>
+
+      {/* Provider rows */}
+      <ProviderRow name="Claude"         status={snapshot.claude} expanded={expanded} isLast={false} />
+      <ProviderRow name="OpenAI / Codex" status={snapshot.openai} expanded={expanded} isLast />
+
+      {/* Community signal */}
+      {hasCommunity && communitySignal && (
+        <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '8px' }}>
+          <div
+            style={{
+              fontSize: 'var(--font-size-tertiary)',
+              fontFamily: 'var(--font-sans)',
+              color: 'var(--text-secondary)',
+              marginBottom: '6px',
+              letterSpacing: 0,
+            }}
+          >
+            Community signal
+          </div>
+          <CommunitySignalRow label="Claude" signals={communitySignal.claude} />
+          <CommunitySignalRow label="OpenAI" signals={communitySignal.openai} />
+          {communitySignal.fetched_at && (
+            <div
+              style={{
+                fontSize: '10px',
+                color: 'var(--text-secondary)',
+                marginTop: '4px',
+                fontFamily: 'var(--font-mono)',
+                opacity: 0.6,
+              }}
+            >
+              Crowd data {communitySignal.fetched_at.slice(0, 19).replace('T', ' ')} UTC
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Timestamp pinned to bottom */}
+      {snapshot.fetched_at && (
+        <div
+          style={{
+            marginTop: 'auto',
+            paddingTop: '12px',
+            fontSize: '10px',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-mono)',
+            opacity: 0.6,
+          }}
+        >
+          Last checked {snapshot.fetched_at.slice(0, 19).replace('T', ' ')} UTC
+        </div>
+      )}
     </div>
   );
 }

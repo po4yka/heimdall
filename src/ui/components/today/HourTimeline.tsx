@@ -12,20 +12,21 @@ export function HourTimeline({ hours }: HourTimelineProps) {
 
   if (totalCost === 0) {
     return (
-      <div class="today-empty-state">
+      <div class="today-empty-state" style={{ flex: 1 }}>
         <span>No activity for this day</span>
       </div>
     );
   }
 
   return (
-    <div>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div
         style={{
           display: 'flex',
           alignItems: 'flex-end',
           gap: '2px',
-          height: '80px',
+          flex: 1,
+          minHeight: '60px',
         }}
       >
         {hours.map(h => {
