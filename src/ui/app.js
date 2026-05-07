@@ -14723,6 +14723,7 @@ ${row.project}` : row.project;
           const response = await fetch("/api/data");
           if (!response.ok) {
             setStatus("global", "error", `Failed to load data: HTTP ${response.status}`);
+            clearStatus("header-refresh");
             return;
           }
           data = await response.json();
@@ -14741,6 +14742,7 @@ ${row.project}` : row.project;
         }
         if (data.error) {
           setStatus("global", "error", data.error);
+          clearStatus("header-refresh");
           return;
         }
         clearStatus("global");

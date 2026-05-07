@@ -332,6 +332,7 @@ function createDataLoader(state: RuntimeState, applyFilter: () => void): (force?
           const response = await fetch('/api/data');
           if (!response.ok) {
             setStatus('global', 'error', `Failed to load data: HTTP ${response.status}`);
+            clearStatus('header-refresh');
             return;
           }
           data = (await response.json()) as DashboardData;
@@ -353,6 +354,7 @@ function createDataLoader(state: RuntimeState, applyFilter: () => void): (force?
 
         if (data.error) {
           setStatus('global', 'error', data.error);
+          clearStatus('header-refresh');
           return;
         }
 
