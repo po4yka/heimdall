@@ -3,6 +3,7 @@ use rusqlite::{Connection, OptionalExtension};
 use tracing::warn;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::models::{
     AgentRegistryRow, AgentRegistryUpdate, AgentRoleAggregate, AgentSessionRecord, AgentSessionRow,
@@ -28,9 +29,29 @@ pub fn open_db(path: &std::path::Path) -> Result<Connection> {
     Ok(conn)
 }
 
+/// Set to true after the first successful init_db in this process.
+/// The scanner always calls init_db before the server starts, so all
+/// subsequent calls from API endpoints are instant no-ops. This eliminates
+/// the 14 DDL write-transaction lock contentions that caused 9+ second
+/// delays when concurrent endpoints called init_db simultaneously.
+static SCHEMA_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
 pub fn init_db(conn: &Connection) -> Result<()> {
+    if SCHEMA_INITIALIZED.load(Ordering::Relaxed) {
+        // Global fast path: schema is initialized in this process. Verify it
+        // also exists on *this* connection (in-memory test DBs each start empty).
+        let exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sessions'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? > 0;
+        if exists {
+            return Ok(());
+        }
+    }
     create_schema(conn)?;
     apply_migrations(conn)?;
+    SCHEMA_INITIALIZED.store(true, Ordering::Relaxed);
     Ok(())
 }
 
@@ -2714,16 +2735,14 @@ pub fn backfill_rate_window_history_from_turns(
         )
     };
 
-    let mut inserted = 0usize;
+    // Filter to days that need inserting before opening a write transaction.
+    let mut to_insert: Vec<(String, f64, i64)> = Vec::new();
     for (day, observed) in daily {
-        // Stop when we reach a day covered by real observations.
         if let Some(ref earliest) = earliest_real {
             if day.as_str() >= earliest.as_str() {
                 continue;
             }
         }
-
-        // Idempotency: skip days that already have a backfill row.
         let exists: bool = conn
             .query_row(
                 "SELECT COUNT(*) FROM rate_window_history
@@ -2733,31 +2752,39 @@ pub fn backfill_rate_window_history_from_turns(
                 |row| row.get::<_, i64>(0).map(|n| n > 0),
             )
             .unwrap_or(true);
-
         if !exists {
-            let ts = format!("{day}T12:00:00Z");
             let used_pct =
                 (observed as f64 / reference_cap_tokens as f64).min(1.0) * 100.0;
-            conn.execute(
-                "INSERT INTO rate_window_history
-                    (timestamp, window_type, used_percent, resets_at,
-                     source_kind, source_path, provider, plan,
-                     observed_tokens, estimated_cap_tokens, confidence)
-                 VALUES (?1, ?2, ?3, NULL, 'backfill', '', ?4, NULL, ?5, ?6, 0.35)",
-                rusqlite::params![
-                    ts,
-                    window_type,
-                    used_pct,
-                    provider,
-                    observed,
-                    reference_cap_tokens,
-                ],
-            )?;
-            inserted += 1;
+            to_insert.push((format!("{day}T12:00:00Z"), used_pct, observed));
         }
     }
 
-    Ok(inserted)
+    if to_insert.is_empty() {
+        return Ok(0);
+    }
+
+    // All inserts in a single transaction — one write lock, no contention.
+    let tx = conn.unchecked_transaction()?;
+    for (ts, used_pct, observed) in &to_insert {
+        tx.execute(
+            "INSERT INTO rate_window_history
+                (timestamp, window_type, used_percent, resets_at,
+                 source_kind, source_path, provider, plan,
+                 observed_tokens, estimated_cap_tokens, confidence)
+             VALUES (?1, ?2, ?3, NULL, 'backfill', '', ?4, NULL, ?5, ?6, 0.35)",
+            rusqlite::params![
+                ts,
+                window_type,
+                used_pct,
+                provider,
+                observed,
+                reference_cap_tokens,
+            ],
+        )?;
+    }
+    tx.commit()?;
+
+    Ok(to_insert.len())
 }
 
 pub struct ClaudeUsageRunInsert<'a> {

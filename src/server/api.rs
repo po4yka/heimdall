@@ -190,7 +190,6 @@ pub async fn api_data(
     request: Request,
 ) -> Result<Json<Value>, StatusCode> {
     enforce_loopback_request(&request)?;
-    let _db_guard = state.db_lock.lock().await;
     let db_path = state.db_path.clone();
     let openai_lookback_days = state.openai_lookback_days;
     let openai_start_date = (chrono::Utc::now().date_naive()
@@ -1997,7 +1996,6 @@ pub async fn api_heatmap(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     enforce_loopback_request(&request)
         .map_err(|s| (s, Json(serde_json::json!({"error": "forbidden"}))))?;
-    let _db_guard = state.db_lock.lock().await;
     let db_path = state.db_path.clone();
     let period = params.period.unwrap_or_else(|| "month".to_string());
     let period_clone = period.clone();
@@ -2348,7 +2346,6 @@ pub async fn api_cost_reconciliation(
     request: Request,
 ) -> Result<Json<Value>, StatusCode> {
     enforce_loopback_request(&request)?;
-    let _db_guard = state.db_lock.lock().await;
     let db_path = state.db_path.clone();
     let period = params.period.clone();
 
@@ -2903,7 +2900,6 @@ pub async fn api_tool_errors(
     let offset = query.offset.unwrap_or(0).max(0);
     let tz = query.tz;
     let db_path = state.db_path.clone();
-    let _db_guard = state.db_lock.lock().await;
     let result = tokio::task::spawn_blocking(move || {
         let conn = db::open_db(&db_path)?;
         db::init_db(&conn)?;
@@ -3419,7 +3415,6 @@ pub async fn api_projects_list(
     request: Request,
 ) -> Result<Json<ProjectsListResponse>, StatusCode> {
     enforce_loopback_request(&request)?;
-    let _db_guard = state.db_lock.lock().await;
     let db_path = state.db_path.clone();
     let aliases = state.project_aliases.clone();
     let projects = tokio::task::spawn_blocking(
@@ -3601,7 +3596,6 @@ pub async fn api_today(
     request: Request,
 ) -> Result<Json<crate::models::TodayResponse>, StatusCode> {
     enforce_loopback_request(&request)?;
-    let _db_guard = state.db_lock.lock().await;
     let db_path = state.db_path.clone();
 
     let result =
