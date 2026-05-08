@@ -50,9 +50,9 @@ describe('BillingBlocksCard', () => {
     const vnode = BillingBlocksCard({ data });
     const text = collectText(vnode).join(' ');
 
-    expect(text).toContain('NO ACTIVE BLOCK');
+    expect(text).toContain('No active block');
     expect(text).toContain('123.0K');
-    expect(text).toContain('SUGGESTED QUOTAS');
+    expect(text).toContain('Suggested quotas');
     expect(text).toContain('P90');
     expect(text).toContain('[Recommended]');
   });

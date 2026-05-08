@@ -14364,7 +14364,7 @@ ${row.project}` : row.project;
     }
     return /* @__PURE__ */ u4("div", { style: { marginTop: "12px", display: "grid", gap: "8px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
-        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "SUGGESTED QUOTAS" }),
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.04em" }, children: "Suggested quotas" }),
         /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: suggestions.sample_label })
       ] }),
       suggestions.sample_count !== suggestions.population_count && /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontStyle: "italic" }, children: [
@@ -14437,7 +14437,7 @@ ${row.project}` : row.project;
               marginBottom: "3px"
             },
             children: [
-              /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "USED" }),
+              /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.04em" }, children: "Used" }),
               /* @__PURE__ */ u4(
                 "span",
                 {
@@ -14487,7 +14487,7 @@ ${row.project}` : row.project;
               marginBottom: "3px"
             },
             children: [
-              /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "PROJECTED" }),
+              /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.04em" }, children: "Projected" }),
               /* @__PURE__ */ u4(
                 "span",
                 {
@@ -14537,8 +14537,8 @@ ${row.project}` : row.project;
     const activeBlock = data.blocks.find((b4) => b4.is_active) ?? null;
     if (!activeBlock) {
       return /* @__PURE__ */ u4("div", { class: "card stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "BILLING BLOCK" }),
-        /* @__PURE__ */ u4("div", { class: "stat-value", style: { opacity: 0.4 }, children: "NO ACTIVE BLOCK" }),
+        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0", fontSize: "11px" }, children: "Billing block" }),
+        /* @__PURE__ */ u4("div", { class: "stat-value", style: { opacity: 0.4 }, children: "No active block" }),
         /* @__PURE__ */ u4("div", { class: "stat-sub", children: [
           "7d historical max:",
           " ",
@@ -14554,7 +14554,7 @@ ${row.project}` : row.project;
     const blockEnd = fmtUtcTime(activeBlock.end);
     return /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
       /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "BILLING BLOCK" }),
+        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0", fontSize: "11px" }, children: "Billing block" }),
         /* @__PURE__ */ u4(
           "div",
           {
@@ -14740,7 +14740,7 @@ ${row.project}` : row.project;
         ] })
       ] }),
       forecast.secondary_signals.length > 0 && /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "8px" }, children: [
-        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "SUPPORTING SIGNALS" }),
+        /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.04em" }, children: "Supporting signals" }),
         forecast.secondary_signals.map((signal) => /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "2px" }, children: [
           /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
             /* @__PURE__ */ u4("span", { class: "stat-sub", children: signal.title }),
@@ -14799,7 +14799,7 @@ ${row.project}` : row.project;
   function HistoricalEnvelopeSection({ envelope }) {
     return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "8px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
-        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "HISTORICAL ENVELOPES" }),
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.04em" }, children: "Historical envelopes" }),
         /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
           envelope.sample_count,
           " completed blocks"
@@ -14813,8 +14813,8 @@ ${row.project}` : row.project;
   function RollingBurnSection({ burn }) {
     return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "6px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
-        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "ROLLING 1H BURN" }),
-        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { color: burnTone(String(burn.tier)) }, children: String(burn.tier).toUpperCase() })
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.04em" }, children: "Rolling 1h burn" }),
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { color: burnTone(String(burn.tier)) }, children: burn.tier })
       ] }),
       /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: "8px" }, children: [
         /* @__PURE__ */ u4("div", { children: [
@@ -14841,8 +14841,8 @@ ${row.project}` : row.project;
   function LimitHitSection({ analysis }) {
     return /* @__PURE__ */ u4("div", { style: { display: "grid", gap: "6px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
-        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.08em" }, children: "LIMIT-HIT RISK" }),
-        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { color: riskTone(analysis.risk_level) }, children: analysis.risk_level.toUpperCase() })
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: "10px", letterSpacing: "0.04em" }, children: "Limit-hit risk" }),
+        /* @__PURE__ */ u4("span", { class: "stat-sub", style: { color: riskTone(analysis.risk_level) }, children: analysis.risk_level })
       ] }),
       /* @__PURE__ */ u4("div", { class: "stat-sub", children: analysis.summary_label }),
       /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [

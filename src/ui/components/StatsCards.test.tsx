@@ -97,8 +97,8 @@ describe('StatsCards', () => {
     expect(collectText(withForecast).join(' ')).toContain('Runs out in');
     expect(collectText(withForecast).join(' ')).toContain('Runout 11:15 UTC');
     expect(collectText(withForecast).join(' ')).toContain('Predictive Signals');
-    expect(collectText(withForecast).join(' ')).toContain('ROLLING 1H BURN');
-    expect(collectText(withForecast).join(' ')).toContain('LIMIT-HIT RISK');
+    expect(collectText(withForecast).join(' ')).toContain('Rolling 1h burn');
+    expect(collectText(withForecast).join(' ')).toContain('Limit-hit risk');
     expect(collectText(withoutForecast).join(' ')).not.toContain('Depletion Forecast');
     expect(collectText(withoutForecast).join(' ')).not.toContain('Predictive Signals');
   });

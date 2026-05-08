@@ -53,7 +53,7 @@ function HistoricalEnvelopeSection({ envelope }: { envelope: HistoricalEnvelope 
   return (
     <div style={{ display: 'grid', gap: '8px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline' }}>
-        <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>HISTORICAL ENVELOPES</span>
+        <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.04em' }}>Historical envelopes</span>
         <span class="stat-sub" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
           {envelope.sample_count} completed blocks
         </span>
@@ -69,9 +69,9 @@ function RollingBurnSection({ burn }: { burn: PredictiveBurnRate }) {
   return (
     <div style={{ display: 'grid', gap: '6px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline' }}>
-        <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>ROLLING 1H BURN</span>
+        <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.04em' }}>Rolling 1h burn</span>
         <span class="stat-sub" style={{ color: burnTone(String(burn.tier)) }}>
-          {String(burn.tier).toUpperCase()}
+          {burn.tier}
         </span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: '8px' }}>
@@ -96,9 +96,9 @@ function LimitHitSection({ analysis }: { analysis: LimitHitAnalysis }) {
   return (
     <div style={{ display: 'grid', gap: '6px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline' }}>
-        <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>LIMIT-HIT RISK</span>
+        <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.04em' }}>Limit-hit risk</span>
         <span class="stat-sub" style={{ color: riskTone(analysis.risk_level) }}>
-          {analysis.risk_level.toUpperCase()}
+          {analysis.risk_level}
         </span>
       </div>
       <div class="stat-sub">

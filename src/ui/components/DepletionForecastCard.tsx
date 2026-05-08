@@ -97,8 +97,8 @@ export function DepletionForecastCard({
 
         {forecast.secondary_signals.length > 0 && (
           <div style={{ display: 'grid', gap: '8px' }}>
-            <div class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
-              SUPPORTING SIGNALS
+            <div class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.04em' }}>
+              Supporting signals
             </div>
             {forecast.secondary_signals.map(signal => (
               <div key={`${signal.kind}-${signal.title}`} style={{ display: 'grid', gap: '2px' }}>

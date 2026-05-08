@@ -72,8 +72,8 @@ function QuotaSuggestionsSection({ data }: { data: BillingBlocksResponse }) {
   return (
     <div style={{ marginTop: '12px', display: 'grid', gap: '8px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline' }}>
-        <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
-          SUGGESTED QUOTAS
+        <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.04em' }}>
+          Suggested quotas
         </span>
         <span class="stat-sub" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
           {suggestions.sample_label}
@@ -172,8 +172,8 @@ function QuotaSection({ block }: QuotaSectionProps) {
             marginBottom: '3px',
           }}
         >
-          <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
-            USED
+          <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.04em' }}>
+            Used
           </span>
           <span
             class="stat-sub"
@@ -213,8 +213,8 @@ function QuotaSection({ block }: QuotaSectionProps) {
             marginBottom: '3px',
           }}
         >
-          <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
-            PROJECTED
+          <span class="stat-sub" style={{ fontSize: '10px', letterSpacing: '0.04em' }}>
+            Projected
           </span>
           <span
             class="stat-sub"
@@ -267,11 +267,11 @@ export function BillingBlocksCard({ data }: BillingBlocksCardProps) {
     return (
       <div class="card stat-card">
         <div class="stat-content">
-          <div class="stat-label" style={{ letterSpacing: '0.08em', fontSize: '11px' }}>
-            BILLING BLOCK
+          <div class="stat-label" style={{ letterSpacing: '0', fontSize: '11px' }}>
+            Billing block
           </div>
           <div class="stat-value" style={{ opacity: 0.4 }}>
-            NO ACTIVE BLOCK
+            No active block
           </div>
           <div class="stat-sub">
             7d historical max:{' '}
@@ -299,8 +299,8 @@ export function BillingBlocksCard({ data }: BillingBlocksCardProps) {
   return (
     <div class="card stat-card">
       <div class="stat-content">
-        <div class="stat-label" style={{ letterSpacing: '0.08em', fontSize: '11px' }}>
-          BILLING BLOCK
+        <div class="stat-label" style={{ letterSpacing: '0', fontSize: '11px' }}>
+          Billing block
         </div>
         <div
           class="stat-value"

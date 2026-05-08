@@ -141,15 +141,15 @@ describe('renderLiveMonitorView', () => {
     liveMonitorFocus.value = 'all';
 
     const text = collectText(renderLiveMonitorView()).join(' ');
-    expect(text).toContain('Suggested Quotas');
+    expect(text).toContain('Suggested quotas');
     expect(text).toContain('Depletion Forecast');
     expect(text).toContain('Billing block runs out in 1h 15m at current burn');
     expect(text).toContain('Runs out in');
-    expect(text).toContain('SUPPORTING SIGNALS');
+    expect(text).toContain('Supporting signals');
     expect(text).toContain('P90');
-    expect(text).toContain('[RECOMMENDED]');
+    expect(text).toContain('[Recommended]');
     expect(text).toContain('Predictive Signals');
-    expect(text).toContain('ROLLING 1H BURN');
+    expect(text).toContain('Rolling 1h burn');
     expect(text).toContain('Based on fewer than 10 completed blocks.');
   });
 
