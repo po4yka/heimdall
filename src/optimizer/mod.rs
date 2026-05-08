@@ -18,6 +18,7 @@ pub mod claude_md;
 pub mod grade;
 pub mod mcp;
 pub mod reread;
+pub mod retry;
 
 use std::path::Path;
 
@@ -114,6 +115,7 @@ pub fn run_optimize_with_overrides(
         )),
         Box::new(reread::RereadDetector::new()),
         Box::new(bash::BashNoiseDetector::new()),
+        Box::new(retry::ToolRetryDetector::new()),
     ];
 
     let mut findings = Vec::new();
