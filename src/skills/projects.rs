@@ -20,9 +20,9 @@ pub fn discover_project_paths(conn: &Connection, overrides: &[PathBuf]) -> Vec<P
             .collect();
     }
 
-    let mut stmt = match conn.prepare(
-        "SELECT DISTINCT cwd FROM turns WHERE cwd IS NOT NULL AND cwd != '' ORDER BY cwd",
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT DISTINCT cwd FROM turns WHERE cwd IS NOT NULL AND cwd != '' ORDER BY cwd")
+    {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!("skills: cannot query project cwds: {e}");

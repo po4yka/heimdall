@@ -12,7 +12,7 @@ use chrono::Utc;
 use rusqlite::Connection;
 use serde::Serialize;
 
-pub use discovery::{Skill, SkillScope, ScopeKind};
+pub use discovery::{ScopeKind, Skill, SkillScope};
 pub use tokens::Tokenizer;
 
 // ---------------------------------------------------------------------------
@@ -268,20 +268,24 @@ fn detect_duplicates(scopes: &[SkillScope]) -> Vec<DuplicateGroup> {
 
     for scope in scopes {
         for skill in &scope.skills {
-            let excerpt = skill.description.as_deref().map(|d| {
-                d.chars().take(120).collect::<String>()
-            });
-            by_name.entry(skill.name.clone()).or_default().push(DuplicateOccurrence {
-                provider: scope.provider,
-                scope_kind: scope.kind,
-                root: scope.root.clone(),
-                project_label: scope.project_label.clone(),
-                bytes: skill.bytes,
-                listing_tokens: skill.listing_tokens,
-                frontmatter_status: skill.frontmatter_status,
-                description_excerpt: excerpt,
-                is_symlink: skill.is_symlink,
-            });
+            let excerpt = skill
+                .description
+                .as_deref()
+                .map(|d| d.chars().take(120).collect::<String>());
+            by_name
+                .entry(skill.name.clone())
+                .or_default()
+                .push(DuplicateOccurrence {
+                    provider: scope.provider,
+                    scope_kind: scope.kind,
+                    root: scope.root.clone(),
+                    project_label: scope.project_label.clone(),
+                    bytes: skill.bytes,
+                    listing_tokens: skill.listing_tokens,
+                    frontmatter_status: skill.frontmatter_status,
+                    description_excerpt: excerpt,
+                    is_symlink: skill.is_symlink,
+                });
         }
     }
 
@@ -325,7 +329,10 @@ fn resolve_project_paths(opts: &ScanOptions) -> Vec<PathBuf> {
     };
 
     if !db_path.exists() {
-        tracing::debug!("skills: db at {} not found, skipping project scan", db_path.display());
+        tracing::debug!(
+            "skills: db at {} not found, skipping project scan",
+            db_path.display()
+        );
         return vec![];
     }
 
@@ -419,10 +426,15 @@ mod tests {
 
         let report = scan(opts).unwrap();
         assert_eq!(report.totals.skills_count, 3);
-        assert_eq!(report.totals.claude_bytes, report.scopes.iter()
-            .filter(|s| s.provider == "claude")
-            .map(|s| s.bytes)
-            .sum::<u64>());
+        assert_eq!(
+            report.totals.claude_bytes,
+            report
+                .scopes
+                .iter()
+                .filter(|s| s.provider == "claude")
+                .map(|s| s.bytes)
+                .sum::<u64>()
+        );
         assert!(!report.budget.is_empty());
         assert_eq!(report.tokenizer, "heuristic");
     }
@@ -456,6 +468,10 @@ mod tests {
         let report = scan(opts).unwrap();
         // Must parse as RFC3339 without panic.
         let parsed = chrono::DateTime::parse_from_rfc3339(&report.generated_at);
-        assert!(parsed.is_ok(), "generated_at is not RFC3339: {}", report.generated_at);
+        assert!(
+            parsed.is_ok(),
+            "generated_at is not RFC3339: {}",
+            report.generated_at
+        );
     }
 }

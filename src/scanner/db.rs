@@ -25,7 +25,9 @@ use crate::tz::TzParams;
 
 pub fn open_db(path: &std::path::Path) -> Result<Connection> {
     let conn = Connection::open(path)?;
-    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;")?;
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;",
+    )?;
     Ok(conn)
 }
 
@@ -2753,8 +2755,7 @@ pub fn backfill_rate_window_history_from_turns(
             )
             .unwrap_or(true);
         if !exists {
-            let used_pct =
-                (observed as f64 / reference_cap_tokens as f64).min(1.0) * 100.0;
+            let used_pct = (observed as f64 / reference_cap_tokens as f64).min(1.0) * 100.0;
             to_insert.push((format!("{day}T12:00:00Z"), used_pct, observed));
         }
     }

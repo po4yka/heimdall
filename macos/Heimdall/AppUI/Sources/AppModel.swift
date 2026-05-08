@@ -17,6 +17,7 @@ public final class AppModel {
     public let sessions: SessionsFeatureModel
     public let projects: ProjectsFeatureModel
     public let skills: SkillsFeatureModel
+    public let instructions: InstructionsFeatureModel
     public let backup: BackupFeatureModel
     public let settings: SettingsFeatureModel
     public let filters: DashboardFiltersModel
@@ -55,6 +56,7 @@ public final class AppModel {
         self.sessions = SessionsFeatureModel(overview: overview)
         self.projects = ProjectsFeatureModel(overview: overview)
         self.skills = SkillsFeatureModel(helperPort: sessionStore.config.helperPort)
+        self.instructions = InstructionsFeatureModel(helperPort: sessionStore.config.helperPort)
         self.backup = BackupFeatureModel(helperPort: sessionStore.config.helperPort)
         self.liveMonitor = LiveMonitorFeatureModel(
             sessionStore: sessionStore,

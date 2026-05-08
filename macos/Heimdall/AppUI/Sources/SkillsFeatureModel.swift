@@ -18,7 +18,7 @@ public struct SkillsReport: Codable, Sendable {
         case tokenizer
         case maxDescChars = "max_desc_chars"
         case budgetFraction = "budget_fraction"
-        case scopes, totals, budget
+        case scopes, totals, budget, duplicates
     }
 }
 

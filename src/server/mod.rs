@@ -199,6 +199,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/version", get(api::api_version))
         .route("/api/today", get(api::api_today))
         .route("/api/skills", get(api::api_skills))
+        .route("/api/instruction-files", get(api::api_instruction_files))
         .route("/api/tool-errors", get(api::api_tool_errors))
         .route("/api/archive", get(api::api_archive_list))
         .route("/api/archive/imports", get(api::api_archive_imports))

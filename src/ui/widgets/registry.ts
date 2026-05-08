@@ -662,6 +662,20 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       invokeMountCallback('skills', el);
     },
   },
+  {
+    id: 'instruction-files',
+    title: 'Instruction files',
+    description: 'CLAUDE.md / AGENTS.md disk + token impact',
+    category: 'system',
+    screens: ['tables'],
+    defaultSize: { w: 4, h: 4 },
+    minW: 2,
+    minH: 2,
+    render: (el: HTMLElement) => {
+      el.id = 'instruction-files';
+      invokeMountCallback('instruction-files', el);
+    },
+  },
 
   // ── Projects tab ──────────────────────────────────────────────────────────
   {

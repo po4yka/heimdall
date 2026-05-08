@@ -5,6 +5,7 @@ use claude_usage_tracker::currency;
 use claude_usage_tracker::db as db_mod;
 use claude_usage_tracker::export;
 use claude_usage_tracker::hook;
+use claude_usage_tracker::instruction_files;
 use claude_usage_tracker::jq as jq_mod;
 use claude_usage_tracker::litellm;
 use claude_usage_tracker::locale;
@@ -213,6 +214,36 @@ enum Commands {
         max_desc_chars: usize,
         /// Use the tiktoken-cl100k tokenizer for accurate token counts
         /// (requires the accurate-tokens Cargo feature)
+        #[arg(long)]
+        accurate: bool,
+    },
+    /// CLAUDE.md / AGENTS.md disk + token analytics.
+    Instructions {
+        /// Path to the heimdall SQLite database.
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Output format: text or json.
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// Apply a jq filter to the JSON output (implies --format json).
+        #[arg(long)]
+        jq: Option<String>,
+        /// Scope: all, claude, codex, global, or projects.
+        #[arg(long, default_value = "all")]
+        scope: String,
+        /// Extra project root to scan (repeatable; overrides DB discovery).
+        #[arg(long = "path")]
+        paths: Vec<PathBuf>,
+        /// Fraction of context window treated as instruction-file budget (default 5%).
+        #[arg(long, default_value_t = 0.05)]
+        budget_fraction: f64,
+        /// Maximum walk depth for nested CLAUDE.md search.
+        #[arg(long, default_value_t = 8usize)]
+        max_walk_depth: usize,
+        /// Skip recursive nested CLAUDE.md discovery.
+        #[arg(long)]
+        no_nested: bool,
+        /// Use tiktoken cl100k tokenizer (requires accurate-tokens feature).
         #[arg(long)]
         accurate: bool,
     },
@@ -1030,6 +1061,30 @@ fn main() -> Result<()> {
                 &cfg_extra_skills_dirs,
             )?;
         }
+        Commands::Instructions {
+            db_path,
+            format,
+            jq,
+            scope,
+            paths,
+            budget_fraction,
+            max_walk_depth,
+            no_nested,
+            accurate,
+        } => {
+            let db = default_db(db_path);
+            cmd_instructions(
+                &db,
+                &format,
+                jq.as_deref(),
+                &scope,
+                &paths,
+                budget_fraction,
+                max_walk_depth,
+                !no_nested,
+                accurate,
+            )?;
+        }
         Commands::Archive { action } => {
             use archive::{Archive, ArchiveLock};
             match action {
@@ -1771,8 +1826,11 @@ fn cmd_skills(
             let thin = "-".repeat(70);
             println!();
             println!("{sep}");
-            println!("  Skills Inventory  --  tokenizer: {}  |  budget: {:.1}%",
-                report.tokenizer, report.budget_fraction * 100.0);
+            println!(
+                "  Skills Inventory  --  tokenizer: {}  |  budget: {:.1}%",
+                report.tokenizer,
+                report.budget_fraction * 100.0
+            );
             println!("{sep}");
             println!(
                 "  {} skills  |  {} bytes total  |  {} listing tokens",
@@ -1783,7 +1841,9 @@ fn cmd_skills(
             println!("{thin}");
 
             for scope_entry in &report.scopes {
-                let label = scope_entry.project_label.as_deref()
+                let label = scope_entry
+                    .project_label
+                    .as_deref()
                     .map(|l| format!(" [{}]", l))
                     .unwrap_or_default();
                 println!(
@@ -1811,7 +1871,10 @@ fn cmd_skills(
 
             println!("{thin}");
             println!("  Budget table  (fraction = {:.4})", report.budget_fraction);
-            println!("  {:<36} {:>8} {:>8} {:>10}  {}", "Model", "Budget", "Used", "Headroom", "Drop");
+            println!(
+                "  {:<36} {:>8} {:>8} {:>10}  {}",
+                "Model", "Budget", "Used", "Headroom", "Drop"
+            );
             for row in &report.budget {
                 let headroom = if row.headroom_tokens < 0 {
                     format!("[OVER {:+}]", row.headroom_tokens)
@@ -1833,7 +1896,8 @@ fn cmd_skills(
             }
             if !report.duplicates.is_empty() {
                 let total_wasted: u64 = report.duplicates.iter().map(|d| d.wasted_bytes).sum();
-                let total_wasted_tok: usize = report.duplicates.iter().map(|d| d.wasted_tokens).sum();
+                let total_wasted_tok: usize =
+                    report.duplicates.iter().map(|d| d.wasted_tokens).sum();
                 println!("{}", "-".repeat(70));
                 println!(
                     "  Duplicates  ({} names in 2+ scopes)  |  {} wasted  |  {} tokens wasted",
@@ -1855,7 +1919,10 @@ fn cmd_skills(
                             "{} / {:?}{}",
                             occ.provider,
                             occ.scope_kind,
-                            occ.project_label.as_deref().map(|l| format!(" [{l}]")).unwrap_or_default()
+                            occ.project_label
+                                .as_deref()
+                                .map(|l| format!(" [{l}]"))
+                                .unwrap_or_default()
                         );
                         let symlink_tag = if occ.is_symlink { " [link]" } else { "" };
                         println!(
@@ -1866,10 +1933,181 @@ fn cmd_skills(
                             symlink_tag,
                         );
                         if let Some(excerpt) = &occ.description_excerpt {
-                            println!("      desc: {}…", &excerpt.chars().take(80).collect::<String>());
+                            println!(
+                                "      desc: {}…",
+                                &excerpt.chars().take(80).collect::<String>()
+                            );
                         }
                     }
                 }
+            }
+            println!("{sep}");
+            println!();
+        }
+    }
+    Ok(())
+}
+
+fn cmd_instructions(
+    db_path: &std::path::Path,
+    format: &str,
+    jq: Option<&str>,
+    scope: &str,
+    extra_paths: &[PathBuf],
+    budget_fraction: f64,
+    max_walk_depth: usize,
+    include_nested: bool,
+    accurate: bool,
+) -> Result<()> {
+    let tokenizer = if accurate {
+        #[cfg(feature = "accurate-tokens")]
+        {
+            skills::Tokenizer::TiktokenCl100k
+        }
+        #[cfg(not(feature = "accurate-tokens"))]
+        {
+            anyhow::bail!(
+                "--accurate requires the accurate-tokens Cargo feature. \
+                 Rebuild with: cargo build --features accurate-tokens"
+            );
+        }
+    } else {
+        skills::Tokenizer::Heuristic
+    };
+
+    let (include_global, include_projects) = match scope {
+        "claude" | "codex" | "global" => (true, false),
+        "projects" => (false, true),
+        _ => (true, true),
+    };
+
+    let opts = instruction_files::ScanOptions {
+        include_global,
+        include_projects,
+        include_nested,
+        project_paths: extra_paths.to_vec(),
+        tokenizer,
+        budget_fraction,
+        max_walk_depth,
+        db_path: Some(db_path.to_path_buf()),
+        ..Default::default()
+    };
+
+    let report = instruction_files::scan(opts)?;
+
+    let effective_format = if jq.is_some() { "json" } else { format };
+
+    match effective_format.to_ascii_lowercase().as_str() {
+        "json" => {
+            let value = serde_json::to_value(&report)?;
+            if let Some(filter) = jq {
+                apply_jq_and_print(&value, filter);
+            } else {
+                println!("{}", serde_json::to_string_pretty(&value)?);
+            }
+        }
+        _ => {
+            let sep = "=".repeat(70);
+            let thin = "-".repeat(70);
+            println!();
+
+            // Group scopes: global first, then per-project
+            let global_scopes: Vec<_> = report
+                .scopes
+                .iter()
+                .filter(|s| {
+                    matches!(
+                        s.kind,
+                        instruction_files::discovery::ScopeKind::ClaudeGlobal
+                            | instruction_files::discovery::ScopeKind::CodexGlobal
+                    )
+                })
+                .collect();
+
+            if !global_scopes.is_empty() {
+                println!("{sep}");
+                println!("===== Global =====");
+                println!("{thin}");
+                for s in &global_scopes {
+                    for f in &s.files {
+                        let path_str = f.path.display().to_string();
+                        let status_str = match f.frontmatter_status {
+                            instruction_files::FrontmatterStatus::Ok => "ok",
+                            instruction_files::FrontmatterStatus::Invalid => "INVALID",
+                            instruction_files::FrontmatterStatus::NotApplicable => "n/a",
+                        };
+                        println!(
+                            "  {:<50} {:>8}  {:>5} tok  {:>4} lines  {}",
+                            path_str,
+                            fmt_bytes(f.bytes),
+                            f.tokens,
+                            f.line_count,
+                            status_str,
+                        );
+                    }
+                }
+            }
+
+            // Per-project scopes
+            let mut project_labels: Vec<String> = report
+                .scopes
+                .iter()
+                .filter_map(|s| s.project_label.clone())
+                .collect();
+            project_labels.dedup();
+            project_labels.sort();
+
+            for label in &project_labels {
+                println!("{sep}");
+                println!("===== Per-project: {} =====", label);
+                println!("{thin}");
+                for s in report
+                    .scopes
+                    .iter()
+                    .filter(|s| s.project_label.as_deref() == Some(label))
+                {
+                    let is_nested = matches!(
+                        s.kind,
+                        instruction_files::discovery::ScopeKind::ClaudeProjectNested
+                    );
+                    for f in &s.files {
+                        let path_str = f.path.display().to_string();
+                        let status_str = match f.frontmatter_status {
+                            instruction_files::FrontmatterStatus::Ok => "ok",
+                            instruction_files::FrontmatterStatus::Invalid => "INVALID",
+                            instruction_files::FrontmatterStatus::NotApplicable => "n/a",
+                        };
+                        let prefix = if is_nested { "  [nested] " } else { "  " };
+                        println!(
+                            "{}{:<50} {:>8}  {:>5} tok  {:>4} lines  {}",
+                            prefix,
+                            path_str,
+                            fmt_bytes(f.bytes),
+                            f.tokens,
+                            f.line_count,
+                            status_str,
+                        );
+                    }
+                }
+            }
+
+            println!("{sep}");
+            println!("===== Budget =====");
+            println!("{thin}");
+            println!(
+                "  {:<32} {:>8} {:>8} {:>10}",
+                "Model", "Budget", "Used", "Headroom"
+            );
+            for row in &report.budget {
+                let headroom = if row.headroom_tokens < 0 {
+                    format!("[OVER {:+}]", row.headroom_tokens)
+                } else {
+                    format!("{:+}", row.headroom_tokens)
+                };
+                println!(
+                    "  {:<32} {:>8} {:>8} {:>10}",
+                    row.model_label, row.budget_tokens, row.used_tokens, headroom,
+                );
             }
             println!("{sep}");
             println!();

@@ -88,10 +88,7 @@ pub fn compute_budget(
 mod tests {
     use super::*;
 
-    const SIZES: &[(&str, usize)] = &[
-        ("Sonnet 200K", 200_000),
-        ("Sonnet 1M", 1_000_000),
-    ];
+    const SIZES: &[(&str, usize)] = &[("Sonnet 200K", 200_000), ("Sonnet 1M", 1_000_000)];
 
     #[test]
     fn no_drop_when_within_budget() {

@@ -192,6 +192,49 @@ export interface SkillsReport {
   duplicates: SkillsDuplicateGroup[];
 }
 
+// ── Instruction files inventory ─────────────────────────────────────────────
+
+export type InstructionFrontmatterStatus = 'ok' | 'invalid' | 'not_applicable';
+
+export interface InstructionFile {
+  path: string;
+  bytes: number;
+  line_count: number;
+  tokens: number;
+  modified: string;            // RFC3339
+  frontmatter_status: InstructionFrontmatterStatus;
+  is_symlink: boolean;
+}
+
+export interface InstructionScope {
+  provider: string;            // "claude" | "codex"
+  kind: string;                // snake_case ScopeKind
+  root: string;
+  project_label: string | null;
+  files: InstructionFile[];
+  bytes: number;
+  tokens: number;
+}
+
+export interface InstructionTotals {
+  file_count: number;
+  total_bytes: number;
+  total_tokens: number;
+  claude_bytes: number;
+  codex_bytes: number;
+  project_count: number;
+  nested_count: number;
+}
+
+export interface InstructionFilesReport {
+  generated_at: string;
+  tokenizer: string;
+  budget_fraction: number;
+  scopes: InstructionScope[];
+  totals: InstructionTotals;
+  budget: SkillsBudgetRow[];
+}
+
 export interface McpServerSummary {
   provider: string;
   server: string;

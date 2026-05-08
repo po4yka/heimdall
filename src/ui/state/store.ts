@@ -27,6 +27,10 @@ export const backupLoadState = signal<'idle' | 'loading' | 'error'>('idle');
 export const skillsReport = signal<import('./dashboard-types').SkillsReport | null>(null);
 export const skillsLoadState = signal<'idle' | 'loading' | 'error'>('idle');
 
+// ── Instruction files inventory ───────────────────────────────────────
+export const instructionFilesReport = signal<import('./dashboard-types').InstructionFilesReport | null>(null);
+export const instructionFilesLoadState = signal<'idle' | 'loading' | 'error'>('idle');
+
 // ── Web captures (companion extension) ───────────────────────────────
 export interface WebConversationSummary {
   vendor: string;

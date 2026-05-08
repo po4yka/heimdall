@@ -5812,4 +5812,28 @@ mod tests {
         // Restore so other tests run against the original override state.
         crate::pricing::replace_overrides(snapshot);
     }
+
+    #[tokio::test]
+    async fn test_api_instruction_files_returns_json() {
+        let tmp = TempDir::new().unwrap();
+        let (db_path, projects) = setup_test_db(&tmp);
+        let app = test_app(db_path, projects);
+
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/instruction-files")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let data: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(data["generated_at"].is_string());
+        assert!(data["totals"].is_object());
+        assert!(data["budget"].is_array());
+    }
 }

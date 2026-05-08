@@ -19,6 +19,7 @@ use crate::agent_status;
 use crate::agent_status::models::AgentStatusSnapshot;
 use crate::claude_admin;
 use crate::config::{AgentStatusConfig, AggregatorConfig, LiveSettings, WebhookConfig};
+use crate::instruction_files;
 use crate::live_providers;
 use crate::models::ClaudeAdminSummary;
 use crate::models::ClaudeUsageResponse;
@@ -486,8 +487,7 @@ pub(crate) async fn build_subscription_quota_section(
                 let specs: Vec<(String, Option<&'static str>, i64)> = estimates
                     .iter()
                     .filter_map(|e| {
-                        let cap =
-                            e.smoothed_cap_tokens.unwrap_or(e.estimated_cap_tokens);
+                        let cap = e.smoothed_cap_tokens.unwrap_or(e.estimated_cap_tokens);
                         if cap <= 0 {
                             return None;
                         }
@@ -1087,11 +1087,25 @@ pub async fn api_claude_usage(
         db::get_latest_claude_usage_response(&conn)
     })
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
 
-    let value = serde_json::to_value(response)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
+    let value = serde_json::to_value(response).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
     Ok(Json(value))
 }
 
@@ -1114,10 +1128,7 @@ pub async fn api_skills(
     let opts = skills::ScanOptions {
         include_global: true,
         include_plugins: true,
-        include_projects: matches!(
-            q.scope.as_deref().unwrap_or("all"),
-            "all" | "projects"
-        ),
+        include_projects: matches!(q.scope.as_deref().unwrap_or("all"), "all" | "projects"),
         budget_fraction: q.budget_fraction.unwrap_or(0.01),
         max_desc_chars: q.max_desc_chars.unwrap_or(1536),
         db_path: Some(db_path),
@@ -1131,6 +1142,49 @@ pub async fn api_skills(
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     Ok(Json(report))
+}
+
+#[derive(serde::Deserialize, Default)]
+pub struct InstructionFilesQuery {
+    pub scope: Option<String>,
+    pub budget_fraction: Option<f64>,
+    pub max_walk_depth: Option<usize>,
+    pub no_nested: Option<bool>,
+}
+
+pub async fn api_instruction_files(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<InstructionFilesQuery>,
+) -> impl axum::response::IntoResponse {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    let scope = q.scope.as_deref().unwrap_or("all");
+    let budget_fraction = q.budget_fraction.unwrap_or(0.05);
+    let max_walk_depth = q.max_walk_depth.unwrap_or(8);
+    let include_nested = !q.no_nested.unwrap_or(false);
+    let (include_global, include_projects) = match scope {
+        "claude" | "codex" | "global" => (true, false),
+        "projects" => (false, true),
+        _ => (true, true),
+    };
+    let opts = instruction_files::ScanOptions {
+        include_global,
+        include_projects,
+        include_nested,
+        budget_fraction,
+        max_walk_depth,
+        db_path: Some(state.db_path.clone()),
+        ..Default::default()
+    };
+    match tokio::task::spawn_blocking(move || instruction_files::scan(opts)).await {
+        Ok(Ok(report)) => axum::Json(report).into_response(),
+        Ok(Err(e)) => {
+            tracing::error!("instruction_files scan failed: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
+        }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "task panicked").into_response(),
+    }
 }
 
 pub async fn api_version(
@@ -2048,8 +2102,18 @@ pub async fn api_heatmap(
         Ok((cells, total_cost_nanos, active_days))
     })
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
 
     let (cells, total_cost_nanos, active_days) = result;
     let max_cost_nanos = cells.iter().map(|c| c.cost_nanos).max().unwrap_or(0);
@@ -2066,8 +2130,12 @@ pub async fn api_heatmap(
         tz_offset_min,
     };
 
-    let value = serde_json::to_value(resp)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
+    let value = serde_json::to_value(resp).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
     Ok(Json(value))
 }
 
@@ -2119,11 +2187,18 @@ pub async fn api_billing_blocks(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     enforce_loopback_request(&request)
         .map_err(|s| (s, Json(serde_json::json!({"error": "forbidden"}))))?;
-    let response = load_billing_blocks_response(&state)
-        .await
-        .map_err(|s| (s, Json(serde_json::json!({"error": "internal server error"}))))?;
-    let value = serde_json::to_value(response)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": e.to_string()}))))?;
+    let response = load_billing_blocks_response(&state).await.map_err(|s| {
+        (
+            s,
+            Json(serde_json::json!({"error": "internal server error"})),
+        )
+    })?;
+    let value = serde_json::to_value(response).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": e.to_string()})),
+        )
+    })?;
     Ok(Json(value))
 }
 

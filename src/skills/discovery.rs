@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use super::{
-    frontmatter::{parse_skill_md, FrontmatterStatus},
+    frontmatter::{FrontmatterStatus, parse_skill_md},
     sizing::bundle_bytes,
-    tokens::{count_listing_tokens, Tokenizer},
+    tokens::{Tokenizer, count_listing_tokens},
 };
 
 // ---------------------------------------------------------------------------
@@ -134,7 +134,8 @@ pub fn enumerate_skill_dirs(
                     status: FrontmatterStatus::Missing,
                 }
             };
-            let tokens = count_listing_tokens(&fm.name, fm.description.as_deref(), max_desc_chars, tok);
+            let tokens =
+                count_listing_tokens(&fm.name, fm.description.as_deref(), max_desc_chars, tok);
             skills.push(Skill {
                 name: fm.name,
                 path: path.clone(),
@@ -235,8 +236,7 @@ pub fn enumerate_plugin_skills(
 
         let fm = parse_skill_md(skill_md);
         let (file_count, bytes) = bundle_bytes(bundle_dir);
-        let tokens =
-            count_listing_tokens(&fm.name, fm.description.as_deref(), max_desc_chars, tok);
+        let tokens = count_listing_tokens(&fm.name, fm.description.as_deref(), max_desc_chars, tok);
 
         skills.push(Skill {
             name: fm.name,
@@ -365,9 +365,14 @@ mod tests {
         skill_dir(dir.path(), "my-skill", "Does things.");
         skill_dir(dir.path(), "other-skill", "Also useful.");
 
-        let scope =
-            enumerate_skill_dirs(dir.path(), ScopeKind::ClaudeGlobal, None, 1536, Tokenizer::Heuristic)
-                .unwrap();
+        let scope = enumerate_skill_dirs(
+            dir.path(),
+            ScopeKind::ClaudeGlobal,
+            None,
+            1536,
+            Tokenizer::Heuristic,
+        )
+        .unwrap();
         assert_eq!(scope.skills.len(), 2);
         let names: Vec<&str> = scope.skills.iter().map(|s| s.name.as_str()).collect();
         assert!(names.contains(&"my-skill"));
@@ -379,9 +384,14 @@ mod tests {
         let dir = TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join("not-a-skill")).unwrap();
         skill_dir(dir.path(), "real-skill", "desc");
-        let scope =
-            enumerate_skill_dirs(dir.path(), ScopeKind::ClaudeGlobal, None, 1536, Tokenizer::Heuristic)
-                .unwrap();
+        let scope = enumerate_skill_dirs(
+            dir.path(),
+            ScopeKind::ClaudeGlobal,
+            None,
+            1536,
+            Tokenizer::Heuristic,
+        )
+        .unwrap();
         assert_eq!(scope.skills.len(), 1);
         assert_eq!(scope.skills[0].name, "real-skill");
     }
@@ -432,8 +442,14 @@ mod tests {
             format!("---\nname: s\ndescription: {long_desc}\n---\n"),
         )
         .unwrap();
-        let scope = enumerate_skill_dirs(dir.path(), ScopeKind::ClaudeGlobal, None, 1536, Tokenizer::Heuristic)
-            .unwrap();
+        let scope = enumerate_skill_dirs(
+            dir.path(),
+            ScopeKind::ClaudeGlobal,
+            None,
+            1536,
+            Tokenizer::Heuristic,
+        )
+        .unwrap();
         assert!(scope.skills[0].description_truncated);
     }
 }
