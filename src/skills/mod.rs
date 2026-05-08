@@ -349,7 +349,7 @@ fn detect_duplicates(scopes: &[SkillScope]) -> Vec<DuplicateGroup> {
         })
         .collect();
 
-    groups.sort_by(|a, b| b.wasted_bytes.cmp(&a.wasted_bytes));
+    groups.sort_by_key(|b| std::cmp::Reverse(b.wasted_bytes));
     groups
 }
 

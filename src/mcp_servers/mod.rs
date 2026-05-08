@@ -275,7 +275,7 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
 
     // --- Log probe ---
     if opts.probe_logs {
-        let log_dir = opts.claude_desktop_log_dir_override.clone().or_else(|| {
+        let log_dir = opts.claude_desktop_log_dir_override.clone().or({
             #[cfg(target_os = "macos")]
             {
                 dirs::home_dir().map(|h| h.join("Library/Logs/Claude"))

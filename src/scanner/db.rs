@@ -2103,11 +2103,11 @@ LIMIT 500";
         });
     }
 
-    sessions.sort_by(|a, b| b.total_cost_nanos.cmp(&a.total_cost_nanos));
+    sessions.sort_by_key(|b| std::cmp::Reverse(b.total_cost_nanos));
     sessions.truncate(50);
 
     let mut top_subagent_roles: Vec<(String, i64)> = role_cost.into_iter().collect();
-    top_subagent_roles.sort_by(|a, b| b.1.cmp(&a.1));
+    top_subagent_roles.sort_by_key(|b| std::cmp::Reverse(b.1));
     top_subagent_roles.truncate(10);
 
     AgentTreeSummary {
@@ -3153,8 +3153,7 @@ pub fn query_dashboard_claude_md_size(conn: &Connection) -> crate::models::Claud
         // 3. 30-day token delta.
         let baseline_tokens = revisions
             .iter()
-            .filter(|r| r.commit_ts <= cutoff_30d)
-            .next_back()
+            .rfind(|r| r.commit_ts <= cutoff_30d)
             .map(|r| r.token_count)
             .unwrap_or(0);
         let token_delta_30d = current_token_count - baseline_tokens;
