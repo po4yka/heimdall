@@ -1831,6 +1831,46 @@ fn cmd_skills(
                     },
                 );
             }
+            if !report.duplicates.is_empty() {
+                let total_wasted: u64 = report.duplicates.iter().map(|d| d.wasted_bytes).sum();
+                let total_wasted_tok: usize = report.duplicates.iter().map(|d| d.wasted_tokens).sum();
+                println!("{}", "-".repeat(70));
+                println!(
+                    "  Duplicates  ({} names in 2+ scopes)  |  {} wasted  |  {} tokens wasted",
+                    report.duplicates.len(),
+                    fmt_bytes(total_wasted),
+                    total_wasted_tok,
+                );
+                println!("{}", "-".repeat(70));
+                for dup in &report.duplicates {
+                    println!(
+                        "  {:<40} ({} copies)   {} wasted   {} tok wasted",
+                        dup.name,
+                        dup.count,
+                        fmt_bytes(dup.wasted_bytes),
+                        dup.wasted_tokens,
+                    );
+                    for occ in &dup.occurrences {
+                        let scope_label = format!(
+                            "{} / {:?}{}",
+                            occ.provider,
+                            occ.scope_kind,
+                            occ.project_label.as_deref().map(|l| format!(" [{l}]")).unwrap_or_default()
+                        );
+                        let symlink_tag = if occ.is_symlink { " [link]" } else { "" };
+                        println!(
+                            "    {:<50}  {}  {} tok{}",
+                            scope_label,
+                            fmt_bytes(occ.bytes),
+                            occ.listing_tokens,
+                            symlink_tag,
+                        );
+                        if let Some(excerpt) = &occ.description_excerpt {
+                            println!("      desc: {}…", &excerpt.chars().take(80).collect::<String>());
+                        }
+                    }
+                }
+            }
             println!("{sep}");
             println!();
         }

@@ -6936,6 +6936,124 @@
       ] })
     ] });
   }
+  function DuplicateOccurrenceRow({ occ }) {
+    const kindLabel = occ.scope_kind.replace(/_/g, " ");
+    const projectSuffix = occ.project_label ? ` [${occ.project_label}]` : "";
+    return /* @__PURE__ */ u4("div", { style: { marginLeft: "12px", marginTop: "4px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
+          occ.provider,
+          " \xB7 ",
+          kindLabel,
+          projectSuffix,
+          occ.is_symlink && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--text-secondary)" }, children: "[link]" })
+        ] }),
+        /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
+          fmtBytes(occ.bytes),
+          " \xB7 ",
+          occ.listing_tokens,
+          " tok",
+          occ.frontmatter_status !== "ok" && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent, #D71921)" }, children: [
+            "[",
+            occ.frontmatter_status,
+            "]"
+          ] })
+        ] })
+      ] }),
+      occ.description_excerpt && /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)", opacity: 0.7, marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: [
+        occ.description_excerpt,
+        occ.description_excerpt.length >= 120 ? "\u2026" : ""
+      ] })
+    ] });
+  }
+  function DuplicateGroupRow({ group }) {
+    const [open, setOpen] = d2(false);
+    const allSameDesc = group.occurrences.every(
+      (o4) => o4.description_excerpt === group.occurrences[0]?.description_excerpt
+    );
+    return /* @__PURE__ */ u4("div", { style: { marginBottom: "6px", borderTop: "1px solid rgba(var(--text-primary-rgb, 232,232,232), 0.08)", paddingTop: "6px" }, children: [
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          onClick: () => setOpen(!open),
+          style: {
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            width: "100%",
+            textAlign: "left",
+            padding: "0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center"
+          },
+          children: [
+            /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
+              group.name,
+              !allSameDesc && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--accent, #D71921)", fontSize: "10px" }, children: "[differs]" })
+            ] }),
+            /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
+              group.count,
+              "\xD7 \xB7 ",
+              fmtBytes(group.wasted_bytes),
+              " wasted \xB7 ",
+              group.wasted_tokens,
+              " tok ",
+              open ? "\u25B2" : "\u25BC"
+            ] })
+          ]
+        }
+      ),
+      open && /* @__PURE__ */ u4("div", { style: { marginTop: "4px" }, children: group.occurrences.map((occ, i4) => /* @__PURE__ */ u4(DuplicateOccurrenceRow, { occ }, `${occ.scope_kind}:${occ.root}:${i4}`)) })
+    ] });
+  }
+  function DuplicatesSection({ groups }) {
+    const [open, setOpen] = d2(false);
+    if (groups.length === 0) return null;
+    const totalWasted = groups.reduce((s4, g4) => s4 + g4.wasted_bytes, 0);
+    const totalWastedTok = groups.reduce((s4, g4) => s4 + g4.wasted_tokens, 0);
+    const hasConflicts = groups.some(
+      (g4) => !g4.occurrences.every((o4) => o4.description_excerpt === g4.occurrences[0]?.description_excerpt)
+    );
+    return /* @__PURE__ */ u4("div", { style: { marginTop: "14px", borderTop: "1px solid rgba(var(--text-primary-rgb, 232,232,232), 0.08)", paddingTop: "10px" }, children: [
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          onClick: () => setOpen(!open),
+          style: {
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            width: "100%",
+            textAlign: "left",
+            padding: "0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "8px"
+          },
+          children: [
+            /* @__PURE__ */ u4("div", { class: "stat-label", style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
+              "Duplicates",
+              hasConflicts && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--accent, #D71921)" }, children: "[WARN: conflicting descriptions]" })
+            ] }),
+            /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)" }, children: [
+              groups.length,
+              " names \xB7 ",
+              fmtBytes(totalWasted),
+              " wasted \xB7 ",
+              totalWastedTok,
+              " tok ",
+              open ? "\u25B2" : "\u25BC"
+            ] })
+          ]
+        }
+      ),
+      open && groups.map((g4) => /* @__PURE__ */ u4(DuplicateGroupRow, { group: g4 }, g4.name))
+    ] });
+  }
   function SkillsCardInner({ report }) {
     const anyOver = report.budget.some((r4) => r4.headroom_tokens < 0);
     return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
@@ -6955,10 +7073,15 @@
         /* @__PURE__ */ u4("div", { children: [
           /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Listing tokens" }),
           /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: report.totals.total_listing_tokens })
+        ] }),
+        report.totals.duplicate_count > 0 && /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Duplicates" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px", color: "var(--accent, #D71921)" }, children: report.totals.duplicate_count })
         ] })
       ] }),
       report.budget.map((row) => /* @__PURE__ */ u4(BudgetBar, { row }, row.model_label)),
       report.scopes.map((scope) => /* @__PURE__ */ u4(ScopeSection, { scope }, `${scope.kind}:${scope.root}`)),
+      /* @__PURE__ */ u4(DuplicatesSection, { groups: report.duplicates }),
       /* @__PURE__ */ u4("div", { style: { marginTop: "8px", fontSize: "10px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }, children: [
         "tokenizer: ",
         report.tokenizer,

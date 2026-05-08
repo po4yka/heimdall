@@ -146,6 +146,28 @@ export interface SkillsTotals {
   claude_bytes: number;
   codex_bytes: number;
   project_count: number;
+  duplicate_count: number;
+  duplicate_wasted_bytes: number;
+}
+
+export interface SkillsDuplicateOccurrence {
+  provider: string;
+  scope_kind: string;
+  root: string;
+  project_label: string | null;
+  bytes: number;
+  listing_tokens: number;
+  frontmatter_status: 'ok' | 'missing' | 'invalid';
+  description_excerpt: string | null;
+  is_symlink: boolean;
+}
+
+export interface SkillsDuplicateGroup {
+  name: string;
+  count: number;
+  wasted_bytes: number;
+  wasted_tokens: number;
+  occurrences: SkillsDuplicateOccurrence[];
 }
 
 export interface SkillsBudgetRow {
@@ -167,6 +189,7 @@ export interface SkillsReport {
   scopes: SkillScope[];
   totals: SkillsTotals;
   budget: SkillsBudgetRow[];
+  duplicates: SkillsDuplicateGroup[];
 }
 
 export interface McpServerSummary {

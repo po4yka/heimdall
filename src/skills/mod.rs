@@ -27,6 +27,33 @@ pub struct SkillsTotals {
     pub claude_bytes: u64,
     pub codex_bytes: u64,
     pub project_count: usize,
+    pub duplicate_count: usize,
+    pub duplicate_wasted_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DuplicateOccurrence {
+    pub provider: &'static str,
+    pub scope_kind: ScopeKind,
+    pub root: PathBuf,
+    pub project_label: Option<String>,
+    pub bytes: u64,
+    pub listing_tokens: usize,
+    pub frontmatter_status: frontmatter::FrontmatterStatus,
+    /// First 120 chars of the description, for quick diff comparison in UIs.
+    pub description_excerpt: Option<String>,
+    pub is_symlink: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DuplicateGroup {
+    pub name: String,
+    pub count: usize,
+    /// Sum of all occurrence bytes minus the smallest one — bytes you could save.
+    pub wasted_bytes: u64,
+    /// Sum of all occurrence listing_tokens minus the smallest one.
+    pub wasted_tokens: usize,
+    pub occurrences: Vec<DuplicateOccurrence>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -39,6 +66,8 @@ pub struct SkillsReport {
     pub scopes: Vec<SkillScope>,
     pub totals: SkillsTotals,
     pub budget: Vec<budget::BudgetRow>,
+    /// Skills whose name appears in 2+ scopes, sorted by wasted_bytes descending.
+    pub duplicates: Vec<DuplicateGroup>,
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +232,12 @@ pub fn scan(opts: ScanOptions) -> Result<SkillsReport> {
     }
 
     // --- Totals ---
-    let totals = compute_totals(&scopes, &opts);
+    let mut totals = compute_totals(&scopes, &opts);
+
+    // --- Duplicates ---
+    let duplicates = detect_duplicates(&scopes);
+    totals.duplicate_count = duplicates.len();
+    totals.duplicate_wasted_bytes = duplicates.iter().map(|d| d.wasted_bytes).sum();
 
     // --- Budget ---
     let all_skills: Vec<&Skill> = scopes.iter().flat_map(|s| s.skills.iter()).collect();
@@ -224,7 +258,53 @@ pub fn scan(opts: ScanOptions) -> Result<SkillsReport> {
         scopes,
         totals,
         budget: budget_rows,
+        duplicates,
     })
+}
+
+fn detect_duplicates(scopes: &[SkillScope]) -> Vec<DuplicateGroup> {
+    use std::collections::HashMap;
+    let mut by_name: HashMap<String, Vec<DuplicateOccurrence>> = HashMap::new();
+
+    for scope in scopes {
+        for skill in &scope.skills {
+            let excerpt = skill.description.as_deref().map(|d| {
+                d.chars().take(120).collect::<String>()
+            });
+            by_name.entry(skill.name.clone()).or_default().push(DuplicateOccurrence {
+                provider: scope.provider,
+                scope_kind: scope.kind,
+                root: scope.root.clone(),
+                project_label: scope.project_label.clone(),
+                bytes: skill.bytes,
+                listing_tokens: skill.listing_tokens,
+                frontmatter_status: skill.frontmatter_status,
+                description_excerpt: excerpt,
+                is_symlink: skill.is_symlink,
+            });
+        }
+    }
+
+    let mut groups: Vec<DuplicateGroup> = by_name
+        .into_iter()
+        .filter(|(_, occs)| occs.len() >= 2)
+        .map(|(name, occs)| {
+            let total_bytes: u64 = occs.iter().map(|o| o.bytes).sum();
+            let min_bytes = occs.iter().map(|o| o.bytes).min().unwrap_or(0);
+            let total_tokens: usize = occs.iter().map(|o| o.listing_tokens).sum();
+            let min_tokens = occs.iter().map(|o| o.listing_tokens).min().unwrap_or(0);
+            DuplicateGroup {
+                count: occs.len(),
+                wasted_bytes: total_bytes.saturating_sub(min_bytes),
+                wasted_tokens: total_tokens.saturating_sub(min_tokens),
+                name,
+                occurrences: occs,
+            }
+        })
+        .collect();
+
+    groups.sort_by(|a, b| b.wasted_bytes.cmp(&a.wasted_bytes));
+    groups
 }
 
 fn resolve_project_paths(opts: &ScanOptions) -> Vec<PathBuf> {
@@ -287,6 +367,8 @@ fn compute_totals(scopes: &[SkillScope], opts: &ScanOptions) -> SkillsTotals {
         claude_bytes,
         codex_bytes,
         project_count: project_roots.len(),
+        duplicate_count: 0,
+        duplicate_wasted_bytes: 0,
     }
 }
 

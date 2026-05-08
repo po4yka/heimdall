@@ -11,6 +11,7 @@ public struct SkillsReport: Codable, Sendable {
     public let scopes: [SkillScopeResponse]
     public let totals: SkillsTotals
     public let budget: [SkillsBudgetRow]
+    public let duplicates: [SkillsDuplicateGroup]
 
     enum CodingKeys: String, CodingKey {
         case generatedAt = "generated_at"
@@ -28,6 +29,8 @@ public struct SkillsTotals: Codable, Sendable {
     public let claudeBytes: UInt64
     public let codexBytes: UInt64
     public let projectCount: Int
+    public let duplicateCount: Int
+    public let duplicateWastedBytes: UInt64
 
     enum CodingKeys: String, CodingKey {
         case skillsCount = "skills_count"
@@ -36,6 +39,54 @@ public struct SkillsTotals: Codable, Sendable {
         case claudeBytes = "claude_bytes"
         case codexBytes = "codex_bytes"
         case projectCount = "project_count"
+        case duplicateCount = "duplicate_count"
+        case duplicateWastedBytes = "duplicate_wasted_bytes"
+    }
+}
+
+public struct SkillsDuplicateOccurrence: Codable, Sendable {
+    public let provider: String
+    public let scopeKind: String
+    public let root: String
+    public let projectLabel: String?
+    public let bytes: UInt64
+    public let listingTokens: Int
+    public let frontmatterStatus: String
+    public let descriptionExcerpt: String?
+    public let isSymlink: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case scopeKind = "scope_kind"
+        case root
+        case projectLabel = "project_label"
+        case bytes
+        case listingTokens = "listing_tokens"
+        case frontmatterStatus = "frontmatter_status"
+        case descriptionExcerpt = "description_excerpt"
+        case isSymlink = "is_symlink"
+    }
+}
+
+public struct SkillsDuplicateGroup: Codable, Sendable, Identifiable {
+    public let name: String
+    public let count: Int
+    public let wastedBytes: UInt64
+    public let wastedTokens: Int
+    public let occurrences: [SkillsDuplicateOccurrence]
+
+    public var id: String { name }
+
+    enum CodingKeys: String, CodingKey {
+        case name, count
+        case wastedBytes = "wasted_bytes"
+        case wastedTokens = "wasted_tokens"
+        case occurrences
+    }
+
+    public var allSameDescription: Bool {
+        let first = occurrences.first?.descriptionExcerpt
+        return occurrences.allSatisfy { $0.descriptionExcerpt == first }
     }
 }
 

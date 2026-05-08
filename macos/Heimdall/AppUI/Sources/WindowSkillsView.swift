@@ -20,6 +20,9 @@ struct WindowSkillsView: View {
                 SkillsSummaryRow(totals: report.totals)
                 SkillsBudgetSection(rows: report.budget)
                 SkillsScopesSection(scopes: report.scopes)
+                if !report.duplicates.isEmpty {
+                    SkillsDuplicatesSection(groups: report.duplicates)
+                }
                 SkillsFooterView(report: report)
             } else if self.model.isLoading {
                 ProgressView("Scanning skills…")
@@ -259,6 +262,136 @@ private struct SkillsTableRow: View {
         }
         .font(.caption2.monospaced())
         .padding(.vertical, 3)
+    }
+}
+
+// MARK: - Duplicates
+
+private struct SkillsDuplicatesSection: View {
+    let groups: [SkillsDuplicateGroup]
+    @State private var expanded = false
+
+    private var totalWasted: UInt64 { groups.reduce(0) { $0 + $1.wastedBytes } }
+    private var totalWastedTok: Int { groups.reduce(0) { $0 + $1.wastedTokens } }
+    private var hasConflicts: Bool { groups.contains { !$0.allSameDescription } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                WindowSectionHeader(
+                    title: "Duplicates",
+                    subtitle: "Skills whose name appears in 2 or more scopes"
+                )
+                if self.hasConflicts {
+                    Text("WARN: conflicting descriptions")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.red)
+                }
+                Spacer()
+                Text("\(self.groups.count) names · \(formatBytes(self.totalWasted)) wasted · \(self.totalWastedTok) tok")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { self.expanded.toggle() }
+                } label: {
+                    Image(systemName: self.expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if self.expanded {
+                VStack(spacing: 6) {
+                    ForEach(self.groups) { group in
+                        DuplicateGroupCard(group: group)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct DuplicateGroupCard: View {
+    let group: SkillsDuplicateGroup
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.12)) { self.expanded.toggle() }
+            } label: {
+                HStack {
+                    HStack(spacing: 6) {
+                        Text(group.name)
+                            .font(.caption.weight(.medium))
+                            .lineLimit(1)
+                        if !group.allSameDescription {
+                            Text("[differs]")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    Spacer()
+                    Text("\(group.count)× · \(formatBytes(group.wastedBytes)) wasted · \(group.wastedTokens) tok")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    Image(systemName: self.expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 10)
+            }
+            .buttonStyle(.plain)
+
+            if self.expanded {
+                Divider().opacity(0.4)
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(group.occurrences.enumerated()), id: \.offset) { _, occ in
+                        DuplicateOccurrenceRow(occ: occ)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+            }
+        }
+        .menuCardBackground(opacity: 0.04, cornerRadius: 10)
+    }
+}
+
+private struct DuplicateOccurrenceRow: View {
+    let occ: SkillsDuplicateOccurrence
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                HStack(spacing: 4) {
+                    Text("\(occ.provider) · \(occ.scopeKind.replacingOccurrences(of: "_", with: " "))")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    if let label = occ.projectLabel {
+                        Text("[\(label)]").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                    }
+                    if occ.isSymlink {
+                        Text("[link]").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                    }
+                    if occ.frontmatterStatus != "ok" {
+                        Text("[\(occ.frontmatterStatus)]").font(.caption2.monospaced()).foregroundStyle(.red)
+                    }
+                }
+                Spacer()
+                Text("\(formatBytes(occ.bytes)) · \(occ.listingTokens) tok")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+            if let excerpt = occ.descriptionExcerpt, !excerpt.isEmpty {
+                Text(excerpt + (excerpt.count >= 120 ? "…" : ""))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
-import type { SkillsReport, SkillScope, SkillsBudgetRow } from '../state/dashboard-types';
+import type { SkillsReport, SkillScope, SkillsBudgetRow, SkillsDuplicateGroup, SkillsDuplicateOccurrence } from '../state/dashboard-types';
 import { skillsReport, skillsLoadState } from '../state/store';
 
 function fmtBytes(b: number): string {
@@ -124,6 +124,108 @@ function ScopeSection({ scope }: { scope: SkillScope }) {
   );
 }
 
+function DuplicateOccurrenceRow({ occ }: { occ: SkillsDuplicateOccurrence }) {
+  const kindLabel = occ.scope_kind.replace(/_/g, ' ');
+  const projectSuffix = occ.project_label ? ` [${occ.project_label}]` : '';
+  return (
+    <div style={{ marginLeft: '12px', marginTop: '4px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>
+          {occ.provider} · {kindLabel}{projectSuffix}
+          {occ.is_symlink && <span style={{ marginLeft: '4px', color: 'var(--text-secondary)' }}>[link]</span>}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>
+          {fmtBytes(occ.bytes)} · {occ.listing_tokens} tok
+          {occ.frontmatter_status !== 'ok' && (
+            <span style={{ marginLeft: '4px', color: 'var(--accent, #D71921)' }}>[{occ.frontmatter_status}]</span>
+          )}
+        </span>
+      </div>
+      {occ.description_excerpt && (
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)', opacity: 0.7, marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {occ.description_excerpt}{occ.description_excerpt.length >= 120 ? '…' : ''}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DuplicateGroupRow({ group }: { group: SkillsDuplicateGroup }) {
+  const [open, setOpen] = useState(false);
+  const allSameDesc = group.occurrences.every(
+    (o) => o.description_excerpt === group.occurrences[0]?.description_excerpt
+  );
+  return (
+    <div style={{ marginBottom: '6px', borderTop: '1px solid rgba(var(--text-primary-rgb, 232,232,232), 0.08)', paddingTop: '6px' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          width: '100%', textAlign: 'left', padding: '0',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+          {group.name}
+          {!allSameDesc && (
+            <span style={{ marginLeft: '6px', color: 'var(--accent, #D71921)', fontSize: '10px' }}>[differs]</span>
+          )}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>
+          {group.count}× · {fmtBytes(group.wasted_bytes)} wasted · {group.wasted_tokens} tok {open ? '▲' : '▼'}
+        </span>
+      </button>
+      {open && (
+        <div style={{ marginTop: '4px' }}>
+          {group.occurrences.map((occ, i) => (
+            <DuplicateOccurrenceRow key={`${occ.scope_kind}:${occ.root}:${i}`} occ={occ} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DuplicatesSection({ groups }: { groups: SkillsDuplicateGroup[] }) {
+  const [open, setOpen] = useState(false);
+  if (groups.length === 0) return null;
+  const totalWasted = groups.reduce((s, g) => s + g.wasted_bytes, 0);
+  const totalWastedTok = groups.reduce((s, g) => s + g.wasted_tokens, 0);
+  const hasConflicts = groups.some(
+    (g) => !g.occurrences.every((o) => o.description_excerpt === g.occurrences[0]?.description_excerpt)
+  );
+  return (
+    <div style={{ marginTop: '14px', borderTop: '1px solid rgba(var(--text-primary-rgb, 232,232,232), 0.08)', paddingTop: '10px' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          width: '100%', textAlign: 'left', padding: '0',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: '8px',
+        }}
+      >
+        <div class="stat-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          Duplicates
+          {hasConflicts && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--accent, #D71921)' }}>
+              [WARN: conflicting descriptions]
+            </span>
+          )}
+        </div>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-secondary)' }}>
+          {groups.length} names · {fmtBytes(totalWasted)} wasted · {totalWastedTok} tok {open ? '▲' : '▼'}
+        </span>
+      </button>
+      {open && groups.map((g) => (
+        <DuplicateGroupRow key={g.name} group={g} />
+      ))}
+    </div>
+  );
+}
+
 function SkillsCardInner({ report }: { report: SkillsReport }) {
   const anyOver = report.budget.some((r) => r.headroom_tokens < 0);
 
@@ -152,6 +254,14 @@ function SkillsCardInner({ report }: { report: SkillsReport }) {
           <div class="stat-label" style={{ fontSize: '10px' }}>Listing tokens</div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '18px' }}>{report.totals.total_listing_tokens}</div>
         </div>
+        {report.totals.duplicate_count > 0 && (
+          <div>
+            <div class="stat-label" style={{ fontSize: '10px' }}>Duplicates</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '18px', color: 'var(--accent, #D71921)' }}>
+              {report.totals.duplicate_count}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Budget bars */}
@@ -163,6 +273,9 @@ function SkillsCardInner({ report }: { report: SkillsReport }) {
       {report.scopes.map((scope) => (
         <ScopeSection key={`${scope.kind}:${scope.root}`} scope={scope} />
       ))}
+
+      {/* Duplicates */}
+      <DuplicatesSection groups={report.duplicates} />
 
       <div style={{ marginTop: '8px', fontSize: '10px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
         tokenizer: {report.tokenizer} · budget fraction: {(report.budget_fraction * 100).toFixed(1)}%
