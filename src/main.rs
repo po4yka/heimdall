@@ -6,12 +6,12 @@ use claude_usage_tracker::db as db_mod;
 use claude_usage_tracker::export;
 use claude_usage_tracker::hook;
 use claude_usage_tracker::instruction_files;
-use claude_usage_tracker::mcp_servers;
 use claude_usage_tracker::jq as jq_mod;
 use claude_usage_tracker::litellm;
 use claude_usage_tracker::locale;
 #[cfg(feature = "mcp")]
 use claude_usage_tracker::mcp;
+use claude_usage_tracker::mcp_servers;
 use claude_usage_tracker::menubar;
 use claude_usage_tracker::optimizer;
 use claude_usage_tracker::pricing;
@@ -943,13 +943,12 @@ fn main() -> Result<()> {
             scanner::scan(dirs, &db, true)?;
             {
                 let conn = scanner::db::open_db(&db)?;
-                let outcome =
-                    instruction_files::claude_md_history::refresh_claude_md_history(
-                        &conn,
-                        &[],
-                        skills::Tokenizer::Heuristic,
-                        false,
-                    );
+                let outcome = instruction_files::claude_md_history::refresh_claude_md_history(
+                    &conn,
+                    &[],
+                    skills::Tokenizer::Heuristic,
+                    false,
+                );
                 tracing::debug!(
                     "claude_md history: visited {} files, inserted {} revisions",
                     outcome.files_visited,
@@ -2329,10 +2328,7 @@ fn cmd_mcp_servers(
     let sep = "=".repeat(70);
     println!();
     println!("{sep}");
-    println!(
-        "MCP server inventory  {}",
-        report.generated_at
-    );
+    println!("MCP server inventory  {}", report.generated_at);
     println!(
         "  configured: {}  running: {}  never invoked: {}  projects: {}",
         report.totals.configured_count,

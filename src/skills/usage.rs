@@ -34,7 +34,14 @@ pub fn fetch_skill_invocation_stats(
         let total_calls: u64 = row.get::<_, i64>(1)? as u64;
         let last_used: Option<String> = row.get(2)?;
         let distinct_sessions: u64 = row.get::<_, i64>(3)? as u64;
-        Ok((name, SkillInvocationStats { total_calls, last_used, distinct_sessions }))
+        Ok((
+            name,
+            SkillInvocationStats {
+                total_calls,
+                last_used,
+                distinct_sessions,
+            },
+        ))
     })?;
 
     let mut map = HashMap::new();

@@ -1815,7 +1815,9 @@ pub(crate) fn query_dashboard_subagents(conn: &Connection) -> crate::models::Sub
     })
 }
 
-pub(crate) fn query_dashboard_context_pressure(conn: &Connection) -> crate::models::ContextPressureSummary {
+pub(crate) fn query_dashboard_context_pressure(
+    conn: &Connection,
+) -> crate::models::ContextPressureSummary {
     use crate::models::{ContextPressureBucket, ContextPressureRow, ContextPressureSummary};
     use crate::pricing::model_context_window;
 
@@ -1870,27 +1872,26 @@ LIMIT 200";
         }
     };
 
-    let raw_rows: Vec<(String, Option<String>, String, String, u32, u64, u32)> =
-        collect_warn(
-            match stmt.query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, i64>(4)? as u32,
-                    row.get::<_, i64>(5)? as u64,
-                    row.get::<_, i64>(6)? as u32,
-                ))
-            }) {
-                Ok(m) => m,
-                Err(e) => {
-                    warn!("context_pressure query failed: {e}");
-                    return ContextPressureSummary::default();
-                }
-            },
-            "context_pressure",
-        );
+    let raw_rows: Vec<(String, Option<String>, String, String, u32, u64, u32)> = collect_warn(
+        match stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)? as u32,
+                row.get::<_, i64>(5)? as u64,
+                row.get::<_, i64>(6)? as u32,
+            ))
+        }) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("context_pressure query failed: {e}");
+                return ContextPressureSummary::default();
+            }
+        },
+        "context_pressure",
+    );
 
     let mut rows = Vec::with_capacity(raw_rows.len());
     let mut healthy_count = 0u32;
@@ -1899,7 +1900,9 @@ LIMIT 200";
     let mut overcompacted_count = 0u32;
     let mut fraction_sum = 0.0f64;
 
-    for (session_id, project, model, started_at, turn_count, peak_input_tokens, compaction_count) in raw_rows {
+    for (session_id, project, model, started_at, turn_count, peak_input_tokens, compaction_count) in
+        raw_rows
+    {
         let ctx_size = model_context_window(&model);
         let peak_fraction = if ctx_size > 0 {
             (peak_input_tokens as f64 / ctx_size as f64).min(1.0) as f32
@@ -1922,7 +1925,11 @@ LIMIT 200";
         };
 
         fraction_sum += peak_fraction as f64;
-        let project = if project.as_deref().unwrap_or("").is_empty() { None } else { project };
+        let project = if project.as_deref().unwrap_or("").is_empty() {
+            None
+        } else {
+            project
+        };
 
         rows.push(ContextPressureRow {
             session_id,
@@ -2062,22 +2069,25 @@ LIMIT 500";
             output_tokens: root_rows.iter().map(|r| r.output_tokens).sum(),
             cache_read_tokens: root_rows.iter().map(|r| r.cache_read_tokens).sum(),
             estimated_cost_nanos: root_rows.iter().map(|r| r.cost_nanos).sum(),
-            children: sub_rows.iter().map(|r| {
-                let role = r.role.clone();
-                if let Some(ref rn) = role {
-                    *role_cost.entry(rn.clone()).or_insert(0) += r.cost_nanos;
-                }
-                AgentTreeNode {
-                    agent_id: r.agent_id.clone(),
-                    role,
-                    turn_count: r.turn_count,
-                    input_tokens: r.input_tokens,
-                    output_tokens: r.output_tokens,
-                    cache_read_tokens: r.cache_read_tokens,
-                    estimated_cost_nanos: r.cost_nanos,
-                    children: vec![],
-                }
-            }).collect(),
+            children: sub_rows
+                .iter()
+                .map(|r| {
+                    let role = r.role.clone();
+                    if let Some(ref rn) = role {
+                        *role_cost.entry(rn.clone()).or_insert(0) += r.cost_nanos;
+                    }
+                    AgentTreeNode {
+                        agent_id: r.agent_id.clone(),
+                        role,
+                        turn_count: r.turn_count,
+                        input_tokens: r.input_tokens,
+                        output_tokens: r.output_tokens,
+                        cache_read_tokens: r.cache_read_tokens,
+                        estimated_cost_nanos: r.cost_nanos,
+                        children: vec![],
+                    }
+                })
+                .collect(),
         };
 
         let total_cost_nanos: i64 = rows.iter().map(|r| r.cost_nanos).sum();
@@ -2099,12 +2109,13 @@ LIMIT 500";
     top_subagent_roles.sort_by(|a, b| b.1.cmp(&a.1));
     top_subagent_roles.truncate(10);
 
-    AgentTreeSummary { sessions, top_subagent_roles }
+    AgentTreeSummary {
+        sessions,
+        top_subagent_roles,
+    }
 }
 
-pub fn query_dashboard_session_quality(
-    conn: &Connection,
-) -> crate::models::SessionQualitySummary {
+pub fn query_dashboard_session_quality(conn: &Connection) -> crate::models::SessionQualitySummary {
     use crate::models::{SessionCategoryQualityRow, SessionDepthBucket, SessionQualitySummary};
     use chrono::{Duration, Utc};
     use std::collections::HashMap;
@@ -2294,9 +2305,7 @@ LEFT JOIN turn_pauses             tp  ON tp.session_id  = ws.session_id";
     }
 }
 
-pub fn query_dashboard_hook_telemetry(
-    conn: &Connection,
-) -> crate::models::HookTelemetrySummary {
+pub fn query_dashboard_hook_telemetry(conn: &Connection) -> crate::models::HookTelemetrySummary {
     use crate::models::{
         HookBypassAncestorRow, HookLatencyBucket, HookOutcomeRow, HookTelemetrySummary,
     };
@@ -2366,7 +2375,10 @@ pub fn query_dashboard_hook_telemetry(
         total += 1;
         let lat = (*latency_us).max(0) as u64;
         all_latencies.push(lat);
-        outcome_latencies.entry(outcome.clone()).or_default().push(lat);
+        outcome_latencies
+            .entry(outcome.clone())
+            .or_default()
+            .push(lat);
 
         match outcome.as_str() {
             "ok" => ok_count += 1,
@@ -2449,8 +2461,11 @@ pub fn query_dashboard_hook_telemetry(
             last_seen,
         })
         .collect();
-    top_bypass_ancestors
-        .sort_by(|a, b| b.bypass_count.cmp(&a.bypass_count).then(a.command.cmp(&b.command)));
+    top_bypass_ancestors.sort_by(|a, b| {
+        b.bypass_count
+            .cmp(&a.bypass_count)
+            .then(a.command.cmp(&b.command))
+    });
     top_bypass_ancestors.truncate(10);
 
     HookTelemetrySummary {
@@ -3031,10 +3046,9 @@ fn query_cost_per_session_by_day_for_project(
         }
     };
 
-    let rows_result = stmt.query_map(
-        rusqlite::params![project_path, cutoff_epoch],
-        |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
-    );
+    let rows_result = stmt.query_map(rusqlite::params![project_path, cutoff_epoch], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+    });
 
     match rows_result {
         Ok(rows) => rows
@@ -3058,18 +3072,17 @@ pub fn query_dashboard_claude_md_size(conn: &Connection) -> crate::models::Claud
 
     // 1. Enumerate distinct (project_path, file_path) pairs.
     let pairs: Vec<(String, String)> = {
-        let mut stmt = match conn
-            .prepare("SELECT DISTINCT project_path, file_path FROM claude_md_history")
-        {
-            Ok(s) => s,
-            Err(e) => {
-                warn!("claude_md_size: enumerate pairs failed: {e}");
-                return crate::models::ClaudeMdSizeSummary {
-                    generated_at,
-                    ..Default::default()
-                };
-            }
-        };
+        let mut stmt =
+            match conn.prepare("SELECT DISTINCT project_path, file_path FROM claude_md_history") {
+                Ok(s) => s,
+                Err(e) => {
+                    warn!("claude_md_size: enumerate pairs failed: {e}");
+                    return crate::models::ClaudeMdSizeSummary {
+                        generated_at,
+                        ..Default::default()
+                    };
+                }
+            };
         match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?))) {
             Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
             Err(e) => {
@@ -3084,9 +3097,7 @@ pub fn query_dashboard_claude_md_size(conn: &Connection) -> crate::models::Claud
 
     let cutoff_90d = (now - Duration::days(89)).timestamp();
     let cutoff_30d = (now - Duration::days(29)).timestamp();
-    let cutoff_30d_str = (now - Duration::days(29))
-        .format("%Y-%m-%d")
-        .to_string();
+    let cutoff_30d_str = (now - Duration::days(29)).format("%Y-%m-%d").to_string();
 
     let mut files: Vec<crate::models::ClaudeMdFileTrend> = Vec::new();
     let mut total_revisions: u32 = 0;
@@ -3133,7 +3144,10 @@ pub fn query_dashboard_claude_md_size(conn: &Connection) -> crate::models::Claud
         total_revisions += revisions.len() as u32;
 
         let current_token_count = revisions.last().map(|r| r.token_count).unwrap_or(0);
-        let first_seen_iso = revisions.first().map(|r| r.commit_iso.clone()).unwrap_or_default();
+        let first_seen_iso = revisions
+            .first()
+            .map(|r| r.commit_iso.clone())
+            .unwrap_or_default();
 
         // 3. 30-day token delta.
         let baseline_tokens = revisions
@@ -11332,8 +11346,7 @@ mod tests {
         .unwrap();
         let summary = query_dashboard_session_quality(&conn);
         assert_eq!(
-            summary.total_sessions,
-            1,
+            summary.total_sessions, 1,
             "only the recent session should be included"
         );
     }
@@ -11559,7 +11572,10 @@ mod tests {
         let summary = query_dashboard_claude_md_size(&conn);
         assert_eq!(summary.total_files_tracked, 1);
         // Only the recent revision falls in the 90-day window.
-        assert_eq!(summary.total_revisions, 1, "old revision should be excluded");
+        assert_eq!(
+            summary.total_revisions, 1,
+            "old revision should be excluded"
+        );
         assert_eq!(summary.files[0].current_token_count, 100);
     }
 

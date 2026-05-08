@@ -99,12 +99,36 @@ mod tests {
         let conn = setup_db();
 
         // 3 calls for "my-server" across 2 sessions, 2 distinct tools
-        insert_row(&conn, "sess1", Some("my-server"), Some("tool-a"), "2026-01-01T00:00:00Z");
-        insert_row(&conn, "sess1", Some("my-server"), Some("tool-b"), "2026-01-02T00:00:00Z");
-        insert_row(&conn, "sess2", Some("my-server"), Some("tool-a"), "2026-01-03T00:00:00Z");
+        insert_row(
+            &conn,
+            "sess1",
+            Some("my-server"),
+            Some("tool-a"),
+            "2026-01-01T00:00:00Z",
+        );
+        insert_row(
+            &conn,
+            "sess1",
+            Some("my-server"),
+            Some("tool-b"),
+            "2026-01-02T00:00:00Z",
+        );
+        insert_row(
+            &conn,
+            "sess2",
+            Some("my-server"),
+            Some("tool-a"),
+            "2026-01-03T00:00:00Z",
+        );
 
         // 1 call for "other-server"
-        insert_row(&conn, "sess1", Some("other-server"), Some("tool-x"), "2026-01-01T00:00:00Z");
+        insert_row(
+            &conn,
+            "sess1",
+            Some("other-server"),
+            Some("tool-x"),
+            "2026-01-01T00:00:00Z",
+        );
 
         // row with no mcp_server (should be excluded)
         insert_row(&conn, "sess1", None, None, "2026-01-01T00:00:00Z");
@@ -128,7 +152,13 @@ mod tests {
     #[test]
     fn keys_are_lowercased() {
         let conn = setup_db();
-        insert_row(&conn, "s1", Some("My-Server"), Some("t"), "2026-01-01T00:00:00Z");
+        insert_row(
+            &conn,
+            "s1",
+            Some("My-Server"),
+            Some("t"),
+            "2026-01-01T00:00:00Z",
+        );
         let stats = fetch_usage_stats(&conn).unwrap();
         // Key should be lowercased
         assert!(stats.contains_key("my-server"));

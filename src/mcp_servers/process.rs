@@ -52,10 +52,7 @@ pub fn match_runtime(entry: &mut McpServerEntry, sys: &System) {
             continue;
         }
 
-        let prefix_match = our_args
-            .iter()
-            .zip(proc_args.iter())
-            .all(|(a, b)| a == b);
+        let prefix_match = our_args.iter().zip(proc_args.iter()).all(|(a, b)| a == b);
 
         if prefix_match {
             let parent_pid = proc.parent().map(|p| p.as_u32());

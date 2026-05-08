@@ -366,19 +366,19 @@ pub enum CostTrend {
 /// One depth bucket in the session-quality distribution.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct SessionDepthBucket {
-    pub label: String,           // "1", "2", "3-5", "6-10", "11-20", "21+"
+    pub label: String, // "1", "2", "3-5", "6-10", "11-20", "21+"
     pub min_turns: u32,
-    pub max_turns: Option<u32>,  // None for "21+"
+    pub max_turns: Option<u32>, // None for "21+"
     pub session_count: u32,
 }
 
 /// Per-category row in the cross-tab quality breakdown.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct SessionCategoryQualityRow {
-    pub category: String,        // 13-category slug or "uncategorized"
+    pub category: String, // 13-category slug or "uncategorized"
     pub session_count: u32,
-    pub abandoned_count: u32,    // sessions with turn_count <= 2
-    pub long_pause_count: u32,   // sessions with max inter-turn gap >= 30 min
+    pub abandoned_count: u32,  // sessions with turn_count <= 2
+    pub long_pause_count: u32, // sessions with max inter-turn gap >= 30 min
     pub avg_turns: f32,
     pub bucket_counts: Vec<u32>, // length 6, parallel to depth_buckets order
 }
@@ -399,7 +399,7 @@ pub struct SessionQualitySummary {
 /// One latency bucket in the hook telemetry histogram.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct HookLatencyBucket {
-    pub label: String,       // "<10ms", "10-50ms", "50-100ms", "100-500ms", "500ms+"
+    pub label: String, // "<10ms", "10-50ms", "50-100ms", "100-500ms", "500ms+"
     pub min_us: u64,
     pub max_us: Option<u64>, // None for "500ms+"
     pub count: u32,

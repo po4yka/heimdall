@@ -85,10 +85,7 @@ pub fn parse_codex_config_toml(path: &Path) -> Vec<McpServerEntry> {
 fn build_transport(name: &str, table: &toml::map::Map<String, toml::Value>) -> Transport {
     // If url is present, determine http vs sse via optional `type` field
     if let Some(url) = table.get("url").and_then(|v| v.as_str()) {
-        let transport_type = table
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("http");
+        let transport_type = table.get("type").and_then(|v| v.as_str()).unwrap_or("http");
         let clean_url = redact::redact_url_for_display(url);
         if transport_type == "sse" {
             return Transport::Sse { url: clean_url };
@@ -242,8 +239,14 @@ HOST = "localhost"
         let entries = parse_codex_config_toml(&path);
         assert_eq!(entries.len(), 1);
         let e = &entries[0];
-        assert!(matches!(e.env.get("API_KEY"), Some(RedactedValue::Secret { .. })));
-        assert!(matches!(e.env.get("HOST"), Some(RedactedValue::Plain { .. })));
+        assert!(matches!(
+            e.env.get("API_KEY"),
+            Some(RedactedValue::Secret { .. })
+        ));
+        assert!(matches!(
+            e.env.get("HOST"),
+            Some(RedactedValue::Plain { .. })
+        ));
     }
 
     #[test]

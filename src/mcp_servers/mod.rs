@@ -50,9 +50,17 @@ pub enum RuntimeState {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RedactedValue {
-    Plain { value: String },
-    Secret { masked: String },
-    EnvFromFile { path: String, exists: bool, bytes: u64 },
+    Plain {
+        value: String,
+    },
+    Secret {
+        masked: String,
+    },
+    EnvFromFile {
+        path: String,
+        exists: bool,
+        bytes: u64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -212,16 +220,19 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .map(|s| s.to_string());
-            claude_entries
-                .extend(discovery_claude::parse_project_mcp_json(root, label.as_deref()));
+            claude_entries.extend(discovery_claude::parse_project_mcp_json(
+                root,
+                label.as_deref(),
+            ));
         }
     }
 
     // --- Codex ~/.codex/config.toml ---
     if opts.include_codex_global {
         if let Some(ref home) = codex_home {
-            codex_entries
-                .extend(discovery_codex::parse_codex_config_toml(&home.join("config.toml")));
+            codex_entries.extend(discovery_codex::parse_codex_config_toml(
+                &home.join("config.toml"),
+            ));
         }
     }
 
@@ -244,8 +255,7 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
 
     // Join usage into entries and compute dormancy
     let dormant_days = opts.dormant_threshold_days;
-    let threshold_dt =
-        chrono::Utc::now() - chrono::Duration::days(dormant_days as i64);
+    let threshold_dt = chrono::Utc::now() - chrono::Duration::days(dormant_days as i64);
 
     for entry in claude_entries.iter_mut().chain(codex_entries.iter_mut()) {
         let key = entry.name.to_lowercase();
@@ -285,8 +295,7 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
     // --- Live process matching ---
     if opts.probe_processes {
         let sys = sysinfo::System::new_with_specifics(
-            sysinfo::RefreshKind::new()
-                .with_processes(sysinfo::ProcessRefreshKind::new()),
+            sysinfo::RefreshKind::new().with_processes(sysinfo::ProcessRefreshKind::new()),
         );
         for entry in claude_entries.iter_mut().chain(codex_entries.iter_mut()) {
             process::match_runtime(entry, &sys);

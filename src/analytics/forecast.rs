@@ -44,7 +44,11 @@ pub(crate) fn compute_forecast_from_days(
 
     // Rolling means.
     let rolling_7d_avg_nanos = if n >= 7 {
-        days[(n - 7) as usize..].iter().map(|d| d.cost_nanos).sum::<i64>() / 7
+        days[(n - 7) as usize..]
+            .iter()
+            .map(|d| d.cost_nanos)
+            .sum::<i64>()
+            / 7
     } else {
         days.iter().map(|d| d.cost_nanos).sum::<i64>() / n
     };
@@ -91,7 +95,10 @@ fn fit_ols(nonzero: &[(f64, f64)]) -> Option<CostRegression> {
     let n = nonzero.len() as f64;
     let mean_x: f64 = nonzero.iter().map(|(x, _)| x).sum::<f64>() / n;
     let mean_y: f64 = nonzero.iter().map(|(_, y)| y).sum::<f64>() / n;
-    let ss_xy: f64 = nonzero.iter().map(|(x, y)| (x - mean_x) * (y - mean_y)).sum();
+    let ss_xy: f64 = nonzero
+        .iter()
+        .map(|(x, y)| (x - mean_x) * (y - mean_y))
+        .sum();
     let ss_xx: f64 = nonzero.iter().map(|(x, _)| (x - mean_x).powi(2)).sum();
     let ss_yy: f64 = nonzero.iter().map(|(_, y)| (y - mean_y).powi(2)).sum();
 
@@ -175,13 +182,18 @@ mod tests {
         assert!(slope.abs() < 1_000, "slope should be ~0, got {slope}");
         let expected_month = 30 * nanos;
         let delta = (summary.projected_month_nanos - expected_month).abs();
-        assert!(delta < expected_month / 100, "projected {}", summary.projected_month_nanos);
+        assert!(
+            delta < expected_month / 100,
+            "projected {}",
+            summary.projected_month_nanos
+        );
     }
 
     #[test]
     fn rising_history_rising_trend() {
         // slope=10M, avg≈155M → slope/avg≈6.5% > 5% threshold
-        let summary = compute_forecast_from_days(days_linear(10_000_000, 10_000_000, 30), String::new());
+        let summary =
+            compute_forecast_from_days(days_linear(10_000_000, 10_000_000, 30), String::new());
         assert_eq!(summary.trend, CostTrend::Rising);
         let reg = summary.regression.as_ref().expect("should have regression");
         assert!(reg.slope_nanos_per_day > 0);
@@ -191,13 +203,17 @@ mod tests {
     #[test]
     fn falling_history_falling_trend() {
         // slope=-20M, avg≈310M → slope/avg≈-6.5% < -5% threshold
-        let summary = compute_forecast_from_days(days_linear(600_000_000, -20_000_000, 30), String::new());
+        let summary =
+            compute_forecast_from_days(days_linear(600_000_000, -20_000_000, 30), String::new());
         assert_eq!(summary.trend, CostTrend::Falling);
     }
 
     #[test]
     fn sparse_history_insufficient() {
-        let days = sparse_days(30, &[(0, 1_000_000_000), (15, 2_000_000_000), (29, 500_000_000)]);
+        let days = sparse_days(
+            30,
+            &[(0, 1_000_000_000), (15, 2_000_000_000), (29, 500_000_000)],
+        );
         let summary = compute_forecast_from_days(days, String::new());
         assert_eq!(summary.trend, CostTrend::Insufficient);
         assert!(summary.regression.is_none());
@@ -217,7 +233,8 @@ mod tests {
     #[test]
     fn negative_slope_projection_clamped_to_zero() {
         // Very steep decline → projection should never go negative
-        let summary = compute_forecast_from_days(days_linear(1_000_000_000, -50_000_000, 30), String::new());
+        let summary =
+            compute_forecast_from_days(days_linear(1_000_000_000, -50_000_000, 30), String::new());
         assert!(summary.projected_month_nanos >= 0);
     }
 }

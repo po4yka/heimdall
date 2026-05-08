@@ -16,7 +16,9 @@ use chrono::Utc;
 use tracing::warn;
 
 use crate::config::load_config_resolved;
-use crate::scanner::db::{HookEventRow, LiveEventRow, init_db, insert_hook_event, insert_live_event, open_db};
+use crate::scanner::db::{
+    HookEventRow, LiveEventRow, init_db, insert_hook_event, insert_live_event, open_db,
+};
 
 /// Entry point for the `heimdall-hook` binary, extracted for testability.
 ///
@@ -62,9 +64,14 @@ pub fn main_impl() {
 
     // 4. Record telemetry (always, swallow errors).
     let latency_us = started.elapsed().as_micros().min(i64::MAX as u128) as i64;
-    if let Err(e) =
-        write_hook_telemetry(received_at, outcome, latency_us, tool_name, session_id, bypass_match)
-    {
+    if let Err(e) = write_hook_telemetry(
+        received_at,
+        outcome,
+        latency_us,
+        tool_name,
+        session_id,
+        bypass_match,
+    ) {
         warn!("heimdall-hook telemetry write failed: {}", e);
     }
 

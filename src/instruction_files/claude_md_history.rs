@@ -66,11 +66,8 @@ pub fn refresh_claude_md_history(
         }
 
         // Find the most recent commit already stored so we can skip it.
-        let since_sha = crate::scanner::db::last_claude_md_commit_sha(
-            conn,
-            &repo_root_str,
-            &rel_path_str,
-        );
+        let since_sha =
+            crate::scanner::db::last_claude_md_commit_sha(conn, &repo_root_str, &rel_path_str);
 
         let revs = walk_claude_md_history(
             &file.repo_root,

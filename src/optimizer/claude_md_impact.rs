@@ -40,10 +40,8 @@ impl Detector for ClaudeMdImpactDetector {
             // Estimated monthly waste: extra tokens introduced in 30d × avg cost-per-session
             // scaled by their fraction of current token budget × 30 days.
             let waste = if file.current_token_count > 0 {
-                let delta_fraction =
-                    file.token_delta_30d as f64 / file.current_token_count as f64;
-                ((delta_fraction * file.avg_cost_per_session_30d_nanos as f64 * 30.0) as i64)
-                    .max(0)
+                let delta_fraction = file.token_delta_30d as f64 / file.current_token_count as f64;
+                ((delta_fraction * file.avg_cost_per_session_30d_nanos as f64 * 30.0) as i64).max(0)
             } else {
                 0
             };
@@ -161,8 +159,7 @@ mod tests {
 
         // Insert history rows — one per day with increasing token counts.
         for day_offset in 0i64..6 {
-            let ts_epoch =
-                (now - chrono::Duration::days(day_offset)).timestamp();
+            let ts_epoch = (now - chrono::Duration::days(day_offset)).timestamp();
             conn.execute(
                 "INSERT OR IGNORE INTO claude_md_history
                  (project_path, file_path, commit_sha, commit_ts, byte_size, token_count, line_count)
@@ -183,6 +180,10 @@ mod tests {
         let detector = ClaudeMdImpactDetector::new();
         // The detector must not panic regardless of whether a finding fires.
         let result = detector.run(&conn);
-        assert!(result.is_ok(), "detector should not error: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "detector should not error: {:?}",
+            result.err()
+        );
     }
 }

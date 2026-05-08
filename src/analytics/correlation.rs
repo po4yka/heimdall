@@ -46,10 +46,7 @@ mod tests {
         let xs: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let ys: Vec<f64> = vec![2.0, 4.0, 6.0, 8.0, 10.0];
         let r = pearson(&xs, &ys).expect("should return Some");
-        assert!(
-            (r - 1.0_f32).abs() < 0.001,
-            "expected r ≈ 1.0, got {r}"
-        );
+        assert!((r - 1.0_f32).abs() < 0.001, "expected r ≈ 1.0, got {r}");
     }
 
     #[test]
@@ -57,10 +54,7 @@ mod tests {
         let xs: Vec<f64> = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         let ys: Vec<f64> = vec![10.0, 8.0, 6.0, 4.0, 2.0];
         let r = pearson(&xs, &ys).expect("should return Some");
-        assert!(
-            (r + 1.0_f32).abs() < 0.001,
-            "expected r ≈ -1.0, got {r}"
-        );
+        assert!((r + 1.0_f32).abs() < 0.001, "expected r ≈ -1.0, got {r}");
     }
 
     #[test]

@@ -177,8 +177,7 @@ pub fn walk_claude_md_history(
         };
 
         let byte_size = text.len() as i64;
-        let token_count =
-            crate::instruction_files::tokens::count_text(&text, tokenizer) as i64;
+        let token_count = crate::instruction_files::tokens::count_text(&text, tokenizer) as i64;
         let line_count = text.lines().count() as i64;
 
         revisions.push(ClaudeMdRevision {
@@ -206,28 +205,32 @@ pub fn discover_tracked_claude_md(
     conn: &Connection,
     projects_override: &[PathBuf],
 ) -> Vec<TrackedClaudeMd> {
-    let project_paths =
-        crate::skills::projects::discover_project_paths(conn, projects_override);
+    let project_paths = crate::skills::projects::discover_project_paths(conn, projects_override);
 
     let mut seen: HashSet<(PathBuf, PathBuf)> = HashSet::new();
     let mut results: Vec<TrackedClaudeMd> = Vec::new();
 
     // Helper that adds a candidate if tracked and not yet seen.
-    let try_add =
-        |repo_root: PathBuf, rel_path: PathBuf, label: String, seen: &mut HashSet<(PathBuf, PathBuf)>, results: &mut Vec<TrackedClaudeMd>| {
-            if !git_file_is_tracked(&repo_root, &rel_path) {
-                return;
-            }
-            let canonical = repo_root.canonicalize().unwrap_or_else(|_| repo_root.clone());
-            let key = (canonical, rel_path.clone());
-            if seen.insert(key) {
-                results.push(TrackedClaudeMd {
-                    repo_root,
-                    rel_path,
-                    label,
-                });
-            }
-        };
+    let try_add = |repo_root: PathBuf,
+                   rel_path: PathBuf,
+                   label: String,
+                   seen: &mut HashSet<(PathBuf, PathBuf)>,
+                   results: &mut Vec<TrackedClaudeMd>| {
+        if !git_file_is_tracked(&repo_root, &rel_path) {
+            return;
+        }
+        let canonical = repo_root
+            .canonicalize()
+            .unwrap_or_else(|_| repo_root.clone());
+        let key = (canonical, rel_path.clone());
+        if seen.insert(key) {
+            results.push(TrackedClaudeMd {
+                repo_root,
+                rel_path,
+                label,
+            });
+        }
+    };
 
     // Per-project files.
     for project in &project_paths {

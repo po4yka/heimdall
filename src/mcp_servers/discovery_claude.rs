@@ -30,14 +30,9 @@ pub fn parse_claude_dotjson(path: &Path) -> (Vec<McpServerEntry>, Vec<McpServerE
     // Top-level mcpServers
     if let Some(servers) = root.get("mcpServers").and_then(|v| v.as_object()) {
         for (name, val) in servers {
-            if let Some(entry) = parse_server_entry(
-                name,
-                val,
-                ScopeKind::ClaudeUserGlobal,
-                path,
-                None,
-                None,
-            ) {
+            if let Some(entry) =
+                parse_server_entry(name, val, ScopeKind::ClaudeUserGlobal, path, None, None)
+            {
                 global.push(entry);
             }
         }
@@ -163,10 +158,7 @@ pub fn parse_server_entry(
     project_label: Option<String>,
     managed_by: Option<&'static str>,
 ) -> Option<McpServerEntry> {
-    let transport_type = val
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("stdio");
+    let transport_type = val.get("type").and_then(|v| v.as_str()).unwrap_or("stdio");
 
     let transport = match transport_type {
         "http" => {

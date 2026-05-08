@@ -179,7 +179,11 @@ fn short_session(session_id: &str) -> &str {
         .split_once(':')
         .map(|(_, raw)| {
             let raw = raw.trim_end_matches(|c: char| !c.is_alphanumeric());
-            if raw.len() > 8 { &raw[raw.len() - 8..] } else { raw }
+            if raw.len() > 8 {
+                &raw[raw.len() - 8..]
+            } else {
+                raw
+            }
         })
         .unwrap_or(session_id)
 }
@@ -536,7 +540,9 @@ mod tests {
         // 2 edits < threshold of 3
         for i in 0..2u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((2 - i) * 100),
+                &conn,
+                "claude:s1",
+                &ts((2 - i) * 100),
                 "Edit",
                 Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#),
                 false,
@@ -551,7 +557,9 @@ mod tests {
         // 4 reads < threshold of 5
         for i in 0..4u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((4 - i) * 100),
+                &conn,
+                "claude:s1",
+                &ts((4 - i) * 100),
                 "Read",
                 Some(r#"{"file_path":"/src/foo.rs"}"#),
                 false,
@@ -570,7 +578,9 @@ mod tests {
         // 5 reads → low (count == 5, ≤7, 0 errors)
         for i in 0..5u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((5 - i) * 100),
+                &conn,
+                "claude:s1",
+                &ts((5 - i) * 100),
                 "Read",
                 Some(r#"{"file_path":"/src/foo.rs"}"#),
                 false,
@@ -579,7 +589,11 @@ mod tests {
         let findings = det().run(&conn).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Low);
-        assert!(findings[0].title.contains("5 times"), "{}", findings[0].title);
+        assert!(
+            findings[0].title.contains("5 times"),
+            "{}",
+            findings[0].title
+        );
         assert!(findings[0].estimated_monthly_waste_nanos > 0);
     }
 
@@ -588,7 +602,9 @@ mod tests {
         let (_dir, conn) = empty_db();
         for i in 0..3u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((3 - i) * 100),
+                &conn,
+                "claude:s1",
+                &ts((3 - i) * 100),
                 "Edit",
                 Some(r#"{"file_path":"/src/bar.rs","old_string":"x","new_string":"y"}"#),
                 false,
@@ -604,7 +620,9 @@ mod tests {
         let (_dir, conn) = empty_db();
         for i in 0..8u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((8 - i) * 100),
+                &conn,
+                "claude:s1",
+                &ts((8 - i) * 100),
                 "Edit",
                 Some(r#"{"file_path":"/src/bar.rs","old_string":"x","new_string":"y"}"#),
                 false,
@@ -621,7 +639,9 @@ mod tests {
         // 4 edits, 2 with is_error — should upgrade to High (errors >= 2)
         for i in 0..4u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((4 - i) * 100),
+                &conn,
+                "claude:s1",
+                &ts((4 - i) * 100),
                 "Edit",
                 Some(r#"{"file_path":"/src/baz.rs","old_string":"a","new_string":"b"}"#),
                 i < 2, // first two errored
@@ -643,7 +663,9 @@ mod tests {
         // 4 edits, 1 error — Medium (errors >= 1)
         for i in 0..4u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((4 - i) * 100),
+                &conn,
+                "claude:s1",
+                &ts((4 - i) * 100),
                 "Edit",
                 Some(r#"{"file_path":"/src/qux.rs","old_string":"a","new_string":"b"}"#),
                 i == 0,
@@ -652,7 +674,11 @@ mod tests {
         let findings = det().run(&conn).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Medium);
-        assert!(findings[0].title.contains("1 error"), "{}", findings[0].title);
+        assert!(
+            findings[0].title.contains("1 error"),
+            "{}",
+            findings[0].title
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -665,7 +691,11 @@ mod tests {
         // Commands that share the same first-60-char lowercased prefix collapse into one group.
         // "cargo build --release --target x86_64-unknown-linux-musl -j4" is exactly 60 chars.
         let prefix = "cargo build --release --target x86_64-unknown-linux-musl -j4";
-        assert_eq!(prefix.len(), 60, "prefix must be exactly 60 chars for this test");
+        assert_eq!(
+            prefix.len(),
+            60,
+            "prefix must be exactly 60 chars for this test"
+        );
         let cmds = [
             prefix.to_string(),
             format!("{prefix} 2>&1"),
@@ -675,7 +705,9 @@ mod tests {
         ];
         for (i, cmd) in cmds.iter().enumerate() {
             insert_invocation(
-                &conn, "claude:s1", &ts((5 - i as u32) * 100),
+                &conn,
+                "claude:s1",
+                &ts((5 - i as u32) * 100),
                 "Bash",
                 Some(&format!(r#"{{"command":"{cmd}"}}"#)),
                 false,
@@ -702,7 +734,9 @@ mod tests {
         // 5 calls to the same MCP tool (different args) → 1 finding.
         for i in 0..5u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((5 - i) * 100),
+                &conn,
+                "claude:s1",
+                &ts((5 - i) * 100),
                 "mcp__github__get_pr",
                 Some(&format!(r#"{{"pr_number":{i}}}"#)),
                 false,
@@ -727,16 +761,28 @@ mod tests {
         // Edit → Bash → Edit on same file = 1 cycle → Low.
         // Higher ts() offset = older timestamp, ensuring chronological order.
         insert_invocation(
-            &conn, "claude:s1", &ts(300), "Edit",
-            Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#), false,
+            &conn,
+            "claude:s1",
+            &ts(300),
+            "Edit",
+            Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#),
+            false,
         );
         insert_invocation(
-            &conn, "claude:s1", &ts(200), "Bash",
-            Some(r#"{"command":"cargo check"}"#), false,
+            &conn,
+            "claude:s1",
+            &ts(200),
+            "Bash",
+            Some(r#"{"command":"cargo check"}"#),
+            false,
         );
         insert_invocation(
-            &conn, "claude:s1", &ts(100), "Edit",
-            Some(r#"{"file_path":"/src/foo.rs","old_string":"b","new_string":"c"}"#), false,
+            &conn,
+            "claude:s1",
+            &ts(100),
+            "Edit",
+            Some(r#"{"file_path":"/src/foo.rs","old_string":"b","new_string":"c"}"#),
+            false,
         );
 
         let findings = det().run(&conn).unwrap();
@@ -755,8 +801,12 @@ mod tests {
         // Back-to-back edits with no intermediate tool → no cycle.
         for i in 0..3u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((3 - i) * 100), "Edit",
-                Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#), false,
+                &conn,
+                "claude:s1",
+                &ts((3 - i) * 100),
+                "Edit",
+                Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#),
+                false,
             );
         }
         let findings = det().run(&conn).unwrap();
@@ -764,22 +814,50 @@ mod tests {
             .iter()
             .filter(|f| f.title.contains("rewritten across"))
             .collect();
-        assert!(cycles.is_empty(), "no cycle without intermediate: {:?}", cycles);
+        assert!(
+            cycles.is_empty(),
+            "no cycle without intermediate: {:?}",
+            cycles
+        );
     }
 
     #[test]
     fn rework_cycle_per_file_isolation() {
         let (_dir, conn) = empty_db();
         // foo.rs has a cycle; bar.rs does not.
-        insert_invocation(&conn, "claude:s1", &ts(400), "Edit",
-            Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#), false);
-        insert_invocation(&conn, "claude:s1", &ts(300), "Bash",
-            Some(r#"{"command":"cargo check"}"#), false);
-        insert_invocation(&conn, "claude:s1", &ts(200), "Edit",
-            Some(r#"{"file_path":"/src/foo.rs","old_string":"b","new_string":"c"}"#), false);
+        insert_invocation(
+            &conn,
+            "claude:s1",
+            &ts(400),
+            "Edit",
+            Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#),
+            false,
+        );
+        insert_invocation(
+            &conn,
+            "claude:s1",
+            &ts(300),
+            "Bash",
+            Some(r#"{"command":"cargo check"}"#),
+            false,
+        );
+        insert_invocation(
+            &conn,
+            "claude:s1",
+            &ts(200),
+            "Edit",
+            Some(r#"{"file_path":"/src/foo.rs","old_string":"b","new_string":"c"}"#),
+            false,
+        );
         // bar.rs: single edit only
-        insert_invocation(&conn, "claude:s1", &ts(100), "Edit",
-            Some(r#"{"file_path":"/src/bar.rs","old_string":"x","new_string":"y"}"#), false);
+        insert_invocation(
+            &conn,
+            "claude:s1",
+            &ts(100),
+            "Edit",
+            Some(r#"{"file_path":"/src/bar.rs","old_string":"x","new_string":"y"}"#),
+            false,
+        );
 
         let findings = det().run(&conn).unwrap();
         let cycles: Vec<_> = findings
@@ -797,13 +875,21 @@ mod tests {
         // Offsets: edit0=700, bash0=600, edit1=500, bash1=400, edit2=300, bash2=200, edit3=100
         for i in 0..4u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts(700 - i * 200), "Edit",
-                Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#), false,
+                &conn,
+                "claude:s1",
+                &ts(700 - i * 200),
+                "Edit",
+                Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#),
+                false,
             );
             if i < 3 {
                 insert_invocation(
-                    &conn, "claude:s1", &ts(700 - i * 200 - 100), "Bash",
-                    Some(r#"{"command":"cargo check"}"#), false,
+                    &conn,
+                    "claude:s1",
+                    &ts(700 - i * 200 - 100),
+                    "Bash",
+                    Some(r#"{"command":"cargo check"}"#),
+                    false,
                 );
             }
         }
@@ -826,7 +912,10 @@ mod tests {
         for sess in ["claude:s1", "claude:s2"] {
             for i in 0..3u32 {
                 insert_invocation(
-                    &conn, sess, &ts((3 - i) * 100), "Edit",
+                    &conn,
+                    sess,
+                    &ts((3 - i) * 100),
+                    "Edit",
                     Some(r#"{"file_path":"/src/foo.rs","old_string":"a","new_string":"b"}"#),
                     false,
                 );
@@ -838,7 +927,11 @@ mod tests {
             .iter()
             .filter(|f| f.title.contains("invoked"))
             .collect();
-        assert_eq!(repeat_findings.len(), 2, "should have one finding per session");
+        assert_eq!(
+            repeat_findings.len(),
+            2,
+            "should have one finding per session"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -851,8 +944,12 @@ mod tests {
         // 100 invocations of an unrecognised tool — no input extraction rule.
         for i in 0..100u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((100 - i) * 60),
-                "UnknownTool", Some(r#"{"foo":"bar"}"#), false,
+                &conn,
+                "claude:s1",
+                &ts((100 - i) * 60),
+                "UnknownTool",
+                Some(r#"{"foo":"bar"}"#),
+                false,
             );
         }
         assert!(det().run(&conn).unwrap().is_empty());
@@ -863,8 +960,12 @@ mod tests {
         let (_dir, conn) = empty_db();
         for i in 0..5u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((5 - i) * 100),
-                "Edit", Some("{not valid json"), false,
+                &conn,
+                "claude:s1",
+                &ts((5 - i) * 100),
+                "Edit",
+                Some("{not valid json"),
+                false,
             );
         }
         // No parseable file_path → all skipped.
@@ -877,8 +978,12 @@ mod tests {
         insert_sessions(&conn, 1);
         for i in 0..5u32 {
             insert_invocation(
-                &conn, "claude:session_0", &ts((5 - i) * 100),
-                "Read", None, false,
+                &conn,
+                "claude:session_0",
+                &ts((5 - i) * 100),
+                "Read",
+                None,
+                false,
             );
         }
         assert!(det().run(&conn).unwrap().is_empty());
@@ -893,8 +998,12 @@ mod tests {
         let (_dir, conn) = empty_db();
         for i in 0..5u32 {
             insert_invocation(
-                &conn, "claude:s1", &ts((5 - i) * 100),
-                "Read", Some(r#"{"file_path":"/src/x.rs"}"#), false,
+                &conn,
+                "claude:s1",
+                &ts((5 - i) * 100),
+                "Read",
+                Some(r#"{"file_path":"/src/x.rs"}"#),
+                false,
             );
         }
         let findings = det().run(&conn).unwrap();
