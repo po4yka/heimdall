@@ -57,7 +57,7 @@ function supportValue(signal: DepletionForecastSignal): string {
 
 export function DepletionForecastCard({
   forecast,
-  title = 'Depletion Forecast',
+  title = 'Depletion forecast',
 }: {
   forecast: DepletionForecast;
   title?: string;

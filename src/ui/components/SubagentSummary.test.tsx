@@ -38,7 +38,7 @@ describe('SubagentSummary', () => {
 
     const text = collectText(SubagentSummary({ summary })).join(' ');
 
-    expect(text).toContain('Subagent Breakdown');
+    expect(text).toContain('Subagent breakdown');
     expect(text).toContain('Parent:');
     expect(text).toContain('Subagent:');
     expect(text).toContain('unique agents');

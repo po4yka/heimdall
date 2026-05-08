@@ -37,7 +37,7 @@ export function ReconciliationBlock({ reconciliation }: ReconciliationBlockProps
 
   return (
     <div class="card card-flat bento-full">
-      <h2>OpenAI Org Usage Reconciliation</h2>
+      <h2>OpenAI org usage reconciliation</h2>
       <div class="muted" style={{ marginBottom: '12px' }}>
         Official OpenAI organization usage buckets for Codex-compatible models over the last {reconciliation.lookback_days} days.
       </div>
@@ -54,7 +54,7 @@ export function ReconciliationBlock({ reconciliation }: ReconciliationBlockProps
           </div>
           <div class="stat-card">
             <div class="stat-content">
-              <div class="stat-label">Local Estimated Cost</div>
+              <div class="stat-label">Local estimated cost</div>
               <div class="stat-value cost-value" style={{ fontSize: '20px' }}>
                 ${reconciliation.estimated_local_cost.toFixed(4)}
               </div>
@@ -63,7 +63,7 @@ export function ReconciliationBlock({ reconciliation }: ReconciliationBlockProps
           </div>
           <div class="stat-card">
             <div class="stat-content">
-              <div class="stat-label">Org Usage Cost</div>
+              <div class="stat-label">Org usage cost</div>
               <div class="stat-value cost-value" style={{ fontSize: '20px' }}>
                 ${reconciliation.api_usage_cost.toFixed(4)}
               </div>
@@ -81,7 +81,7 @@ export function ReconciliationBlock({ reconciliation }: ReconciliationBlockProps
           </div>
           <div class="stat-card">
             <div class="stat-content">
-              <div class="stat-label">API Tokens</div>
+              <div class="stat-label">API tokens</div>
               <div class="stat-value" style={{ fontSize: '16px' }}>
                 {reconciliation.api_input_tokens.toLocaleString()} / {reconciliation.api_output_tokens.toLocaleString()}
               </div>
@@ -90,7 +90,7 @@ export function ReconciliationBlock({ reconciliation }: ReconciliationBlockProps
           </div>
           <div class="stat-card">
             <div class="stat-content">
-              <div class="stat-label">Cached Input + Requests</div>
+              <div class="stat-label">Cached input + requests</div>
               <div class="stat-value" style={{ fontSize: '16px' }}>
                 {reconciliation.api_cached_input_tokens.toLocaleString()} / {reconciliation.api_requests.toLocaleString()}
               </div>

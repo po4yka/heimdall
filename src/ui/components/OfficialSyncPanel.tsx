@@ -61,7 +61,7 @@ export function OfficialSyncPanel({ summary, providerFilter }: OfficialSyncPanel
             marginBottom: '8px',
           }}
         >
-          <div class="stat-label">Official History</div>
+          <div class="stat-label">Official history</div>
           {summary.available && (
             <button
               onClick={() => {

@@ -73,7 +73,7 @@ export function CacheEfficiencyCard({
   return (
     <div class="card stat-card" title={tooltip}>
       <div class="stat-content">
-        <div class="stat-label">Cache Hit Rate</div>
+        <div class="stat-label">Cache hit rate</div>
         <div
           class="stat-value"
           style={{ fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em' }}

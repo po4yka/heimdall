@@ -842,7 +842,7 @@ export function renderDashboardView(
   const chartTitleEl = $('daily-chart-title');
   if (chartTitleEl) {
     chartTitleEl.textContent =
-      (bucketIsWeek ? 'Weekly Token Usage - ' : 'Daily Token Usage - ') +
+      (bucketIsWeek ? 'Weekly token usage – ' : 'Daily token usage – ') +
       RANGE_LABELS[selectedRange.value] +
       providerLabel;
   }

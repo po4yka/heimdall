@@ -113,7 +113,7 @@ function LimitHitSection({ analysis }: { analysis: LimitHitAnalysis }) {
 
 export function PredictiveInsightsCard({
   insights,
-  title = 'Predictive Signals',
+  title = 'Predictive signals',
 }: {
   insights: PredictiveInsights;
   title?: string;

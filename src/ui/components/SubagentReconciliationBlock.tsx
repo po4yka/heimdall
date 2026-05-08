@@ -42,7 +42,7 @@ export function SubagentReconciliationBlock({ reconciliation }: SubagentReconcil
   return (
     <div class="card card-flat bento-full">
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0 }}>Subagent Cost Reconciliation</h2>
+        <h2 style={{ margin: 0 }}>Subagent cost reconciliation</h2>
         <span
           style={{
             fontFamily: 'var(--font-mono)',
@@ -72,7 +72,7 @@ export function SubagentReconciliationBlock({ reconciliation }: SubagentReconcil
         </div>
         <div class="stat-card">
           <div class="stat-content">
-            <div class="stat-label">Agent-Sessions Cost</div>
+            <div class="stat-label">Agent-sessions cost</div>
             <div class="stat-value cost-value" style={{ fontSize: '20px' }}>
               ${reconciliation.agent_sessions_cost.toFixed(4)}
             </div>
@@ -81,7 +81,7 @@ export function SubagentReconciliationBlock({ reconciliation }: SubagentReconcil
         </div>
         <div class="stat-card">
           <div class="stat-content">
-            <div class="stat-label">Sidechain Turns Cost</div>
+            <div class="stat-label">Sidechain turns cost</div>
             <div class="stat-value cost-value" style={{ fontSize: '20px' }}>
               ${reconciliation.turns_subagent_cost.toFixed(4)}
             </div>
@@ -99,7 +99,7 @@ export function SubagentReconciliationBlock({ reconciliation }: SubagentReconcil
         </div>
         <div class="stat-card">
           <div class="stat-content">
-            <div class="stat-label">Spawns / Sidechain Turns</div>
+            <div class="stat-label">Spawns / sidechain turns</div>
             <div class="stat-value" style={{ fontSize: '16px' }}>
               {reconciliation.agent_session_rows.toLocaleString()} / {reconciliation.subagent_turn_rows.toLocaleString()}
             </div>
@@ -108,7 +108,7 @@ export function SubagentReconciliationBlock({ reconciliation }: SubagentReconcil
         </div>
         <div class="stat-card">
           <div class="stat-content">
-            <div class="stat-label">Distinct Agents</div>
+            <div class="stat-label">Distinct agents</div>
             <div class="stat-value" style={{ fontSize: '16px' }}>
               {reconciliation.distinct_agents_in_agent_sessions.toLocaleString()} / {reconciliation.distinct_agents_in_turns.toLocaleString()}
             </div>

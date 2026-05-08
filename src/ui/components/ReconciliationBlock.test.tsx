@@ -30,7 +30,7 @@ describe('ReconciliationBlock', () => {
     const vnode = ReconciliationBlock({ reconciliation });
     const text = collectText(vnode).join(' ');
 
-    expect(text).toContain('OpenAI Org Usage Reconciliation');
+    expect(text).toContain('OpenAI org usage reconciliation');
     expect(text).toContain('2026-04-13');
     expect(text).toContain('2026-04-20');
     expect(text).toContain('1.2300');

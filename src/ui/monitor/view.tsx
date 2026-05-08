@@ -172,7 +172,7 @@ function ProviderLaneCard({ provider }: { provider: LiveMonitorProvider }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: '12px' }}>
         <div>
-          <div class="stat-label">Weekly Projection</div>
+          <div class="stat-label">Weekly projection</div>
           <div class="stat-value" style={{ fontSize: '20px' }}>
             {provider.projected_weekly_spend_usd != null ? fmtCostCompact(provider.projected_weekly_spend_usd) : '—'}
           </div>
@@ -210,7 +210,7 @@ function BlockPanel({ block, density }: { block: LiveMonitorBlock; density: Live
   return (
     <div class="card stat-card" style={{ padding: d.padding }}>
       <div class="stat-content">
-        <div class="stat-label">Active Block</div>
+        <div class="stat-label">Active block</div>
         <div class="stat-value">{fmt(totalTokens)}</div>
         <div class="stat-sub" style={{ fontSize: d.fontSize }}>
           {block.entry_count} entries · ends {new Date(block.end).toLocaleTimeString()}
@@ -253,7 +253,7 @@ function ContextPanel({ data, density }: { data: LiveMonitorContextWindow; densi
   return (
     <div class="card stat-card" style={{ padding: d.padding }}>
       <div class="stat-content">
-        <div class="stat-label">Context Window</div>
+        <div class="stat-label">Context window</div>
         <div class="stat-value">{fmt(data.total_input_tokens)}</div>
         <div class="stat-sub" style={{ fontSize: d.fontSize }}>
           of {fmt(data.context_window_size)} · {(data.pct * 100).toFixed(1)}%
@@ -278,7 +278,7 @@ function SessionPanel({ provider, density }: { provider: LiveMonitorProvider; de
   return (
     <div class="card stat-card" style={{ padding: d.padding }}>
       <div class="stat-content">
-        <div class="stat-label">Recent Session</div>
+        <div class="stat-label">Recent session</div>
         <div class="stat-value" style={{ fontSize: '22px' }}>{provider.title}</div>
         <div class="stat-sub" style={{ fontSize: d.fontSize }}>{session.display_name}</div>
         <div class="stat-sub" style={{ fontSize: d.fontSize }}>
@@ -306,7 +306,7 @@ function QuotaSuggestionsPanel({
   return (
     <div class="card stat-card" style={{ padding: d.padding }}>
       <div class="stat-content">
-        <div class="stat-label">Suggested Quotas</div>
+        <div class="stat-label">Suggested quotas</div>
         <div class="stat-sub" style={{ fontSize: d.fontSize }}>
           {suggestions.sample_label}
         </div>
@@ -316,7 +316,7 @@ function QuotaSuggestionsPanel({
               <span class="stat-sub" style={{ fontSize: d.fontSize }}>
                 {level.label}
                 {level.key === suggestions.recommended_key && (
-                  <span style={{ marginLeft: '6px', color: 'var(--success)' }}>[RECOMMENDED]</span>
+                  <span style={{ marginLeft: '6px', color: 'var(--success)' }}>[Recommended]</span>
                 )}
               </span>
               <span class="stat-value" style={{ fontSize: '18px' }}>{fmt(level.limit_tokens)}</span>

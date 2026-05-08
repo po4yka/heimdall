@@ -92,14 +92,14 @@ describe('StatsCards', () => {
       },
     });
 
-    expect(collectText(withForecast).join(' ')).toContain('Depletion Forecast');
+    expect(collectText(withForecast).join(' ')).toContain('Depletion forecast');
     expect(collectText(withForecast).join(' ')).toContain('Billing block');
     expect(collectText(withForecast).join(' ')).toContain('Runs out in');
     expect(collectText(withForecast).join(' ')).toContain('Runout 11:15 UTC');
-    expect(collectText(withForecast).join(' ')).toContain('Predictive Signals');
+    expect(collectText(withForecast).join(' ')).toContain('Predictive signals');
     expect(collectText(withForecast).join(' ')).toContain('Rolling 1h burn');
     expect(collectText(withForecast).join(' ')).toContain('Limit-hit risk');
-    expect(collectText(withoutForecast).join(' ')).not.toContain('Depletion Forecast');
-    expect(collectText(withoutForecast).join(' ')).not.toContain('Predictive Signals');
+    expect(collectText(withoutForecast).join(' ')).not.toContain('Depletion forecast');
+    expect(collectText(withoutForecast).join(' ')).not.toContain('Predictive signals');
   });
 });

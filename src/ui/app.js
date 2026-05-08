@@ -9001,7 +9001,7 @@
         el.id = "daily-chart-card";
         el.className = "card bento-2 chart-card";
         if (!el.querySelector("#daily-chart-title")) {
-          el.innerHTML = '<h2 id="daily-chart-title">Daily Token Usage</h2><div class="chart-wrap tall"><div id="chart-daily"></div></div>';
+          el.innerHTML = '<h2 id="daily-chart-title">Daily token usage</h2><div class="chart-wrap tall"><div id="chart-daily"></div></div>';
         }
       }
     },
@@ -13341,7 +13341,7 @@
             marginBottom: "8px"
           },
           children: [
-            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Official History" }),
+            /* @__PURE__ */ u4("div", { class: "stat-label", children: "Official history" }),
             summary.available && /* @__PURE__ */ u4(
               "button",
               {
@@ -13763,7 +13763,7 @@
       ] }) });
     }
     return /* @__PURE__ */ u4("div", { class: "card card-flat bento-full", children: [
-      /* @__PURE__ */ u4("h2", { children: "OpenAI Org Usage Reconciliation" }),
+      /* @__PURE__ */ u4("h2", { children: "OpenAI org usage reconciliation" }),
       /* @__PURE__ */ u4("div", { class: "muted", style: { marginBottom: "12px" }, children: [
         "Official OpenAI organization usage buckets for Codex-compatible models over the last ",
         reconciliation.lookback_days,
@@ -13780,7 +13780,7 @@
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Rolling comparison window" })
         ] }) }),
         /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Local Estimated Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Local estimated cost" }),
           /* @__PURE__ */ u4("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
             "$",
             reconciliation.estimated_local_cost.toFixed(4)
@@ -13788,7 +13788,7 @@
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Codex local logs" })
         ] }) }),
         /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Org Usage Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Org usage cost" }),
           /* @__PURE__ */ u4("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
             "$",
             reconciliation.api_usage_cost.toFixed(4)
@@ -13805,7 +13805,7 @@
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Org usage cost minus local estimate" })
         ] }) }),
         /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "API Tokens" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "API tokens" }),
           /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
             reconciliation.api_input_tokens.toLocaleString(),
             " / ",
@@ -13814,7 +13814,7 @@
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Input / output tokens" })
         ] }) }),
         /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cached Input + Requests" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cached input + requests" }),
           /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
             reconciliation.api_cached_input_tokens.toLocaleString(),
             " / ",
@@ -13853,7 +13853,7 @@
     const statusBracket = deltaMatch ? { label: "[OK]", color: "var(--success, var(--text-primary))" } : { label: `[DRIFT: ${reconciliation.delta_cost >= 0 ? "+" : ""}$${reconciliation.delta_cost.toFixed(4)}]`, color: "var(--accent)" };
     return /* @__PURE__ */ u4("div", { class: "card card-flat bento-full", children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ u4("h2", { style: { margin: 0 }, children: "Subagent Cost Reconciliation" }),
+        /* @__PURE__ */ u4("h2", { style: { margin: 0 }, children: "Subagent cost reconciliation" }),
         /* @__PURE__ */ u4(
           "span",
           {
@@ -13889,7 +13889,7 @@
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Rolling comparison window" })
         ] }) }),
         /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent-Sessions Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Agent-sessions cost" }),
           /* @__PURE__ */ u4("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
             "$",
             reconciliation.agent_sessions_cost.toFixed(4)
@@ -13897,7 +13897,7 @@
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Child JSONL view" })
         ] }) }),
         /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Sidechain Turns Cost" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Sidechain turns cost" }),
           /* @__PURE__ */ u4("div", { class: "stat-value cost-value", style: { fontSize: "20px" }, children: [
             "$",
             reconciliation.turns_subagent_cost.toFixed(4)
@@ -13914,7 +13914,7 @@
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Agent-sessions minus sidechain" })
         ] }) }),
         /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Spawns / Sidechain Turns" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Spawns / sidechain turns" }),
           /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
             reconciliation.agent_session_rows.toLocaleString(),
             " / ",
@@ -13923,7 +13923,7 @@
           /* @__PURE__ */ u4("div", { class: "stat-sub", children: "Row counts per view" })
         ] }) }),
         /* @__PURE__ */ u4("div", { class: "stat-card", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Distinct Agents" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Distinct agents" }),
           /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "16px" }, children: [
             reconciliation.distinct_agents_in_agent_sessions.toLocaleString(),
             " / ",
@@ -14266,7 +14266,7 @@ ${row.project}` : row.project;
     const tooltip = tooltipParts.join(" \xB7 ");
     return /* @__PURE__ */ u4("div", { class: "card stat-card", title: tooltip, children: [
       /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cache Hit Rate" }),
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cache hit rate" }),
         /* @__PURE__ */ u4(
           "div",
           {
@@ -14706,7 +14706,7 @@ ${row.project}` : row.project;
   }
   function DepletionForecastCard({
     forecast,
-    title = "Depletion Forecast"
+    title = "Depletion forecast"
   }) {
     const primary = forecast.primary_signal;
     const primaryPercent = Math.max(0, primary.projected_percent ?? primary.used_percent);
@@ -14858,7 +14858,7 @@ ${row.project}` : row.project;
   }
   function PredictiveInsightsCard({
     insights,
-    title = "Predictive Signals"
+    title = "Predictive signals"
   }) {
     const hasAny = !!insights.rolling_hour_burn || !!insights.historical_envelope || !!insights.limit_hit_analysis;
     if (!hasAny) {
@@ -14935,7 +14935,7 @@ ${row.project}` : row.project;
     const subPctInput = totalInput > 0 ? summary.subagent_input / totalInput * 100 : 0;
     const subPctOutput = totalOutput > 0 ? summary.subagent_output / totalOutput * 100 : 0;
     return /* @__PURE__ */ u4("div", { class: "table-card", children: [
-      /* @__PURE__ */ u4("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: "0" }, children: "Subagent Breakdown" }) }),
+      /* @__PURE__ */ u4("div", { class: "section-header", style: { padding: "20px 20px 0" }, children: /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: "0" }, children: "Subagent breakdown" }) }),
       /* @__PURE__ */ u4("div", { style: "display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:12px 20px 20px", children: [
         /* @__PURE__ */ u4("div", { children: [
           /* @__PURE__ */ u4("div", { class: "stat-label", children: "Turns" }),
@@ -14953,7 +14953,7 @@ ${row.project}` : row.project;
           ] })
         ] }),
         /* @__PURE__ */ u4("div", { children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Input Tokens" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Input tokens" }),
           /* @__PURE__ */ u4("div", { style: "font-size:15px", children: [
             "Parent: ",
             /* @__PURE__ */ u4("span", { class: "num", children: fmt(summary.parent_input) })
@@ -14967,7 +14967,7 @@ ${row.project}` : row.project;
           ] })
         ] }),
         /* @__PURE__ */ u4("div", { children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Output Tokens" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Output tokens" }),
           /* @__PURE__ */ u4("div", { style: "font-size:15px", children: [
             "Parent: ",
             /* @__PURE__ */ u4("span", { class: "num", children: fmt(summary.parent_output) })
@@ -15010,7 +15010,7 @@ ${row.project}` : row.project;
           const v4 = r4.by_plan[plan];
           return v4 != null ? Math.min(100, Math.max(0, v4)) : 0;
         }),
-        color: `rgba(var(--text-primary-rgb, 232, 232, 232), ${opacity})`
+        color: withAlpha("--text-display", opacity)
       };
     });
     const secondarySeries = {
@@ -15038,11 +15038,12 @@ ${row.project}` : row.project;
       chart: {
         type: "bar",
         stacked: true,
+        background: "transparent",
         toolbar: { show: false },
         animations: { enabled: false },
         fontFamily: "var(--font-mono)"
       },
-      theme: { mode: "dark" },
+      theme: { mode: apexThemeMode() },
       series: allSeries,
       colors: allSeries.map((s4) => s4.color),
       stroke: {
@@ -15102,7 +15103,7 @@ ${row.project}` : row.project;
         }
       ],
       tooltip: {
-        theme: "dark",
+        theme: apexThemeMode(),
         style: { fontFamily: "var(--font-mono)", fontSize: "11px" },
         y: {
           formatter: (val) => val != null && Number.isFinite(val) ? `${val.toFixed(1)}%` : "\u2014"
@@ -16518,7 +16519,7 @@ ${row.project}` : row.project;
     );
     const chartTitleEl = $2("daily-chart-title");
     if (chartTitleEl) {
-      chartTitleEl.textContent = (bucketIsWeek ? "Weekly Token Usage - " : "Daily Token Usage - ") + RANGE_LABELS[selectedRange.value] + providerLabel;
+      chartTitleEl.textContent = (bucketIsWeek ? "Weekly token usage \u2013 " : "Daily token usage \u2013 ") + RANGE_LABELS[selectedRange.value] + providerLabel;
     }
     R(
       /* @__PURE__ */ u4(
@@ -17016,12 +17017,12 @@ ${row.project}` : row.project;
   // src/ui/monitor/store.ts
   var LIVE_MONITOR_PREFERENCE_KEY = "heimdall.live_monitor.preferences.v1";
   var LIVE_MONITOR_PANEL_OPTIONS = [
-    { id: "active_block", label: "Active Block" },
-    { id: "predictive_insights", label: "Predictive Signals" },
-    { id: "depletion_forecast", label: "Depletion Forecast" },
-    { id: "quota_suggestions", label: "Suggested Quotas" },
-    { id: "context_window", label: "Context Window" },
-    { id: "recent_session", label: "Recent Session" },
+    { id: "active_block", label: "Active block" },
+    { id: "predictive_insights", label: "Predictive signals" },
+    { id: "depletion_forecast", label: "Depletion forecast" },
+    { id: "quota_suggestions", label: "Suggested quotas" },
+    { id: "context_window", label: "Context window" },
+    { id: "recent_session", label: "Recent session" },
     { id: "warnings", label: "Warnings" }
   ];
   var LIVE_MONITOR_FOCUS_OPTIONS = ["all", "claude", "codex"];
@@ -17401,7 +17402,7 @@ ${row.project}` : row.project;
       ] }, `${provider.provider}-${index}`)) }),
       /* @__PURE__ */ u4("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "12px" }, children: [
         /* @__PURE__ */ u4("div", { children: [
-          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Weekly Projection" }),
+          /* @__PURE__ */ u4("div", { class: "stat-label", children: "Weekly projection" }),
           /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "20px" }, children: provider.projected_weekly_spend_usd != null ? fmtCostCompact(provider.projected_weekly_spend_usd) : "\u2014" })
         ] }),
         /* @__PURE__ */ u4("div", { children: [
@@ -17422,7 +17423,7 @@ ${row.project}` : row.project;
     const d5 = densityTokens(density);
     const runout = blockRunoutLabel(block);
     return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Active Block" }),
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Active block" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", children: fmt(totalTokens2) }),
       /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
         block.entry_count,
@@ -17464,7 +17465,7 @@ ${row.project}` : row.project;
   function ContextPanel({ data, density }) {
     const d5 = densityTokens(density);
     return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Context Window" }),
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Context window" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", children: fmt(data.total_input_tokens) }),
       /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
         "of ",
@@ -17489,7 +17490,7 @@ ${row.project}` : row.project;
     const session = provider.recent_session;
     const d5 = densityTokens(density);
     return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Recent Session" }),
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Recent session" }),
       /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "22px" }, children: provider.title }),
       /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: session.display_name }),
       /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
@@ -17512,12 +17513,12 @@ ${row.project}` : row.project;
     }
     const d5 = densityTokens(density);
     return /* @__PURE__ */ u4("div", { class: "card stat-card", style: { padding: d5.padding }, children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Suggested Quotas" }),
+      /* @__PURE__ */ u4("div", { class: "stat-label", children: "Suggested quotas" }),
       /* @__PURE__ */ u4("div", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: suggestions.sample_label }),
       /* @__PURE__ */ u4("div", { style: { display: "grid", gap: d5.listGap, marginTop: d5.marginTop }, children: suggestions.levels.map((level) => /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "baseline" }, children: [
         /* @__PURE__ */ u4("span", { class: "stat-sub", style: { fontSize: d5.fontSize }, children: [
           level.label,
-          level.key === suggestions.recommended_key && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--success)" }, children: "[RECOMMENDED]" })
+          level.key === suggestions.recommended_key && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--success)" }, children: "[Recommended]" })
         ] }),
         /* @__PURE__ */ u4("span", { class: "stat-value", style: { fontSize: "18px" }, children: fmt(level.limit_tokens) })
       ] }, level.key)) }),

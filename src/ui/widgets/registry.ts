@@ -230,7 +230,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       // Preserve inner structure so the chart renders into #chart-daily.
       if (!el.querySelector('#daily-chart-title')) {
         // Static literal — no dynamic content, no XSS vector.
-        el.innerHTML = '<h2 id="daily-chart-title">Daily Token Usage</h2><div class="chart-wrap tall"><div id="chart-daily"></div></div>';
+        el.innerHTML = '<h2 id="daily-chart-title">Daily token usage</h2><div class="chart-wrap tall"><div id="chart-daily"></div></div>';
       }
     },
   },

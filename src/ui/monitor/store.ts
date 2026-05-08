@@ -19,12 +19,12 @@ export interface LiveMonitorPreferences {
 
 export const LIVE_MONITOR_PREFERENCE_KEY = 'heimdall.live_monitor.preferences.v1';
 export const LIVE_MONITOR_PANEL_OPTIONS: Array<{ id: LiveMonitorPanelId; label: string }> = [
-  { id: 'active_block', label: 'Active Block' },
-  { id: 'predictive_insights', label: 'Predictive Signals' },
-  { id: 'depletion_forecast', label: 'Depletion Forecast' },
-  { id: 'quota_suggestions', label: 'Suggested Quotas' },
-  { id: 'context_window', label: 'Context Window' },
-  { id: 'recent_session', label: 'Recent Session' },
+  { id: 'active_block', label: 'Active block' },
+  { id: 'predictive_insights', label: 'Predictive signals' },
+  { id: 'depletion_forecast', label: 'Depletion forecast' },
+  { id: 'quota_suggestions', label: 'Suggested quotas' },
+  { id: 'context_window', label: 'Context window' },
+  { id: 'recent_session', label: 'Recent session' },
   { id: 'warnings', label: 'Warnings' },
 ];
 

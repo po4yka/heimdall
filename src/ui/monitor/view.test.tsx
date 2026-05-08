@@ -142,13 +142,13 @@ describe('renderLiveMonitorView', () => {
 
     const text = collectText(renderLiveMonitorView()).join(' ');
     expect(text).toContain('Suggested quotas');
-    expect(text).toContain('Depletion Forecast');
+    expect(text).toContain('Depletion forecast');
     expect(text).toContain('Billing block runs out in 1h 15m at current burn');
     expect(text).toContain('Runs out in');
     expect(text).toContain('Supporting signals');
     expect(text).toContain('P90');
     expect(text).toContain('[Recommended]');
-    expect(text).toContain('Predictive Signals');
+    expect(text).toContain('Predictive signals');
     expect(text).toContain('Rolling 1h burn');
     expect(text).toContain('Based on fewer than 10 completed blocks.');
   });
@@ -208,10 +208,10 @@ describe('renderLiveMonitorView', () => {
     const text = collectText(renderLiveMonitorView()).join(' ');
     expect(text).toContain('Provider Lanes');
     expect(text).toContain('Claude');
-    expect(text).not.toContain('Active Block');
-    expect(text).not.toContain('Predictive Signals');
+    expect(text).not.toContain('Active block');
+    expect(text).not.toContain('Predictive signals');
     expect(text).not.toContain('Warnings');
-    expect(text).toContain('Context Window');
+    expect(text).toContain('Context window');
   });
 
   it('renders Claude admin fallback metrics in the provider lane', () => {
