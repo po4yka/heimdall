@@ -760,6 +760,7 @@ export interface DashboardData {
   cost_forecast?: CostForecastSummary;
   session_quality?: SessionQualitySummary;
   hook_telemetry?: HookTelemetrySummary;
+  claude_md_size?: ClaudeMdSizeSummary;
   error?: string;
 }
 
@@ -1118,5 +1119,37 @@ export interface CostForecastSummary {
   regression: CostRegression | null;
   projected_month_nanos: number;
   trend: CostTrend;
+  generated_at: string;
+}
+
+// ── CLAUDE.md size over time ─────────────────────────────────────────────────
+
+export interface ClaudeMdSizePoint {
+  commit_ts: number;
+  commit_iso: string;
+  commit_sha: string;
+  byte_size: number;
+  token_count: number;
+  line_count: number;
+}
+
+export interface ClaudeMdFileTrend {
+  project_path: string;
+  file_path: string;
+  label: string;
+  revisions: ClaudeMdSizePoint[];
+  current_token_count: number;
+  first_seen_iso: string;
+  token_delta_30d: number;
+  token_delta_pct_30d: number;
+  cost_correlation: number | null;
+  cost_correlation_sample_size: number;
+  avg_cost_per_session_30d_nanos: number;
+}
+
+export interface ClaudeMdSizeSummary {
+  files: ClaudeMdFileTrend[];
+  total_files_tracked: number;
+  total_revisions: number;
   generated_at: string;
 }

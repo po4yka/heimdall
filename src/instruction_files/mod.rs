@@ -1,5 +1,7 @@
+pub mod claude_md_history;
 pub mod discovery;
 pub mod frontmatter;
+pub mod git_history;
 pub mod tokens;
 
 use std::path::PathBuf;

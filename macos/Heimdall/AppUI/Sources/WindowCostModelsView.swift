@@ -21,6 +21,8 @@ struct WindowCostModelsView: View {
 
             CostForecastSection(summary: self.dashboardData.costForecast)
 
+            ClaudeMdSizeSection(summary: self.dashboardData.claudeMdSize)
+
             CostModelsModelSection(model: self.model)
 
             CostModelsToolSection(model: self.model)
@@ -218,5 +220,109 @@ private struct CostModelsVersionSection: View {
                     .menuCardBackground(opacity: 0.04, cornerRadius: 16)
             }
         }
+    }
+}
+
+// MARK: - CLAUDE.md size section
+
+private struct ClaudeMdSizeSection: View {
+    let summary: ClaudeMdSizeSummary?
+
+    private func fmtTokens(_ n: Int64) -> String {
+        n >= 1000 ? String(format: "%.1fk", Double(n) / 1000) : "\(n)"
+    }
+
+    private func fmtDelta(_ file: ClaudeMdFileTrend) -> String {
+        let n = file.tokenDelta30d
+        let pct = file.tokenDeltaPct30d * 100
+        let sign = n >= 0 ? "+" : ""
+        return "\(sign)\(fmtTokens(n)) (\(sign)\(String(format: "%.1f", pct))%)"
+    }
+
+    private func deltaColor(_ file: ClaudeMdFileTrend) -> Color {
+        if file.tokenDelta30d > 0 { return .primary }
+        if file.tokenDelta30d < 0 { return .green }
+        return .secondary
+    }
+
+    private func fmtCorrelation(_ file: ClaudeMdFileTrend) -> String {
+        guard let r = file.costCorrelation else { return "n/a" }
+        let conf = file.costCorrelationSampleSize < 10 ? " low-conf" : ""
+        return String(format: "%+.2f%@", r, conf)
+    }
+
+    var body: some View {
+        guard let s = summary, s.totalFilesTracked > 0 else { return AnyView(EmptyView()) }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 14) {
+                WindowSectionHeader(
+                    title: "CLAUDE.md size over time",
+                    subtitle: "Token growth vs. session cost, last 90 days"
+                )
+
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible()), GridItem(.flexible()),
+                        GridItem(.flexible()), GridItem(.flexible())
+                    ],
+                    spacing: 12
+                ) {
+                    WindowOverviewKpiTile(label: "Files", value: "\(s.totalFilesTracked)")
+                    WindowOverviewKpiTile(label: "Revisions", value: "\(s.totalRevisions)")
+                    WindowOverviewKpiTile(
+                        label: "Growth ≥20%",
+                        value: "\(s.files.filter { $0.tokenDeltaPct30d >= 0.20 }.count)"
+                    )
+                    WindowOverviewKpiTile(
+                        label: "Correlation ≥0.3",
+                        value: "\(s.files.filter { ($0.costCorrelation ?? 0) >= 0.3 }.count)"
+                    )
+                }
+
+                ForEach(s.files) { file in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(file.label)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text(fmtTokens(file.currentTokenCount) + " tok")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.primary)
+                            if file.tokenDelta30d != 0 {
+                                Text(fmtDelta(file))
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(deltaColor(file))
+                            }
+                            Text("r=\(fmtCorrelation(file))")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if !file.revisions.isEmpty {
+                            let maxTok = file.revisions.map(\.tokenCount).max() ?? 1
+                            HStack(alignment: .bottom, spacing: 2) {
+                                ForEach(Array(file.revisions.suffix(30).enumerated()), id: \.offset) { _, rev in
+                                    let h = maxTok > 0 ? CGFloat(rev.tokenCount) / CGFloat(maxTok) : 0
+                                    Color.primary.opacity(0.5 + 0.5 * Double(h))
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .frame(height: 40 * h + 2)
+                                }
+                            }
+                            .frame(height: 42)
+                            .padding(8)
+                            .menuCardBackground(opacity: 0.04, cornerRadius: 8)
+                        }
+                    }
+                    .padding(14)
+                    .menuCardBackground(opacity: 0.04, cornerRadius: 12)
+                }
+
+                Text("Correlation is statistical only — not causal. Low confidence when n<10 days.")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+        )
     }
 }

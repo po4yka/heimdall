@@ -317,6 +317,8 @@ pub struct DashboardData {
     pub session_quality: SessionQualitySummary,
     #[serde(default)]
     pub hook_telemetry: HookTelemetrySummary,
+    #[serde(default)]
+    pub claude_md_size: ClaudeMdSizeSummary,
 }
 
 /// One entry in the `weekly_by_model` array of `/api/data`.
@@ -434,6 +436,43 @@ pub struct HookTelemetrySummary {
     pub latency_buckets: Vec<HookLatencyBucket>,
     pub outcome_rows: Vec<HookOutcomeRow>,
     pub top_bypass_ancestors: Vec<HookBypassAncestorRow>,
+    pub generated_at: String,
+}
+
+// ---------------------------------------------------------------------------
+// CLAUDE.md size over time analytics
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClaudeMdSizePoint {
+    pub commit_ts: i64,
+    pub commit_iso: String,
+    pub commit_sha: String,
+    pub byte_size: i64,
+    pub token_count: i64,
+    pub line_count: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClaudeMdFileTrend {
+    pub project_path: String,
+    pub file_path: String,
+    pub label: String,
+    pub revisions: Vec<ClaudeMdSizePoint>,
+    pub current_token_count: i64,
+    pub first_seen_iso: String,
+    pub token_delta_30d: i64,
+    pub token_delta_pct_30d: f32,
+    pub cost_correlation: Option<f32>,
+    pub cost_correlation_sample_size: u32,
+    pub avg_cost_per_session_30d_nanos: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClaudeMdSizeSummary {
+    pub files: Vec<ClaudeMdFileTrend>,
+    pub total_files_tracked: u32,
+    pub total_revisions: u32,
     pub generated_at: String,
 }
 

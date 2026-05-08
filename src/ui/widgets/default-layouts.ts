@@ -100,6 +100,7 @@ const TABLES_WIDGETS = stack([
   { id: 'project-cost-mount',     h: 4 },
   { id: 'session-quality-card',   h: 5 },
   { id: 'hook-telemetry-card',    h: 5 },
+  { id: 'claude-md-size-card',    h: 6 },
 ]);
 
 const PROJECTS_WIDGETS = stack([

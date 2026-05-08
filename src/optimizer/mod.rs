@@ -15,6 +15,7 @@
 pub mod agents;
 pub mod bash;
 pub mod claude_md;
+pub mod claude_md_impact;
 pub mod grade;
 pub mod hook_bypass;
 pub mod hook_latency;
@@ -120,6 +121,7 @@ pub fn run_optimize_with_overrides(
         Box::new(retry::ToolRetryDetector::new()),
         Box::new(hook_latency::HookLatencyDetector::new()),
         Box::new(hook_bypass::HookBypassDetector::new()),
+        Box::new(claude_md_impact::ClaudeMdImpactDetector::new()),
     ];
 
     let mut findings = Vec::new();

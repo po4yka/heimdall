@@ -8522,6 +8522,205 @@
     return /* @__PURE__ */ u4(HookTelemetryCardInner, { summary });
   }
 
+  // src/ui/components/ClaudeMdSizeCard.tsx
+  function fmtTokens2(n3) {
+    return n3 >= 1e3 ? `${(n3 / 1e3).toFixed(1)}k` : `${n3}`;
+  }
+  function fmtDelta(n3, pct3) {
+    const sign = n3 >= 0 ? "+" : "";
+    return `${sign}${fmtTokens2(n3)} (${sign}${(pct3 * 100).toFixed(1)}%)`;
+  }
+  function fmtDate(iso) {
+    return iso ? iso.slice(0, 10) : "";
+  }
+  function fmtCorrelation(corr, sampleSize) {
+    if (corr == null) return "n/a";
+    const confidence = sampleSize < 10 ? " low-conf" : "";
+    return `${corr >= 0 ? "+" : ""}${corr.toFixed(2)}${confidence}`;
+  }
+  function KpiTile5({ label, value }) {
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: label }),
+      /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: value })
+    ] });
+  }
+  function TokenTrendBars({ revisions }) {
+    if (revisions.length === 0) return null;
+    const shown = revisions.slice(-20);
+    const maxTokens = Math.max(...shown.map((r4) => r4.token_count), 1);
+    return /* @__PURE__ */ u4("div", { style: { marginBottom: "12px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "6px", fontSize: "10px" }, children: [
+        "Token count over time (last ",
+        shown.length,
+        " revisions)"
+      ] }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "flex",
+            gap: "3px",
+            alignItems: "flex-end",
+            padding: "10px",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            height: "80px"
+          },
+          children: shown.map((r4, i4) => {
+            const heightPct = (r4.token_count / maxTokens * 100).toFixed(1);
+            return /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  flex: "1",
+                  height: `${heightPct}%`,
+                  background: "rgba(var(--text-primary-rgb,232,232,232),0.7)",
+                  borderRadius: "1px 1px 0 0",
+                  minHeight: "2px"
+                },
+                title: `${fmtDate(r4.commit_iso)}: ${r4.token_count} tokens`
+              },
+              `rev-${i4}`
+            );
+          })
+        }
+      )
+    ] });
+  }
+  function RevisionTable({ revisions }) {
+    const shown = revisions.slice(-5).reverse();
+    if (shown.length === 0) return null;
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "6px", fontSize: "10px" }, children: "Recent revisions" }),
+      /* @__PURE__ */ u4("div", { style: { padding: "10px", border: "1px solid var(--border)", borderRadius: "8px" }, children: /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "grid",
+            gridTemplateColumns: "auto 1fr auto auto auto",
+            gap: "3px 12px",
+            alignItems: "center"
+          },
+          children: [
+            ["SHA", "Date", "Tokens", "Lines", "Bytes"].map((h5) => /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "9px",
+                  color: "var(--text-secondary)",
+                  textTransform: "uppercase"
+                },
+                children: h5
+              },
+              h5
+            )),
+            shown.map((r4, i4) => /* @__PURE__ */ u4(S, { children: [
+              /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: r4.commit_sha.slice(0, 7) }, `sha-${i4}`),
+              /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-primary)" }, children: fmtDate(r4.commit_iso) }),
+              /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-primary)" }, children: r4.token_count }),
+              /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-secondary)" }, children: r4.line_count }),
+              /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-secondary)" }, children: r4.byte_size })
+            ] }))
+          ]
+        }
+      ) })
+    ] });
+  }
+  function FileTrendRow({ file }) {
+    const deltaColor = file.token_delta_30d > 0 ? "rgba(var(--text-primary-rgb,232,232,232),0.9)" : file.token_delta_30d < 0 ? "var(--success,#3fb950)" : "var(--text-secondary)";
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        style: {
+          padding: "14px",
+          border: "1px solid var(--border)",
+          borderRadius: "8px",
+          marginBottom: "12px"
+        },
+        children: [
+          /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                marginBottom: "10px",
+                flexWrap: "wrap",
+                gap: "8px"
+              },
+              children: [
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-primary)", fontWeight: 500 }, children: file.label }),
+                /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "16px", alignItems: "baseline" }, children: [
+                  /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-primary)" }, children: [
+                    fmtTokens2(file.current_token_count),
+                    " tok"
+                  ] }),
+                  file.token_delta_30d !== 0 && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: deltaColor }, children: fmtDelta(file.token_delta_30d, file.token_delta_pct_30d) }),
+                  /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
+                    "r=",
+                    fmtCorrelation(file.cost_correlation, file.cost_correlation_sample_size)
+                  ] })
+                ] })
+              ]
+            }
+          ),
+          /* @__PURE__ */ u4(TokenTrendBars, { revisions: file.revisions }),
+          /* @__PURE__ */ u4(RevisionTable, { revisions: file.revisions })
+        ]
+      }
+    );
+  }
+  function ClaudeMdSizeCardInner({ summary }) {
+    const filesWithGrowth = summary.files.filter((f5) => f5.token_delta_pct_30d >= 0.2).length;
+    const filesWithCorr = summary.files.filter((f5) => (f5.cost_correlation ?? 0) >= 0.3).length;
+    return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "10px" }, children: "CLAUDE.md size over time" }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "16px" }, children: [
+        /* @__PURE__ */ u4(KpiTile5, { label: "Files tracked", value: summary.total_files_tracked }),
+        /* @__PURE__ */ u4(KpiTile5, { label: "Total revisions", value: summary.total_revisions }),
+        /* @__PURE__ */ u4(KpiTile5, { label: "Growth \u226520% (30d)", value: filesWithGrowth }),
+        /* @__PURE__ */ u4(KpiTile5, { label: "Correlation \u22650.3", value: filesWithCorr })
+      ] }),
+      summary.files.map((file, i4) => /* @__PURE__ */ u4(FileTrendRow, { file }, `file-${i4}`)),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            marginTop: "12px",
+            fontFamily: "var(--font-mono)",
+            fontSize: "10px",
+            color: "var(--text-secondary)",
+            lineHeight: "1.5"
+          },
+          children: "Correlation between token growth and per-session cost is statistical only \u2014 not causal. Low confidence when sample size <10 days."
+        }
+      )
+    ] });
+  }
+  function ClaudeMdSizeCard() {
+    const data = rawData.value;
+    if (!data) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "CLAUDE.md size over time" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "loading..." })
+      ] });
+    }
+    const summary = data.claude_md_size;
+    if (!summary || summary.total_files_tracked === 0) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "CLAUDE.md size over time" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: [
+          "No git-tracked CLAUDE.md found. Run ",
+          /* @__PURE__ */ u4("code", { children: "heimdall scan" }),
+          " to populate history."
+        ] })
+      ] });
+    }
+    return /* @__PURE__ */ u4(ClaudeMdSizeCardInner, { summary });
+  }
+
   // src/ui/components/Sidebar.tsx
   var NAV_ITEMS = [
     { key: "overview", label: "Overview", abbr: "OV" },
@@ -9320,6 +9519,20 @@
         invokeMountCallback("hook-telemetry-card", el);
       }
     },
+    {
+      id: "claude-md-size-card",
+      title: "CLAUDE.md size over time",
+      description: "Git history of token count per CLAUDE.md file vs. per-session cost correlation",
+      category: "chart",
+      screens: ["tables"],
+      defaultSize: { w: 6, h: 6 },
+      minW: 2,
+      minH: 3,
+      render: (el) => {
+        el.id = "claude-md-size-card";
+        invokeMountCallback("claude-md-size-card", el);
+      }
+    },
     // ── Projects tab ──────────────────────────────────────────────────────────
     {
       id: "projects-registry",
@@ -9415,7 +9628,8 @@
     { id: "sessions-mount", h: 5 },
     { id: "project-cost-mount", h: 4 },
     { id: "session-quality-card", h: 5 },
-    { id: "hook-telemetry-card", h: 5 }
+    { id: "hook-telemetry-card", h: 5 },
+    { id: "claude-md-size-card", h: 6 }
   ]);
   var PROJECTS_WIDGETS = stack([
     { id: "projects-registry", h: 8 }
@@ -24223,6 +24437,9 @@ ${row.project}` : row.project;
     });
     registerMountCallback("hook-telemetry-card", (el) => {
       R(/* @__PURE__ */ u4(HookTelemetryCard, {}), el);
+    });
+    registerMountCallback("claude-md-size-card", (el) => {
+      R(/* @__PURE__ */ u4(ClaudeMdSizeCard, {}), el);
     });
   }
   var backupModalMount = document.getElementById("backup-modal-mount");

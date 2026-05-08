@@ -314,6 +314,70 @@ public struct HookTelemetrySummary: Codable, Sendable {
     }
 }
 
+// MARK: - CLAUDE.md size over time types
+
+public struct ClaudeMdSizePoint: Codable, Sendable {
+    public let commitTs: Int64
+    public let commitIso: String
+    public let commitSha: String
+    public let byteSize: Int64
+    public let tokenCount: Int64
+    public let lineCount: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case commitTs = "commit_ts"
+        case commitIso = "commit_iso"
+        case commitSha = "commit_sha"
+        case byteSize = "byte_size"
+        case tokenCount = "token_count"
+        case lineCount = "line_count"
+    }
+}
+
+public struct ClaudeMdFileTrend: Codable, Sendable, Identifiable {
+    public let projectPath: String
+    public let filePath: String
+    public let label: String
+    public let revisions: [ClaudeMdSizePoint]
+    public let currentTokenCount: Int64
+    public let firstSeenIso: String
+    public let tokenDelta30d: Int64
+    public let tokenDeltaPct30d: Float
+    public let costCorrelation: Float?
+    public let costCorrelationSampleSize: UInt32
+    public let avgCostPerSession30dNanos: Int64
+
+    public var id: String { "\(projectPath)/\(filePath)" }
+
+    enum CodingKeys: String, CodingKey {
+        case projectPath = "project_path"
+        case filePath = "file_path"
+        case label
+        case revisions
+        case currentTokenCount = "current_token_count"
+        case firstSeenIso = "first_seen_iso"
+        case tokenDelta30d = "token_delta_30d"
+        case tokenDeltaPct30d = "token_delta_pct_30d"
+        case costCorrelation = "cost_correlation"
+        case costCorrelationSampleSize = "cost_correlation_sample_size"
+        case avgCostPerSession30dNanos = "avg_cost_per_session_30d_nanos"
+    }
+}
+
+public struct ClaudeMdSizeSummary: Codable, Sendable {
+    public let files: [ClaudeMdFileTrend]
+    public let totalFilesTracked: UInt32
+    public let totalRevisions: UInt32
+    public let generatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case files
+        case totalFilesTracked = "total_files_tracked"
+        case totalRevisions = "total_revisions"
+        case generatedAt = "generated_at"
+    }
+}
+
 // MARK: - Partial dashboard decode
 
 private struct DashboardDataPartial: Codable {
@@ -322,6 +386,7 @@ private struct DashboardDataPartial: Codable {
     let costForecast: CostForecastSummary?
     let sessionQuality: SessionQualitySummary?
     let hookTelemetry: HookTelemetrySummary?
+    let claudeMdSize: ClaudeMdSizeSummary?
 
     enum CodingKeys: String, CodingKey {
         case contextPressure = "context_pressure"
@@ -329,6 +394,7 @@ private struct DashboardDataPartial: Codable {
         case costForecast = "cost_forecast"
         case sessionQuality = "session_quality"
         case hookTelemetry = "hook_telemetry"
+        case claudeMdSize = "claude_md_size"
     }
 }
 
@@ -344,6 +410,7 @@ public final class DashboardDataFeatureModel {
     public var costForecast: CostForecastSummary?
     public var sessionQuality: SessionQualitySummary?
     public var hookTelemetry: HookTelemetrySummary?
+    public var claudeMdSize: ClaudeMdSizeSummary?
     public var isLoading: Bool = false
 
     public init(helperPort: Int) {
@@ -364,6 +431,7 @@ public final class DashboardDataFeatureModel {
             self.costForecast = partial.costForecast
             self.sessionQuality = partial.sessionQuality
             self.hookTelemetry = partial.hookTelemetry
+            self.claudeMdSize = partial.claudeMdSize
         } catch {
             // supplemental sections — silently ignore fetch failures
         }

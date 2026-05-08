@@ -13,6 +13,7 @@ import { AgentTreeCard } from './components/AgentTreeCard';
 import { CostForecastCard } from './components/CostForecastCard';
 import { SessionQualityCard } from './components/SessionQualityCard';
 import { HookTelemetryCard } from './components/HookTelemetryCard';
+import { ClaudeMdSizeCard } from './components/ClaudeMdSizeCard';
 import { Sidebar } from './components/Sidebar';
 import { SavedViewsBar } from './components/SavedViewsBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -178,6 +179,9 @@ if (dashboardRuntime) {
   });
   registerMountCallback('hook-telemetry-card', (el) => {
     render(<HookTelemetryCard />, el);
+  });
+  registerMountCallback('claude-md-size-card', (el) => {
+    render(<ClaudeMdSizeCard />, el);
   });
 }
 

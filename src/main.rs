@@ -248,6 +248,11 @@ enum Commands {
         #[arg(long)]
         accurate: bool,
     },
+    /// CLAUDE.md size-over-time analytics and history management
+    ClaudeMd {
+        #[command(subcommand)]
+        action: ClaudeMdAction,
+    },
     /// Manage the local chat-backup archive (Phase 1: CLI snapshots only)
     Archive {
         #[command(subcommand)]
@@ -410,6 +415,37 @@ enum ConfigAction {
         /// Output format: toml | json
         #[arg(long, default_value = "toml", value_parser = ["toml", "json"])]
         format: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ClaudeMdAction {
+    /// List tracked CLAUDE.md files and their 90-day token trends
+    List {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+        /// Optional database path override
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+    },
+    /// Refresh history for newly committed CLAUDE.md revisions (incremental)
+    Refresh {
+        /// Optional database path override
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Extra project directory to include (repeatable)
+        #[arg(long = "path")]
+        paths: Vec<PathBuf>,
+    },
+    /// Wipe and rebuild all CLAUDE.md history from scratch
+    Rebuild {
+        /// Optional database path override
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Extra project directory to include (repeatable)
+        #[arg(long = "path")]
+        paths: Vec<PathBuf>,
     },
 }
 
@@ -905,6 +941,21 @@ fn main() -> Result<()> {
             let db = default_db(db_path);
             let dirs = default_dirs(projects_dir);
             scanner::scan(dirs, &db, true)?;
+            {
+                let conn = scanner::db::open_db(&db)?;
+                let outcome =
+                    instruction_files::claude_md_history::refresh_claude_md_history(
+                        &conn,
+                        &[],
+                        skills::Tokenizer::Heuristic,
+                        false,
+                    );
+                tracing::debug!(
+                    "claude_md history: visited {} files, inserted {} revisions",
+                    outcome.files_visited,
+                    outcome.revisions_inserted,
+                );
+            }
         }
         Commands::Today {
             db_path,
@@ -1110,6 +1161,10 @@ fn main() -> Result<()> {
                 accurate,
             )?;
         }
+        Commands::ClaudeMd { action } => {
+            cmd_claude_md(&action, &default_db(None))?;
+        }
+
         Commands::Archive { action } => {
             use archive::{Archive, ArchiveLock};
             match action {
@@ -3277,7 +3332,96 @@ pub(crate) fn cmd_today(
             ht.stdin_timeout_count,
         );
     }
+    let cmsz = scanner::db::query_dashboard_claude_md_size(&conn);
+    if cmsz.total_files_tracked > 0 {
+        let strong = cmsz
+            .files
+            .iter()
+            .filter(|f| f.cost_correlation.unwrap_or(0.0) >= 0.3)
+            .count();
+        println!(
+            "CLAUDE.md history (90d): {} files, {} revisions, {} with cost correlation ≥0.3",
+            cmsz.total_files_tracked, cmsz.total_revisions, strong,
+        );
+    }
     println!();
+    Ok(())
+}
+
+fn cmd_claude_md(action: &ClaudeMdAction, default_db: &std::path::Path) -> Result<()> {
+    match action {
+        ClaudeMdAction::List { json, db_path } => {
+            let db = db_path.as_deref().unwrap_or(default_db);
+            if !db.exists() {
+                anyhow::bail!("Database not found. Run: heimdall scan");
+            }
+            let conn = scanner::db::open_db(db)?;
+            let summary = scanner::db::query_dashboard_claude_md_size(&conn);
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&summary)?);
+            } else {
+                println!(
+                    "CLAUDE.md history (90d): {} files tracked, {} total revisions",
+                    summary.total_files_tracked, summary.total_revisions
+                );
+                for f in &summary.files {
+                    println!(
+                        "  {:<40} {:>6} tokens  {:+5} 30d  corr: {}",
+                        f.label,
+                        f.current_token_count,
+                        f.token_delta_30d,
+                        f.cost_correlation
+                            .map(|r| format!("{r:.2}"))
+                            .unwrap_or_else(|| "n/a".into()),
+                    );
+                }
+            }
+        }
+        ClaudeMdAction::Refresh { db_path, paths } => {
+            let db = db_path.as_deref().unwrap_or(default_db);
+            if !db.exists() {
+                anyhow::bail!("Database not found. Run: heimdall scan");
+            }
+            let conn = scanner::db::open_db(db)?;
+            let outcome = instruction_files::claude_md_history::refresh_claude_md_history(
+                &conn,
+                paths,
+                skills::Tokenizer::Heuristic,
+                false,
+            );
+            println!(
+                "Refreshed: visited {} files, inserted {} revisions",
+                outcome.files_visited, outcome.revisions_inserted
+            );
+            if !outcome.errors.is_empty() {
+                for e in &outcome.errors {
+                    eprintln!("  error: {e}");
+                }
+            }
+        }
+        ClaudeMdAction::Rebuild { db_path, paths } => {
+            let db = db_path.as_deref().unwrap_or(default_db);
+            if !db.exists() {
+                anyhow::bail!("Database not found. Run: heimdall scan");
+            }
+            let conn = scanner::db::open_db(db)?;
+            let outcome = instruction_files::claude_md_history::refresh_claude_md_history(
+                &conn,
+                paths,
+                skills::Tokenizer::Heuristic,
+                true,
+            );
+            println!(
+                "Rebuilt: visited {} files, inserted {} revisions",
+                outcome.files_visited, outcome.revisions_inserted
+            );
+            if !outcome.errors.is_empty() {
+                for e in &outcome.errors {
+                    eprintln!("  error: {e}");
+                }
+            }
+        }
+    }
     Ok(())
 }
 

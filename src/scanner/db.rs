@@ -312,6 +312,22 @@ fn create_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_hook_events_outcome ON hook_events(outcome, ts_epoch);",
     )?;
 
+    // CLAUDE.md size-over-time history: one row per (project_path, file_path, commit_sha).
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS claude_md_history (
+            project_path TEXT NOT NULL,
+            file_path    TEXT NOT NULL,
+            commit_sha   TEXT NOT NULL,
+            commit_ts    INTEGER NOT NULL,
+            byte_size    INTEGER NOT NULL,
+            token_count  INTEGER NOT NULL,
+            line_count   INTEGER NOT NULL,
+            PRIMARY KEY (project_path, file_path, commit_sha)
+        );
+        CREATE INDEX IF NOT EXISTS idx_claude_md_history_ts
+            ON claude_md_history(project_path, file_path, commit_ts);",
+    )?;
+
     // Agent status history: one row per component per poll.
     // PRIMARY KEY (ts_epoch, provider, component_id) ensures INSERT OR IGNORE is idempotent.
     conn.execute_batch(
@@ -2988,6 +3004,247 @@ pub(crate) fn query_dashboard_official_sync(conn: &Connection) -> Result<Officia
     })
 }
 
+// ── CLAUDE.md size-over-time dashboard query ─────────────────────────────────
+
+/// Returns a map of `"YYYY-MM-DD"` → average cost-per-session (in nanos, as f64)
+/// for turns matching `project_path`. Pass `""` to aggregate across all projects
+/// (used for the global `~/.claude/CLAUDE.md`).
+fn query_cost_per_session_by_day_for_project(
+    conn: &Connection,
+    project_path: &str,
+    cutoff_epoch: i64,
+) -> std::collections::HashMap<String, f64> {
+    // Use a single SQL with a conditional WHERE clause driven by ?1.
+    // When project_path is "" the cwd filter is skipped via the OR ?1 = '' trick.
+    let sql = "SELECT date(timestamp) AS day,
+                      CAST(SUM(estimated_cost_nanos) AS REAL) / NULLIF(COUNT(DISTINCT session_id), 0) AS avg_cost
+               FROM turns
+               WHERE (?1 = '' OR cwd = ?1)
+                 AND timestamp >= datetime(?2, 'unixepoch')
+               GROUP BY day";
+
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("query_cost_per_session_by_day prepare failed: {e}");
+            return std::collections::HashMap::new();
+        }
+    };
+
+    let rows_result = stmt.query_map(
+        rusqlite::params![project_path, cutoff_epoch],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+    );
+
+    match rows_result {
+        Ok(rows) => rows
+            .filter_map(|r: rusqlite::Result<(String, f64)>| r.ok())
+            .collect::<std::collections::HashMap<String, f64>>(),
+        Err(e) => {
+            warn!("query_cost_per_session_by_day query failed: {e}");
+            std::collections::HashMap::new()
+        }
+    }
+}
+
+/// Build the full `ClaudeMdSizeSummary` for the dashboard.
+/// Never panics — returns `Default::default()` on any SQL error.
+pub fn query_dashboard_claude_md_size(conn: &Connection) -> crate::models::ClaudeMdSizeSummary {
+    use chrono::{DateTime, Duration, Utc};
+    use std::collections::HashMap;
+
+    let generated_at = Utc::now().to_rfc3339();
+    let now = Utc::now();
+
+    // 1. Enumerate distinct (project_path, file_path) pairs.
+    let pairs: Vec<(String, String)> = {
+        let mut stmt = match conn
+            .prepare("SELECT DISTINCT project_path, file_path FROM claude_md_history")
+        {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("claude_md_size: enumerate pairs failed: {e}");
+                return crate::models::ClaudeMdSizeSummary {
+                    generated_at,
+                    ..Default::default()
+                };
+            }
+        };
+        match stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?))) {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(e) => {
+                warn!("claude_md_size: enumerate query failed: {e}");
+                return crate::models::ClaudeMdSizeSummary {
+                    generated_at,
+                    ..Default::default()
+                };
+            }
+        }
+    };
+
+    let cutoff_90d = (now - Duration::days(89)).timestamp();
+    let cutoff_30d = (now - Duration::days(29)).timestamp();
+    let cutoff_30d_str = (now - Duration::days(29))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let mut files: Vec<crate::models::ClaudeMdFileTrend> = Vec::new();
+    let mut total_revisions: u32 = 0;
+
+    for (project_path, file_path) in &pairs {
+        // 2. Fetch revisions within the 90-day window.
+        let mut rev_stmt = match conn.prepare(
+            "SELECT commit_sha, commit_ts, byte_size, token_count, line_count
+             FROM claude_md_history
+             WHERE project_path=?1 AND file_path=?2 AND commit_ts >= ?3
+             ORDER BY commit_ts ASC",
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("claude_md_size: revision query prepare failed: {e}");
+                continue;
+            }
+        };
+
+        let revisions: Vec<crate::models::ClaudeMdSizePoint> = match rev_stmt.query_map(
+            rusqlite::params![project_path, file_path, cutoff_90d],
+            |row| {
+                let commit_ts: i64 = row.get(1)?;
+                let commit_iso = DateTime::from_timestamp(commit_ts, 0)
+                    .unwrap_or_default()
+                    .to_rfc3339();
+                Ok(crate::models::ClaudeMdSizePoint {
+                    commit_sha: row.get(0)?,
+                    commit_ts,
+                    commit_iso,
+                    byte_size: row.get(2)?,
+                    token_count: row.get(3)?,
+                    line_count: row.get(4)?,
+                })
+            },
+        ) {
+            Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+            Err(e) => {
+                warn!("claude_md_size: revision query failed: {e}");
+                continue;
+            }
+        };
+
+        total_revisions += revisions.len() as u32;
+
+        let current_token_count = revisions.last().map(|r| r.token_count).unwrap_or(0);
+        let first_seen_iso = revisions.first().map(|r| r.commit_iso.clone()).unwrap_or_default();
+
+        // 3. 30-day token delta.
+        let baseline_tokens = revisions
+            .iter()
+            .filter(|r| r.commit_ts <= cutoff_30d)
+            .last()
+            .map(|r| r.token_count)
+            .unwrap_or(0);
+        let token_delta_30d = current_token_count - baseline_tokens;
+        let token_delta_pct_30d = if baseline_tokens > 0 {
+            token_delta_30d as f32 / baseline_tokens as f32
+        } else {
+            0.0
+        };
+
+        // 4. Build label from file_path / project_path.
+        let label = {
+            let home_prefix = dirs::home_dir()
+                .map(|h| h.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            if project_path.contains(&home_prefix) && file_path == "CLAUDE.md" {
+                "~/.claude/CLAUDE.md".to_string()
+            } else {
+                let repo_name = std::path::Path::new(project_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown");
+                if file_path == "CLAUDE.md" {
+                    repo_name.to_string()
+                } else {
+                    format!("{repo_name}/{file_path}")
+                }
+            }
+        };
+
+        // 5. Cost-per-session correlation.
+        // Forward-fill token counts by day, inner-join with cost-per-session series.
+        let cost_map = query_cost_per_session_by_day_for_project(conn, project_path, cutoff_90d);
+
+        // Build a day → token_count map from revisions.
+        let mut token_by_day: HashMap<String, i64> = HashMap::new();
+        for rev in &revisions {
+            let day = DateTime::from_timestamp(rev.commit_ts, 0)
+                .unwrap_or_default()
+                .format("%Y-%m-%d")
+                .to_string();
+            // Last write wins — multiple commits on same day → use latest.
+            token_by_day.insert(day, rev.token_count);
+        }
+
+        // Forward-fill over the days that appear in cost_map.
+        let mut sorted_days: Vec<&String> = cost_map.keys().collect();
+        sorted_days.sort();
+
+        let mut xs: Vec<f64> = Vec::new();
+        let mut ys: Vec<f64> = Vec::new();
+        let mut last_tokens: i64 = 0;
+
+        for day in &sorted_days {
+            if let Some(&t) = token_by_day.get(*day) {
+                last_tokens = t;
+            }
+            if last_tokens > 0 {
+                if let Some(&cost) = cost_map.get(*day) {
+                    xs.push(last_tokens as f64);
+                    ys.push(cost);
+                }
+            }
+        }
+
+        let cost_correlation = crate::analytics::correlation::pearson(&xs, &ys);
+        let cost_correlation_sample_size = xs.len() as u32;
+
+        // 6. avg_cost_per_session_30d_nanos
+        let cost_30d_map =
+            query_cost_per_session_by_day_for_project(conn, project_path, cutoff_30d);
+        let avg_cost_per_session_30d_nanos = if cost_30d_map.is_empty() {
+            0i64
+        } else {
+            let sum: f64 = cost_30d_map.values().sum();
+            (sum / cost_30d_map.len() as f64).round() as i64
+        };
+
+        // suppress unused warning — cutoff_30d_str is used for label generation context
+        let _ = &cutoff_30d_str;
+
+        files.push(crate::models::ClaudeMdFileTrend {
+            project_path: project_path.clone(),
+            file_path: file_path.clone(),
+            label,
+            revisions,
+            current_token_count,
+            first_seen_iso,
+            token_delta_30d,
+            token_delta_pct_30d,
+            cost_correlation,
+            cost_correlation_sample_size,
+            avg_cost_per_session_30d_nanos,
+        });
+    }
+
+    let total_files_tracked = files.len() as u32;
+
+    crate::models::ClaudeMdSizeSummary {
+        files,
+        total_files_tracked,
+        total_revisions,
+        generated_at,
+    }
+}
+
 pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardData> {
     let all_models = query_dashboard_models(conn)?;
     let provider_breakdown = query_dashboard_providers(conn)?;
@@ -3030,6 +3287,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
     let cost_forecast = crate::analytics::forecast::compute_cost_forecast(conn, &tz);
     let session_quality = query_dashboard_session_quality(conn);
     let hook_telemetry = query_dashboard_hook_telemetry(conn);
+    let claude_md_size = query_dashboard_claude_md_size(conn);
 
     // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
     // summing across providers so the frontend gets a single series per model/week.
@@ -3087,6 +3345,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         cost_forecast,
         session_quality,
         hook_telemetry,
+        claude_md_size,
     })
 }
 
@@ -5279,6 +5538,68 @@ pub fn insert_hook_event(conn: &Connection, row: &HookEventRow) -> Result<()> {
         ],
     )?;
     Ok(())
+}
+
+// ── CLAUDE.md history persistence ───────────────────────────────────────────
+
+/// Return the most recently stored commit SHA for a `(project_path, file_path)` pair.
+/// Returns `None` when no rows exist yet.
+pub fn last_claude_md_commit_sha(
+    conn: &Connection,
+    project_path: &str,
+    file_path: &str,
+) -> Option<String> {
+    conn.query_row(
+        "SELECT commit_sha FROM claude_md_history
+         WHERE project_path=?1 AND file_path=?2
+         ORDER BY commit_ts DESC LIMIT 1",
+        rusqlite::params![project_path, file_path],
+        |row| row.get(0),
+    )
+    .ok()
+}
+
+/// Insert a batch of `ClaudeMdRevision` rows using `INSERT OR IGNORE`.
+/// Returns the number of rows actually inserted (duplicates are skipped).
+pub fn insert_claude_md_revisions(
+    conn: &Connection,
+    project_path: &str,
+    file_path: &str,
+    revs: &[crate::instruction_files::git_history::ClaudeMdRevision],
+) -> Result<usize> {
+    let mut count = 0usize;
+    for rev in revs {
+        let n = conn.execute(
+            "INSERT OR IGNORE INTO claude_md_history
+             (project_path, file_path, commit_sha, commit_ts, byte_size, token_count, line_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                project_path,
+                file_path,
+                rev.commit_sha,
+                rev.commit_ts,
+                rev.byte_size,
+                rev.token_count,
+                rev.line_count,
+            ],
+        )?;
+        count += n;
+    }
+    Ok(count)
+}
+
+/// Delete all history rows for a `(project_path, file_path)` pair.
+/// Used during `rebuild` mode to force a full re-import.
+pub fn delete_claude_md_history_for_file(
+    conn: &Connection,
+    project_path: &str,
+    file_path: &str,
+) -> Result<usize> {
+    let n = conn.execute(
+        "DELETE FROM claude_md_history WHERE project_path=?1 AND file_path=?2",
+        rusqlite::params![project_path, file_path],
+    )?;
+    Ok(n)
 }
 
 // ── Server live_events / context-window queries ─────────────────────────────
@@ -11174,5 +11495,145 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM hook_events", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    // ---------------------------------------------------------------------------
+    // CLAUDE.md history tests
+    // ---------------------------------------------------------------------------
+
+    fn insert_claude_md_rev(
+        conn: &Connection,
+        project_path: &str,
+        file_path: &str,
+        sha: &str,
+        commit_ts: i64,
+        tokens: i64,
+    ) {
+        use crate::instruction_files::git_history::ClaudeMdRevision;
+        let revs = vec![ClaudeMdRevision {
+            commit_sha: sha.to_string(),
+            commit_ts,
+            byte_size: tokens * 4,
+            token_count: tokens,
+            line_count: 10,
+        }];
+        insert_claude_md_revisions(conn, project_path, file_path, &revs).unwrap();
+    }
+
+    #[test]
+    fn claude_md_history_empty_db_returns_default_summary() {
+        let (_dir, conn) = crate::optimizer::mod_tests::empty_db();
+        let summary = query_dashboard_claude_md_size(&conn);
+        assert_eq!(summary.total_files_tracked, 0);
+        assert_eq!(summary.total_revisions, 0);
+        assert!(summary.files.is_empty());
+    }
+
+    #[test]
+    fn claude_md_history_inserts_and_queries() {
+        let (_dir, conn) = crate::optimizer::mod_tests::empty_db();
+        let now = chrono::Utc::now().timestamp();
+        insert_claude_md_rev(&conn, "/my/project", "CLAUDE.md", "sha1", now - 200, 100);
+        insert_claude_md_rev(&conn, "/my/project", "CLAUDE.md", "sha2", now - 100, 150);
+        insert_claude_md_rev(&conn, "/my/project", "CLAUDE.md", "sha3", now - 10, 200);
+
+        let summary = query_dashboard_claude_md_size(&conn);
+        assert_eq!(summary.total_files_tracked, 1);
+        assert_eq!(summary.total_revisions, 3);
+        let file = &summary.files[0];
+        assert_eq!(file.current_token_count, 200);
+        assert_eq!(file.revisions.len(), 3);
+    }
+
+    #[test]
+    fn claude_md_history_30day_cutoff_excludes_old_revisions() {
+        let (_dir, conn) = crate::optimizer::mod_tests::empty_db();
+        let now = chrono::Utc::now().timestamp();
+        // A revision 95 days ago — outside the 90-day window.
+        let old_ts = now - (95 * 24 * 3600);
+        // A recent revision.
+        let recent_ts = now - (5 * 24 * 3600);
+        insert_claude_md_rev(&conn, "/proj", "CLAUDE.md", "old_sha", old_ts, 50);
+        insert_claude_md_rev(&conn, "/proj", "CLAUDE.md", "new_sha", recent_ts, 100);
+
+        let summary = query_dashboard_claude_md_size(&conn);
+        assert_eq!(summary.total_files_tracked, 1);
+        // Only the recent revision falls in the 90-day window.
+        assert_eq!(summary.total_revisions, 1, "old revision should be excluded");
+        assert_eq!(summary.files[0].current_token_count, 100);
+    }
+
+    #[test]
+    fn cost_per_session_by_day_for_project_groups_correctly() {
+        let (_dir, conn) = crate::optimizer::mod_tests::empty_db();
+        let now = chrono::Utc::now();
+        let cutoff = (now - chrono::Duration::days(30)).timestamp();
+
+        // Insert two turns in the same session on the same day.
+        let ts = now.format("%Y-%m-%dT12:00:00Z").to_string();
+        for i in 0..2 {
+            conn.execute(
+                "INSERT INTO turns
+                 (session_id, provider, timestamp, cwd, input_tokens, output_tokens,
+                  cache_read_tokens, cache_creation_tokens, reasoning_output_tokens,
+                  estimated_cost_nanos, cost_confidence, billing_mode, model, is_subagent)
+                 VALUES (?1, 'claude', ?2, '/myproject', 10, 5, 0, 0, 0, 500000, 'estimated', 'auto', 'claude-3-5-sonnet', 0)",
+                rusqlite::params![format!("session_{i}"), ts],
+            )
+            .unwrap();
+        }
+
+        let map = query_cost_per_session_by_day_for_project(&conn, "/myproject", cutoff);
+        assert_eq!(map.len(), 1, "should produce one day entry");
+        let avg = *map.values().next().unwrap();
+        // Two distinct sessions on same day → avg = (500000 + 500000) / 2 = 500000
+        assert!(
+            (avg - 500_000.0).abs() < 1.0,
+            "expected avg ~500000 nanos per session, got {avg}"
+        );
+    }
+
+    #[test]
+    fn summary_correlation_none_when_sample_size_under_5() {
+        // With only 4 data points pearson returns None, so cost_correlation should be None.
+        let (_dir, conn) = crate::optimizer::mod_tests::empty_db();
+        let now = chrono::Utc::now().timestamp();
+
+        // Insert 4 history revisions on different days.
+        for i in 0i64..4 {
+            insert_claude_md_rev(
+                &conn,
+                "/proj",
+                "CLAUDE.md",
+                &format!("sha{i}"),
+                now - i * 86400,
+                100 + i * 10,
+            );
+        }
+
+        // Insert matching turns for those 4 days so cost map is populated.
+        for i in 0i64..4 {
+            let ts = chrono::DateTime::from_timestamp(now - i * 86400, 0)
+                .unwrap()
+                .format("%Y-%m-%dT12:00:00Z")
+                .to_string();
+            conn.execute(
+                "INSERT INTO turns
+                 (session_id, provider, timestamp, cwd, input_tokens, output_tokens,
+                  cache_read_tokens, cache_creation_tokens, reasoning_output_tokens,
+                  estimated_cost_nanos, cost_confidence, billing_mode, model, is_subagent)
+                 VALUES (?1, 'claude', ?2, '/proj', 10, 5, 0, 0, 0, 1000000, 'estimated', 'auto', 'claude-3-5-sonnet', 0)",
+                rusqlite::params![format!("s{i}"), ts],
+            )
+            .unwrap();
+        }
+
+        let summary = query_dashboard_claude_md_size(&conn);
+        assert_eq!(summary.total_files_tracked, 1);
+        let file = &summary.files[0];
+        assert!(
+            file.cost_correlation.is_none(),
+            "4 data points should yield no correlation (pearson needs ≥5)"
+        );
     }
 }

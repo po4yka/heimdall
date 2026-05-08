@@ -760,6 +760,20 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       invokeMountCallback('hook-telemetry-card', el);
     },
   },
+  {
+    id: 'claude-md-size-card',
+    title: 'CLAUDE.md size over time',
+    description: 'Git history of token count per CLAUDE.md file vs. per-session cost correlation',
+    category: 'chart',
+    screens: ['tables'],
+    defaultSize: { w: 6, h: 6 },
+    minW: 2,
+    minH: 3,
+    render: (el: HTMLElement) => {
+      el.id = 'claude-md-size-card';
+      invokeMountCallback('claude-md-size-card', el);
+    },
+  },
 
   // ── Projects tab ──────────────────────────────────────────────────────────
   {
