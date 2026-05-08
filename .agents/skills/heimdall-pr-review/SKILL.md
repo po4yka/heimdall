@@ -51,6 +51,13 @@ Use this skill for review requests in the Heimdall repo.
 - Manual `PartialEq` without matching `Hash` (or vice versa) on `HashMap`/`HashSet` key types (**CRITICAL**)
 - Integer overflow on length or counter arithmetic using bare `+`/`-`/`*` on untrusted input (**WARNING**)
 
+### TypeScript / UI
+
+- `.forEach(async ...)` in `src/ui/` — `.forEach` ignores the returned Promise; errors are silently swallowed and execution order is non-deterministic. Use `for...of` with `await` for sequential execution or `Promise.all(items.map(async ...))` for parallel. (**HIGH**)
+- `useSignal(prop)` where the argument is a component prop — the signal captures only the initial value and goes stale on re-renders. Require `useComputed(() => props.value)` instead. (**HIGH**)
+- `{signal.value}` in JSX return for read-only display — forces full component re-render; pass the signal object directly (`{signal}`) for DOM-level binding. (**MEDIUM**)
+- `onChange` on `<input>` / `<textarea>` / `<select>` without `preact/compat` — fires only on blur in raw Preact, not on every keystroke. Confirm `preact/compat` alias is active in `tsconfig.json` or use `onInput` instead. (**HIGH**)
+
 ### Quality
 
 - No unjustified `#[allow(...)]`.

@@ -35,6 +35,8 @@ Out of scope: anything in `src/` (Rust crate), `src/ui/` (Preact dashboard). Def
 - `Task { @MainActor in ... }` is used (not `DispatchQueue.main.async`) for SwiftUI state updates.
 - Sendable conformance is explicit on types crossed across actor boundaries.
 - No data races on shared mutable static state without `@MainActor`, an actor, or explicit lock.
+- `withCheckedContinuation` or `withCheckedThrowingContinuation` where `continuation.resume()` is not called on every code path — the awaiting task hangs forever. (**CRITICAL**)
+- `await MainActor.run {}` called from a context already isolated to `@MainActor` — redundant and signals a misunderstanding of isolation; use plain `await` instead. (**WARNING**)
 
 ### SwiftUI state (WARNING)
 - `@State` is private and used only for view-local state.
@@ -42,10 +44,16 @@ Out of scope: anything in `src/` (Rust crate), `src/ui/` (Preact dashboard). Def
 - `@Environment` over manual prop drilling.
 - View bodies are pure — no side effects, no `Task.detached` invoked from `body`.
 - `onChange(of:)` uses the modern two-parameter form (Swift 5.9+).
+- `@State private var x = MyClass()` where `MyClass` is a reference type — SwiftUI reinitializes the class on every view rebuild, leaking orphaned instances that continue receiving notifications and writing to UserDefaults. Use `@State` only for value types or with `@Observable` classes via the `@State var model = Model()` pattern only when the initializer has no side effects; otherwise lift to a parent or use `.task`/`.onAppear` to inject. (**WARNING** — escalate to **CRITICAL** if the class registers observers or writes persistent state in its initializer)
+- `ForEach(items, id: \.self)` where `items` elements are mutable, non-unique, or optional — causes broken animations, crashes on duplicate IDs (multiple `nil` optionals), and full-row rebuilds on any property change. Require `Identifiable` conformance with a stable `id` property. (**WARNING**)
+- `NavigationView` or `NavigationLink(isActive:)` usage — both deprecated since iOS 16/macOS 13. Require migration to `NavigationStack` + `.navigationDestination(for:)` + `NavigationPath`. Also flag mixing `NavigationLink(destination:)` with `navigationPath.removeLast()` — silently skips two screens. (**WARNING**)
 
 ### macOS-specific (WARNING)
 - Menu-bar / `MenuBarExtra` views avoid heavy work in `body` — the menu re-renders on every status update.
-- File system access uses URL-based APIs and bookmarks where sandboxing applies.
+- `SettingsLink` inside a `MenuBarExtra` scene — silently does nothing. The workaround requires a hidden `Window` scene declared *before* the `Settings` scene in the `App` body, plus an `.openWindow` environment action. Flag any `SettingsLink` in a menu-bar-only app without this workaround. (**CRITICAL**)
+- `NSApplication.shared.activate()` without `ignoringOtherApps: true` — window may not come forward on activation policy changes from `.accessory` to `.regular`. (**WARNING**)
+- `startAccessingSecurityScopedResource()` without a matching `stopAccessingSecurityScopedResource()` in a `defer` block — leaks kernel resources until relaunch under sandboxing. (**WARNING**)
+- File system access uses URL-based security-scoped bookmarks where sandboxing applies; not raw path strings.
 - Any AppKit interop (`NSViewRepresentable`, `NSHostingView`) clearly documents lifetime ownership.
 - Notifications and observers are removed in `deinit` or via `NotificationCenter.Notifications` async sequence.
 
@@ -54,7 +62,8 @@ Out of scope: anything in `src/` (Rust crate), `src/ui/` (Preact dashboard). Def
 - Test files land under `macos/Heimdall/Tests/` and follow the existing per-target subdirectory structure.
 - Design tokens come from `DesignTokens.swift` — no new ad-hoc colors, no hardcoded hex outside the asset catalog.
 - Numbers shown in UI use the existing `LiveMonitorTimeFormatter`-style helpers; do not inline new `DateFormatter` instances inside views (perf footgun on menu re-renders).
-- Accessibility: any new interactive control declares `.accessibilityLabel` / `.accessibilityHint`; any custom drawing has a meaningful `.accessibilityElement` description.
+- Accessibility — `Image(systemName:)` or `Image(_:)` inside a `Button` body must declare `.accessibilityLabel`; without it VoiceOver reads the SF Symbol name literally (e.g. "star fill, button"). Decorative images that convey no information must have `.accessibilityHidden(true)`. (**WARNING** — promote to **CRITICAL** for any interactive control)
+- Accessibility — any new interactive control declares `.accessibilityLabel` / `.accessibilityHint`; any custom drawing has a meaningful `.accessibilityElement` description.
 - No `print(...)`; use the project's logging path.
 
 ### Build hygiene (CRITICAL)
