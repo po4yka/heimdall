@@ -1836,6 +1836,7 @@ fn cmd_optimize(db_path: &std::path::Path, format: &str, jq: Option<&str>) -> Re
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_skills(
     db_path: &std::path::Path,
     format: &str,
@@ -1951,8 +1952,8 @@ fn cmd_skills(
             println!("{thin}");
             println!("  Budget table  (fraction = {:.4})", report.budget_fraction);
             println!(
-                "  {:<36} {:>8} {:>8} {:>10}  {}",
-                "Model", "Budget", "Used", "Headroom", "Drop"
+                "  {:<36} {:>8} {:>8} {:>10}  Drop",
+                "Model", "Budget", "Used", "Headroom"
             );
             for row in &report.budget {
                 let headroom = if row.headroom_tokens < 0 {
@@ -2027,6 +2028,7 @@ fn cmd_skills(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_instructions(
     db_path: &std::path::Path,
     format: &str,
