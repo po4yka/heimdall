@@ -647,6 +647,22 @@ export const WIDGET_CATALOG: WidgetDef[] = [
     },
   },
 
+  // ── Tables tab (skills) ───────────────────────────────────────────────────
+  {
+    id: 'skills',
+    title: 'Skills inventory',
+    description: 'Disk and context-budget impact of installed skills',
+    category: 'system',
+    screens: ['tables'],
+    defaultSize: { w: 4, h: 4 },
+    minW: 2,
+    minH: 2,
+    render: (el: HTMLElement) => {
+      el.id = 'skills';
+      invokeMountCallback('skills', el);
+    },
+  },
+
   // ── Projects tab ──────────────────────────────────────────────────────────
   {
     id: 'projects-registry',

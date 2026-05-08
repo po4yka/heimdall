@@ -25,6 +25,10 @@ pub struct Config {
     /// Additional directories to scan for JSONL usage files.
     pub projects_dirs: Vec<PathBuf>,
 
+    /// Additional directories to scan for skills (.claude/skills, .codex/skills).
+    #[serde(default)]
+    pub extra_skills_dirs: Vec<PathBuf>,
+
     /// Override the default SQLite database path (`~/.claude/usage.db`).
     pub db_path: Option<PathBuf>,
 

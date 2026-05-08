@@ -113,6 +113,62 @@ export interface ToolErrorsResponse {
   total: number;
 }
 
+// ── Skills inventory ────────────────────────────────────────────────────────
+
+export interface SkillRow {
+  name: string;
+  path: string;
+  description: string | null;
+  description_chars: number;
+  description_truncated: boolean;
+  bytes: number;
+  file_count: number;
+  listing_tokens: number;
+  frontmatter_status: 'ok' | 'missing' | 'invalid';
+  is_symlink: boolean;
+  symlink_target: string | null;
+}
+
+export interface SkillScope {
+  provider: string;
+  kind: string;
+  root: string;
+  project_label: string | null;
+  skills: SkillRow[];
+  bytes: number;
+  listing_tokens: number;
+}
+
+export interface SkillsTotals {
+  skills_count: number;
+  total_bytes: number;
+  total_listing_tokens: number;
+  claude_bytes: number;
+  codex_bytes: number;
+  project_count: number;
+}
+
+export interface SkillsBudgetRow {
+  model_label: string;
+  context_size: number;
+  fraction: number;
+  budget_tokens: number;
+  used_tokens: number;
+  headroom_tokens: number;
+  simulated_drop_count: number;
+  simulated_drop_order: string[];
+}
+
+export interface SkillsReport {
+  generated_at: string;
+  tokenizer: string;
+  max_desc_chars: number;
+  budget_fraction: number;
+  scopes: SkillScope[];
+  totals: SkillsTotals;
+  budget: SkillsBudgetRow[];
+}
+
 export interface McpServerSummary {
   provider: string;
   server: string;

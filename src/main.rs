@@ -19,6 +19,7 @@ use claude_usage_tracker::scanner;
 use claude_usage_tracker::scheduler;
 use claude_usage_tracker::scrape;
 use claude_usage_tracker::server;
+use claude_usage_tracker::skills;
 use claude_usage_tracker::statusline;
 use claude_usage_tracker::usage_monitor;
 
@@ -187,6 +188,33 @@ enum Commands {
         /// jq-style filter applied to the JSON output (implies --format=json)
         #[arg(long, value_name = "FILTER")]
         jq: Option<String>,
+    },
+    /// Analyse disk and context-budget impact of installed skills
+    Skills {
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Output format: text | json
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// jq-style filter applied to the JSON output (implies --format=json)
+        #[arg(long, value_name = "FILTER")]
+        jq: Option<String>,
+        /// Scope: all | claude | codex | global | projects
+        #[arg(long, default_value = "all")]
+        scope: String,
+        /// Additional project directories to inspect (repeatable; replaces DB discovery)
+        #[arg(long = "path", value_name = "DIR")]
+        paths: Vec<PathBuf>,
+        /// skillListingBudgetFraction to use for the budget table (default: 0.01)
+        #[arg(long, default_value_t = 0.01)]
+        budget_fraction: f64,
+        /// skillListingMaxDescChars truncation threshold (default: 1536)
+        #[arg(long, default_value_t = 1536usize)]
+        max_desc_chars: usize,
+        /// Use the tiktoken-cl100k tokenizer for accurate token counts
+        /// (requires the accurate-tokens Cargo feature)
+        #[arg(long)]
+        accurate: bool,
     },
     /// Manage the local chat-backup archive (Phase 1: CLI snapshots only)
     Archive {
@@ -768,6 +796,7 @@ fn main() -> Result<()> {
     // Extract config values before match (avoids partial move issues)
     let cfg_db = cfg.db_path;
     let cfg_dirs = cfg.projects_dirs;
+    let cfg_extra_skills_dirs = cfg.extra_skills_dirs;
     let cfg_host = cfg.host;
     let cfg_port = cfg.port;
     let cfg_oauth_enabled = cfg.oauth.enabled;
@@ -977,6 +1006,29 @@ fn main() -> Result<()> {
         } => {
             let db = default_db(db_path);
             cmd_optimize(&db, &format, jq.as_deref())?;
+        }
+        Commands::Skills {
+            db_path,
+            format,
+            jq,
+            scope,
+            paths,
+            budget_fraction,
+            max_desc_chars,
+            accurate,
+        } => {
+            let db = default_db(db_path);
+            cmd_skills(
+                &db,
+                &format,
+                jq.as_deref(),
+                &scope,
+                &paths,
+                budget_fraction,
+                max_desc_chars,
+                accurate,
+                &cfg_extra_skills_dirs,
+            )?;
         }
         Commands::Archive { action } => {
             use archive::{Archive, ArchiveLock};
@@ -1648,6 +1700,152 @@ fn cmd_optimize(db_path: &std::path::Path, format: &str, jq: Option<&str>) -> Re
         }
     }
     Ok(())
+}
+
+fn cmd_skills(
+    db_path: &std::path::Path,
+    format: &str,
+    jq: Option<&str>,
+    scope: &str,
+    extra_paths: &[PathBuf],
+    budget_fraction: f64,
+    max_desc_chars: usize,
+    accurate: bool,
+    config_extra_dirs: &[PathBuf],
+) -> Result<()> {
+    let tokenizer = if accurate {
+        #[cfg(feature = "accurate-tokens")]
+        {
+            skills::Tokenizer::TiktokenCl100k
+        }
+        #[cfg(not(feature = "accurate-tokens"))]
+        {
+            anyhow::bail!(
+                "--accurate requires the accurate-tokens Cargo feature. \
+                 Rebuild with: cargo build --features accurate-tokens"
+            );
+        }
+    } else {
+        skills::Tokenizer::Heuristic
+    };
+
+    // Merge --path flags + config extra_skills_dirs.
+    let mut project_paths: Vec<PathBuf> = extra_paths.to_vec();
+    project_paths.extend_from_slice(config_extra_dirs);
+
+    let (include_global, include_plugins, include_projects) = match scope {
+        "claude" => (true, true, false),
+        "codex" => (true, false, false),
+        "global" => (true, true, false),
+        "projects" => (false, false, true),
+        _ => (true, true, true), // "all" or any unknown value
+    };
+
+    let opts = skills::ScanOptions {
+        include_global,
+        include_plugins,
+        include_projects,
+        project_paths,
+        tokenizer,
+        max_desc_chars,
+        budget_fraction,
+        db_path: Some(db_path.to_path_buf()),
+        ..Default::default()
+    };
+
+    let report = skills::scan(opts)?;
+
+    let effective_format = if jq.is_some() { "json" } else { format };
+
+    match effective_format.to_ascii_lowercase().as_str() {
+        "json" => {
+            let value = serde_json::to_value(&report)?;
+            if let Some(filter) = jq {
+                apply_jq_and_print(&value, filter);
+            } else {
+                println!("{}", serde_json::to_string_pretty(&value)?);
+            }
+        }
+        _ => {
+            let sep = "=".repeat(70);
+            let thin = "-".repeat(70);
+            println!();
+            println!("{sep}");
+            println!("  Skills Inventory  --  tokenizer: {}  |  budget: {:.1}%",
+                report.tokenizer, report.budget_fraction * 100.0);
+            println!("{sep}");
+            println!(
+                "  {} skills  |  {} bytes total  |  {} listing tokens",
+                report.totals.skills_count,
+                fmt_bytes(report.totals.total_bytes),
+                report.totals.total_listing_tokens,
+            );
+            println!("{thin}");
+
+            for scope_entry in &report.scopes {
+                let label = scope_entry.project_label.as_deref()
+                    .map(|l| format!(" [{}]", l))
+                    .unwrap_or_default();
+                println!(
+                    "  {:20}  {:16}{}  {} bytes  {} tokens  {} skills",
+                    scope_entry.provider,
+                    format!("{:?}", scope_entry.kind),
+                    label,
+                    fmt_bytes(scope_entry.bytes),
+                    scope_entry.listing_tokens,
+                    scope_entry.skills.len(),
+                );
+                for s in &scope_entry.skills {
+                    let sym = if s.is_symlink { " [link]" } else { "" };
+                    let trunc = if s.description_truncated { "+" } else { "" };
+                    println!(
+                        "    {:<40} {:>8}  {:>5} tok{}{}",
+                        s.name,
+                        fmt_bytes(s.bytes),
+                        s.listing_tokens,
+                        sym,
+                        trunc,
+                    );
+                }
+            }
+
+            println!("{thin}");
+            println!("  Budget table  (fraction = {:.4})", report.budget_fraction);
+            println!("  {:<36} {:>8} {:>8} {:>10}  {}", "Model", "Budget", "Used", "Headroom", "Drop");
+            for row in &report.budget {
+                let headroom = if row.headroom_tokens < 0 {
+                    format!("[OVER {:+}]", row.headroom_tokens)
+                } else {
+                    format!("{:+}", row.headroom_tokens)
+                };
+                println!(
+                    "  {:<36} {:>8} {:>8} {:>10}  {}",
+                    row.model_label,
+                    row.budget_tokens,
+                    row.used_tokens,
+                    headroom,
+                    if row.simulated_drop_count > 0 {
+                        format!("{} dropped", row.simulated_drop_count)
+                    } else {
+                        "ok".to_string()
+                    },
+                );
+            }
+            println!("{sep}");
+            println!();
+        }
+    }
+    Ok(())
+}
+
+fn fmt_bytes(bytes: u64) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1}MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1_024 {
+        format!("{:.1}KB", bytes as f64 / 1_024.0)
+    } else {
+        format!("{}B", bytes)
+    }
 }
 
 fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Result<()> {

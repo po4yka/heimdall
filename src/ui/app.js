@@ -1048,6 +1048,8 @@
   var versionChecking = y3(false);
   var backupSnapshots = y3([]);
   var backupLoadState = y3("idle");
+  var skillsReport = y3(null);
+  var skillsLoadState = y3("idle");
   var webConversations = y3([]);
   var companionHeartbeat = y3(null);
   var archiveImports = y3([]);
@@ -6821,6 +6823,179 @@
     ] });
   }
 
+  // src/ui/components/SkillsCard.tsx
+  function fmtBytes(b4) {
+    if (b4 >= 1048576) return (b4 / 1048576).toFixed(1) + " MB";
+    if (b4 >= 1024) return (b4 / 1024).toFixed(1) + " KB";
+    return b4 + " B";
+  }
+  function BudgetBar({ row }) {
+    const fill = Math.min(1, row.budget_tokens > 0 ? row.used_tokens / row.budget_tokens : 0);
+    const isOver = row.headroom_tokens < 0;
+    const barColor = isOver ? "var(--accent, #D71921)" : fill > 0.8 ? "rgba(var(--text-primary-rgb, 232,232,232), 0.80)" : "rgba(var(--text-primary-rgb, 232,232,232), 0.55)";
+    return /* @__PURE__ */ u4("div", { style: { marginBottom: "10px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "4px" }, children: [
+        /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "11px" }, children: row.model_label }),
+        /* @__PURE__ */ u4(
+          "span",
+          {
+            style: {
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              color: isOver ? "var(--accent, #D71921)" : "var(--text-secondary)"
+            },
+            children: isOver ? `[OVER: ${Math.abs(row.headroom_tokens)} tok over, ~${row.simulated_drop_count} skills dropped]` : `${row.used_tokens} / ${row.budget_tokens} tok`
+          }
+        )
+      ] }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            height: "4px",
+            borderRadius: "2px",
+            background: "rgba(var(--text-primary-rgb, 232,232,232), 0.10)",
+            overflow: "hidden"
+          },
+          role: "img",
+          "aria-label": `Skills listing tokens: ${row.used_tokens} of ${row.budget_tokens}`,
+          children: /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                height: "100%",
+                width: `${(fill * 100).toFixed(2)}%`,
+                background: barColor,
+                borderRadius: "2px",
+                transition: "width 300ms cubic-bezier(0.25,0.1,0.25,1)"
+              }
+            }
+          )
+        }
+      )
+    ] });
+  }
+  function ScopeSection({ scope }) {
+    const [open, setOpen] = d2(false);
+    const kindLabel = scope.kind.replace(/_/g, " ");
+    const projectSuffix = scope.project_label ? ` [${scope.project_label}]` : "";
+    return /* @__PURE__ */ u4("div", { style: { marginBottom: "8px", borderTop: "1px solid rgba(var(--text-primary-rgb, 232,232,232), 0.08)", paddingTop: "8px" }, children: [
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          onClick: () => setOpen(!open),
+          style: {
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            width: "100%",
+            textAlign: "left",
+            padding: "0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            color: "var(--text-primary)"
+          },
+          children: [
+            /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)" }, children: [
+              scope.provider,
+              " \xB7 ",
+              kindLabel,
+              projectSuffix
+            ] }),
+            /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)" }, children: [
+              scope.skills.length,
+              " skills \xB7 ",
+              fmtBytes(scope.bytes),
+              " \xB7 ",
+              scope.listing_tokens,
+              " tok ",
+              open ? "\u25B2" : "\u25BC"
+            ] })
+          ]
+        }
+      ),
+      open && scope.skills.length > 0 && /* @__PURE__ */ u4("table", { style: { width: "100%", borderCollapse: "collapse", marginTop: "8px", fontSize: "11px" }, children: [
+        /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
+          /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "NAME" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "DISK" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "TOK" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "STATUS" })
+        ] }) }),
+        /* @__PURE__ */ u4("tbody", { children: scope.skills.map((s4) => /* @__PURE__ */ u4("tr", { title: s4.description ?? void 0, children: [
+          /* @__PURE__ */ u4("td", { style: { padding: "2px 4px", fontFamily: "var(--font-mono)" }, children: [
+            s4.name,
+            s4.is_symlink && /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", marginLeft: "4px" }, children: "[link]" }),
+            s4.description_truncated && /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", marginLeft: "2px" }, children: "+" })
+          ] }),
+          /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }, children: fmtBytes(s4.bytes) }),
+          /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }, children: s4.listing_tokens }),
+          /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: s4.frontmatter_status !== "ok" ? "var(--accent, #D71921)" : "var(--text-secondary)" }, children: s4.frontmatter_status })
+        ] }, s4.path)) })
+      ] })
+    ] });
+  }
+  function SkillsCardInner({ report }) {
+    const anyOver = report.budget.some((r4) => r4.headroom_tokens < 0);
+    return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Skills inventory" }),
+        anyOver && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--accent, #D71921)" }, children: "[WARN: skills will be dropped from listing]" })
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "16px", marginBottom: "14px" }, children: [
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Skills" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: report.totals.skills_count })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Disk" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: fmtBytes(report.totals.total_bytes) })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Listing tokens" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: report.totals.total_listing_tokens })
+        ] })
+      ] }),
+      report.budget.map((row) => /* @__PURE__ */ u4(BudgetBar, { row }, row.model_label)),
+      report.scopes.map((scope) => /* @__PURE__ */ u4(ScopeSection, { scope }, `${scope.kind}:${scope.root}`)),
+      /* @__PURE__ */ u4("div", { style: { marginTop: "8px", fontSize: "10px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }, children: [
+        "tokenizer: ",
+        report.tokenizer,
+        " \xB7 budget fraction: ",
+        (report.budget_fraction * 100).toFixed(1),
+        "%"
+      ] })
+    ] });
+  }
+  function SkillsCard() {
+    const report = skillsReport.value;
+    const loadState3 = skillsLoadState.value;
+    y2(() => {
+      if (report !== null || loadState3 === "loading") return;
+      skillsLoadState.value = "loading";
+      fetch("/api/skills").then((r4) => r4.json()).then((data) => {
+        skillsReport.value = data;
+        skillsLoadState.value = "idle";
+      }).catch(() => {
+        skillsLoadState.value = "error";
+      });
+    }, []);
+    if (loadState3 === "loading") {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Skills inventory" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "scanning..." })
+      ] });
+    }
+    if (loadState3 === "error" || !report) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Skills inventory" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--accent, #D71921)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "[ERROR: failed to load skills data]" })
+      ] });
+    }
+    return /* @__PURE__ */ u4(SkillsCardInner, { report });
+  }
+
   // src/ui/components/Sidebar.tsx
   var NAV_ITEMS = [
     { key: "overview", label: "Overview", abbr: "OV" },
@@ -7504,6 +7679,21 @@
       render: (el) => {
         el.id = "today-weekday-hour-mount";
         el.className = "card card-flat bento-full";
+      }
+    },
+    // ── Tables tab (skills) ───────────────────────────────────────────────────
+    {
+      id: "skills",
+      title: "Skills inventory",
+      description: "Disk and context-budget impact of installed skills",
+      category: "system",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "skills";
+        invokeMountCallback("skills", el);
       }
     },
     // ── Projects tab ──────────────────────────────────────────────────────────
@@ -22383,6 +22573,9 @@ ${row.project}` : row.project;
   if (dashboardRuntime) {
     registerMountCallback("projects-registry", (el) => {
       R(/* @__PURE__ */ u4(ProjectsRegistry, { onReload: dashboardRuntime.loadData }), el);
+    });
+    registerMountCallback("skills", (el) => {
+      R(/* @__PURE__ */ u4(SkillsCard, {}), el);
     });
   }
   var backupModalMount = document.getElementById("backup-modal-mount");

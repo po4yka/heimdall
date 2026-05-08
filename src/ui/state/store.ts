@@ -23,6 +23,10 @@ export interface SnapshotMeta {
 export const backupSnapshots = signal<SnapshotMeta[]>([]);
 export const backupLoadState = signal<'idle' | 'loading' | 'error'>('idle');
 
+// ── Skills inventory ─────────────────────────────────────────────────
+export const skillsReport = signal<import('./dashboard-types').SkillsReport | null>(null);
+export const skillsLoadState = signal<'idle' | 'loading' | 'error'>('idle');
+
 // ── Web captures (companion extension) ───────────────────────────────
 export interface WebConversationSummary {
   vendor: string;

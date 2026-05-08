@@ -33,6 +33,7 @@ pub mod pricing_defs;
 pub mod pricing_sync;
 pub mod scanner;
 pub mod scheduler;
+pub mod skills;
 pub mod scrape;
 pub mod server;
 pub mod status_aggregator;

@@ -98,6 +98,7 @@ public struct HeimdallScenes: Scene {
                 costModels: self.model.costModels,
                 sessions: self.model.sessions,
                 projects: self.model.projects,
+                skills: self.model.skills,
                 backup: self.model.backup,
                 filters: self.model.filters,
                 savedViews: self.model.savedViews,

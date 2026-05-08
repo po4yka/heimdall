@@ -5,6 +5,7 @@ import { ImportsPanel } from './components/ImportsPanel';
 import { WebCapturesPanel } from './components/WebCapturesPanel';
 import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
 import { ProjectsRegistry } from './components/projects/ProjectsRegistry';
+import { SkillsCard } from './components/SkillsCard';
 import { Sidebar } from './components/Sidebar';
 import { SavedViewsBar } from './components/SavedViewsBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -146,6 +147,9 @@ if (globalStatusMount && dashboardRuntime) {
 if (dashboardRuntime) {
   registerMountCallback('projects-registry', (el) => {
     render(<ProjectsRegistry onReload={dashboardRuntime.loadData} />, el);
+  });
+  registerMountCallback('skills', (el) => {
+    render(<SkillsCard />, el);
   });
 }
 

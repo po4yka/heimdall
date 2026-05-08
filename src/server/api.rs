@@ -52,6 +52,7 @@ use crate::oauth::models::UsageWindowsResponse;
 use crate::openai;
 use crate::scanner;
 use crate::scanner::db;
+use crate::skills;
 use crate::status_aggregator;
 use crate::status_aggregator::models::CommunitySignal;
 use crate::webhooks::{self, WebhookState};
@@ -1096,6 +1097,40 @@ pub async fn api_claude_usage(
 
 pub async fn api_health() -> &'static str {
     "ok"
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+pub struct SkillsQuery {
+    pub scope: Option<String>,
+    pub budget_fraction: Option<f64>,
+    pub max_desc_chars: Option<usize>,
+}
+
+pub async fn api_skills(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<SkillsQuery>,
+) -> Result<Json<skills::SkillsReport>, StatusCode> {
+    let db_path = state.db_path.clone();
+    let opts = skills::ScanOptions {
+        include_global: true,
+        include_plugins: true,
+        include_projects: matches!(
+            q.scope.as_deref().unwrap_or("all"),
+            "all" | "projects"
+        ),
+        budget_fraction: q.budget_fraction.unwrap_or(0.01),
+        max_desc_chars: q.max_desc_chars.unwrap_or(1536),
+        db_path: Some(db_path),
+        ..Default::default()
+    };
+    let report = tokio::task::spawn_blocking(move || skills::scan(opts))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map_err(|e| {
+            tracing::warn!("api_skills: scan failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(report))
 }
 
 pub async fn api_version(

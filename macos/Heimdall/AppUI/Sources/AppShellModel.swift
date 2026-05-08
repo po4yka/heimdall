@@ -10,6 +10,7 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
     case costModels
     case sessions
     case projects
+    case skills
     case liveMonitor
     // Programmatic-only destinations (not shown in sidebar):
     case provider(ProviderID)
@@ -24,6 +25,7 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
         case .costModels:          return "cost-models"
         case .sessions:            return "sessions"
         case .projects:            return "projects"
+        case .skills:              return "skills"
         case .liveMonitor:         return "live-monitor"
         case .provider(let p):     return "provider:\(p.rawValue)"
         case .toolErrors(let t):   return "tool-errors:\(t)"
@@ -39,6 +41,7 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
         case .costModels:          return "Cost & Models"
         case .sessions:            return "Sessions"
         case .projects:            return "Projects"
+        case .skills:              return "Skills"
         case .liveMonitor:         return "Live Monitor"
         case .provider(let p):     return p.title
         case .toolErrors:          return "Tool Errors"
@@ -54,6 +57,7 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
         case .costModels:          return "Cost & models"
         case .sessions:            return "Sessions"
         case .projects:            return "Projects"
+        case .skills:              return "Skills inventory"
         case .liveMonitor:         return "Fast refresh"
         case .provider(.claude):   return "Anthropic usage"
         case .provider(.codex):    return "OpenAI usage"
@@ -70,6 +74,7 @@ public enum AppNavigationItem: Hashable, Sendable, Identifiable {
         case .costModels:          return "dollarsign.circle"
         case .sessions:            return "list.bullet.rectangle"
         case .projects:            return "folder"
+        case .skills:              return "books.vertical"
         case .liveMonitor:         return "waveform.path.ecg.rectangle"
         case .provider(.claude):   return "quote.bubble"
         case .provider(.codex):    return "curlybraces.square"
@@ -125,7 +130,7 @@ public final class AppShellModel {
 
     /// Ordered sidebar destinations. Provider and toolErrors are programmatic-only and excluded.
     public var navigationItems: [AppNavigationItem] {
-        [.overview, .today, .activity, .agents, .costModels, .sessions, .projects, .liveMonitor]
+        [.overview, .today, .activity, .agents, .costModels, .sessions, .projects, .skills, .liveMonitor]
     }
 
     public func selectNavigation(_ item: AppNavigationItem) {
@@ -135,7 +140,7 @@ public final class AppShellModel {
             self.sessionStore.selectedProvider = provider
             self.selectedMenuTab = provider == .claude ? .claude : .codex
             self.sessionStore.selectedMergeTab = self.selectedMenuTab
-        case .overview, .today, .activity, .agents, .costModels, .sessions, .projects, .liveMonitor:
+        case .overview, .today, .activity, .agents, .costModels, .sessions, .projects, .skills, .liveMonitor:
             self.selectedMenuTab = .overview
             self.sessionStore.selectedMergeTab = .overview
         case .toolErrors:
