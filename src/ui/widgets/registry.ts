@@ -676,6 +676,20 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       invokeMountCallback('instruction-files', el);
     },
   },
+  {
+    id: 'mcp-servers',
+    title: 'MCP servers',
+    description: 'Configured MCP servers, transports, runtime state, and usage',
+    category: 'system',
+    screens: ['tables'],
+    defaultSize: { w: 4, h: 4 },
+    minW: 2,
+    minH: 2,
+    render: (el: HTMLElement) => {
+      el.id = 'mcp-servers';
+      invokeMountCallback('mcp-servers', el);
+    },
+  },
 
   // ── Projects tab ──────────────────────────────────────────────────────────
   {

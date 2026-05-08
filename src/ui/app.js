@@ -1052,6 +1052,8 @@
   var skillsLoadState = y3("idle");
   var instructionFilesReport = y3(null);
   var instructionFilesLoadState = y3("idle");
+  var mcpServersReport = y3(null);
+  var mcpServersLoadState = y3("idle");
   var webConversations = y3([]);
   var companionHeartbeat = y3(null);
   var archiveImports = y3([]);
@@ -7317,6 +7319,344 @@
     return /* @__PURE__ */ u4(InstructionFilesCardInner, { report });
   }
 
+  // src/ui/components/McpServersCard.tsx
+  function fmtBytes3(b4) {
+    if (b4 >= 1048576) return (b4 / 1048576).toFixed(1) + " MB";
+    if (b4 >= 1024) return (b4 / 1024).toFixed(1) + " KB";
+    return b4 + " B";
+  }
+  function relativeTime2(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m5 = Math.floor(diff / 6e4);
+    if (m5 < 60) return `${m5}m ago`;
+    const h5 = Math.floor(m5 / 60);
+    if (h5 < 24) return `${h5}h ago`;
+    return `${Math.floor(h5 / 24)}d ago`;
+  }
+  function TransportPill({ transport }) {
+    return /* @__PURE__ */ u4(
+      "span",
+      {
+        style: {
+          fontFamily: "var(--font-mono)",
+          fontSize: "10px",
+          padding: "1px 5px",
+          border: "1px solid rgba(var(--text-primary-rgb, 232,232,232), 0.20)",
+          borderRadius: "3px",
+          color: "var(--text-secondary)",
+          marginLeft: "6px"
+        },
+        children: transport.kind
+      }
+    );
+  }
+  function RuntimeBadge({ runtime }) {
+    if (runtime.kind === "running") {
+      return /* @__PURE__ */ u4(
+        "span",
+        {
+          style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "10px",
+            color: "var(--success, #4caf50)",
+            marginLeft: "8px"
+          },
+          children: [
+            "[RUNNING pid:",
+            runtime.pid,
+            "]"
+          ]
+        }
+      );
+    }
+    if (runtime.kind === "not_running") {
+      return /* @__PURE__ */ u4(
+        "span",
+        {
+          style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "10px",
+            color: "var(--text-secondary)",
+            marginLeft: "8px",
+            opacity: 0.6
+          },
+          children: "[STOPPED]"
+        }
+      );
+    }
+    return /* @__PURE__ */ u4(
+      "span",
+      {
+        style: {
+          fontFamily: "var(--font-mono)",
+          fontSize: "10px",
+          color: "var(--text-secondary)",
+          marginLeft: "8px",
+          opacity: 0.5
+        },
+        children: "[N/A]"
+      }
+    );
+  }
+  function RedactedValueCell({ val }) {
+    if (val.kind === "plain") {
+      return /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", wordBreak: "break-all" }, children: val.value });
+    }
+    if (val.kind === "secret") {
+      return /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px" }, children: [
+        /* @__PURE__ */ u4("span", { style: { opacity: 0.5 }, children: val.masked }),
+        /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent, #D71921)", fontSize: "9px" }, children: "[SECRET]" })
+      ] });
+    }
+    return /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
+      val.path,
+      !val.exists && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent, #D71921)", fontSize: "9px" }, children: "[MISSING]" }),
+      val.exists && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", opacity: 0.5 }, children: fmtBytes3(val.bytes) })
+    ] });
+  }
+  function ServerRow({ server }) {
+    const [open, setOpen] = d2(false);
+    const envKeys = Object.keys(server.env);
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        style: {
+          borderTop: "1px solid rgba(var(--text-primary-rgb, 232,232,232), 0.08)",
+          paddingTop: "8px",
+          marginBottom: "4px"
+        },
+        children: [
+          /* @__PURE__ */ u4(
+            "button",
+            {
+              type: "button",
+              onClick: () => setOpen(!open),
+              style: {
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                width: "100%",
+                textAlign: "left",
+                padding: "0",
+                display: "flex",
+                alignItems: "center",
+                color: "var(--text-primary)"
+              },
+              children: [
+                /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", flexShrink: 0 }, children: server.name }),
+                /* @__PURE__ */ u4(TransportPill, { transport: server.transport }),
+                /* @__PURE__ */ u4(RuntimeBadge, { runtime: server.runtime }),
+                /* @__PURE__ */ u4(
+                  "span",
+                  {
+                    style: {
+                      marginLeft: "auto",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "10px",
+                      color: "var(--text-secondary)",
+                      flexShrink: 0,
+                      paddingLeft: "8px"
+                    },
+                    children: open ? "\u25B2" : "\u25BC"
+                  }
+                )
+              ]
+            }
+          ),
+          open && /* @__PURE__ */ u4("div", { style: { marginTop: "8px", paddingLeft: "4px" }, children: [
+            /* @__PURE__ */ u4("div", { style: { marginBottom: "6px" }, children: [
+              /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "10px", display: "block", marginBottom: "2px" }, children: "Source" }),
+              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)", wordBreak: "break-all" }, children: server.source_path })
+            ] }),
+            server.managed_by && /* @__PURE__ */ u4("div", { style: { marginBottom: "6px" }, children: [
+              /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "10px", display: "block", marginBottom: "2px" }, children: "Managed by" }),
+              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: server.managed_by })
+            ] }),
+            server.transport.kind === "stdio" && /* @__PURE__ */ u4("div", { style: { marginBottom: "6px" }, children: [
+              /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "10px", display: "block", marginBottom: "2px" }, children: "Command" }),
+              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)", wordBreak: "break-all" }, children: [
+                server.transport.command,
+                server.transport.args.length > 0 && /* @__PURE__ */ u4("span", { style: { opacity: 0.7 }, children: [
+                  " ",
+                  server.transport.args.join(" ")
+                ] })
+              ] })
+            ] }),
+            (server.transport.kind === "http" || server.transport.kind === "sse") && /* @__PURE__ */ u4("div", { style: { marginBottom: "6px" }, children: [
+              /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "10px", display: "block", marginBottom: "2px" }, children: "URL" }),
+              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)", wordBreak: "break-all" }, children: server.transport.url })
+            ] }),
+            envKeys.length > 0 && /* @__PURE__ */ u4("div", { style: { marginBottom: "6px" }, children: [
+              /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "10px", display: "block", marginBottom: "4px" }, children: "Environment" }),
+              /* @__PURE__ */ u4("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "10px" }, children: [
+                /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
+                  /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em", width: "40%" }, children: "KEY" }),
+                  /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "VALUE" })
+                ] }) }),
+                /* @__PURE__ */ u4("tbody", { children: envKeys.map((key) => {
+                  const val = server.env[key];
+                  if (!val) return null;
+                  return /* @__PURE__ */ u4("tr", { children: [
+                    /* @__PURE__ */ u4("td", { style: { padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", verticalAlign: "top" }, children: key }),
+                    /* @__PURE__ */ u4("td", { style: { padding: "2px 4px", verticalAlign: "top" }, children: /* @__PURE__ */ u4(RedactedValueCell, { val }) })
+                  ] }, key);
+                }) })
+              ] })
+            ] }),
+            server.log_probe && /* @__PURE__ */ u4("div", { style: { marginBottom: "6px" }, children: [
+              /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "10px", display: "block", marginBottom: "2px" }, children: "Log" }),
+              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
+                server.log_probe.path,
+                /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", opacity: 0.6 }, children: [
+                  fmtBytes3(server.log_probe.bytes),
+                  " \xB7 ",
+                  server.log_probe.recent_line_count,
+                  " recent lines \xB7 ",
+                  relativeTime2(server.log_probe.modified)
+                ] })
+              ] })
+            ] }),
+            server.usage && /* @__PURE__ */ u4("div", { style: { marginBottom: "2px" }, children: [
+              /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "10px", display: "block", marginBottom: "2px" }, children: "Usage" }),
+              /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
+                server.usage.total_calls,
+                " calls",
+                server.usage.last_used && /* @__PURE__ */ u4("span", { children: [
+                  " \xB7 last ",
+                  relativeTime2(server.usage.last_used)
+                ] }),
+                /* @__PURE__ */ u4("span", { children: [
+                  " \xB7 ",
+                  server.usage.distinct_sessions,
+                  " sessions"
+                ] }),
+                /* @__PURE__ */ u4("span", { children: [
+                  " \xB7 ",
+                  server.usage.distinct_tools,
+                  " tools"
+                ] })
+              ] })
+            ] }),
+            !server.usage && /* @__PURE__ */ u4("div", { children: /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)", opacity: 0.5 }, children: "[never invoked]" }) })
+          ] })
+        ]
+      }
+    );
+  }
+  function ProviderColumn({ title, servers }) {
+    if (servers.length === 0) return null;
+    return /* @__PURE__ */ u4("div", { style: { flex: "1 1 0", minWidth: "0" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px", marginBottom: "8px" }, children: [
+        title,
+        " (",
+        servers.length,
+        ")"
+      ] }),
+      servers.map((s4) => /* @__PURE__ */ u4(ServerRow, { server: s4 }, `${s4.provider}:${s4.name}:${s4.scope}`))
+    ] });
+  }
+  function McpServersCardInner({ report }) {
+    const t4 = report.totals;
+    const hasNeverInvoked = t4.never_invoked_count > 0;
+    const showTwoColumns = report.claude.length > 0 && report.codex.length > 0;
+    return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "MCP servers" }),
+        hasNeverInvoked && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)", opacity: 0.7 }, children: [
+          "[",
+          t4.never_invoked_count,
+          " never invoked]"
+        ] })
+      ] }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "14px" }, children: [
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Configured" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: t4.configured_count })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Running" }),
+          /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                fontFamily: "var(--font-mono)",
+                fontSize: "18px",
+                color: t4.running_count > 0 ? "var(--success, #4caf50)" : void 0
+              },
+              children: t4.running_count
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Never invoked" }),
+          /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                fontFamily: "var(--font-mono)",
+                fontSize: "18px",
+                color: t4.never_invoked_count > 0 ? "var(--text-secondary)" : void 0,
+                opacity: t4.never_invoked_count > 0 ? 0.7 : 1
+              },
+              children: t4.never_invoked_count
+            }
+          )
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Claude" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: t4.claude_count })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Codex" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: t4.codex_count })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Projects" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: t4.project_count })
+        ] })
+      ] }),
+      t4.configured_count === 0 ? /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)", opacity: 0.6 }, children: "No MCP servers configured." }) : /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "24px", alignItems: "flex-start" }, children: showTwoColumns ? /* @__PURE__ */ u4(S, { children: [
+        /* @__PURE__ */ u4(ProviderColumn, { title: "Claude Code", servers: report.claude }),
+        /* @__PURE__ */ u4("div", { style: { width: "1px", background: "rgba(var(--text-primary-rgb, 232,232,232), 0.08)", alignSelf: "stretch", flexShrink: 0 } }),
+        /* @__PURE__ */ u4(ProviderColumn, { title: "Codex", servers: report.codex })
+      ] }) : /* @__PURE__ */ u4(S, { children: [
+        report.claude.length > 0 && /* @__PURE__ */ u4(ProviderColumn, { title: "Claude Code", servers: report.claude }),
+        report.codex.length > 0 && /* @__PURE__ */ u4(ProviderColumn, { title: "Codex", servers: report.codex })
+      ] }) }),
+      /* @__PURE__ */ u4("div", { style: { marginTop: "8px", fontSize: "10px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }, children: [
+        "generated ",
+        relativeTime2(report.generated_at)
+      ] })
+    ] });
+  }
+  function McpServersCard() {
+    const report = mcpServersReport.value;
+    const loadState3 = mcpServersLoadState.value;
+    y2(() => {
+      if (report !== null || loadState3 === "loading") return;
+      mcpServersLoadState.value = "loading";
+      fetch("/api/mcp-servers").then((r4) => r4.json()).then((data) => {
+        mcpServersReport.value = data;
+        mcpServersLoadState.value = "idle";
+      }).catch(() => {
+        mcpServersLoadState.value = "error";
+      });
+    }, []);
+    if (loadState3 === "loading") {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "MCP servers" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "scanning..." })
+      ] });
+    }
+    if (loadState3 === "error" || !report) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "MCP servers" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--accent, #D71921)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "[ERROR: failed to load MCP servers data]" })
+      ] });
+    }
+    return /* @__PURE__ */ u4(McpServersCardInner, { report });
+  }
+
   // src/ui/components/Sidebar.tsx
   var NAV_ITEMS = [
     { key: "overview", label: "Overview", abbr: "OV" },
@@ -8029,6 +8369,20 @@
       render: (el) => {
         el.id = "instruction-files";
         invokeMountCallback("instruction-files", el);
+      }
+    },
+    {
+      id: "mcp-servers",
+      title: "MCP servers",
+      description: "Configured MCP servers, transports, runtime state, and usage",
+      category: "system",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "mcp-servers";
+        invokeMountCallback("mcp-servers", el);
       }
     },
     // ── Projects tab ──────────────────────────────────────────────────────────
@@ -22914,6 +23268,9 @@ ${row.project}` : row.project;
     });
     registerMountCallback("instruction-files", (el) => {
       R(/* @__PURE__ */ u4(InstructionFilesCard, {}), el);
+    });
+    registerMountCallback("mcp-servers", (el) => {
+      R(/* @__PURE__ */ u4(McpServersCard, {}), el);
     });
   }
   var backupModalMount = document.getElementById("backup-modal-mount");

@@ -900,3 +900,64 @@ export interface TodayResponse {
   days_hours_7: DayHourCell[];
   weekday_hour_90: WeekdayHourCell[];
 }
+
+// ── MCP servers inventory ───────────────────────────────────────────────────
+
+export type McpTransport =
+  | { kind: 'stdio'; command: string; args: string[] }
+  | { kind: 'http'; url: string }
+  | { kind: 'sse'; url: string };
+
+export type McpRuntimeState =
+  | { kind: 'running'; pid: number; parent_pid: number | null; started_at: string | null; cpu_percent: number; memory_bytes: number }
+  | { kind: 'not_running' }
+  | { kind: 'not_applicable' };
+
+export type McpRedactedValue =
+  | { kind: 'plain'; value: string }
+  | { kind: 'secret'; masked: string }
+  | { kind: 'env_from_file'; path: string; exists: boolean; bytes: number };
+
+export interface McpLogProbe {
+  path: string;
+  bytes: number;
+  modified: string;
+  recent_line_count: number;
+}
+
+export interface McpUsageStats {
+  total_calls: number;
+  last_used: string | null;
+  distinct_sessions: number;
+  distinct_tools: number;
+}
+
+export interface McpServerEntry {
+  name: string;
+  provider: string;
+  scope: string;
+  project_label: string | null;
+  source_path: string;
+  managed_by: string | null;
+  transport: McpTransport;
+  env: Record<string, McpRedactedValue>;
+  runtime: McpRuntimeState;
+  log_probe: McpLogProbe | null;
+  usage: McpUsageStats | null;
+}
+
+export interface McpServerTotals {
+  configured_count: number;
+  running_count: number;
+  never_invoked_count: number;
+  claude_count: number;
+  codex_count: number;
+  project_count: number;
+}
+
+export interface McpServersReport {
+  generated_at: string;
+  claude: McpServerEntry[];
+  codex: McpServerEntry[];
+  totals: McpServerTotals;
+}

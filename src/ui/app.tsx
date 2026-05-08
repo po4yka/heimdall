@@ -7,6 +7,7 @@ import { AgentRegistryModal } from './components/agents/AgentRegistryModal';
 import { ProjectsRegistry } from './components/projects/ProjectsRegistry';
 import { SkillsCard } from './components/SkillsCard';
 import { InstructionFilesCard } from './components/InstructionFilesCard';
+import { McpServersCard } from './components/McpServersCard';
 import { Sidebar } from './components/Sidebar';
 import { SavedViewsBar } from './components/SavedViewsBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -154,6 +155,9 @@ if (dashboardRuntime) {
   });
   registerMountCallback('instruction-files', (el) => {
     render(<InstructionFilesCard />, el);
+  });
+  registerMountCallback('mcp-servers', (el) => {
+    render(<McpServersCard />, el);
   });
 }
 

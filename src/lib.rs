@@ -24,6 +24,7 @@ pub mod live_providers;
 pub mod locale;
 #[cfg(feature = "mcp")]
 pub mod mcp;
+pub mod mcp_servers;
 pub mod menubar;
 pub mod models;
 pub mod oauth;

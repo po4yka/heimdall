@@ -31,6 +31,10 @@ export const skillsLoadState = signal<'idle' | 'loading' | 'error'>('idle');
 export const instructionFilesReport = signal<import('./dashboard-types').InstructionFilesReport | null>(null);
 export const instructionFilesLoadState = signal<'idle' | 'loading' | 'error'>('idle');
 
+// ── MCP servers inventory ─────────────────────────────────────────────
+export const mcpServersReport = signal<import('./dashboard-types').McpServersReport | null>(null);
+export const mcpServersLoadState = signal<'idle' | 'loading' | 'error'>('idle');
+
 // ── Web captures (companion extension) ───────────────────────────────
 export interface WebConversationSummary {
   vendor: string;

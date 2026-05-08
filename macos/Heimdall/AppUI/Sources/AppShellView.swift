@@ -23,6 +23,7 @@ struct AppShellView: View {
     @Bindable var projects: ProjectsFeatureModel
     @Bindable var skills: SkillsFeatureModel
     @Bindable var instructions: InstructionsFeatureModel
+    @Bindable var mcpServers: McpServersFeatureModel
     @Bindable var backup: BackupFeatureModel
     @Bindable var filters: DashboardFiltersModel
 
@@ -74,6 +75,8 @@ struct AppShellView: View {
                             WindowSkillsView(model: self.skills)
                         case .instructions:
                             WindowInstructionsView(model: self.instructions)
+                        case .mcpServers:
+                            WindowMcpServersView(model: self.mcpServers)
                         case .liveMonitor:
                             WindowLiveMonitorView(model: self.liveMonitor, helperPort: self.helperPort)
                         case .provider(let provider):
@@ -132,6 +135,8 @@ struct AppShellView: View {
                             await self.skills.reload()
                         case .instructions:
                             await self.instructions.reload()
+                        case .mcpServers:
+                            await self.mcpServers.reload()
                         case .toolErrors:
                             break
                         }
@@ -216,6 +221,8 @@ struct AppShellView: View {
             return self.skills.isLoading
         case .instructions:
             return self.instructions.isLoading
+        case .mcpServers:
+            return self.mcpServers.isLoading
         case .toolErrors:
             return false
         }

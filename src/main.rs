@@ -6,6 +6,7 @@ use claude_usage_tracker::db as db_mod;
 use claude_usage_tracker::export;
 use claude_usage_tracker::hook;
 use claude_usage_tracker::instruction_files;
+use claude_usage_tracker::mcp_servers;
 use claude_usage_tracker::jq as jq_mod;
 use claude_usage_tracker::litellm;
 use claude_usage_tracker::locale;
@@ -597,6 +598,30 @@ enum McpAction {
         /// Target client: claude-code | claude-desktop | cursor
         #[arg(long, default_value = "claude-code")]
         client: String,
+    },
+    /// List configured MCP servers from Claude Code and Codex with transport and live state
+    Servers {
+        #[arg(long)]
+        db_path: Option<PathBuf>,
+        /// Output format: text | json
+        #[arg(long, default_value = "text", value_parser = ["text", "json"])]
+        format: String,
+        #[arg(long)]
+        jq: Option<String>,
+        /// Scope filter: all | claude | codex | global | projects
+        #[arg(long, default_value = "all")]
+        scope: String,
+        #[arg(long = "path")]
+        paths: Vec<PathBuf>,
+        /// Skip live process detection
+        #[arg(long)]
+        no_processes: bool,
+        /// Skip log file probe
+        #[arg(long)]
+        no_logs: bool,
+        /// Print secret values in plaintext (warns on stderr)
+        #[arg(long)]
+        show_secrets: bool,
     },
 }
 
@@ -2197,6 +2222,121 @@ fn cmd_scheduler(action: SchedulerAction, default_db: &std::path::Path) -> Resul
 }
 
 #[allow(clippy::too_many_arguments)]
+fn cmd_mcp_servers(
+    db_path: &std::path::Path,
+    format: &str,
+    jq: Option<&str>,
+    scope: &str,
+    paths: &[PathBuf],
+    probe_processes: bool,
+    probe_logs: bool,
+    show_secrets: bool,
+) -> Result<()> {
+    use mcp_servers::{RedactedValue, RuntimeState, ScanOptions, Transport};
+
+    if show_secrets {
+        eprintln!("[WARN: secret values printed in plaintext]");
+    }
+
+    let (include_claude_global, include_claude_projects, include_codex_global) = match scope {
+        "claude" => (true, true, false),
+        "codex" => (false, false, true),
+        "global" => (true, false, true),
+        "projects" => (false, true, false),
+        _ => (true, true, true),
+    };
+
+    let opts = ScanOptions {
+        include_claude_global,
+        include_claude_projects,
+        include_codex_global,
+        project_paths: paths.to_vec(),
+        probe_processes,
+        probe_logs,
+        db_path: Some(db_path.to_path_buf()),
+        ..Default::default()
+    };
+
+    let report = mcp_servers::scan(opts)?;
+
+    let effective_format = if jq.is_some() { "json" } else { format };
+    if effective_format == "json" {
+        let value = serde_json::to_value(&report)?;
+        if let Some(filter) = jq {
+            apply_jq_and_print(&value, filter);
+        } else {
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        }
+        return Ok(());
+    }
+
+    // Text renderer
+    let sep = "=".repeat(70);
+    println!();
+    println!("{sep}");
+    println!(
+        "MCP server inventory  {}",
+        report.generated_at
+    );
+    println!(
+        "  configured: {}  running: {}  never invoked: {}  projects: {}",
+        report.totals.configured_count,
+        report.totals.running_count,
+        report.totals.never_invoked_count,
+        report.totals.project_count
+    );
+    println!("{sep}");
+
+    for (label, entries) in [("Claude Code", &report.claude), ("Codex", &report.codex)] {
+        println!();
+        println!("── {label} ──────────────────────────────");
+        if entries.is_empty() {
+            println!("  (none configured)");
+            continue;
+        }
+        for e in entries {
+            let runtime_str = match &e.runtime {
+                RuntimeState::Running { pid, .. } => format!("[RUNNING pid:{pid}]"),
+                RuntimeState::NotRunning => "[STOPPED]".to_string(),
+                RuntimeState::NotApplicable => "[N/A]".to_string(),
+            };
+            let scope_tag = match e.scope {
+                mcp_servers::ScopeKind::ClaudeUserGlobal => "(global)",
+                mcp_servers::ScopeKind::ClaudeUserGlobalAlt => "(global-alt)",
+                mcp_servers::ScopeKind::ClaudeProject => "(project)",
+                mcp_servers::ScopeKind::CodexUserGlobal => "(global)",
+            };
+            println!("  {} {} {}", e.name, scope_tag, runtime_str);
+            match &e.transport {
+                Transport::Stdio { command, args } => {
+                    println!("    stdio: {} {}", command, args.join(" "));
+                }
+                Transport::Http { url } => println!("    http: {url}"),
+                Transport::Sse { url } => println!("    sse:  {url}"),
+            }
+            for (k, v) in &e.env {
+                let display = match v {
+                    RedactedValue::Plain { value } => value.clone(),
+                    RedactedValue::Secret { masked } => masked.clone(),
+                    RedactedValue::EnvFromFile { path, .. } => format!("(file: {path})"),
+                };
+                println!("    env {k} = {display}");
+            }
+            if let Some(ref u) = e.usage {
+                println!(
+                    "    usage: {} calls · {} sessions · {} tools",
+                    u.total_calls, u.distinct_sessions, u.distinct_tools
+                );
+            } else {
+                println!("    usage: never invoked");
+            }
+        }
+    }
+    println!();
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
 fn cmd_dashboard(
     db: std::path::PathBuf,
     dirs: Option<Vec<std::path::PathBuf>>,
@@ -2623,6 +2763,28 @@ fn cmd_mcp(action: McpAction, default_db: &dyn Fn(Option<PathBuf>) -> PathBuf) -
                 println!("  Run: heimdall mcp install");
             }
         },
+        McpAction::Servers {
+            db_path,
+            format,
+            jq,
+            scope,
+            paths,
+            no_processes,
+            no_logs,
+            show_secrets,
+        } => {
+            let db = default_db(db_path);
+            cmd_mcp_servers(
+                &db,
+                &format,
+                jq.as_deref(),
+                &scope,
+                &paths,
+                !no_processes,
+                !no_logs,
+                show_secrets,
+            )?;
+        }
     }
     Ok(())
 }

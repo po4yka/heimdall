@@ -100,6 +100,7 @@ public struct HeimdallScenes: Scene {
                 projects: self.model.projects,
                 skills: self.model.skills,
                 instructions: self.model.instructions,
+                mcpServers: self.model.mcpServers,
                 backup: self.model.backup,
                 filters: self.model.filters,
                 savedViews: self.model.savedViews,

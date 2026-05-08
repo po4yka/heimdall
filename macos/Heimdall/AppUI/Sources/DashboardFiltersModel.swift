@@ -73,7 +73,7 @@ func dashboardFilterGroups(for tab: AppNavigationItem) -> DashboardFilterGroups 
     case .costModels: return [.range, .bucket, .provider, .models]
     case .sessions:   return [.range, .provider, .models, .projectSearch]
     case .projects:   return [.projectSearch]
-    case .skills, .instructions, .liveMonitor, .provider, .toolErrors: return []
+    case .skills, .instructions, .mcpServers, .liveMonitor, .provider, .toolErrors: return []
     }
 }
 
