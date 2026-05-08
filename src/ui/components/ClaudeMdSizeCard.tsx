@@ -94,7 +94,6 @@ function RevisionTable({ revisions }: { revisions: ClaudeMdSizePoint[] }) {
                 fontFamily: 'var(--font-mono)',
                 fontSize: '9px',
                 color: 'var(--text-secondary)',
-                textTransform: 'uppercase',
               }}
             >
               {h}

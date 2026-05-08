@@ -108,10 +108,10 @@ function OutcomeTable({ rows }: { rows: HookOutcomeRow[] }) {
             alignItems: 'center',
           }}
         >
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Outcome</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>Count</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>p50</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>p95</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)' }}>Outcome</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textAlign: 'right' }}>Count</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textAlign: 'right' }}>p50</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textAlign: 'right' }}>p95</div>
           {rows.map((r) => (
             <>
               <div key={`outcome-${r.outcome}`} style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-primary)', lineHeight: '20px' }}>{r.outcome}</div>
@@ -147,8 +147,8 @@ function BypassTable({ rows }: { rows: HookBypassAncestorRow[] }) {
             alignItems: 'center',
           }}
         >
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Command</div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textTransform: 'uppercase', textAlign: 'right' }}>Bypasses</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)' }}>Command</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textAlign: 'right' }}>Bypasses</div>
           {rows.map((a) => (
             <>
               <div

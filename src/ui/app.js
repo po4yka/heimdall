@@ -8421,10 +8421,10 @@
                 alignItems: "center"
               },
               children: [
-                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase" }, children: "Outcome" }),
-                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase", textAlign: "right" }, children: "Count" }),
-                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase", textAlign: "right" }, children: "p50" }),
-                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase", textAlign: "right" }, children: "p95" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)" }, children: "Outcome" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textAlign: "right" }, children: "Count" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textAlign: "right" }, children: "p50" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textAlign: "right" }, children: "p95" }),
                 rows2.map((r4) => /* @__PURE__ */ u4(S, { children: [
                   /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-primary)", lineHeight: "20px" }, children: r4.outcome }, `outcome-${r4.outcome}`),
                   /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-primary)" }, children: r4.count }),
@@ -8460,8 +8460,8 @@
                 alignItems: "center"
               },
               children: [
-                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase" }, children: "Command" }),
-                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase", textAlign: "right" }, children: "Bypasses" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)" }, children: "Command" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textAlign: "right" }, children: "Bypasses" }),
                 rows2.map((a4) => /* @__PURE__ */ u4(S, { children: [
                   /* @__PURE__ */ u4(
                     "div",
@@ -8614,8 +8614,7 @@
                 style: {
                   fontFamily: "var(--font-mono)",
                   fontSize: "9px",
-                  color: "var(--text-secondary)",
-                  textTransform: "uppercase"
+                  color: "var(--text-secondary)"
                 },
                 children: h5
               },
@@ -13838,9 +13837,8 @@
         /* @__PURE__ */ u4("span", { style: {
           fontSize: "10px",
           letterSpacing: "0.08em",
-          textTransform: "uppercase",
           color: "var(--text-disabled)"
-        }, children: "Subagent Reconciliation" }),
+        }, children: "Subagent reconciliation" }),
         /* @__PURE__ */ u4("span", { style: { color: "var(--text-disabled)" }, children: "\xB7" }),
         /* @__PURE__ */ u4("span", { children: reconciliation.error ?? "Unavailable" })
       ] }) });
