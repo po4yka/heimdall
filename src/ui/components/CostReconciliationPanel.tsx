@@ -23,11 +23,10 @@ export function CostReconciliationPanel({ data }: Props) {
           fontFamily: 'var(--font-mono)',
           fontSize: '11px',
           fontWeight: 400,
-          textTransform: 'uppercase' as const,
           letterSpacing: '0.08em',
           color: 'var(--text-secondary)',
         }}>
-          COST RECONCILIATION
+          Cost reconciliation
         </span>
         {data.period && (
           <span style={{
@@ -46,33 +45,30 @@ export function CostReconciliationPanel({ data }: Props) {
           <div style={{
             fontFamily: 'var(--font-mono)',
             fontSize: '11px',
-            textTransform: 'uppercase' as const,
             letterSpacing: '0.08em',
             color: 'var(--text-secondary)',
             marginBottom: '8px',
-          }}>HOOK-REPORTED</div>
+          }}>Hook-reported</div>
           <div class="stat-value" style={{ fontSize: '24px' }}>{fmtCost(hookUsd)}</div>
         </div>
         <div>
           <div style={{
             fontFamily: 'var(--font-mono)',
             fontSize: '11px',
-            textTransform: 'uppercase' as const,
             letterSpacing: '0.08em',
             color: 'var(--text-secondary)',
             marginBottom: '8px',
-          }}>LOCAL ESTIMATE</div>
+          }}>Local estimate</div>
           <div class="stat-value" style={{ fontSize: '24px' }}>{fmtCost(localUsd)}</div>
         </div>
         <div>
           <div style={{
             fontFamily: 'var(--font-mono)',
             fontSize: '11px',
-            textTransform: 'uppercase' as const,
             letterSpacing: '0.08em',
             color: 'var(--text-secondary)',
             marginBottom: '8px',
-          }}>DIVERGENCE</div>
+          }}>Divergence</div>
           <div
             class="stat-value"
             style={{ fontSize: '24px', color: isWarn ? 'var(--accent)' : undefined }}

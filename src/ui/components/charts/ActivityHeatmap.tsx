@@ -78,7 +78,7 @@ export function ActivityHeatmap({ data, metric: metricSignal, onMetricChange }: 
     <div class="heatmap-panel">
       <div class="heatmap-header">
         <span class="heatmap-title">
-          ACTIVITY / 7x24 / {period.toUpperCase()}
+          Activity / 7x24 / {period}
         </span>
         <span class="heatmap-subtitle">
           {active_days} active {active_days === 1 ? 'day' : 'days'}

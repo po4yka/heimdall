@@ -10885,10 +10885,10 @@
     "--border": "#E0E0E0"
   };
   var RANGE_LABELS = {
-    "7d": "Last 7 Days",
-    "30d": "Last 30 Days",
-    "90d": "Last 90 Days",
-    "all": "All Time"
+    "7d": "Last 7 days",
+    "30d": "Last 30 days",
+    "90d": "Last 90 days",
+    "all": "All time"
   };
   var RANGE_TICKS = { "7d": 7, "30d": 15, "90d": 13, "all": 12 };
   function apexThemeMode() {
@@ -11297,8 +11297,8 @@
     return /* @__PURE__ */ u4("div", { class: "heatmap-panel", children: [
       /* @__PURE__ */ u4("div", { class: "heatmap-header", children: [
         /* @__PURE__ */ u4("span", { class: "heatmap-title", children: [
-          "ACTIVITY / 7x24 / ",
-          period.toUpperCase()
+          "Activity / 7x24 / ",
+          period
         ] }),
         /* @__PURE__ */ u4("span", { class: "heatmap-subtitle", children: [
           active_days,
@@ -12501,10 +12501,9 @@
           fontFamily: "var(--font-mono)",
           fontSize: "11px",
           fontWeight: 400,
-          textTransform: "uppercase",
           letterSpacing: "0.08em",
           color: "var(--text-secondary)"
-        }, children: "COST RECONCILIATION" }),
+        }, children: "Cost reconciliation" }),
         data.period && /* @__PURE__ */ u4("span", { style: {
           fontFamily: "var(--font-mono)",
           fontSize: "11px",
@@ -12521,33 +12520,30 @@
           /* @__PURE__ */ u4("div", { style: {
             fontFamily: "var(--font-mono)",
             fontSize: "11px",
-            textTransform: "uppercase",
             letterSpacing: "0.08em",
             color: "var(--text-secondary)",
             marginBottom: "8px"
-          }, children: "HOOK-REPORTED" }),
+          }, children: "Hook-reported" }),
           /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "24px" }, children: fmtCost(hookUsd) })
         ] }),
         /* @__PURE__ */ u4("div", { children: [
           /* @__PURE__ */ u4("div", { style: {
             fontFamily: "var(--font-mono)",
             fontSize: "11px",
-            textTransform: "uppercase",
             letterSpacing: "0.08em",
             color: "var(--text-secondary)",
             marginBottom: "8px"
-          }, children: "LOCAL ESTIMATE" }),
+          }, children: "Local estimate" }),
           /* @__PURE__ */ u4("div", { class: "stat-value", style: { fontSize: "24px" }, children: fmtCost(localUsd) })
         ] }),
         /* @__PURE__ */ u4("div", { children: [
           /* @__PURE__ */ u4("div", { style: {
             fontFamily: "var(--font-mono)",
             fontSize: "11px",
-            textTransform: "uppercase",
             letterSpacing: "0.08em",
             color: "var(--text-secondary)",
             marginBottom: "8px"
-          }, children: "DIVERGENCE" }),
+          }, children: "Divergence" }),
           /* @__PURE__ */ u4(
             "div",
             {
@@ -13755,9 +13751,8 @@
         /* @__PURE__ */ u4("span", { style: {
           fontSize: "10px",
           letterSpacing: "0.08em",
-          textTransform: "uppercase",
           color: "var(--text-disabled)"
-        }, children: "OpenAI Reconciliation" }),
+        }, children: "OpenAI reconciliation" }),
         /* @__PURE__ */ u4("span", { style: { color: "var(--text-disabled)" }, children: "\xB7" }),
         /* @__PURE__ */ u4("span", { children: reconciliation.error ?? "Unavailable" })
       ] }) });
@@ -14199,7 +14194,7 @@ ${row.project}` : row.project;
       {
         columns: columns7,
         data,
-        title: "Recent Sessions",
+        title: "Recent sessions",
         sectionKey: "sessions-mount",
         exportFn: onExportCSV,
         pageSize: SESSIONS_PAGE_SIZE,
@@ -14619,7 +14614,7 @@ ${row.project}` : row.project;
     const severity = data.severity ?? "ok";
     return /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
       /* @__PURE__ */ u4("div", { class: "stat-content", children: [
-        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "CONTEXT WINDOW" }),
+        /* @__PURE__ */ u4("div", { class: "stat-label", style: { letterSpacing: "0.08em", fontSize: "11px" }, children: "Context window" }),
         /* @__PURE__ */ u4(
           "div",
           {
@@ -16467,7 +16462,6 @@ ${row.project}` : row.project;
                 fontFamily: "var(--font-mono)",
                 fontSize: "11px",
                 letterSpacing: "0.08em",
-                textTransform: "uppercase",
                 color: "var(--text-secondary)",
                 display: "flex",
                 alignItems: "center",
@@ -17165,8 +17159,7 @@ ${row.project}` : row.project;
               borderRadius: "999px",
               border: "1px solid var(--border-visible)",
               color: "var(--accent)",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase"
+              letterSpacing: "0.08em"
             },
             children: issue
           }
@@ -17188,8 +17181,7 @@ ${row.project}` : row.project;
               background: liveMonitorFocus.value === option ? "var(--text-primary)" : "transparent",
               color: liveMonitorFocus.value === option ? "var(--bg)" : "var(--text-primary)",
               fontSize: "12px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase"
+              letterSpacing: "0.08em"
             },
             children: option === "all" ? "All" : option === "claude" ? "Claude" : "Codex"
           },
@@ -17209,8 +17201,7 @@ ${row.project}` : row.project;
               background: liveMonitorDensity.value === option ? "var(--text-primary)" : "transparent",
               color: liveMonitorDensity.value === option ? "var(--bg)" : "var(--text-primary)",
               fontSize: "12px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase"
+              letterSpacing: "0.08em"
             },
             children: option
           },
@@ -17233,8 +17224,7 @@ ${row.project}` : row.project;
                     cursor: "pointer",
                     listStyle: "none",
                     fontSize: "12px",
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase"
+                    letterSpacing: "0.08em"
                   },
                   children: "Panels"
                 }
@@ -17269,8 +17259,7 @@ ${row.project}` : row.project;
               color: "var(--text-primary)",
               textDecoration: "none",
               fontSize: "12px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase"
+              letterSpacing: "0.08em"
             },
             children: "Dashboard"
           }

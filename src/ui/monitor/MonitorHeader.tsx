@@ -54,7 +54,6 @@ export function MonitorHeader({ onThemeToggle, onRefresh }: MonitorHeaderProps) 
               border: '1px solid var(--border-visible)',
               color: 'var(--accent)',
               letterSpacing: '0.08em',
-              textTransform: 'uppercase',
             }}
           >
             {issue}
@@ -79,7 +78,6 @@ export function MonitorHeader({ onThemeToggle, onRefresh }: MonitorHeaderProps) 
                 color: liveMonitorFocus.value === option ? 'var(--bg)' : 'var(--text-primary)',
                 fontSize: '12px',
                 letterSpacing: '0.08em',
-                textTransform: 'uppercase',
               }}
             >
               {option === 'all' ? 'All' : option === 'claude' ? 'Claude' : 'Codex'}
@@ -100,7 +98,6 @@ export function MonitorHeader({ onThemeToggle, onRefresh }: MonitorHeaderProps) 
                 color: liveMonitorDensity.value === option ? 'var(--bg)' : 'var(--text-primary)',
                 fontSize: '12px',
                 letterSpacing: '0.08em',
-                textTransform: 'uppercase',
               }}
             >
               {option}
@@ -121,7 +118,6 @@ export function MonitorHeader({ onThemeToggle, onRefresh }: MonitorHeaderProps) 
               listStyle: 'none',
               fontSize: '12px',
               letterSpacing: '0.08em',
-              textTransform: 'uppercase',
             }}
           >
             Panels
@@ -152,7 +148,6 @@ export function MonitorHeader({ onThemeToggle, onRefresh }: MonitorHeaderProps) 
             textDecoration: 'none',
             fontSize: '12px',
             letterSpacing: '0.08em',
-            textTransform: 'uppercase',
           }}
         >
           Dashboard

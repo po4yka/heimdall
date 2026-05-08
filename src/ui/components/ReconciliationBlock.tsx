@@ -23,10 +23,9 @@ export function ReconciliationBlock({ reconciliation }: ReconciliationBlockProps
           <span style={{
             fontSize: '10px',
             letterSpacing: '0.08em',
-            textTransform: 'uppercase',
             color: 'var(--text-disabled)',
           }}>
-            OpenAI Reconciliation
+            OpenAI reconciliation
           </span>
           <span style={{ color: 'var(--text-disabled)' }}>·</span>
           <span>{reconciliation.error ?? 'Unavailable'}</span>

@@ -9,7 +9,7 @@ export const CHART_CSS_FALLBACKS: Record<string, string> = {
 
 // ── Time range ─────────────────────────────────────────────────────────
 export const RANGE_LABELS: Record<RangeKey, string> = {
-  '7d': 'Last 7 Days', '30d': 'Last 30 Days', '90d': 'Last 90 Days', 'all': 'All Time',
+  '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days', 'all': 'All time',
 };
 export const RANGE_TICKS: Record<RangeKey, number> = { '7d': 7, '30d': 15, '90d': 13, 'all': 12 };
 

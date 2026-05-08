@@ -287,7 +287,7 @@ export function SessionsTable({
     <DataTable
       columns={columns}
       data={data}
-      title="Recent Sessions"
+      title="Recent sessions"
       sectionKey="sessions-mount"
       exportFn={onExportCSV}
       pageSize={SESSIONS_PAGE_SIZE}

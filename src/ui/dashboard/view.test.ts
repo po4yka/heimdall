@@ -323,7 +323,7 @@ describe('dashboard view', () => {
     expect(store.lastByProject.value).toHaveLength(1);
     expect(store.lastByProject.value[0]?.display_name).toBe('Heimdall UI');
     expect(elements['daily-chart-title']?.textContent).toBe(
-      'Daily token usage – All Time (claude)'
+      'Daily token usage – All time (claude)'
     );
     expect(elements['stats-row']?.dataset['hasContent']).toBe('1');
     expect(elements['model-cost-mount']?.dataset['hasContent']).toBe('1');

@@ -783,7 +783,6 @@ export function renderDashboardView(
             fontFamily: 'var(--font-mono)',
             fontSize: '11px',
             letterSpacing: '0.08em',
-            textTransform: 'uppercase',
             color: 'var(--text-secondary)',
             display: 'flex',
             alignItems: 'center',

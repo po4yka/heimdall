@@ -34,7 +34,7 @@ describe('chart helpers', () => {
         })[name] ?? '',
     }));
 
-    expect(RANGE_LABELS['30d']).toBe('Last 30 Days');
+    expect(RANGE_LABELS['30d']).toBe('Last 30 days');
     expect(RANGE_TICKS['7d']).toBe(7);
     expect(apexThemeMode()).toBe('light');
     expect(cssVar('--text-display')).toBe('#eeeeee');

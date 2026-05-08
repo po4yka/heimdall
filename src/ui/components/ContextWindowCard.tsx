@@ -31,7 +31,7 @@ export function ContextWindowCard({ data }: Props) {
     <div class="card stat-card">
       <div class="stat-content">
         <div class="stat-label" style={{ letterSpacing: '0.08em', fontSize: '11px' }}>
-          CONTEXT WINDOW
+          Context window
         </div>
         <div
           class="stat-value"

@@ -184,8 +184,8 @@ describe('chart contracts', () => {
     const titles = collectProp(vnode, 'title');
     const joined = text.join('');
 
-    expect(text).toContain('ACTIVITY / 7x24 / ');
-    expect(text).toContain('MONTH');
+    expect(text).toContain('Activity / 7x24 / ');
+    expect(text).toContain('month');
     expect(joined).toContain('1 active day');
     expect(titles.some(title => title.includes('Mon 06:00'))).toBe(true);
   });
