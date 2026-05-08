@@ -2641,6 +2641,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
 
     let context_pressure = query_dashboard_context_pressure(conn);
     let agent_tree = query_dashboard_agent_tree(conn);
+    let cost_forecast = crate::analytics::forecast::compute_cost_forecast(conn, &tz);
 
     // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
     // summing across providers so the frontend gets a single series per model/week.
@@ -2695,6 +2696,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         codex_plan,
         context_pressure,
         agent_tree,
+        cost_forecast,
     })
 }
 
@@ -4940,6 +4942,47 @@ pub fn query_local_cost_by_day(
     for row in rows {
         let (day, nanos) = row?;
         map.insert(day, nanos);
+    }
+    Ok(map)
+}
+
+/// Sum cost (nanos) by TZ-aware day from `turns` since `cutoff_iso`.
+///
+/// Uses `tz.sql_day_expr` so day boundaries match the rest of the dashboard.
+pub fn query_cost_by_day_tz(
+    conn: &Connection,
+    tz: &crate::tz::TzParams,
+    cutoff_iso: &str,
+) -> Result<std::collections::HashMap<String, i64>> {
+    let day_expr = tz.sql_day_expr("timestamp");
+    let offset_param = tz.offset_sql_param();
+    let cutoff_slot = if offset_param.is_some() { "?2" } else { "?1" };
+    let sql = format!(
+        "SELECT {day_expr} AS day,
+                COALESCE(SUM(estimated_cost_nanos), 0) AS nanos
+         FROM turns
+         WHERE timestamp >= {cutoff_slot}
+         GROUP BY day
+         ORDER BY day"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let mut map = std::collections::HashMap::new();
+    if let Some(ref off) = offset_param {
+        let rows = stmt.query_map(rusqlite::params![off, cutoff_iso], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
+        for row in rows {
+            let (day, nanos) = row?;
+            map.insert(day, nanos);
+        }
+    } else {
+        let rows = stmt.query_map(rusqlite::params![cutoff_iso], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })?;
+        for row in rows {
+            let (day, nanos) = row?;
+            map.insert(day, nanos);
+        }
     }
     Ok(map)
 }

@@ -67,7 +67,7 @@ struct AppShellView: View {
                         case .agents:
                             WindowAgentsView(model: self.agents, dashboardData: self.dashboardData)
                         case .costModels:
-                            WindowCostModelsView(model: self.costModels)
+                            WindowCostModelsView(model: self.costModels, dashboardData: self.dashboardData)
                         case .sessions:
                             WindowSessionsView(model: self.sessions, dashboardData: self.dashboardData)
                         case .projects:

@@ -311,6 +311,8 @@ pub struct DashboardData {
     pub context_pressure: ContextPressureSummary,
     #[serde(default)]
     pub agent_tree: AgentTreeSummary,
+    #[serde(default)]
+    pub cost_forecast: CostForecastSummary,
 }
 
 /// One entry in the `weekly_by_model` array of `/api/data`.
@@ -327,6 +329,46 @@ pub struct WeeklyModelRow {
     pub cache_creation_tokens: i64,
     pub reasoning_output_tokens: i64,
     pub cost_nanos: i64,
+}
+
+/// One data point in the rolling cost-forecast series.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyCostPoint {
+    pub day: String,
+    pub cost_nanos: i64,
+}
+
+/// OLS regression fit on recent daily cost (only populated when ≥ 7 non-zero days exist).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CostRegression {
+    pub slope_nanos_per_day: i64,
+    pub intercept_nanos: i64,
+    pub r_squared: f32,
+    pub sample_size: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum CostTrend {
+    #[default]
+    Insufficient,
+    Rising,
+    Flat,
+    Falling,
+}
+
+/// Rolling 7/30-day burn rate and projected monthly spend via simple linear regression.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CostForecastSummary {
+    /// Last 30 calendar days (oldest first, gaps zero-filled).
+    pub days: Vec<DailyCostPoint>,
+    pub rolling_7d_avg_nanos: i64,
+    pub rolling_30d_avg_nanos: i64,
+    pub regression: Option<CostRegression>,
+    /// max(30 × rolling_30d_avg, regression 30-day extrapolation), clamped ≥ 0.
+    pub projected_month_nanos: i64,
+    pub trend: CostTrend,
+    pub generated_at: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

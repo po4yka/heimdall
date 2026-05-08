@@ -757,6 +757,7 @@ export interface DashboardData {
   codex_plan?: CodexPlanSection | null;
   context_pressure?: ContextPressureSummary;
   agent_tree?: AgentTreeSummary;
+  cost_forecast?: CostForecastSummary;
   error?: string;
 }
 
@@ -1024,4 +1025,30 @@ export interface SessionAgentTree {
 export interface AgentTreeSummary {
   sessions: SessionAgentTree[];
   top_subagent_roles: [string, number][];
+}
+
+// ── Cost forecasting ────────────────────────────────────────────────────────
+
+export type CostTrend = 'insufficient' | 'rising' | 'flat' | 'falling';
+
+export interface DailyCostPoint {
+  day: string;
+  cost_nanos: number;
+}
+
+export interface CostRegression {
+  slope_nanos_per_day: number;
+  intercept_nanos: number;
+  r_squared: number;
+  sample_size: number;
+}
+
+export interface CostForecastSummary {
+  days: DailyCostPoint[];
+  rolling_7d_avg_nanos: number;
+  rolling_30d_avg_nanos: number;
+  regression: CostRegression | null;
+  projected_month_nanos: number;
+  trend: CostTrend;
+  generated_at: string;
 }

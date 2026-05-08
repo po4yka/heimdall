@@ -10,6 +10,7 @@ import { InstructionFilesCard } from './components/InstructionFilesCard';
 import { McpServersCard } from './components/McpServersCard';
 import { ContextPressureCard } from './components/ContextPressureCard';
 import { AgentTreeCard } from './components/AgentTreeCard';
+import { CostForecastCard } from './components/CostForecastCard';
 import { Sidebar } from './components/Sidebar';
 import { SavedViewsBar } from './components/SavedViewsBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -166,6 +167,9 @@ if (dashboardRuntime) {
   });
   registerMountCallback('agent-tree', (el) => {
     render(<AgentTreeCard />, el);
+  });
+  registerMountCallback('cost-forecast', (el) => {
+    render(<CostForecastCard />, el);
   });
 }
 

@@ -7959,6 +7959,137 @@
     return /* @__PURE__ */ u4(AgentTreeCardInner, { summary });
   }
 
+  // src/ui/components/CostForecastCard.tsx
+  var NANOS_PER_USD = 1e9;
+  function nanosToUsd(nanos) {
+    return nanos / NANOS_PER_USD;
+  }
+  function trendLabel(t4) {
+    if (t4 === "rising") return "[RISING]";
+    if (t4 === "falling") return "[FALLING]";
+    if (t4 === "flat") return "[FLAT]";
+    return "";
+  }
+  function trendColor(t4) {
+    if (t4 === "rising") return "var(--accent,#D71921)";
+    if (t4 === "falling") return "var(--success,#4caf50)";
+    return "var(--text-secondary)";
+  }
+  function KpiTile2({ label, value, color }) {
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: label }),
+      /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px", color: color ?? "var(--text-primary)" }, children: value })
+    ] });
+  }
+  function DayBar({ point, maxNanos }) {
+    const frac = maxNanos > 0 ? Math.min(1, point.cost_nanos / maxNanos) : 0;
+    const label = point.day.slice(5);
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          flex: "1",
+          minWidth: "0",
+          gap: "2px"
+        },
+        children: [
+          /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                width: "100%",
+                height: "40px",
+                display: "flex",
+                alignItems: "flex-end"
+              },
+              children: /* @__PURE__ */ u4(
+                "div",
+                {
+                  style: {
+                    width: "100%",
+                    height: `${Math.max(2, frac * 40)}px`,
+                    background: "var(--text-primary)",
+                    opacity: point.cost_nanos > 0 ? 0.55 : 0.1,
+                    borderRadius: "1px 1px 0 0"
+                  }
+                }
+              )
+            }
+          ),
+          label.endsWith("-01") || label === rawData.value?.daily_by_model?.[0]?.day?.slice(5) ? /* @__PURE__ */ u4("div", { style: { fontSize: "8px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap" }, children: label }) : /* @__PURE__ */ u4("div", { style: { height: "10px" } })
+        ]
+      }
+    );
+  }
+  function CostForecastCardInner({ summary }) {
+    const burn7 = fmtCostBig(nanosToUsd(summary.rolling_7d_avg_nanos));
+    const burn30 = fmtCostBig(nanosToUsd(summary.rolling_30d_avg_nanos));
+    const projected = fmtCostBig(nanosToUsd(summary.projected_month_nanos));
+    const maxNanos = Math.max(...summary.days.map((d5) => d5.cost_nanos), 1);
+    const showTrend = summary.trend !== "insufficient";
+    return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "10px" }, children: "Cost forecast" }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "14px", alignItems: "flex-end" }, children: [
+        /* @__PURE__ */ u4(KpiTile2, { label: "7-day burn / day", value: burn7 }),
+        /* @__PURE__ */ u4(KpiTile2, { label: "30-day burn / day", value: burn30 }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Projected month" }),
+          /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "baseline", gap: "6px" }, children: [
+            /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: projected }),
+            showTrend && /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                  color: trendColor(summary.trend)
+                },
+                children: trendLabel(summary.trend)
+              }
+            )
+          ] })
+        ] }),
+        summary.regression && /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "R\xB2" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: summary.regression.r_squared.toFixed(2) })
+        ] })
+      ] }),
+      summary.trend === "insufficient" && /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            fontFamily: "var(--font-mono)",
+            fontSize: "10px",
+            color: "var(--text-secondary)",
+            marginBottom: "10px"
+          },
+          children: "Need \u22657 days of activity for regression \u2014 showing rolling average."
+        }
+      ),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "2px", alignItems: "flex-end", height: "52px" }, children: summary.days.map((d5) => /* @__PURE__ */ u4(DayBar, { point: d5, maxNanos }, d5.day)) })
+    ] });
+  }
+  function CostForecastCard() {
+    const data = rawData.value;
+    if (!data) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cost forecast" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "loading..." })
+      ] });
+    }
+    const summary = data.cost_forecast;
+    if (!summary) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Cost forecast" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "No data available." })
+      ] });
+    }
+    return /* @__PURE__ */ u4(CostForecastCardInner, { summary });
+  }
+
   // src/ui/components/Sidebar.tsx
   var NAV_ITEMS = [
     { key: "overview", label: "Overview", abbr: "OV" },
@@ -8713,6 +8844,20 @@
       render: (el) => {
         el.id = "agent-tree";
         invokeMountCallback("agent-tree", el);
+      }
+    },
+    {
+      id: "cost-forecast",
+      title: "Cost forecast",
+      description: "Rolling 7/30-day burn rate and projected monthly spend via linear regression",
+      category: "kpi",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 3 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "cost-forecast";
+        invokeMountCallback("cost-forecast", el);
       }
     },
     // ── Projects tab ──────────────────────────────────────────────────────────
@@ -23607,6 +23752,9 @@ ${row.project}` : row.project;
     });
     registerMountCallback("agent-tree", (el) => {
       R(/* @__PURE__ */ u4(AgentTreeCard, {}), el);
+    });
+    registerMountCallback("cost-forecast", (el) => {
+      R(/* @__PURE__ */ u4(CostForecastCard, {}), el);
     });
   }
   var backupModalMount = document.getElementById("backup-modal-mount");

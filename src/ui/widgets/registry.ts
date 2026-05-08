@@ -718,6 +718,20 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       invokeMountCallback('agent-tree', el);
     },
   },
+  {
+    id: 'cost-forecast',
+    title: 'Cost forecast',
+    description: 'Rolling 7/30-day burn rate and projected monthly spend via linear regression',
+    category: 'kpi',
+    screens: ['tables'],
+    defaultSize: { w: 4, h: 3 },
+    minW: 2,
+    minH: 2,
+    render: (el: HTMLElement) => {
+      el.id = 'cost-forecast';
+      invokeMountCallback('cost-forecast', el);
+    },
+  },
 
   // ── Projects tab ──────────────────────────────────────────────────────────
   {

@@ -124,15 +124,69 @@ public struct AgentTreeSummary: Codable, Sendable {
     }
 }
 
+// MARK: - Cost forecasting types
+
+public enum CostTrend: String, Codable, Sendable {
+    case insufficient, rising, flat, falling
+}
+
+public struct DailyCostPoint: Codable, Sendable, Identifiable {
+    public let day: String
+    public let costNanos: Int64
+
+    public var id: String { day }
+
+    enum CodingKeys: String, CodingKey {
+        case day
+        case costNanos = "cost_nanos"
+    }
+}
+
+public struct CostRegression: Codable, Sendable {
+    public let slopeNanosPerDay: Int64
+    public let interceptNanos: Int64
+    public let rSquared: Float
+    public let sampleSize: UInt32
+
+    enum CodingKeys: String, CodingKey {
+        case slopeNanosPerDay = "slope_nanos_per_day"
+        case interceptNanos = "intercept_nanos"
+        case rSquared = "r_squared"
+        case sampleSize = "sample_size"
+    }
+}
+
+public struct CostForecastSummary: Codable, Sendable {
+    public let days: [DailyCostPoint]
+    public let rolling7dAvgNanos: Int64
+    public let rolling30dAvgNanos: Int64
+    public let regression: CostRegression?
+    public let projectedMonthNanos: Int64
+    public let trend: CostTrend
+    public let generatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case days
+        case rolling7dAvgNanos = "rolling_7d_avg_nanos"
+        case rolling30dAvgNanos = "rolling_30d_avg_nanos"
+        case regression
+        case projectedMonthNanos = "projected_month_nanos"
+        case trend
+        case generatedAt = "generated_at"
+    }
+}
+
 // MARK: - Partial dashboard decode
 
 private struct DashboardDataPartial: Codable {
     let contextPressure: ContextPressureSummary?
     let agentTree: AgentTreeSummary?
+    let costForecast: CostForecastSummary?
 
     enum CodingKeys: String, CodingKey {
         case contextPressure = "context_pressure"
         case agentTree = "agent_tree"
+        case costForecast = "cost_forecast"
     }
 }
 
@@ -145,6 +199,7 @@ public final class DashboardDataFeatureModel {
 
     public var contextPressure: ContextPressureSummary?
     public var agentTree: AgentTreeSummary?
+    public var costForecast: CostForecastSummary?
     public var isLoading: Bool = false
 
     public init(helperPort: Int) {
@@ -162,6 +217,7 @@ public final class DashboardDataFeatureModel {
             let partial = try JSONDecoder().decode(DashboardDataPartial.self, from: data)
             self.contextPressure = partial.contextPressure
             self.agentTree = partial.agentTree
+            self.costForecast = partial.costForecast
         } catch {
             // supplemental sections — silently ignore fetch failures
         }
