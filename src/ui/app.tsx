@@ -281,6 +281,7 @@ async function loadArchiveImports(): Promise<void> {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     archiveImports.value = (await r.json()) as typeof archiveImports.value;
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('failed to load imports:', err);
   }
 }
@@ -299,6 +300,7 @@ async function loadWebConversations(): Promise<void> {
     webConversations.value = body.conversations;
     companionHeartbeat.value = body.heartbeat;
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('failed to load web captures:', err);
   }
 }

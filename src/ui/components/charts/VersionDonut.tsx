@@ -1,3 +1,4 @@
+import type { Signal } from '@preact/signals';
 import { MetricDonut } from './MetricDonut';
 import { fmtCost, fmtCostCompact, fmt } from '../../lib/format';
 import type { VersionSummary } from '../../state/types';
@@ -5,7 +6,7 @@ import type { VersionMetric } from '../../state/store';
 
 export interface VersionDonutProps {
   rows: VersionSummary[];
-  metric: VersionMetric;
+  metric: Signal<VersionMetric>;
   onMetricChange: (next: VersionMetric) => void;
 }
 
@@ -34,6 +35,7 @@ function formatMetricValue(value: number, metric: VersionMetric, large = false):
 }
 
 export function VersionDonut({ rows, metric, onMetricChange }: VersionDonutProps) {
+  const metricValue = metric.value;
   const normalized = rows.map(r => ({
     ...r,
     version: r.version === '' || r.version === 'unknown' ? '(unknown)' : r.version,
@@ -41,7 +43,7 @@ export function VersionDonut({ rows, metric, onMetricChange }: VersionDonutProps
 
   return MetricDonut<VersionSummary & { version: string }, VersionMetric>({
     rows: normalized,
-    metric,
+    metric: metricValue,
     metricOptions: METRIC_OPTIONS,
     metricLabel: m => METRIC_LABELS[m],
     metricValue: getMetricValue,

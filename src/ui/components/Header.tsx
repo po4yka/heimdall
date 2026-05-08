@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'preact/hooks';
+import { useSignalEffect } from '@preact/signals';
 import { createTriggerRescan } from '../lib/rescan';
 import { setStatus } from '../lib/status';
 import { InlineStatus } from './InlineStatus';
@@ -31,11 +32,11 @@ export function Header({
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const triggerRef = useRef<(() => Promise<void>) | null>(null);
 
-  useEffect(() => {
+  useSignalEffect(() => {
     const themeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (!themeColorMeta) return;
     themeColorMeta.setAttribute('content', themeMode.value === 'light' ? '#F5F5F5' : '#000000');
-  }, [themeMode.value]);
+  });
 
   useEffect(() => {
     if (!headerRef.current) return;
@@ -113,7 +114,7 @@ export function Header({
           </span>
         )}
       </h1>
-      <div class="meta">{metaText.value}</div>
+      <div class="meta">{metaText}</div>
       <div class="header-actions">
         {navigationHref && navigationLabel && (
           <a class="header-button header-button--link" href={navigationHref}>
@@ -188,7 +189,7 @@ export function Header({
           onClick={() => triggerRef.current?.()}
           aria-label="Rescan database"
         >
-          {rescanLabel.value}
+          {rescanLabel}
         </button>
         <InlineStatus placement="rescan" inline />
         <InlineStatus placement="header-refresh" inline dismissable={false} />

@@ -229,6 +229,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       el.className = 'card bento-2 chart-card';
       // Preserve inner structure so the chart renders into #chart-daily.
       if (!el.querySelector('#daily-chart-title')) {
+        // Static literal — no dynamic content, no XSS vector.
         el.innerHTML = '<h2 id="daily-chart-title">Daily Token Usage</h2><div class="chart-wrap tall"><div id="chart-daily"></div></div>';
       }
     },
@@ -246,6 +247,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       el.id = 'model-chart-card';
       el.className = 'card chart-card';
       if (!el.querySelector('#chart-model')) {
+        // Static literal — no dynamic content, no XSS vector.
         el.innerHTML = '<h2>By Model</h2><div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>';
       }
     },
@@ -263,6 +265,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       el.id = 'project-chart-card';
       el.className = 'card chart-card';
       if (!el.querySelector('#chart-project')) {
+        // Static literal — no dynamic content, no XSS vector.
         el.innerHTML = '<h2>Top Projects</h2><div class="chart-wrap"><div id="chart-project"></div></div>';
       }
     },

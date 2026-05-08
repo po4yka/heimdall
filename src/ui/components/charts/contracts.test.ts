@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { signal } from '@preact/signals';
 
 vi.hoisted(() => {
   Object.defineProperty(globalThis, 'window', {
@@ -145,7 +146,7 @@ describe('chart contracts', () => {
     ];
     const vnode = VersionDonut({
       rows,
-      metric: 'cost',
+      metric: signal<import('../../state/store').VersionMetric>('cost'),
       onMetricChange: () => undefined,
     }) as { props: { children: unknown } };
 
@@ -176,7 +177,7 @@ describe('chart contracts', () => {
 
     const vnode = ActivityHeatmap({
       data,
-      metric: 'cost',
+      metric: signal<import('../../state/store').HeatmapMetric>('cost'),
       onMetricChange: () => undefined,
     });
     const text = collectText(vnode);

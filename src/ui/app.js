@@ -998,6 +998,16 @@
       return y3(i4, n3);
     }, []);
   }
+  function useComputed(i4, n3) {
+    var r4 = A2(i4);
+    r4.current = i4;
+    d4.__$f |= 4;
+    return T2(function() {
+      return g2(function() {
+        return r4.current();
+      }, n3);
+    }, []);
+  }
   var k3 = "undefined" == typeof requestAnimationFrame ? setTimeout : function(i4) {
     var n3 = function() {
       clearTimeout(r4);
@@ -6541,8 +6551,8 @@
     }
   }
   function ProjectsRegistry({ onReload }) {
-    const [rows2, setRows] = d2(projectsRegistry.value);
-    const [loading, setLoading] = d2(rows2.length === 0);
+    const rows2 = useComputed(() => projectsRegistry.value);
+    const [loading, setLoading] = d2(rows2.value.length === 0);
     const [query, setQuery] = d2("");
     const [labelEdits, setLabelEdits] = d2({});
     async function load() {
@@ -6550,7 +6560,6 @@
       try {
         const fresh = await fetchProjectsRegistry();
         projectsRegistry.value = fresh;
-        setRows(fresh);
       } catch (err) {
         setStatus(
           "project-registry",
@@ -6565,9 +6574,6 @@
     y2(() => {
       void load();
     }, []);
-    useSignalEffect(() => {
-      setRows(projectsRegistry.value);
-    });
     async function handleLabelSave(row, raw) {
       const trimmed = raw.trim();
       const next = trimmed.length > 0 ? trimmed : null;
@@ -6616,11 +6622,11 @@
     }
     const filtered = T2(() => {
       const q4 = query.trim().toLowerCase();
-      if (!q4) return rows2;
-      return rows2.filter((r4) => {
+      if (!q4) return rows2.value;
+      return rows2.value.filter((r4) => {
         return r4.slug.toLowerCase().includes(q4) || r4.raw_name.toLowerCase().includes(q4) || (r4.custom_label ?? "").toLowerCase().includes(q4) || r4.project_uuid.toLowerCase().includes(q4) || r4.display_name.toLowerCase().includes(q4);
       });
-    }, [rows2, query]);
+    }, [rows2.value, query]);
     const columns7 = T2(
       () => [
         {
@@ -6814,7 +6820,7 @@
         ] })
       ] }),
       /* @__PURE__ */ u4("div", { style: { padding: "0 20px 20px" }, children: [
-        loading && rows2.length === 0 ? /* @__PURE__ */ u4(TableSkeleton, { rows: 6, columns: 5 }) : /* @__PURE__ */ u4(
+        loading && rows2.value.length === 0 ? /* @__PURE__ */ u4(TableSkeleton, { rows: 6, columns: 5 }) : /* @__PURE__ */ u4(
           DataTable,
           {
             columns: columns7,
@@ -7418,12 +7424,12 @@
     if (val.kind === "secret") {
       return /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px" }, children: [
         /* @__PURE__ */ u4("span", { style: { opacity: 0.5 }, children: val.masked }),
-        /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent, #D71921)", fontSize: "9px" }, children: "[SECRET]" })
+        /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent)", fontSize: "9px" }, children: "[SECRET]" })
       ] });
     }
     return /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
       val.path,
-      !val.exists && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent, #D71921)", fontSize: "9px" }, children: "[MISSING]" }),
+      !val.exists && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent)", fontSize: "9px" }, children: "[MISSING]" }),
       val.exists && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", opacity: 0.5 }, children: fmtBytes3(val.bytes) })
     ] });
   }
@@ -7681,7 +7687,7 @@
     if (loadState3 === "error" || !report) {
       return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "MCP servers" }),
-        /* @__PURE__ */ u4("div", { style: { color: "var(--accent, #D71921)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "[ERROR: failed to load MCP servers data]" })
+        /* @__PURE__ */ u4("div", { style: { color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "[ERROR: failed to load MCP servers data]" })
       ] });
     }
     return /* @__PURE__ */ u4(McpServersCardInner, { report });
@@ -10595,11 +10601,11 @@
     const headerRef = A2(null);
     const btnRef = A2(null);
     const triggerRef = A2(null);
-    y2(() => {
+    useSignalEffect(() => {
       const themeColorMeta = document.querySelector('meta[name="theme-color"]');
       if (!themeColorMeta) return;
       themeColorMeta.setAttribute("content", themeMode.value === "light" ? "#F5F5F5" : "#000000");
-    }, [themeMode.value]);
+    });
     y2(() => {
       if (!headerRef.current) return;
       const root = document.documentElement;
@@ -10668,7 +10674,7 @@
         ] }),
         planLabel2 && /* @__PURE__ */ u4("span", { class: "header-plan-badge", "aria-hidden": "true", children: planLabel2 })
       ] }),
-      /* @__PURE__ */ u4("div", { class: "meta", children: metaText.value }),
+      /* @__PURE__ */ u4("div", { class: "meta", children: metaText }),
       /* @__PURE__ */ u4("div", { class: "header-actions", children: [
         navigationHref && navigationLabel && /* @__PURE__ */ u4("a", { class: "header-button header-button--link", href: navigationHref, children: [
           "[",
@@ -10752,7 +10758,7 @@
             disabled: rescanDisabled.value,
             onClick: () => triggerRef.current?.(),
             "aria-label": "Rescan database",
-            children: rescanLabel.value
+            children: rescanLabel
           }
         ),
         /* @__PURE__ */ u4(InlineStatus, { placement: "rescan", inline: true }),
@@ -10873,6 +10879,11 @@
   }
 
   // src/ui/lib/charts.ts
+  var CHART_CSS_FALLBACKS = {
+    "--text-primary": "#0A0A0A",
+    "--text-secondary": "#6B6B6B",
+    "--border": "#E0E0E0"
+  };
   var RANGE_LABELS = {
     "7d": "Last 7 Days",
     "30d": "Last 30 Days",
@@ -11257,7 +11268,8 @@
     }
     return fmt(value);
   }
-  function ActivityHeatmap({ data, metric, onMetricChange }) {
+  function ActivityHeatmap({ data, metric: metricSignal, onMetricChange }) {
+    const metric = metricSignal.value;
     const {
       cells,
       max_cost_nanos,
@@ -15316,9 +15328,9 @@ ${row.project}` : row.project;
     const dashArray = seriesKeys.map(
       (_4, i4) => DASH_LADDER[i4 % DASH_LADDER.length] ?? 0
     );
-    const textPrimary = resolveCssVar("--text-primary", "#0a0a0a");
-    const textSecondary = resolveCssVar("--text-secondary", "#666666");
-    const borderColor = resolveCssVar("--border", "#e0e0e0");
+    const textPrimary = resolveCssVar("--text-primary", CHART_CSS_FALLBACKS["--text-primary"]);
+    const textSecondary = resolveCssVar("--text-secondary", CHART_CSS_FALLBACKS["--text-secondary"]);
+    const borderColor = resolveCssVar("--border", CHART_CSS_FALLBACKS["--border"]);
     const annotationsX = changelog.filter((entry) => provider === "all" || entry.provider === provider).map((entry) => ({
       x: Date.parse(`${entry.date}T12:00:00Z`),
       borderColor: textSecondary,
@@ -15546,13 +15558,14 @@ ${row.project}` : row.project;
     }
   }
   function VersionDonut({ rows: rows2, metric, onMetricChange }) {
+    const metricValue = metric.value;
     const normalized = rows2.map((r4) => ({
       ...r4,
       version: r4.version === "" || r4.version === "unknown" ? "(unknown)" : r4.version
     }));
     return MetricDonut({
       rows: normalized,
-      metric,
+      metric: metricValue,
       metricOptions: METRIC_OPTIONS2,
       metricLabel: (m5) => METRIC_LABELS3[m5],
       metricValue: getMetricValue2,
@@ -16192,7 +16205,7 @@ ${row.project}` : row.project;
                 VersionDonut,
                 {
                   rows: data,
-                  metric: versionDonutMetric.value,
+                  metric: versionDonutMetric,
                   onMetricChange: handleMetricChange
                 }
               ) }),
@@ -16354,7 +16367,7 @@ ${row.project}` : row.project;
         ActivityHeatmap,
         {
           data,
-          metric: heatmapMetric.value,
+          metric: heatmapMetric,
           onMetricChange: handleMetricChange
         }
       ),
@@ -24102,7 +24115,7 @@ ${row.project}` : row.project;
         }
       };
     }, [screen]);
-    y2(() => {
+    useSignalEffect(() => {
       const el = containerRef.current;
       if (!el || isMobileRef.current) return;
       const grid = gridRef.current;
@@ -24111,8 +24124,8 @@ ${row.project}` : row.project;
         syncEditMode(grid, el, editMode.value, resetBtn);
         updateAddBtnVisibility();
       }
-    }, [editMode.value]);
-    y2(() => {
+    });
+    useSignalEffect(() => {
       const pending = pendingLayoutApply.value;
       if (!pending || pending.screen !== screen) return;
       const el = containerRef.current;
@@ -24137,7 +24150,7 @@ ${row.project}` : row.project;
       });
       setStatus("layout-save", "success", "[VIEW APPLIED]", 2e3);
       pendingLayoutApply.value = null;
-    }, [pendingLayoutApply.value, screen]);
+    });
     y2(() => {
       const onResize = () => {
         const nowMobile = window.innerWidth < MOBILE_BREAKPOINT;

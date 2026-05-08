@@ -1,6 +1,12 @@
 import type { ApexOptions } from './apex';
 import type { RangeKey } from '../state/types';
 
+export const CHART_CSS_FALLBACKS: Record<string, string> = {
+  '--text-primary': '#0A0A0A',
+  '--text-secondary': '#6B6B6B',
+  '--border': '#E0E0E0',
+};
+
 // ── Time range ─────────────────────────────────────────────────────────
 export const RANGE_LABELS: Record<RangeKey, string> = {
   '7d': 'Last 7 Days', '30d': 'Last 30 Days', '90d': 'Last 90 Days', 'all': 'All Time',

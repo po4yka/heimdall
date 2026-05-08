@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { useSignalEffect } from '@preact/signals';
+import { useComputed } from '@preact/signals';
 import {
   type CellContext,
   type ColumnDef,
@@ -43,8 +43,8 @@ async function copyText(text: string, label: string) {
 }
 
 export function ProjectsRegistry({ onReload }: ProjectsRegistryProps) {
-  const [rows, setRows] = useState<ProjectRegistryRow[]>(projectsRegistry.value);
-  const [loading, setLoading] = useState(rows.length === 0);
+  const rows = useComputed(() => projectsRegistry.value);
+  const [loading, setLoading] = useState(rows.value.length === 0);
   const [query, setQuery] = useState('');
   // Pending edits keyed by uuid so each row's input is locally controlled.
   const [labelEdits, setLabelEdits] = useState<Record<string, string>>({});
@@ -54,7 +54,6 @@ export function ProjectsRegistry({ onReload }: ProjectsRegistryProps) {
     try {
       const fresh = await fetchProjectsRegistry();
       projectsRegistry.value = fresh;
-      setRows(fresh);
     } catch (err) {
       setStatus(
         'project-registry',
@@ -71,11 +70,6 @@ export function ProjectsRegistry({ onReload }: ProjectsRegistryProps) {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Keep local rows in sync with the global signal (other surfaces may refresh it).
-  useSignalEffect(() => {
-    setRows(projectsRegistry.value);
-  });
 
   async function handleLabelSave(row: ProjectRegistryRow, raw: string) {
     const trimmed = raw.trim();
@@ -130,8 +124,8 @@ export function ProjectsRegistry({ onReload }: ProjectsRegistryProps) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(r => {
+    if (!q) return rows.value;
+    return rows.value.filter(r => {
       return (
         r.slug.toLowerCase().includes(q) ||
         r.raw_name.toLowerCase().includes(q) ||
@@ -140,7 +134,7 @@ export function ProjectsRegistry({ onReload }: ProjectsRegistryProps) {
         r.display_name.toLowerCase().includes(q)
       );
     });
-  }, [rows, query]);
+  }, [rows.value, query]);
 
   const columns: ColumnDef<ProjectRegistryRow, unknown>[] = useMemo(
     () => [
@@ -341,7 +335,7 @@ export function ProjectsRegistry({ onReload }: ProjectsRegistryProps) {
         </div>
       </div>
       <div style={{ padding: '0 20px 20px' }}>
-        {loading && rows.length === 0 ? (
+        {loading && rows.value.length === 0 ? (
           <TableSkeleton rows={6} columns={5} />
         ) : (
           <DataTable

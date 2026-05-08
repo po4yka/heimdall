@@ -6,6 +6,7 @@ import type {
 import type { ApexOptions } from '../lib/apex';
 import { ApexChart } from './charts/ApexChart';
 import { resolveCssVar } from '../lib/colors';
+import { CHART_CSS_FALLBACKS } from '../lib/charts';
 
 interface Props {
   history: RateWindowHistoryRow[];
@@ -72,9 +73,9 @@ function buildOptions(
   // Resolve CSS variables to concrete colours so ApexCharts can paint them
   // into SVG attributes that don't accept `var(...)` expressions (legend
   // marker fills, annotation markers, axis labels rendered to canvas).
-  const textPrimary = resolveCssVar('--text-primary', '#0a0a0a');
-  const textSecondary = resolveCssVar('--text-secondary', '#666666');
-  const borderColor = resolveCssVar('--border', '#e0e0e0');
+  const textPrimary = resolveCssVar('--text-primary', CHART_CSS_FALLBACKS['--text-primary']!);
+  const textSecondary = resolveCssVar('--text-secondary', CHART_CSS_FALLBACKS['--text-secondary']!);
+  const borderColor = resolveCssVar('--border', CHART_CSS_FALLBACKS['--border']!);
 
   // Changelog events as vertical dashed lines — no text labels since the
   // list below the chart already shows the full description. This avoids

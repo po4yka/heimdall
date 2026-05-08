@@ -453,7 +453,7 @@ function renderVersionSummary(data: DashboardData['version_summary']): void {
           <div style={{ flex: '1 1 260px', minWidth: '220px' }}>
             <VersionDonut
               rows={data}
-              metric={versionDonutMetric.value}
+              metric={versionDonutMetric}
               onMetricChange={handleMetricChange}
             />
           </div>
@@ -662,7 +662,7 @@ export function renderActivityHeatmap(data: HeatmapData | null): void {
   render(
     <ActivityHeatmap
       data={data}
-      metric={heatmapMetric.value}
+      metric={heatmapMetric}
       onMetricChange={handleMetricChange}
     />,
     container

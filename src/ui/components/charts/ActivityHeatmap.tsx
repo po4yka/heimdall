@@ -8,6 +8,7 @@
 //      opacity, others dimmed) or switch to small-multiples (7×24 grid per
 //      project, capped at top-N)?
 // Until those questions are answered the all-projects view is the contract.
+import type { Signal } from '@preact/signals';
 import { withAlpha } from '../../lib/charts';
 import { fmt, fmtCost, fmtCostBig, fmtCostCompact, fmtTzOffset } from '../../lib/format';
 import type { HeatmapData } from '../../state/types';
@@ -22,7 +23,7 @@ const LEGEND_STEPS = [0.05, 0.2, 0.4, 0.6, 0.9];
 
 export interface ActivityHeatmapProps {
   data: HeatmapData;
-  metric: HeatmapMetric;
+  metric: Signal<HeatmapMetric>;
   onMetricChange: (next: HeatmapMetric) => void;
 }
 
@@ -40,7 +41,8 @@ function formatPeak(value: number, metric: HeatmapMetric): string {
   return fmt(value);
 }
 
-export function ActivityHeatmap({ data, metric, onMetricChange }: ActivityHeatmapProps) {
+export function ActivityHeatmap({ data, metric: metricSignal, onMetricChange }: ActivityHeatmapProps) {
+  const metric = metricSignal.value;
   const {
     cells,
     max_cost_nanos,

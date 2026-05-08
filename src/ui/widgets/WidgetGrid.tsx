@@ -9,6 +9,7 @@
  * Mobile (<720px) bypasses GridStack and renders a single-column read-only stack.
  */
 import { useEffect, useRef, useCallback } from 'preact/hooks';
+import { useSignalEffect } from '@preact/signals';
 import { GridStack } from 'gridstack';
 import { render } from 'preact';
 import { editMode } from '../state/store';
@@ -276,7 +277,7 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
   }, [screen]);
 
   // ── React to editMode changes ──────────────────────────────────────
-  useEffect(() => {
+  useSignalEffect(() => {
     const el = containerRef.current;
     if (!el || isMobileRef.current) return;
     const grid = gridRef.current;
@@ -285,10 +286,10 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
       syncEditMode(grid, el, editMode.value, resetBtn);
       updateAddBtnVisibility();
     }
-  }, [editMode.value]);
+  });
 
   // ── React to saved-view application ────────────────────────────────
-  useEffect(() => {
+  useSignalEffect(() => {
     const pending = pendingLayoutApply.value;
     if (!pending || pending.screen !== screen) return;
     const el = containerRef.current;
@@ -317,8 +318,7 @@ export function WidgetGrid({ screen }: WidgetGridProps) {
     });
     setStatus('layout-save', 'success', '[VIEW APPLIED]', 2000);
     pendingLayoutApply.value = null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingLayoutApply.value, screen]);
+  });
 
   // ── Mobile resize handler ──────────────────────────────────────────
   useEffect(() => {
@@ -381,6 +381,7 @@ function buildChrome(
 ): HTMLElement {
   const chromeEl = document.createElement('div');
   chromeEl.className = 'widget-chrome';
+  // Static literal — no dynamic content, no XSS vector.
   chromeEl.innerHTML =
     '<span class="widget-drag-handle" title="Drag to move" aria-hidden="true">&#x2807;</span>';
 

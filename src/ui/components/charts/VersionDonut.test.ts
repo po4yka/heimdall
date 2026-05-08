@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { signal } from '@preact/signals';
 
 vi.hoisted(() => {
   Object.defineProperty(globalThis, 'window', {
@@ -36,7 +37,7 @@ describe('VersionDonut', () => {
     ];
     const vnode = VersionDonut({
       rows,
-      metric: 'cost',
+      metric: signal<import('../../state/store').VersionMetric>('cost'),
       onMetricChange: () => undefined,
     }) as { props: { children: unknown } };
 

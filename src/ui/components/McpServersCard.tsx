@@ -98,7 +98,7 @@ function RedactedValueCell({ val }: { val: McpRedactedValue }) {
     return (
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px' }}>
         <span style={{ opacity: 0.5 }}>{val.masked}</span>
-        <span style={{ marginLeft: '4px', color: 'var(--accent, #D71921)', fontSize: '9px' }}>[SECRET]</span>
+        <span style={{ marginLeft: '4px', color: 'var(--accent)', fontSize: '9px' }}>[SECRET]</span>
       </span>
     );
   }
@@ -106,7 +106,7 @@ function RedactedValueCell({ val }: { val: McpRedactedValue }) {
   return (
     <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>
       {val.path}
-      {!val.exists && <span style={{ marginLeft: '4px', color: 'var(--accent, #D71921)', fontSize: '9px' }}>[MISSING]</span>}
+      {!val.exists && <span style={{ marginLeft: '4px', color: 'var(--accent)', fontSize: '9px' }}>[MISSING]</span>}
       {val.exists && <span style={{ marginLeft: '4px', opacity: 0.5 }}>{fmtBytes(val.bytes)}</span>}
     </span>
   );
@@ -442,7 +442,7 @@ export function McpServersCard() {
     return (
       <div class="card" style={{ padding: '16px' }}>
         <div class="stat-label">MCP servers</div>
-        <div style={{ color: 'var(--accent, #D71921)', fontFamily: 'var(--font-mono)', fontSize: '12px', marginTop: '8px' }}>
+        <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: '12px', marginTop: '8px' }}>
           [ERROR: failed to load MCP servers data]
         </div>
       </div>
