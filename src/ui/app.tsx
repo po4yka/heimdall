@@ -12,6 +12,7 @@ import { ContextPressureCard } from './components/ContextPressureCard';
 import { AgentTreeCard } from './components/AgentTreeCard';
 import { CostForecastCard } from './components/CostForecastCard';
 import { SessionQualityCard } from './components/SessionQualityCard';
+import { HookTelemetryCard } from './components/HookTelemetryCard';
 import { Sidebar } from './components/Sidebar';
 import { SavedViewsBar } from './components/SavedViewsBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -174,6 +175,9 @@ if (dashboardRuntime) {
   });
   registerMountCallback('session-quality-card', (el) => {
     render(<SessionQualityCard />, el);
+  });
+  registerMountCallback('hook-telemetry-card', (el) => {
+    render(<HookTelemetryCard />, el);
   });
 }
 

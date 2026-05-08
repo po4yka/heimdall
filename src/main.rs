@@ -3267,6 +3267,16 @@ pub(crate) fn cmd_today(
             sq.avg_turns_per_session,
         );
     }
+    let ht = scanner::db::query_dashboard_hook_telemetry(&conn);
+    if ht.total_invocations > 0 {
+        println!(
+            "Hook telemetry (30d): {} invocations, p95 {}ms, {} bypasses, {} timeouts",
+            ht.total_invocations,
+            ht.p95_latency_us / 1000,
+            ht.bypass_count,
+            ht.stdin_timeout_count,
+        );
+    }
     println!();
     Ok(())
 }

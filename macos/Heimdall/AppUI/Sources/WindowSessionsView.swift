@@ -27,6 +27,10 @@ struct WindowSessionsView: View {
                 SessionQualitySection(summary: sq)
             }
 
+            if let ht = self.dashboardData.hookTelemetry, ht.totalInvocations > 0 {
+                HookTelemetrySection(summary: ht)
+            }
+
             SessionsRecentSection(model: self.model)
 
             SessionsModelSection(model: self.model)
@@ -210,6 +214,137 @@ private struct ContextPressureSection: View {
                         .font(.caption2.monospaced())
                         .padding(.vertical, 3)
                         Divider().opacity(0.2)
+                    }
+                }
+                .padding(18)
+                .menuCardBackground(opacity: 0.04, cornerRadius: 16)
+            }
+        }
+    }
+}
+
+// MARK: - Hook telemetry section
+
+private struct HookTelemetrySection: View {
+    let summary: HookTelemetrySummary
+
+    private func fmtMs(_ us: UInt64) -> String {
+        "\(us / 1000)ms"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            WindowSectionHeader(
+                title: "Hook telemetry",
+                subtitle: "PreToolUse hook latency and bypass events over 30 days"
+            )
+
+            // KPI grid
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible()), GridItem(.flexible()),
+                    GridItem(.flexible()), GridItem(.flexible())
+                ],
+                spacing: 12
+            ) {
+                WindowOverviewKpiTile(
+                    label: "Invocations",
+                    value: "\(summary.totalInvocations)"
+                )
+                WindowOverviewKpiTile(
+                    label: "p95 latency",
+                    value: fmtMs(summary.p95LatencyUs)
+                )
+                WindowOverviewKpiTile(
+                    label: "Bypasses",
+                    value: "\(summary.bypassCount)"
+                )
+                WindowOverviewKpiTile(
+                    label: "Timeouts",
+                    value: "\(summary.stdinTimeoutCount)"
+                )
+            }
+            .padding(18)
+            .menuCardBackground(opacity: 0.04, cornerRadius: 16)
+
+            // Latency histogram
+            if !summary.latencyBuckets.isEmpty {
+                let maxCount = summary.latencyBuckets.map(\.count).max() ?? 1
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Latency distribution")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    HStack(alignment: .bottom, spacing: 6) {
+                        ForEach(summary.latencyBuckets) { bucket in
+                            let frac = maxCount > 0 ? Double(bucket.count) / Double(maxCount) : 0
+                            VStack(spacing: 2) {
+                                Text("\(bucket.count)")
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                Rectangle()
+                                    .fill(Color.primary.opacity(0.3 + frac * 0.7))
+                                    .frame(height: max(CGFloat(frac) * 48, bucket.count > 0 ? 4 : 0))
+                                Text(bucket.label)
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .frame(height: 80)
+                }
+                .padding(18)
+                .menuCardBackground(opacity: 0.04, cornerRadius: 16)
+            }
+
+            // Outcome breakdown
+            if !summary.outcomeRows.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Outcome breakdown")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    ForEach(summary.outcomeRows) { row in
+                        HStack {
+                            Text(row.outcome)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Text("\(row.count)")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.primary)
+                            Text("p50 \(fmtMs(row.p50Us))")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                            Text("p95 \(fmtMs(row.p95Us))")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(18)
+                .menuCardBackground(opacity: 0.04, cornerRadius: 16)
+            }
+
+            // Top bypass ancestors (only when bypasses exist)
+            if summary.bypassCount > 0 && !summary.topBypassAncestors.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Top bypass ancestors")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    ForEach(summary.topBypassAncestors) { ancestor in
+                        HStack {
+                            Text(ancestor.command.count > 40
+                                 ? String(ancestor.command.prefix(40)) + "…"
+                                 : ancestor.command)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Spacer()
+                            Text("\(ancestor.bypassCount)")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.primary)
+                        }
                     }
                 }
                 .padding(18)

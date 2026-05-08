@@ -9,14 +9,14 @@ pub mod install;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use chrono::Utc;
 use tracing::warn;
 
 use crate::config::load_config_resolved;
-use crate::scanner::db::{LiveEventRow, init_db, insert_live_event, open_db};
+use crate::scanner::db::{HookEventRow, LiveEventRow, init_db, insert_hook_event, insert_live_event, open_db};
 
 /// Entry point for the `heimdall-hook` binary, extracted for testability.
 ///
@@ -27,53 +27,68 @@ use crate::scanner::db::{LiveEventRow, init_db, insert_live_event, open_db};
 /// - Returns within ~50 ms for normal operation; stdin read is guarded by a
 ///   1-second timeout.
 pub fn main_impl() {
-    // 1. Bypass check: if any ancestor has --dangerously-skip-permissions, skip.
-    if bypass::is_bypass_active() {
-        print!("{{}}");
-        return;
-    }
+    let started = Instant::now();
+    let received_at = Utc::now();
+    let mut outcome = "ok";
+    let mut tool_name: Option<String> = None;
+    let mut session_id: Option<String> = None;
+    let mut bypass_match: Option<bypass::BypassMatch> = None;
 
-    // 2. Read stdin with a 1-second timeout via a background thread + channel.
-    let json = match read_stdin_with_timeout(Duration::from_secs(1)) {
-        Some(s) => s,
-        None => {
-            // Timeout or empty — output {} and exit cleanly.
-            print!("{{}}");
-            return;
+    // 1. Bypass check: if any ancestor has --dangerously-skip-permissions, skip ingest.
+    if let Some(m) = bypass::detect_bypass() {
+        outcome = "bypass";
+        bypass_match = Some(m);
+    } else {
+        // 2. Read stdin with a 1-second timeout.
+        match read_stdin_with_timeout(Duration::from_secs(1)) {
+            Some(json) if !json.trim().is_empty() => {
+                // 3. Parse and ingest.
+                match ingest_event(&json) {
+                    Ok((tn, sid)) => {
+                        tool_name = tn;
+                        session_id = sid;
+                    }
+                    Err(e) => {
+                        warn!("heimdall-hook ingest error: {}", e);
+                        outcome = "parse_error";
+                    }
+                }
+            }
+            _ => {
+                outcome = "stdin_timeout";
+            }
         }
-    };
-
-    if json.trim().is_empty() {
-        print!("{{}}");
-        return;
     }
 
-    // 3. Run the ingest logic; swallow any error.
-    if let Err(e) = ingest_event(&json) {
-        warn!("heimdall-hook ingest error: {}", e);
+    // 4. Record telemetry (always, swallow errors).
+    let latency_us = started.elapsed().as_micros().min(i64::MAX as u128) as i64;
+    if let Err(e) =
+        write_hook_telemetry(received_at, outcome, latency_us, tool_name, session_id, bypass_match)
+    {
+        warn!("heimdall-hook telemetry write failed: {}", e);
     }
 
-    // 6. Always output {} regardless of success or failure.
+    // 5. Always print {} and return.
     print!("{{}}");
 }
 
 /// Parse the hook payload and write a `live_events` row to SQLite.
-fn ingest_event(json: &str) -> Result<()> {
+/// Returns `(tool_name, session_id)` on success, `Err` on parse failure.
+fn ingest_event(json: &str) -> Result<(Option<String>, Option<String>)> {
     let received_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
 
-    // 3. Parse JSON — returns None on invalid JSON (not an error we surface).
     let event = match ingest::parse_hook_payload(json, &received_at) {
         Some(e) => e,
         None => {
             warn!("heimdall-hook: failed to parse payload");
-            return Ok(());
+            return Err(anyhow::anyhow!("parse_hook_payload returned None"));
         }
     };
 
-    // 4. Resolve DB path from config.
-    let db_path = resolve_db_path();
+    let tool_name = event.tool_name.clone();
+    let session_id = event.session_id.clone();
 
-    // 5. Open DB (create if missing), run migrations, INSERT OR IGNORE.
+    let db_path = resolve_db_path();
     let conn = open_db(&db_path)?;
     init_db(&conn)?;
 
@@ -94,6 +109,36 @@ fn ingest_event(json: &str) -> Result<()> {
         },
     )?;
 
+    Ok((tool_name, session_id))
+}
+
+/// Write one hook telemetry row to the database. Swallows its own errors at call site.
+fn write_hook_telemetry(
+    received_at: chrono::DateTime<Utc>,
+    outcome: &str,
+    latency_us: i64,
+    tool_name: Option<String>,
+    session_id: Option<String>,
+    bypass: Option<bypass::BypassMatch>,
+) -> Result<()> {
+    let db_path = resolve_db_path();
+    let conn = open_db(&db_path)?;
+    init_db(&conn)?;
+    insert_hook_event(
+        &conn,
+        &HookEventRow {
+            received_at: received_at.to_rfc3339(),
+            ts_epoch: received_at.timestamp(),
+            outcome: outcome.to_string(),
+            latency_us,
+            tool_name,
+            session_id,
+            bypass_depth: bypass.as_ref().map(|b| b.depth),
+            bypass_ancestor_pid: bypass.as_ref().map(|b| b.ancestor_pid),
+            bypass_ancestor_command: bypass.as_ref().map(|b| b.ancestor_command.clone()),
+            cli_version: env!("CARGO_PKG_VERSION").to_string(),
+        },
+    )?;
     Ok(())
 }
 
@@ -394,8 +439,8 @@ mod tests {
         assert!(result.is_ok(), "whitespace-trim path must not panic");
     }
 
-    /// Non-JSON garbage bytes: ingest_event returns Ok(()) (parse fails
-    /// gracefully via the None arm in ingest_event).
+    /// Non-JSON garbage bytes: ingest_event returns Err (parse fails via None arm).
+    /// Valid-but-empty JSON inputs (`{}`, `{"foo":1}`) still return Ok (DB write succeeds).
     #[test]
     fn ingest_event_returns_ok_on_non_json() {
         // Valid-but-empty JSON inputs (`{}`, `{"foo":1}`) reach the DB write
@@ -414,18 +459,27 @@ mod tests {
         .unwrap();
         set_test_config_env(&cfg_path);
 
-        let garbage_inputs = [
-            "not json at all",
-            "{{{{",
-            "\x00\x01\x02\x03",
+        // Truly invalid JSON: parse_hook_payload returns None → ingest_event returns Err.
+        let invalid_inputs = ["not json at all", "{{{{", "\x00\x01\x02\x03"];
+        for input in &invalid_inputs {
+            let result = ingest_event(input);
+            assert!(
+                result.is_err(),
+                "ingest_event should return Err for invalid JSON {:?}",
+                input,
+            );
+        }
+
+        // Valid JSON with no recognised fields: still Ok (live_event written with null fields).
+        let valid_inputs = [
             "{}",           // valid JSON but missing all required fields
             r#"{"foo":1}"#, // valid JSON, no recognised fields
         ];
-        for input in &garbage_inputs {
+        for input in &valid_inputs {
             let result = ingest_event(input);
             assert!(
                 result.is_ok(),
-                "ingest_event should return Ok for input {:?}, got {:?}",
+                "ingest_event should return Ok for valid JSON {:?}, got {:?}",
                 input,
                 result
             );
@@ -488,5 +542,131 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM live_events", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1, "duplicate dedup_key must be silently ignored");
+    }
+
+    #[test]
+    fn ingest_event_returns_tool_name_and_session_id() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("tuple_test.db");
+        let cfg_path = dir.path().join("config.toml");
+        std::fs::write(
+            &cfg_path,
+            format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
+        )
+        .unwrap();
+        set_test_config_env(&cfg_path);
+
+        let json = r#"{
+            "session_id": "ses-tuple",
+            "tool_name": "Bash",
+            "tool_use_id": "tu_tuple",
+            "hook_input": { "cost": { "total_cost_usd": 0.001 } }
+        }"#;
+
+        let result = ingest_event(json).unwrap();
+        remove_test_config_env();
+
+        assert_eq!(result.0.as_deref(), Some("Bash"));
+        assert_eq!(result.1.as_deref(), Some("ses-tuple"));
+    }
+
+    #[test]
+    fn ingest_event_returns_err_for_invalid_json() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("err_test.db");
+        let cfg_path = dir.path().join("config.toml");
+        std::fs::write(
+            &cfg_path,
+            format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
+        )
+        .unwrap();
+        set_test_config_env(&cfg_path);
+
+        let result = ingest_event("not valid json {{{{");
+        remove_test_config_env();
+        assert!(result.is_err(), "invalid JSON must return Err");
+    }
+
+    #[test]
+    fn write_hook_telemetry_writes_row() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("telemetry_test.db");
+        let cfg_path = dir.path().join("config.toml");
+        std::fs::write(
+            &cfg_path,
+            format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
+        )
+        .unwrap();
+        set_test_config_env(&cfg_path);
+
+        let received_at = chrono::Utc::now();
+        write_hook_telemetry(
+            received_at,
+            "ok",
+            12_000,
+            Some("Read".into()),
+            Some("ses1".into()),
+            None,
+        )
+        .unwrap();
+
+        remove_test_config_env();
+
+        let conn = open_db(&db_path).unwrap();
+        let (outcome, latency_us): (String, i64) = conn
+            .query_row(
+                "SELECT outcome, latency_us FROM hook_events LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(outcome, "ok");
+        assert_eq!(latency_us, 12_000);
+    }
+
+    #[test]
+    fn write_hook_telemetry_bypass_records_ancestor() {
+        let _guard = crate::config::HEIMDALL_CONFIG_MUTEX
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("bypass_tel_test.db");
+        let cfg_path = dir.path().join("config.toml");
+        std::fs::write(
+            &cfg_path,
+            format!("db_path = {:?}\n", db_path.to_string_lossy().as_ref()),
+        )
+        .unwrap();
+        set_test_config_env(&cfg_path);
+
+        let m = bypass::BypassMatch {
+            depth: 2,
+            ancestor_pid: 999,
+            ancestor_command: "code --dangerously-skip-permissions".into(),
+        };
+        write_hook_telemetry(chrono::Utc::now(), "bypass", 8_000, None, None, Some(m)).unwrap();
+
+        remove_test_config_env();
+
+        let conn = open_db(&db_path).unwrap();
+        let (outcome, depth, cmd): (String, Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT outcome, bypass_depth, bypass_ancestor_command FROM hook_events LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(outcome, "bypass");
+        assert_eq!(depth, Some(2));
+        assert!(cmd.unwrap().contains("dangerously-skip-permissions"));
     }
 }

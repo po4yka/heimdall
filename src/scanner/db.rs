@@ -293,6 +293,25 @@ fn create_schema(conn: &Connection) -> Result<()> {
         CREATE INDEX IF NOT EXISTS idx_live_events_session ON live_events(session_id);",
     )?;
 
+    // Hook execution telemetry: one row per main_impl() invocation regardless of outcome.
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS hook_events (
+            rowid                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            received_at             TEXT NOT NULL,
+            ts_epoch                INTEGER NOT NULL,
+            outcome                 TEXT NOT NULL,
+            latency_us              INTEGER NOT NULL,
+            tool_name               TEXT,
+            session_id              TEXT,
+            bypass_depth            INTEGER,
+            bypass_ancestor_pid     INTEGER,
+            bypass_ancestor_command TEXT,
+            cli_version             TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_hook_events_ts ON hook_events(ts_epoch);
+        CREATE INDEX IF NOT EXISTS idx_hook_events_outcome ON hook_events(outcome, ts_epoch);",
+    )?;
+
     // Agent status history: one row per component per poll.
     // PRIMARY KEY (ts_epoch, provider, component_id) ensures INSERT OR IGNORE is idempotent.
     conn.execute_batch(
@@ -2259,6 +2278,181 @@ LEFT JOIN turn_pauses             tp  ON tp.session_id  = ws.session_id";
     }
 }
 
+pub fn query_dashboard_hook_telemetry(
+    conn: &Connection,
+) -> crate::models::HookTelemetrySummary {
+    use crate::models::{
+        HookBypassAncestorRow, HookLatencyBucket, HookOutcomeRow, HookTelemetrySummary,
+    };
+    use chrono::{Duration, Utc};
+    use std::collections::HashMap;
+
+    let cutoff_epoch = (Utc::now() - Duration::days(29)).timestamp();
+    let generated_at = Utc::now().to_rfc3339();
+
+    let sql = "SELECT outcome, latency_us, bypass_ancestor_command, received_at
+               FROM hook_events
+               WHERE ts_epoch >= ?1
+               ORDER BY ts_epoch ASC";
+
+    let rows: Vec<(String, i64, Option<String>, String)> = {
+        let mut stmt = match conn.prepare(sql) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("query_dashboard_hook_telemetry prepare failed: {e}");
+                return HookTelemetrySummary {
+                    generated_at,
+                    ..Default::default()
+                };
+            }
+        };
+        match stmt.query_map(rusqlite::params![cutoff_epoch], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        }) {
+            Ok(mapped) => mapped
+                .filter_map(|r| match r {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        warn!("hook_telemetry row error: {e}");
+                        None
+                    }
+                })
+                .collect(),
+            Err(e) => {
+                warn!("query_dashboard_hook_telemetry query failed: {e}");
+                return HookTelemetrySummary {
+                    generated_at,
+                    ..Default::default()
+                };
+            }
+        }
+    };
+
+    if rows.is_empty() {
+        return HookTelemetrySummary {
+            generated_at,
+            ..Default::default()
+        };
+    }
+
+    let mut total = 0u32;
+    let mut ok_count = 0u32;
+    let mut bypass_count = 0u32;
+    let mut timeout_count = 0u32;
+    let mut parse_error_count = 0u32;
+    let mut all_latencies: Vec<u64> = Vec::with_capacity(rows.len());
+    // outcome -> latencies for per-outcome p50/p95
+    let mut outcome_latencies: HashMap<String, Vec<u64>> = HashMap::new();
+    // bypass ancestor command -> (count, last_seen)
+    let mut bypass_ancestors: HashMap<String, (u32, String)> = HashMap::new();
+
+    for (outcome, latency_us, bypass_cmd, received_at) in &rows {
+        total += 1;
+        let lat = (*latency_us).max(0) as u64;
+        all_latencies.push(lat);
+        outcome_latencies.entry(outcome.clone()).or_default().push(lat);
+
+        match outcome.as_str() {
+            "ok" => ok_count += 1,
+            "bypass" => {
+                bypass_count += 1;
+                if let Some(cmd) = bypass_cmd {
+                    let entry = bypass_ancestors
+                        .entry(cmd.clone())
+                        .or_insert((0, received_at.clone()));
+                    entry.0 += 1;
+                    if received_at > &entry.1 {
+                        entry.1 = received_at.clone();
+                    }
+                }
+            }
+            "stdin_timeout" => timeout_count += 1,
+            "parse_error" => parse_error_count += 1,
+            _ => {}
+        }
+    }
+
+    fn percentile(sorted: &[u64], pct: f64) -> u64 {
+        if sorted.is_empty() {
+            return 0;
+        }
+        let idx = ((sorted.len() as f64 - 1.0) * pct).round() as usize;
+        sorted[idx.min(sorted.len() - 1)]
+    }
+
+    all_latencies.sort_unstable();
+    let p50 = percentile(&all_latencies, 0.50);
+    let p95 = percentile(&all_latencies, 0.95);
+    let p99 = percentile(&all_latencies, 0.99);
+
+    // Build latency buckets (in microseconds)
+    let bucket_defs: &[(&str, u64, Option<u64>)] = &[
+        ("<10ms", 0, Some(10_000)),
+        ("10-50ms", 10_000, Some(50_000)),
+        ("50-100ms", 50_000, Some(100_000)),
+        ("100-500ms", 100_000, Some(500_000)),
+        ("500ms+", 500_000, None),
+    ];
+    let latency_buckets: Vec<HookLatencyBucket> = bucket_defs
+        .iter()
+        .map(|(label, min_us, max_us)| {
+            let count = all_latencies
+                .iter()
+                .filter(|&&v| v >= *min_us && max_us.map(|m| v < m).unwrap_or(true))
+                .count() as u32;
+            HookLatencyBucket {
+                label: label.to_string(),
+                min_us: *min_us,
+                max_us: *max_us,
+                count,
+            }
+        })
+        .collect();
+
+    // Build per-outcome rows
+    let mut outcome_rows: Vec<HookOutcomeRow> = outcome_latencies
+        .into_iter()
+        .map(|(outcome, mut lats)| {
+            lats.sort_unstable();
+            HookOutcomeRow {
+                count: lats.len() as u32,
+                p50_us: percentile(&lats, 0.50),
+                p95_us: percentile(&lats, 0.95),
+                outcome,
+            }
+        })
+        .collect();
+    outcome_rows.sort_by(|a, b| b.count.cmp(&a.count).then(a.outcome.cmp(&b.outcome)));
+
+    // Build top bypass ancestors (top 10 by count)
+    let mut top_bypass_ancestors: Vec<HookBypassAncestorRow> = bypass_ancestors
+        .into_iter()
+        .map(|(command, (bc, last_seen))| HookBypassAncestorRow {
+            command,
+            bypass_count: bc,
+            last_seen,
+        })
+        .collect();
+    top_bypass_ancestors
+        .sort_by(|a, b| b.bypass_count.cmp(&a.bypass_count).then(a.command.cmp(&b.command)));
+    top_bypass_ancestors.truncate(10);
+
+    HookTelemetrySummary {
+        total_invocations: total,
+        ok_count,
+        bypass_count,
+        stdin_timeout_count: timeout_count,
+        parse_error_count,
+        p50_latency_us: p50,
+        p95_latency_us: p95,
+        p99_latency_us: p99,
+        latency_buckets,
+        outcome_rows,
+        top_bypass_ancestors,
+        generated_at,
+    }
+}
+
 pub(crate) fn query_dashboard_entrypoints(conn: &Connection) -> Result<Vec<EntrypointSummary>> {
     let mut stmt = conn.prepare(
         "SELECT s.provider, COALESCE(s.entrypoint, 'unknown') as ep,
@@ -2835,6 +3029,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
     let agent_tree = query_dashboard_agent_tree(conn);
     let cost_forecast = crate::analytics::forecast::compute_cost_forecast(conn, &tz);
     let session_quality = query_dashboard_session_quality(conn);
+    let hook_telemetry = query_dashboard_hook_telemetry(conn);
 
     // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
     // summing across providers so the frontend gets a single series per model/week.
@@ -2891,6 +3086,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         agent_tree,
         cost_forecast,
         session_quality,
+        hook_telemetry,
     })
 }
 
@@ -5039,6 +5235,47 @@ pub fn insert_live_event(conn: &Connection, event: &LiveEventRow) -> Result<()> 
             event.context_input_tokens,
             event.context_window_size,
             event.hook_reported_cost_nanos,
+        ],
+    )?;
+    Ok(())
+}
+
+// ── Hook execution telemetry ────────────────────────────────────────────────
+
+/// One row destined for the `hook_events` table.
+#[derive(Debug, Clone)]
+pub struct HookEventRow {
+    pub received_at: String,
+    pub ts_epoch: i64,
+    pub outcome: String,
+    pub latency_us: i64,
+    pub tool_name: Option<String>,
+    pub session_id: Option<String>,
+    pub bypass_depth: Option<u32>,
+    pub bypass_ancestor_pid: Option<u32>,
+    pub bypass_ancestor_command: Option<String>,
+    pub cli_version: String,
+}
+
+/// Append one hook telemetry row. Uses plain INSERT (not OR IGNORE) since every
+/// invocation is a distinct event; failures are logged by the caller.
+pub fn insert_hook_event(conn: &Connection, row: &HookEventRow) -> Result<()> {
+    conn.execute(
+        "INSERT INTO hook_events
+            (received_at, ts_epoch, outcome, latency_us, tool_name, session_id,
+             bypass_depth, bypass_ancestor_pid, bypass_ancestor_command, cli_version)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        rusqlite::params![
+            row.received_at,
+            row.ts_epoch,
+            row.outcome,
+            row.latency_us,
+            row.tool_name,
+            row.session_id,
+            row.bypass_depth,
+            row.bypass_ancestor_pid,
+            row.bypass_ancestor_command,
+            row.cli_version,
         ],
     )?;
     Ok(())
@@ -10778,5 +11015,164 @@ mod tests {
             1,
             "only the recent session should be included"
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Hook telemetry query tests
+    // ---------------------------------------------------------------------------
+
+    fn insert_hook_event_row(
+        conn: &Connection,
+        ts_epoch: i64,
+        outcome: &str,
+        latency_us: i64,
+        bypass_cmd: Option<&str>,
+    ) {
+        conn.execute(
+            "INSERT INTO hook_events
+                (received_at, ts_epoch, outcome, latency_us, tool_name, session_id,
+                 bypass_ancestor_command, cli_version)
+             VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5, 'test')",
+            rusqlite::params![
+                "2024-01-01T00:00:00Z",
+                ts_epoch,
+                outcome,
+                latency_us,
+                bypass_cmd,
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn hook_telemetry_empty_db() {
+        let (dir, _conn) = crate::optimizer::mod_tests::empty_db();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        let summary = query_dashboard_hook_telemetry(&conn);
+        assert_eq!(summary.total_invocations, 0);
+        assert_eq!(summary.ok_count, 0);
+        assert_eq!(summary.p50_latency_us, 0);
+    }
+
+    #[test]
+    fn hook_telemetry_buckets_correct() {
+        let (dir, _conn) = crate::optimizer::mod_tests::empty_db();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        // one row per bucket: <10ms, 10-50ms, 50-100ms, 100-500ms, 500ms+
+        let now_epoch = chrono::Utc::now().timestamp();
+        insert_hook_event_row(&conn, now_epoch, "ok", 5_000, None);
+        insert_hook_event_row(&conn, now_epoch, "ok", 30_000, None);
+        insert_hook_event_row(&conn, now_epoch, "ok", 75_000, None);
+        insert_hook_event_row(&conn, now_epoch, "ok", 250_000, None);
+        insert_hook_event_row(&conn, now_epoch, "ok", 750_000, None);
+        let summary = query_dashboard_hook_telemetry(&conn);
+        assert_eq!(summary.total_invocations, 5);
+        assert_eq!(summary.latency_buckets.len(), 5);
+        for bucket in &summary.latency_buckets {
+            assert_eq!(bucket.count, 1, "bucket {} should have 1 row", bucket.label);
+        }
+    }
+
+    #[test]
+    fn hook_telemetry_p95_calculation() {
+        let (dir, _conn) = crate::optimizer::mod_tests::empty_db();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        let now_epoch = chrono::Utc::now().timestamp();
+        // 100 rows with latency 1ms..=100ms
+        for i in 1i64..=100 {
+            insert_hook_event_row(&conn, now_epoch, "ok", i * 1_000, None);
+        }
+        let summary = query_dashboard_hook_telemetry(&conn);
+        assert_eq!(summary.total_invocations, 100);
+        // p50 should be ~50ms, p95 should be ~95ms (within 5ms tolerance)
+        assert!(
+            summary.p50_latency_us >= 45_000 && summary.p50_latency_us <= 55_000,
+            "p50={}",
+            summary.p50_latency_us
+        );
+        assert!(
+            summary.p95_latency_us >= 90_000 && summary.p95_latency_us <= 100_000,
+            "p95={}",
+            summary.p95_latency_us
+        );
+    }
+
+    #[test]
+    fn hook_telemetry_outcome_breakdown() {
+        let (dir, _conn) = crate::optimizer::mod_tests::empty_db();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        let now_epoch = chrono::Utc::now().timestamp();
+        insert_hook_event_row(&conn, now_epoch, "ok", 10_000, None);
+        insert_hook_event_row(&conn, now_epoch, "ok", 20_000, None);
+        insert_hook_event_row(
+            &conn,
+            now_epoch,
+            "bypass",
+            5_000,
+            Some("code --dangerously-skip-permissions"),
+        );
+        insert_hook_event_row(&conn, now_epoch, "stdin_timeout", 1_100_000, None);
+        let summary = query_dashboard_hook_telemetry(&conn);
+        assert_eq!(summary.total_invocations, 4);
+        assert_eq!(summary.ok_count, 2);
+        assert_eq!(summary.bypass_count, 1);
+        assert_eq!(summary.stdin_timeout_count, 1);
+        assert_eq!(summary.parse_error_count, 0);
+    }
+
+    #[test]
+    fn hook_telemetry_bypass_ancestor_grouping() {
+        let (dir, _conn) = crate::optimizer::mod_tests::empty_db();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        let now_epoch = chrono::Utc::now().timestamp();
+        let cmd = "code --dangerously-skip-permissions";
+        for _ in 0..3 {
+            insert_hook_event_row(&conn, now_epoch, "bypass", 5_000, Some(cmd));
+        }
+        let summary = query_dashboard_hook_telemetry(&conn);
+        assert_eq!(summary.bypass_count, 3);
+        assert_eq!(summary.top_bypass_ancestors.len(), 1);
+        assert_eq!(summary.top_bypass_ancestors[0].bypass_count, 3);
+        assert_eq!(summary.top_bypass_ancestors[0].command, cmd);
+    }
+
+    #[test]
+    fn hook_telemetry_30day_cutoff() {
+        let (dir, _conn) = crate::optimizer::mod_tests::empty_db();
+        let db_path = dir.path().join("test.db");
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        let now_epoch = chrono::Utc::now().timestamp();
+        let old_epoch = now_epoch - 31 * 86400; // 31 days ago
+        insert_hook_event_row(&conn, old_epoch, "ok", 10_000, None); // should be excluded
+        insert_hook_event_row(&conn, now_epoch, "ok", 20_000, None); // should be included
+        let summary = query_dashboard_hook_telemetry(&conn);
+        assert_eq!(summary.total_invocations, 1);
+    }
+
+    #[test]
+    fn hook_event_insert_idempotent_schema() {
+        let (dir, _conn) = crate::optimizer::mod_tests::empty_db();
+        let db_path = dir.path().join("test.db");
+        // Running init_db twice must not fail.
+        let conn = open_db(&db_path).unwrap();
+        init_db(&conn).unwrap();
+        init_db(&conn).unwrap();
+        // Insert a row to verify the table exists.
+        let now_epoch = chrono::Utc::now().timestamp();
+        insert_hook_event_row(&conn, now_epoch, "ok", 10_000, None);
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM hook_events", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
     }
 }

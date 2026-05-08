@@ -8305,6 +8305,223 @@
     return /* @__PURE__ */ u4(SessionQualityCardInner, { summary });
   }
 
+  // src/ui/components/HookTelemetryCard.tsx
+  function fmtMs(us) {
+    return `${Math.round(us / 1e3)}ms`;
+  }
+  function KpiTile4({ label, value }) {
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: label }),
+      /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: value })
+    ] });
+  }
+  function LatencyHistogram({ buckets }) {
+    if (buckets.length === 0) return null;
+    const maxCount = Math.max(...buckets.map((b4) => b4.count), 1);
+    return /* @__PURE__ */ u4("div", { style: { marginBottom: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "8px", fontSize: "10px" }, children: "Latency distribution" }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "flex",
+            gap: "6px",
+            alignItems: "flex-end",
+            padding: "12px",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            height: "120px"
+          },
+          children: buckets.map((b4) => {
+            const heightPct = (b4.count / maxCount * 100).toFixed(1);
+            const opacity = b4.count > 0 ? 0.9 : 0.15;
+            return /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "4px",
+                  flex: "1"
+                },
+                children: [
+                  /* @__PURE__ */ u4(
+                    "span",
+                    {
+                      style: {
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "9px",
+                        color: "var(--text-secondary)"
+                      },
+                      children: b4.count
+                    }
+                  ),
+                  /* @__PURE__ */ u4("div", { style: { width: "100%", flex: "1", display: "flex", alignItems: "flex-end" }, children: /* @__PURE__ */ u4(
+                    "div",
+                    {
+                      style: {
+                        width: "100%",
+                        height: `${heightPct}%`,
+                        background: `rgba(var(--text-primary-rgb,232,232,232),${opacity})`,
+                        borderRadius: "2px 2px 0 0",
+                        minHeight: "2px"
+                      }
+                    }
+                  ) }),
+                  /* @__PURE__ */ u4(
+                    "span",
+                    {
+                      style: {
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "9px",
+                        color: "var(--text-secondary)",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        maxWidth: "100%",
+                        textOverflow: "ellipsis"
+                      },
+                      children: b4.label
+                    }
+                  )
+                ]
+              },
+              b4.label
+            );
+          })
+        }
+      )
+    ] });
+  }
+  function OutcomeTable({ rows: rows2 }) {
+    if (rows2.length === 0) return null;
+    return /* @__PURE__ */ u4("div", { style: { marginBottom: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "8px", fontSize: "10px" }, children: "Outcome breakdown" }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            padding: "12px",
+            border: "1px solid var(--border)",
+            borderRadius: "8px"
+          },
+          children: /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto auto",
+                gap: "3px 16px",
+                alignItems: "center"
+              },
+              children: [
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase" }, children: "Outcome" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase", textAlign: "right" }, children: "Count" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase", textAlign: "right" }, children: "p50" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase", textAlign: "right" }, children: "p95" }),
+                rows2.map((r4) => /* @__PURE__ */ u4(S, { children: [
+                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-primary)", lineHeight: "20px" }, children: r4.outcome }, `outcome-${r4.outcome}`),
+                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-primary)" }, children: r4.count }),
+                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-secondary)" }, children: fmtMs(r4.p50_us) }),
+                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-secondary)" }, children: fmtMs(r4.p95_us) })
+                ] }))
+              ]
+            }
+          )
+        }
+      )
+    ] });
+  }
+  function BypassTable({ rows: rows2 }) {
+    if (rows2.length === 0) return null;
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "8px", fontSize: "10px" }, children: "Top bypass ancestors" }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            padding: "12px",
+            border: "1px solid var(--border)",
+            borderRadius: "8px"
+          },
+          children: /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: "3px 16px",
+                alignItems: "center"
+              },
+              children: [
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase" }, children: "Command" }),
+                /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textTransform: "uppercase", textAlign: "right" }, children: "Bypasses" }),
+                rows2.map((a4) => /* @__PURE__ */ u4(S, { children: [
+                  /* @__PURE__ */ u4(
+                    "div",
+                    {
+                      style: {
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "10px",
+                        color: "var(--text-primary)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        lineHeight: "20px"
+                      },
+                      title: a4.command,
+                      children: a4.command.length > 40 ? a4.command.slice(0, 40) + "\u2026" : a4.command
+                    },
+                    `bypass-${a4.command}`
+                  ),
+                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-primary)" }, children: a4.bypass_count })
+                ] }))
+              ]
+            }
+          )
+        }
+      )
+    ] });
+  }
+  function HookTelemetryCardInner({ summary }) {
+    return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "10px" }, children: "Hook telemetry" }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "16px" }, children: [
+        /* @__PURE__ */ u4(KpiTile4, { label: "Invocations (30d)", value: summary.total_invocations }),
+        /* @__PURE__ */ u4(KpiTile4, { label: "p50 latency", value: fmtMs(summary.p50_latency_us) }),
+        /* @__PURE__ */ u4(KpiTile4, { label: "p95 latency", value: fmtMs(summary.p95_latency_us) }),
+        /* @__PURE__ */ u4(KpiTile4, { label: "p99 latency", value: fmtMs(summary.p99_latency_us) }),
+        /* @__PURE__ */ u4(KpiTile4, { label: "Bypasses", value: summary.bypass_count }),
+        /* @__PURE__ */ u4(KpiTile4, { label: "Timeouts", value: summary.stdin_timeout_count }),
+        /* @__PURE__ */ u4(KpiTile4, { label: "Parse errors", value: summary.parse_error_count })
+      ] }),
+      /* @__PURE__ */ u4(LatencyHistogram, { buckets: summary.latency_buckets }),
+      /* @__PURE__ */ u4(OutcomeTable, { rows: summary.outcome_rows }),
+      /* @__PURE__ */ u4(BypassTable, { rows: summary.top_bypass_ancestors })
+    ] });
+  }
+  function HookTelemetryCard() {
+    const data = rawData.value;
+    if (!data) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Hook telemetry" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "loading..." })
+      ] });
+    }
+    const summary = data.hook_telemetry;
+    if (!summary || summary.total_invocations === 0) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Hook telemetry" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: [
+          "No hook invocations recorded yet. Install the hook with ",
+          /* @__PURE__ */ u4("code", { children: "heimdall hook install" }),
+          "."
+        ] })
+      ] });
+    }
+    return /* @__PURE__ */ u4(HookTelemetryCardInner, { summary });
+  }
+
   // src/ui/components/Sidebar.tsx
   var NAV_ITEMS = [
     { key: "overview", label: "Overview", abbr: "OV" },
@@ -9089,6 +9306,20 @@
         invokeMountCallback("session-quality-card", el);
       }
     },
+    {
+      id: "hook-telemetry-card",
+      title: "Hook telemetry",
+      description: "PreToolUse hook latency histogram, outcome breakdown, and top bypass ancestors",
+      category: "system",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 5 },
+      minW: 2,
+      minH: 3,
+      render: (el) => {
+        el.id = "hook-telemetry-card";
+        invokeMountCallback("hook-telemetry-card", el);
+      }
+    },
     // ── Projects tab ──────────────────────────────────────────────────────────
     {
       id: "projects-registry",
@@ -9183,7 +9414,8 @@
     { id: "model-cost-mount", h: 4 },
     { id: "sessions-mount", h: 5 },
     { id: "project-cost-mount", h: 4 },
-    { id: "session-quality-card", h: 5 }
+    { id: "session-quality-card", h: 5 },
+    { id: "hook-telemetry-card", h: 5 }
   ]);
   var PROJECTS_WIDGETS = stack([
     { id: "projects-registry", h: 8 }
@@ -23988,6 +24220,9 @@ ${row.project}` : row.project;
     });
     registerMountCallback("session-quality-card", (el) => {
       R(/* @__PURE__ */ u4(SessionQualityCard, {}), el);
+    });
+    registerMountCallback("hook-telemetry-card", (el) => {
+      R(/* @__PURE__ */ u4(HookTelemetryCard, {}), el);
     });
   }
   var backupModalMount = document.getElementById("backup-modal-mount");

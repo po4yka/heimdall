@@ -759,6 +759,7 @@ export interface DashboardData {
   agent_tree?: AgentTreeSummary;
   cost_forecast?: CostForecastSummary;
   session_quality?: SessionQualitySummary;
+  hook_telemetry?: HookTelemetrySummary;
   error?: string;
 }
 
@@ -1054,6 +1055,43 @@ export interface SessionQualitySummary {
   abandonment_rate: number;
   long_pause_session_count: number;
   avg_turns_per_session: number;
+  generated_at: string;
+}
+
+// ── Hook telemetry ──────────────────────────────────────────────────────────
+
+export interface HookLatencyBucket {
+  label: string;
+  min_us: number;
+  max_us?: number;
+  count: number;
+}
+
+export interface HookOutcomeRow {
+  outcome: string;
+  count: number;
+  p50_us: number;
+  p95_us: number;
+}
+
+export interface HookBypassAncestorRow {
+  command: string;
+  bypass_count: number;
+  last_seen: string;
+}
+
+export interface HookTelemetrySummary {
+  total_invocations: number;
+  ok_count: number;
+  bypass_count: number;
+  stdin_timeout_count: number;
+  parse_error_count: number;
+  p50_latency_us: number;
+  p95_latency_us: number;
+  p99_latency_us: number;
+  latency_buckets: HookLatencyBucket[];
+  outcome_rows: HookOutcomeRow[];
+  top_bypass_ancestors: HookBypassAncestorRow[];
   generated_at: string;
 }
 

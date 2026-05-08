@@ -746,6 +746,20 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       invokeMountCallback('session-quality-card', el);
     },
   },
+  {
+    id: 'hook-telemetry-card',
+    title: 'Hook telemetry',
+    description: 'PreToolUse hook latency histogram, outcome breakdown, and top bypass ancestors',
+    category: 'system',
+    screens: ['tables'],
+    defaultSize: { w: 4, h: 5 },
+    minW: 2,
+    minH: 3,
+    render: (el: HTMLElement) => {
+      el.id = 'hook-telemetry-card';
+      invokeMountCallback('hook-telemetry-card', el);
+    },
+  },
 
   // ── Projects tab ──────────────────────────────────────────────────────────
   {

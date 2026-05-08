@@ -315,6 +315,8 @@ pub struct DashboardData {
     pub cost_forecast: CostForecastSummary,
     #[serde(default)]
     pub session_quality: SessionQualitySummary,
+    #[serde(default)]
+    pub hook_telemetry: HookTelemetrySummary,
 }
 
 /// One entry in the `weekly_by_model` array of `/api/data`.
@@ -389,6 +391,49 @@ pub struct SessionQualitySummary {
     pub abandonment_rate: f32,
     pub long_pause_session_count: u32,
     pub avg_turns_per_session: f32,
+    pub generated_at: String,
+}
+
+/// One latency bucket in the hook telemetry histogram.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct HookLatencyBucket {
+    pub label: String,       // "<10ms", "10-50ms", "50-100ms", "100-500ms", "500ms+"
+    pub min_us: u64,
+    pub max_us: Option<u64>, // None for "500ms+"
+    pub count: u32,
+}
+
+/// Per-outcome row in the hook telemetry breakdown.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct HookOutcomeRow {
+    pub outcome: String,
+    pub count: u32,
+    pub p50_us: u64,
+    pub p95_us: u64,
+}
+
+/// Top bypass ancestor process in the hook telemetry.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct HookBypassAncestorRow {
+    pub command: String,
+    pub bypass_count: u32,
+    pub last_seen: String, // RFC3339
+}
+
+/// Aggregate hook execution telemetry for the last 30 days.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct HookTelemetrySummary {
+    pub total_invocations: u32,
+    pub ok_count: u32,
+    pub bypass_count: u32,
+    pub stdin_timeout_count: u32,
+    pub parse_error_count: u32,
+    pub p50_latency_us: u64,
+    pub p95_latency_us: u64,
+    pub p99_latency_us: u64,
+    pub latency_buckets: Vec<HookLatencyBucket>,
+    pub outcome_rows: Vec<HookOutcomeRow>,
+    pub top_bypass_ancestors: Vec<HookBypassAncestorRow>,
     pub generated_at: String,
 }
 

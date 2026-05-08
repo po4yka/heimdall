@@ -236,6 +236,84 @@ public struct SessionQualitySummary: Codable, Sendable {
     }
 }
 
+// MARK: - Hook telemetry types
+
+public struct HookLatencyBucket: Codable, Sendable, Identifiable {
+    public let label: String
+    public let minUs: UInt64
+    public let maxUs: UInt64?
+    public let count: UInt32
+
+    public var id: String { label }
+
+    enum CodingKeys: String, CodingKey {
+        case label
+        case minUs = "min_us"
+        case maxUs = "max_us"
+        case count
+    }
+}
+
+public struct HookOutcomeRow: Codable, Sendable, Identifiable {
+    public let outcome: String
+    public let count: UInt32
+    public let p50Us: UInt64
+    public let p95Us: UInt64
+
+    public var id: String { outcome }
+
+    enum CodingKeys: String, CodingKey {
+        case outcome
+        case count
+        case p50Us = "p50_us"
+        case p95Us = "p95_us"
+    }
+}
+
+public struct HookBypassAncestorRow: Codable, Sendable, Identifiable {
+    public let command: String
+    public let bypassCount: UInt32
+    public let lastSeen: String
+
+    public var id: String { command }
+
+    enum CodingKeys: String, CodingKey {
+        case command
+        case bypassCount = "bypass_count"
+        case lastSeen = "last_seen"
+    }
+}
+
+public struct HookTelemetrySummary: Codable, Sendable {
+    public let totalInvocations: UInt32
+    public let okCount: UInt32
+    public let bypassCount: UInt32
+    public let stdinTimeoutCount: UInt32
+    public let parseErrorCount: UInt32
+    public let p50LatencyUs: UInt64
+    public let p95LatencyUs: UInt64
+    public let p99LatencyUs: UInt64
+    public let latencyBuckets: [HookLatencyBucket]
+    public let outcomeRows: [HookOutcomeRow]
+    public let topBypassAncestors: [HookBypassAncestorRow]
+    public let generatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case totalInvocations = "total_invocations"
+        case okCount = "ok_count"
+        case bypassCount = "bypass_count"
+        case stdinTimeoutCount = "stdin_timeout_count"
+        case parseErrorCount = "parse_error_count"
+        case p50LatencyUs = "p50_latency_us"
+        case p95LatencyUs = "p95_latency_us"
+        case p99LatencyUs = "p99_latency_us"
+        case latencyBuckets = "latency_buckets"
+        case outcomeRows = "outcome_rows"
+        case topBypassAncestors = "top_bypass_ancestors"
+        case generatedAt = "generated_at"
+    }
+}
+
 // MARK: - Partial dashboard decode
 
 private struct DashboardDataPartial: Codable {
@@ -243,12 +321,14 @@ private struct DashboardDataPartial: Codable {
     let agentTree: AgentTreeSummary?
     let costForecast: CostForecastSummary?
     let sessionQuality: SessionQualitySummary?
+    let hookTelemetry: HookTelemetrySummary?
 
     enum CodingKeys: String, CodingKey {
         case contextPressure = "context_pressure"
         case agentTree = "agent_tree"
         case costForecast = "cost_forecast"
         case sessionQuality = "session_quality"
+        case hookTelemetry = "hook_telemetry"
     }
 }
 
@@ -263,6 +343,7 @@ public final class DashboardDataFeatureModel {
     public var agentTree: AgentTreeSummary?
     public var costForecast: CostForecastSummary?
     public var sessionQuality: SessionQualitySummary?
+    public var hookTelemetry: HookTelemetrySummary?
     public var isLoading: Bool = false
 
     public init(helperPort: Int) {
@@ -282,6 +363,7 @@ public final class DashboardDataFeatureModel {
             self.agentTree = partial.agentTree
             self.costForecast = partial.costForecast
             self.sessionQuality = partial.sessionQuality
+            self.hookTelemetry = partial.hookTelemetry
         } catch {
             // supplemental sections — silently ignore fetch failures
         }
