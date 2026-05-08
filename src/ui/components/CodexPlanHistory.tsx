@@ -2,6 +2,7 @@ import { useMemo } from 'preact/hooks';
 import type { ApexOptions } from '../lib/apex';
 import type { CodexPlanDailyRow } from '../state/dashboard-types';
 import { ApexChart } from './charts/ApexChart';
+import { apexThemeMode, withAlpha } from '../lib/charts';
 
 interface Props {
   history: CodexPlanDailyRow[];
@@ -41,7 +42,7 @@ function buildOptions(history: CodexPlanDailyRow[]): ApexOptions | null {
         const v = r.by_plan[plan];
         return v != null ? Math.min(100, Math.max(0, v)) : 0;
       }),
-      color: `rgba(var(--text-primary-rgb, 232, 232, 232), ${opacity})`,
+      color: withAlpha('--text-display', opacity),
     };
   });
 
@@ -80,11 +81,12 @@ function buildOptions(history: CodexPlanDailyRow[]): ApexOptions | null {
     chart: {
       type: 'bar',
       stacked: true,
+      background: 'transparent',
       toolbar: { show: false },
       animations: { enabled: false },
       fontFamily: 'var(--font-mono)',
     },
-    theme: { mode: 'dark' },
+    theme: { mode: apexThemeMode() },
     series: allSeries,
     colors: allSeries.map(s => s.color),
     stroke: {
@@ -144,7 +146,7 @@ function buildOptions(history: CodexPlanDailyRow[]): ApexOptions | null {
       },
     ],
     tooltip: {
-      theme: 'dark',
+      theme: apexThemeMode(),
       style: { fontFamily: 'var(--font-mono)', fontSize: '11px' },
       y: {
         formatter: (val: number | null) =>
