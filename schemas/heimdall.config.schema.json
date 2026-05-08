@@ -79,6 +79,14 @@
         "locale": null
       }
     },
+    "extra_skills_dirs": {
+      "description": "Additional directories to scan for skills (.claude/skills, .codex/skills).",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string"
+      }
+    },
     "host": {
       "description": "Dashboard bind host (default: localhost).",
       "type": [
@@ -182,6 +190,8 @@
       "$ref": "#/$defs/WebhookConfig",
       "default": {
         "agent_status": false,
+        "agent_stop_reason": false,
+        "agent_stop_reason_filter": null,
         "cap_changes": false,
         "cost_threshold": null,
         "session_depleted": false,
@@ -626,6 +636,22 @@
           "description": "Notify on agent status transitions (default: true when URL is set).",
           "type": "boolean",
           "default": true
+        },
+        "agent_stop_reason": {
+          "description": "Notify when a Claude subagent's terminal `stop_reason` lands on the\nconfigured allowlist (default: `[\"max_tokens\", \"refusal\"]`).",
+          "type": "boolean",
+          "default": true
+        },
+        "agent_stop_reason_filter": {
+          "description": "Optional override for the stop_reason allowlist. `None` resolves to the\nhardcoded default (`[\"max_tokens\", \"refusal\"]`).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "default": null,
+          "items": {
+            "type": "string"
+          }
         },
         "cap_changes": {
           "description": "Notify when estimated Claude Code or Codex subscription caps change\nmaterially (default: true when the webhooks section is present).",
