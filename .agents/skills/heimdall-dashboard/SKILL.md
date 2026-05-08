@@ -23,7 +23,7 @@ Use this skill for dashboard work in `src/ui/`.
 
 1. Make the TSX/CSS changes.
 2. Rebuild UI artifacts with `npm run build:ui`.
-3. If the change is type-sensitive, run `npm run typecheck`.
+3. If the change is type-sensitive, run `./node_modules/.bin/tsc --noEmit`.
 4. Commit the generated `src/ui/app.js` and `src/ui/style.css` alongside the source change.
 
 ## UI guardrails

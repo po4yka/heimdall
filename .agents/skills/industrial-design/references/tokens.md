@@ -1,37 +1,53 @@
-# Industrial Design System — Tokens
+# heimdall design system — Tokens
+
+Canonical token definitions for the Apple-Swiss refined design system. Directory name `industrial-design/` is legacy; contents are current.
 
 ## 1. TYPOGRAPHY
 
-### Font Stack
+### Font Stack (web — Preact dashboard)
 
 | Role | Font | Fallback | Weight |
 |------|------|----------|--------|
-| **Display** | `"Doto"` | `"Space Mono", monospace` | 400–700, variable dot-size |
-| **Body / UI** | `"Space Grotesk"` | `"DM Sans", system-ui, sans-serif` | Light 300, Regular 400, Medium 500, Bold 700 |
-| **Data / Labels** | `"Space Mono"` | `"JetBrains Mono", "SF Mono", monospace` | Regular 400, Bold 700 |
+| **Body / UI / Headings** | `"Inter"` | `"Inter Variable", system-ui, sans-serif` | 400–700 |
+| **Data / Code / Tabular** | `"Geist Mono"` | `"Geist Mono Variable", ui-monospace, "SF Mono", monospace` | 400, 500, 700 |
 
-**Why these fonts:** Doto is a variable dot-matrix display face — the closest free analogue to the industrial dot-matrix typefaces used on instrument panels. Space Grotesk and Space Mono are by Colophon Foundry and share the same geometric DNA, so mixing them on a screen reads as a single typographic voice at three scales.
+**Why these fonts:** Inter (Rasmus Andersson, 2017–2024) is the dominant screen-native grotesque of 2024–2026 — Univers/Helvetica DNA adapted for UI metrics, handles every weight from Light through Black, and ships with tabular + proportional number variants. Geist Mono (Vercel, 2024) is explicitly designed to pair with Inter — same x-height, same proportion, same stroke weight — and inherits the Swiss-grotesque lineage via Suisse Int'l and SF Mono. Both are free, MIT, and self-hostable.
 
-### Type Scale
+**Do not use:** Space Grotesk, Space Mono, Doto (these were the Nothing/industrial era — removed). Helvetica Now (poor screen rendering below 16px). Geometric sans (Futura, Nunito, Poppins — reduce legibility at small sizes).
+
+### Font Stack (Swift — Heimdall)
+
+Use the SF Pro system cascade via SwiftUI's font modifiers:
+- `.font(.largeTitle)` / `.font(.title)` / `.font(.headline)` for headings (auto-selects SF Pro Display above 20pt, Text below)
+- `.font(.body)` / `.font(.callout)` for body
+- `.font(.caption)` / `.font(.caption2)` for metadata
+- `.monospacedDigit()` for numeric columns (tabular figures)
+- `.font(.system(.body, design: .monospaced))` for code / paths
+
+No custom font loading on SwiftUI. Apple's system stack is correct out of the box.
+
+### Type Scale (web)
 
 | Token | Size | Line Height | Letter Spacing | Use |
 |-------|------|-------------|----------------|-----|
-| `--display-xl` | 72px | 1.0 | -0.03em | Hero numbers, time displays |
-| `--display-lg` | 48px | 1.05 | -0.02em | Section heroes, percentages |
-| `--display-md` | 36px | 1.1 | -0.02em | Page titles |
-| `--heading` | 24px | 1.2 | -0.01em | Section headings |
-| `--subheading` | 18px | 1.3 | 0 | Subsections |
-| `--body` | 16px | 1.5 | 0 | Body text |
-| `--body-sm` | 14px | 1.5 | 0.01em | Secondary body |
-| `--caption` | 12px | 1.4 | 0.04em | Timestamps, footnotes |
-| `--label` | 11px | 1.2 | 0.08em | ALL CAPS monospace labels |
+| `--display-xl` | 48px | 1.05 | -0.02em | Hero numbers |
+| `--display-lg` | 36px | 1.1 | -0.02em | Section heroes, percentages |
+| `--display-md` | 28px | 1.15 | -0.01em | Page titles |
+| `--heading` | 20px | 1.2 | -0.005em | Section headings |
+| `--subheading` | 17px | 1.3 | 0 | Subsections |
+| `--body` | 15px | 1.5 | 0 | Body text (base) |
+| `--body-sm` | 14px | 1.5 | 0 | Secondary body, table cells |
+| `--caption` | 12px | 1.4 | 0 | Timestamps, footnotes |
+| `--label` | 11px | 1.2 | 0.02em | Small metadata (sentence-case) |
+| `--label-th` | 11px | 1.2 | 0.08em | `<th>` column headers (ALL-CAPS, the one exception) |
 
 ### Typographic Rules
 
-- **Doto:** 36px+ only, tight tracking, never for body text
-- **Labels:** Always Space Mono, ALL CAPS, 0.06–0.1em spacing, 11–12px ("instrument panel" labels)
-- **Data/Numbers:** Always Space Mono. Units as `--label` size, slightly raised, adjacent
-- **Hierarchy:** display (Doto) > heading (Space Grotesk) > label (Space Mono caps) > body (Space Grotesk). Four levels max.
+- **Inter at all sizes** for body, headings, labels, metadata. Sentence-case throughout.
+- **Hero numbers:** Inter at 36–48px, weight 500 (Medium) or 600 (Semibold). Tight letter-spacing (-0.02em).
+- **Table column headers (`<th>`):** Geist Mono 11px, ALL-CAPS, letter-spacing 0.08em — the sole ALL-CAPS instance permitted. Justified by tabular convention.
+- **Tabular numerals:** always on for numeric columns, hero numbers, percentages, currency. `font-feature-settings: "tnum"`.
+- **Hierarchy:** 4 levels max (display > heading > body > label). Use weight (400/500/600) and size for differentiation, not new families.
 
 ---
 
@@ -39,57 +55,65 @@
 
 ### Primary Palette (Dark Mode)
 
-| Token | Hex | Contrast on #000 | Role |
-|-------|-----|-------------------|------|
-| `--black` | `#000000` | — | Primary background (OLED) |
-| `--surface` | `#111111` | 1.3:1 | Elevated surfaces, cards |
-| `--surface-raised` | `#1A1A1A` | 1.5:1 | Secondary elevation |
-| `--border` | `#222222` | — | Subtle dividers (decorative only) |
+| Token | Hex | Contrast on `--black` | Role |
+|-------|-----|------------------------|------|
+| `--black` | `#0A0A0A` | — | Page canvas (refined dark, not OLED black) |
+| `--surface` | `#111111` | 1.1:1 | Elevated surfaces, cards |
+| `--surface-raised` | `#1A1A1A` | 1.5:1 | Secondary elevation, hover state |
+| `--border` | `#222222` | — | Subtle dividers (decorative) |
 | `--border-visible` | `#333333` | — | Intentional borders, wireframe lines |
-| `--text-disabled` | `#666666` | 4.0:1 | Disabled text, decorative elements |
+| `--text-disabled` | `#666666` | 4.0:1 | Disabled text, decorative meta |
 | `--text-secondary` | `#999999` | 6.3:1 | Labels, captions, metadata |
-| `--text-primary` | `#E8E8E8` | 16.5:1 | Body text |
-| `--text-display` | `#FFFFFF` | 21:1 | Headlines, hero numbers |
+| `--text-primary` | `#E8E8E8` | 14.6:1 | Body text, table cells |
+| `--text-display` | `#FFFFFF` | 20.5:1 | Hero numbers, headlines |
 
-### Accent & Status Colors
+### Primary Palette (Light Mode)
+
+| Token | Hex | Role |
+|-------|-----|------|
+| `--black` | `#F5F5F5` | Page canvas (warm off-white, paper-like) |
+| `--surface` | `#FFFFFF` | Elevated surfaces, cards |
+| `--surface-raised` | `#F0F0F0` | Secondary elevation |
+| `--border` | `#E8E8E8` | Subtle dividers |
+| `--border-visible` | `#CCCCCC` | Intentional borders |
+| `--text-disabled` | `#707070` | Disabled text |
+| `--text-secondary` | `#4F4F4F` | Labels, captions |
+| `--text-primary` | `#1A1A1A` | Body text |
+| `--text-display` | `#000000` | Hero numbers, headlines (pure black ink on paper — correct) |
+
+### Accent & Status Colors (identical across modes)
 
 | Token | Hex | Usage |
 |-------|-----|-------|
-| `--accent` | `#D71921` | Signal light: active states, destructive, urgent. One per screen as UI element. Never decorative. |
-| `--accent-subtle` | `rgba(215,25,33,0.15)` | Accent tint backgrounds |
-| `--success` | `#4A9E5C` | Confirmed, completed, connected |
-| `--warning` | `#D4A843` | Caution, pending, degraded |
-| `--error` | `#D71921` | Shares accent red — errors ARE the accent moment |
-| `--info` | `#999999` | Uses secondary text color |
-| `--interactive` | `#007AFF` / `#5B9BF6` | Tappable text: links, picker values. Not for buttons. |
+| **`--accent-interactive`** | **`#4A7FA5`** | **Primary interactive affordance — links, selected states, primary buttons, active filter chips. The dominant "tappable signal." Same value light + dark.** |
+| `--accent` | `#D71921` | **Semantic error / destructive / over-limit only.** Not a decorative accent. Not a "primary importance" signal. |
+| `--accent-subtle` | `rgba(215,25,33,0.15)` | Tint backgrounds for error/destructive states only |
+| `--success` | `#4A9E5C` | Confirmed, completed, healthy range |
+| `--warning` | `#D4A843` | Caution, moderate-usage, attention |
+| `--error` | `#D71921` | Alias of `--accent` — errors ARE the red signal |
+| `--info` | `#999999` | Uses `--text-secondary` |
 
-**Data status colors:** `--success` = good/in range, `--warning` = moderate/attention, `--accent` = bad/over limit, `--text-primary` = neutral. Apply color to **value**, not label or background. Labels stay `--text-secondary`. Trend arrows inherit value color.
+**Data status rules:**
+- `--success` = within normal range / good / healthy
+- `--warning` = 70–90% / caution / moderate
+- `--accent` (red) = ≥90% / over limit / error / destructive
+- `--text-primary` = neutral (no status encoding)
+- **Apply color to the value itself**, not the label or row background. Labels stay `--text-secondary`. Trend arrows inherit value color.
 
-### Dark / Light Mode
+**Interactive rules:**
+- `--accent-interactive` is a semantic signal: blue-gray means "this responds to your click/tap." Use for all primary interactive affordances. Users learn it fast because it's consistent.
+- A single screen can have many interactive affordances; the one-accent-per-screen discipline is about **emphasis accents**, not interactive colors.
 
-| Token | Dark | Light |
-|-------|------|-------|
-| `--black` | `#000000` | `#F5F5F5` |
-| `--surface` | `#111111` | `#FFFFFF` |
-| `--surface-raised` | `#1A1A1A` | `#F0F0F0` |
-| `--border` | `#222222` | `#E8E8E8` |
-| `--border-visible` | `#333333` | `#CCCCCC` |
-| `--text-disabled` | `#666666` | `#999999` |
-| `--text-secondary` | `#999999` | `#666666` |
-| `--text-primary` | `#E8E8E8` | `#1A1A1A` |
-| `--text-display` | `#FFFFFF` | `#000000` |
-| `--interactive` | `#5B9BF6` | `#007AFF` |
+### Mode Feel
 
-**Identical across modes:** Accent red, status colors, ALL CAPS labels, fonts, type scale, spacing, component shapes.
-
-**Dark feel:** Instrument panel in a dark room. OLED black, white data glowing.
-**Light feel:** Printed technical manual. Off-white paper (#F5F5F5), black ink. Cards = `#FFFFFF` on off-white page = subtle elevation without shadows.
+- **Dark feel:** A refined charcoal surface. Data glows at `#E8E8E8` (not harsh white); `#FFFFFF` reserved for hero moments only. The `#0A0A0A` canvas reads as designed, not as "screen is off."
+- **Light feel:** Printed technical manual. Warm off-white paper (`#F5F5F5`), black ink (`#000000` — pure black is correct on paper). Cards `#FFFFFF` on off-white canvas produce subtle elevation without shadows.
 
 ---
 
 ## 3. SPACING
 
-### Spacing Scale (8px base)
+### Spacing Scale (4px base)
 
 | Token | Value | Use |
 |-------|-------|-----|
@@ -103,40 +127,38 @@
 | `--space-3xl` | 64px | Page-level vertical rhythm |
 | `--space-4xl` | 96px | Hero breathing room |
 
+### Concentric Radii
+
+When nesting a shape inside another, the inner radius follows from the outer:
+
+```
+inner_radius = outer_radius − padding
+```
+
+Example: card with `border-radius: 16px` and `padding: 8px` contains a button — that button's `border-radius` is `8px`, not an independently chosen value. This prevents perceptual "pinching" (inner too small) or "flaring" (inner too large).
+
+Default radii:
+- Cards: 12–16px
+- Compact cards / stat blocks: 8px
+- Technical elements (tag, input, button-secondary): 4px
+- Pills (button-primary, filter chip active): 999px (only for capsule elements)
+
 ---
 
 ## 4. MOTION & INTERACTION
 
 - **Duration:** 150–250ms micro, 300–400ms transitions
-- **Easing:** `cubic-bezier(0.25, 0.1, 0.25, 1)` — subtle ease-out. No spring/bounce.
+- **Easing:** `cubic-bezier(0.25, 0.1, 0.25, 1)` — subtle ease-out. No spring, no bounce.
 - Prefer opacity over position. Elements fade, don't slide.
 - Hover: border/text brightens. No scale, no shadows.
 - No parallax, scroll-jacking, gratuitous animation.
+- Liquid Glass chrome on the sticky top header only — translucent backdrop-filter with subtle lensing is acceptable there. Content surfaces (cards, tables, panels) stay flat.
 
 ---
 
 ## 5. ICONOGRAPHY
 
-- Monoline, 1.5px stroke, no fill. 24x24 base, 20x20 live area. Round caps/joins.
+- Monoline, 1.5px stroke, no fill. 24×24 base, 20×20 live area. Round caps/joins.
 - Color inherits text color. Max 5–6 strokes.
 - Preferred: Lucide (thin), Phosphor (thin). Never filled or multi-color.
-
----
-
-## 6. DOT-MATRIX MOTIF
-
-**When to use:** Hero typography (Doto), decorative grid backgrounds, dot-grid data viz, loading indicators, empty state illustrations.
-
-### CSS Implementation
-```css
-.dot-grid {
-  background-image: radial-gradient(circle, var(--border-visible) 1px, transparent 1px);
-  background-size: 16px 16px;
-}
-.dot-grid-subtle {
-  background-image: radial-gradient(circle, var(--border) 0.5px, transparent 0.5px);
-  background-size: 12px 12px;
-}
-```
-
-Dots 1–2px, uniform 12–16px grid. Opacity 0.1–0.2 for backgrounds, full for data. Never as container border or button style.
+- **No dot-matrix iconography, no crosshair/glyph decorative motifs, no perforated patterns.**

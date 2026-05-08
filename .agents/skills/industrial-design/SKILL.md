@@ -1,26 +1,29 @@
 ---
 name: industrial-design
-description: This skill should be used when the user explicitly says "industrial style", "industrial design", "/industrial-design", or directly asks to use/apply the industrial design system. NEVER trigger automatically for generic UI or design tasks.
-version: 1.0.0
+description: This skill should be used when the user explicitly says "industrial style", "industrial design", "/industrial-design", or directly asks to use/apply the heimdall design system. NEVER trigger automatically for generic UI or design tasks. The directory name is retained for historical reasons; the current design system is Apple-Swiss refined, not Nothing-industrial.
+version: 2.0.0
 allowed-tools: [Read, Write, Edit, Glob, Grep]
 ---
 
-# Industrial UI/UX Design System
+# heimdall design system — Apple-Swiss refined
 
-A senior product designer's toolkit trained in Swiss typography, industrial design (Braun, Teenage Engineering), and modern interface craft. Monochromatic, typographically driven, information-dense without clutter. Dark and light mode with equal rigor.
+A senior product designer's toolkit trained in Swiss International Typographic rigor (Müller-Brockmann grid discipline, Akzidenz-Grotesk → Helvetica → Inter lineage, hierarchy through size and space) blended with Apple's 2026 system craft (SF Pro optical sizes, concentric corner radii, Liquid Glass navigation-layer chrome, semantic color). Data-dense without cosplaying as a cockpit.
 
-**Before starting any design work, declare which Google Fonts are required and how to load them** (see `references/tokens.md` Section 1). Never assume fonts are already available.
+Both dark and light mode are first-class. The product is a long-session analytics dashboard users live in for hours — the aesthetic must be calm enough to sustain that.
+
+**Before starting any design work, declare which fonts are required and how to load them** (see `references/tokens.md` §1). The web stack uses Inter + Geist Mono; the SwiftUI stack uses the SF Pro system cascade. Never assume fonts are already available.
 
 ---
 
 ## 1. DESIGN PHILOSOPHY
 
-- **Subtract, don't add.** Every element must earn its pixel. Default to removal.
-- **Structure is ornament.** Expose the grid, the data, the hierarchy itself.
-- **Monochrome is the canvas.** Color is an event, not a default — except when encoding data status (see Section 3).
-- **Type does the heavy lifting.** Scale, weight, and spacing create hierarchy — not color, not icons, not borders.
-- **Both modes are first-class.** Dark mode: OLED black. Light mode: warm off-white. Neither is "derived" — both get full design attention. Ask the user which mode to start with.
-- **Industrial warmth.** Technical and precise, but never cold. A human hand should be felt.
+- **Calm precision.** Every element earns its pixel; removal is the default. Density is permitted, aggression is not.
+- **Structure through space, not decoration.** Grid discipline, type-weight differentiation, and whitespace communicate hierarchy. Borders, background tints, and color are the last resorts, not the first.
+- **Monochrome canvas, semantic color.** The surface is grayscale. Color appears when it encodes meaning — blue-gray for interactive affordances, green for healthy, amber for caution, red for error/destructive. Never decorative.
+- **Type does the hierarchy.** Size, weight, and space create three layers of importance. Color, borders, and icons are not primary hierarchy tools.
+- **Sentence case.** ALL-CAPS monospaced labels are reserved for `<th>` table column headers only, where tabular convention justifies them. Everywhere else the label is sentence-case at 11–12px in `--text-secondary`.
+- **Concentric radii.** Nested shapes share a conceptual center. `inner_radius = outer_radius - padding`. Independently chosen radii produce "pinched" or "flared" perceptual failures.
+- **Flat content, navigable chrome.** Content surfaces are flat with 1px border separation. Liquid Glass translucency is acceptable only on the sticky top header (the one navigation-layer element). Data panels, tables, cards, charts do not use blur, glass, or shadow.
 
 ---
 
@@ -32,20 +35,20 @@ Every screen has exactly **three layers of importance.** Not two, not five. Thre
 
 | Layer | What | How |
 |-------|------|-----|
-| **Primary** | The ONE thing the user sees first. A number, a headline, a state. | Doto or Space Grotesk at display size. `--text-display`. 48–96px breathing room. |
-| **Secondary** | Supporting context. Labels, descriptions, related data. | Space Grotesk at body/subheading. `--text-primary`. Grouped tight (8–16px) to the primary. |
-| **Tertiary** | Metadata, navigation, system info. Visible but never competing. | Space Mono at caption/label. `--text-secondary` or `--text-disabled`. ALL CAPS. Pushed to edges or bottom. |
+| **Primary** | The ONE thing the user sees first. A number, a headline, a state. | Inter Display at 40–48px; 600 weight for hero numbers, 500 for headlines. `--text-display`. 48–96px breathing room. |
+| **Secondary** | Supporting context. Labels, descriptions, related data. | Inter Text at body/subheading (14–16px). `--text-primary`. Grouped tight (8–16px) to the primary. |
+| **Tertiary** | Metadata, navigation, system info. Visible but never competing. | Inter Text at 11–12px sentence-case. `--text-secondary` or `--text-disabled`. Pushed to edges or bottom. Exception: `<th>` column headers use Geist Mono ALL-CAPS 11px at 0.08em tracking. |
 
 **The test:** Squint at the screen. Can you still tell what's most important? If two things compete, one needs to shrink, fade, or move.
 
-**Common mistake:** Making everything "secondary." Evenly-sized elements with even spacing = visual flatness. Be brave — make the primary absurdly large and the tertiary absurdly small. The contrast IS the hierarchy.
+**Common mistake:** Making everything "secondary." Evenly-sized elements with even spacing produce visual flatness. Be brave — the primary is absurdly large; the tertiary is absurdly small. The contrast IS the hierarchy.
 
 ### 2.2 Font Discipline
 
 Per screen, use maximum:
-- **2 font families** (Space Grotesk + Space Mono. Doto only for hero moments.)
-- **3 font sizes** (one large, one medium, one small)
-- **2 font weights** (Regular + one other — usually Light or Medium, rarely Bold)
+- **2 font families** (Inter + Geist Mono on web; SF Pro Text + SF Pro Display + SF Mono via the system stack on SwiftUI).
+- **3 font sizes** (one large, one medium, one small).
+- **2 font weights** (Regular + one other — usually Medium or Semibold, rarely Bold).
 
 Think of it as a budget. Every additional size/weight costs visual coherence. Before adding a new size, ask: can I create this distinction with spacing or color instead?
 
@@ -61,13 +64,13 @@ Think of it as a budget. Every additional size/weight costs visual coherence. Be
 
 ### 2.3 Spacing as Meaning
 
-Spacing is the primary tool for communicating relationships.
+Spacing is the primary tool for communicating relationships. 4px base unit — all gaps/paddings/margins are multiples.
 
 ```
 Tight (4–8px)   = "These belong together" (icon + label, number + unit)
 Medium (16px)    = "Same group, different items" (list items, form fields)
-Wide (32–48px)   = "New group starts here" (section breaks)
-Vast (64–96px)   = "This is a new context" (hero to content, major divisions)
+Wide (24–32px)   = "New group starts here" (section breaks)
+Vast (48–64px)   = "This is a new context" (hero to content, major divisions)
 ```
 
 **If a divider line is needed, the spacing is probably wrong.** Dividers are a symptom of insufficient spacing contrast. Use them only in data-dense lists where items are structurally identical.
@@ -92,17 +95,19 @@ In a monochrome system, the gray scale IS the hierarchy. Max 4 levels per screen
 --text-disabled (40%) → Disabled, timestamps, hints.
 ```
 
-**Red (#D71921) is not part of the hierarchy.** It's an interrupt — "look HERE, NOW." If nothing is urgent, no red on the screen.
+**Accent system:**
 
-**Data status colors** (success green, warning amber, accent red) are exempt from the "one accent" rule when encoding data values. Apply color to the **value itself**, not labels or row backgrounds. See `references/tokens.md` for the full color system.
+- **`--accent-interactive` (blue-gray `#4A7FA5`)** — the primary interactive affordance. Selected states, links, tappable text, primary buttons. Same value in light + dark mode.
+- **`--accent` (red `#D71921`)** — semantic error / destructive / over-limit only. Not "the urgent thing on screen"; only "this is broken."
+- **Status colors (`--success` green, `--warning` amber)** are exempt from the "one accent" rule when encoding data values. Apply color to the **value itself**, not labels or row backgrounds.
+
+See `references/tokens.md` for the full color system.
 
 ### 2.6 Consistency vs. Variance
 
-**Be consistent in:** Font families, label treatment (always Space Mono ALL CAPS), spacing rhythm, color roles, component shapes, alignment.
+**Be consistent in:** Font families, label treatment (sentence-case everywhere except `<th>`), spacing rhythm, color roles, concentric radii, alignment.
 
-**Break the pattern in exactly ONE place per screen:** An oversized number, a circular widget among rectangles, a red accent among grays, a Doto headline, a vast gap where everything else is tight.
-
-This single break IS the design. Without it: sterile grid. With more than one: visual chaos.
+**Break the pattern once per screen** for emphasis: an oversized number, a single colored element in a zone of grayscale, a rare use of italic. One break is emphasis; two breaks is chaos.
 
 ### 2.7 Compositional Balance
 
@@ -113,14 +118,14 @@ This single break IS the design. Without it: sterile grid. With more than one: v
 
 Balance heavy elements with more empty space, not with more heavy elements.
 
-### 2.8 The Industrial Vibe
+### 2.8 The Refined-Tool Register
 
 1. **Confidence through emptiness.** Large uninterrupted background areas. Resist filling space.
 2. **Precision in the small things.** Letter-spacing, exact gray values, 4px gaps. Micro-decisions compound into craft.
-3. **Data as beauty.** `36GB/s` in Space Mono at 48px IS the visual. No illustrations needed.
-4. **Mechanical honesty.** Controls look like controls. A toggle = physical switch. A gauge = instrument.
-5. **One moment of surprise.** A dot-matrix headline. A circular widget. A red dot. Restraint makes the one expressive moment powerful.
-6. **Percussive, not fluid.** Imagine UI sounds: click not swoosh, tick not chime. Design transitions that feel mechanical and precise.
+3. **Data as presence.** A `36GB/s` number at 48px in Inter Semibold IS the visual. No illustrations needed.
+4. **Mechanical honesty.** Controls look like controls. A toggle is a toggle; a button is a button. No skeuomorphic knobs, no LED meters, no gauge faces.
+5. **One moment of emphasis.** A large number, an unexpected element, a single blue-gray accent. Restraint makes the one expressive moment powerful.
+6. **Motion is informational, not decorative.** Opacity fades, concentric-radius transitions, `cubic-bezier(0.25, 0.1, 0.25, 1)` ease-out. No spring, no bounce, no parallax.
 
 ### 2.9 Visual Variety in Data-Dense Screens
 
@@ -128,8 +133,8 @@ When 3+ data sections appear on one screen, vary the visual form:
 
 | Form | Best for | Weight |
 |------|----------|--------|
-| Hero number (large Doto/Space Mono) | Single key metric | Heavy — use once |
-| Segmented progress bar | Progress toward goal | Medium |
+| Hero number (large Inter Semibold) | Single key metric | Heavy — use once |
+| Smooth progress bar with threshold color | Progress toward goal | Medium |
 | Concentric rings / arcs | Multiple related percentages | Medium |
 | Inline compact bar | Secondary metrics in rows | Light |
 | Number-only with status color | Values without proportion | Lightest |
@@ -142,29 +147,33 @@ Lead section → heaviest treatment. Secondary → different form. Tertiary → 
 
 ## 3. ANTI-PATTERNS — WHAT TO NEVER DO
 
-- No gradients in UI chrome
-- No shadows. No blur. Flat surfaces, border separation.
-- No skeleton loading screens. Use `[LOADING...]` text or segmented spinner.
-- No toast popups. Use inline status text: `[SAVED]`, `[ERROR: ...]`
-- No sad-face illustrations, cute mascots, or multi-paragraph empty states
-- No zebra striping in tables
-- No filled icons, multi-color icons, or emoji as UI
-- No parallax, scroll-jacking, or gratuitous animation
-- No spring/bounce easing. Use subtle ease-out only.
-- No border-radius > 16px on cards. Buttons are pill (999px) or technical (4–8px).
+- No gradients in UI chrome.
+- No shadows on content surfaces. No blur on content surfaces. Flat; border separation. Liquid Glass acceptable only on the sticky top header (navigation-layer chrome).
+- No skeleton loading screens. Use `[LOADING...]` bracket text or a minimal spinner.
+- No toast popups. Use inline status text near the trigger: `[SAVED]`, `[ERROR: ...]`.
+- No sad-face illustrations, cute mascots, or multi-paragraph empty states.
+- No zebra striping in tables.
+- No filled multi-color icons. Monoline at 1.5px stroke, single color.
+- No parallax, scroll-jacking, or gratuitous animation.
+- No spring / bounce easing. Use subtle ease-out only.
+- No border-radius > 16px on cards. Buttons are pill (999px) or technical (4–8px). Respect concentric radii when nesting.
+- No ALL-CAPS monospace outside `<th>` column headers. Sentence-case throughout.
+- No dot-matrix display type (Doto or similar). No LED-meter segmented progress bars. No dot-grid backgrounds.
+- No pure `#000000` canvas on dark mode (reads as OLED panel rather than designed surface). Use `#0A0A0A`.
+- No red `--accent` as the primary interactive affordance — red is reserved for error/destructive semantics.
 - Data visualization: differentiate with **opacity** (100%/60%/30%) or **pattern** (solid/striped/dotted) before introducing color.
 
 ---
 
 ## 4. WORKFLOW
 
-1. **Declare fonts** — tell the user which Google Fonts to load (see `references/tokens.md`)
+1. **Declare fonts** — tell the user which fonts to load (see `references/tokens.md` §1).
 2. **Ask mode** — dark or light? Neither is default.
-3. **Sketch hierarchy** — identify the 3 layers before writing any code
-4. **Compose** — apply craft rules (Sections 2.1–2.9)
-5. **Check tokens** — consult `references/tokens.md` for exact values
-6. **Build components** — consult `references/components.md` for patterns
-7. **Adapt to platform** — consult `references/platform-mapping.md` for output conventions
+3. **Sketch hierarchy** — identify the 3 layers before writing any code.
+4. **Compose** — apply craft rules (Sections 2.1–2.9).
+5. **Check tokens** — consult `references/tokens.md` for exact values.
+6. **Build components** — consult `references/components.md` for patterns.
+7. **Adapt to platform** — consult `references/platform-mapping.md` for output conventions.
 
 ---
 
@@ -172,6 +181,6 @@ Lead section → heaviest treatment. Secondary → different form. Tertiary → 
 
 For detailed token values, component specs, and platform-specific guidance:
 
-- **`references/tokens.md`** — Fonts, type scale, color system (dark + light), spacing scale, grid, motion, iconography, dot-matrix motif
+- **`references/tokens.md`** — Fonts, type scale, color system (dark + light), spacing scale, grid, motion, iconography
 - **`references/components.md`** — Cards, buttons, inputs, lists, tables, nav, tags, segmented controls, progress bars, charts, widgets, overlays, state patterns
 - **`references/platform-mapping.md`** — HTML/CSS and Preact + Tailwind v4 (this repo's stack) output conventions

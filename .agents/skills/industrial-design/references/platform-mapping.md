@@ -1,24 +1,25 @@
-# Industrial Design System — Platform Mapping
+# heimdall design system — Platform Mapping
 
-This system targets web surfaces only. Two implementations are documented: vanilla HTML/CSS (reference) and this repo's actual stack — Preact + Tailwind v4 + Preact signals (practical).
+This system targets web surfaces and SwiftUI (Heimdall). Three implementations are documented: vanilla HTML/CSS (reference), this repo's Preact + Tailwind v4 stack (practical), and the SwiftUI system-font approach (Heimdall).
 
 ---
 
 ## 1. HTML / CSS (reference)
 
-Load fonts via Google Fonts `<link>` or `@import`. Use CSS custom properties, `rem` for type, `px` for spacing/borders. Dark/light via `prefers-color-scheme` or a class/attribute toggle.
+Load fonts via Google Fonts `<link>` (or self-host). Use CSS custom properties, `rem` for type, `px` for spacing/borders. Dark/light via `data-theme` attribute or `prefers-color-scheme`.
 
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link
-  href="https://fonts.googleapis.com/css2?family=Doto:wght@400..700&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap"
   rel="stylesheet">
 ```
 
 ```css
 :root {
-  --black: #000000;
+  /* Dark canvas (default) */
+  --black: #0A0A0A;
   --surface: #111111;
   --surface-raised: #1A1A1A;
   --border: #222222;
@@ -27,11 +28,15 @@ Load fonts via Google Fonts `<link>` or `@import`. Use CSS custom properties, `r
   --text-secondary: #999999;
   --text-primary: #E8E8E8;
   --text-display: #FFFFFF;
+
+  /* Accents */
+  --accent-interactive: #4A7FA5;
   --accent: #D71921;
   --accent-subtle: rgba(215,25,33,0.15);
   --success: #4A9E5C;
   --warning: #D4A843;
-  --interactive: #5B9BF6;
+
+  /* Spacing */
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
@@ -48,28 +53,36 @@ Load fonts via Google Fonts `<link>` or `@import`. Use CSS custom properties, `r
   --surface-raised: #F0F0F0;
   --border: #E8E8E8;
   --border-visible: #CCCCCC;
-  --text-disabled: #999999;
-  --text-secondary: #666666;
+  --text-disabled: #707070;
+  --text-secondary: #4F4F4F;
   --text-primary: #1A1A1A;
   --text-display: #000000;
-  --interactive: #007AFF;
+  /* accent-interactive stays #4A7FA5 in both modes */
 }
 
 body {
   background: var(--black);
   color: var(--text-primary);
-  font-family: "Space Grotesk", "DM Sans", system-ui, sans-serif;
-  font-size: 16px;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 15px;
   line-height: 1.5;
 }
 
-.num, .data, .label { font-family: "Space Mono", "JetBrains Mono", monospace; }
-.display         { font-family: "Doto", "Space Mono", monospace; }
-```
+.num, .data {
+  font-family: "Geist Mono", ui-monospace, "SF Mono", monospace;
+}
 
-Tabular numerals for any live-updating numeric display:
-```css
+/* Tabular numerals for live-updating numeric displays */
 .num, .stat-value, .chart-label { font-feature-settings: "tnum"; }
+
+/* Column headers — the sole ALL-CAPS instance */
+th {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
 ```
 
 ---
@@ -85,14 +98,14 @@ Stack in `claude-usage-tracker`:
 
 ### 2.1 Declare tokens in `src/ui/input.css`
 
-Tailwind v4 uses the `@theme` directive to map CSS custom properties to utilities. Declare the industrial palette there so classes like `bg-[--surface]` and utilities generated from `@theme` both resolve to the same values.
+Tailwind v4 uses the `@theme` directive to map CSS custom properties to utilities. Declare the palette there so classes like `bg-[--surface]` and utilities generated from `@theme` both resolve to the same values.
 
 ```css
 /* src/ui/input.css */
 @import "tailwindcss";
 
 @theme {
-  --color-black: #000000;
+  --color-black: #0A0A0A;
   --color-surface: #111111;
   --color-surface-raised: #1A1A1A;
   --color-border: #222222;
@@ -101,14 +114,13 @@ Tailwind v4 uses the `@theme` directive to map CSS custom properties to utilitie
   --color-text-secondary: #999999;
   --color-text-primary: #E8E8E8;
   --color-text-display: #FFFFFF;
+  --color-accent-interactive: #4A7FA5;
   --color-accent: #D71921;
   --color-success: #4A9E5C;
   --color-warning: #D4A843;
-  --color-interactive: #5B9BF6;
 
-  --font-sans: "Space Grotesk", "DM Sans", system-ui, sans-serif;
-  --font-mono: "Space Mono", "JetBrains Mono", monospace;
-  --font-display: "Doto", "Space Mono", monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
 }
 
 /* Light-mode overrides toggled via data-theme on <html> */
@@ -118,28 +130,36 @@ Tailwind v4 uses the `@theme` directive to map CSS custom properties to utilitie
   --color-surface-raised: #F0F0F0;
   --color-border: #E8E8E8;
   --color-border-visible: #CCCCCC;
-  --color-text-disabled: #999999;
-  --color-text-secondary: #666666;
+  --color-text-disabled: #707070;
+  --color-text-secondary: #4F4F4F;
   --color-text-primary: #1A1A1A;
   --color-text-display: #000000;
-  --color-interactive: #007AFF;
+  /* accent-interactive same in both modes */
 }
 
-/* Tabular numerals for all numeric displays (auto-refresh friendly) */
+/* Tabular numerals for all numeric displays */
 .num, [data-numeric] { font-feature-settings: "tnum"; }
+
+/* Column headers — the sole ALL-CAPS instance */
+th {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 ```
 
 Rebuild after edits: `npm run build:ui`.
 
 ### 2.2 Load fonts in `src/ui/index.html`
 
-Add the three Google Font families to `<head>` (with `preconnect` for speed):
+Add Inter and Geist Mono to `<head>`:
 
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link
-  href="https://fonts.googleapis.com/css2?family=Doto:wght@400..700&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap"
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;700&display=swap"
   rel="stylesheet">
 ```
 
@@ -157,7 +177,7 @@ Any string rendered from server data MUST pass through `esc()` in `src/ui/lib/fo
 
 ### 2.6 ApexCharts theming
 
-Charts in this repo use ApexCharts. Thread the industrial palette through via CSS variables (there's already precedent in `src/ui/lib/charts.ts`):
+Charts in this repo use ApexCharts. The factory in `src/ui/lib/charts.ts` is `dashboardChartOptions` (renamed from the prior `industrialChartOptions`). It threads the palette through via CSS variables:
 
 ```ts
 import ApexCharts from "apexcharts";
@@ -165,14 +185,14 @@ import ApexCharts from "apexcharts";
 const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const industrialTheme: ApexCharts.ApexOptions = {
+const dashboardTheme: ApexCharts.ApexOptions = {
   chart: {
     background: "transparent",
     toolbar: { show: false },
-    fontFamily: 'var(--font-mono), "Space Mono", monospace',
+    fontFamily: 'var(--font-mono), "Geist Mono", ui-monospace, monospace',
     animations: { enabled: false },
   },
-  colors: [cssVar("--color-text-display"), cssVar("--color-accent")],
+  colors: [cssVar("--color-text-display"), cssVar("--color-accent-interactive")],
   grid: { borderColor: cssVar("--color-border"), strokeDashArray: 0 },
   xaxis: { labels: { style: { colors: cssVar("--color-text-secondary") } } },
   yaxis: { labels: { style: { colors: cssVar("--color-text-secondary") } } },
@@ -183,7 +203,7 @@ const industrialTheme: ApexCharts.ApexOptions = {
 ```
 
 Rules:
-- Monochrome palette: `--text-display` for primary series, `--accent` for the single emphasized series (over-limit, active hover, destructive). Never more than one non-monochrome color per chart.
+- Monochrome-first: `--text-display` for primary series. `--accent-interactive` for the secondary highlighted series (selected item, active filter, primary emphasis). `--accent` (red) only for semantic error/over-limit series. Never more than two non-monochrome colors per chart.
 - Differentiate multiple series with **opacity** (100 / 60 / 30) or **dash pattern** before reaching for additional hues.
 - Grid: horizontal lines only, `--border` color.
 - No toolbar, no area fill, no shadow, no legend box — label lines directly.
@@ -198,3 +218,46 @@ npm run build:ui   # both
 ```
 
 Commit both `app.js` and `style.css`. The Rust binary inlines them at compile time via `include_str!`.
+
+---
+
+## 3. SwiftUI (Heimdall)
+
+Heimdall is a SwiftUI menu-bar app; it uses Apple's system font stack natively. No font loading required.
+
+### 3.1 Typography modifiers
+
+```swift
+// Hero numbers (auto-selects SF Pro Display above 20pt)
+Text(usageValue).font(.largeTitle).fontWeight(.semibold)
+
+// Section heading
+Text("Usage").font(.title3).fontWeight(.medium)
+
+// Body
+Text(label).font(.body)
+
+// Numeric columns (tabular figures)
+Text(cost, format: .currency(code: "USD"))
+  .monospacedDigit()
+
+// Code / paths
+Text(path).font(.system(.body, design: .monospaced))
+```
+
+### 3.2 Colors
+
+Use SwiftUI semantic colors — they adapt automatically to the system appearance (light/dark) and respect user accessibility settings:
+
+```swift
+.foregroundStyle(.primary)        // label text
+.foregroundStyle(.secondary)      // subtitle
+.foregroundStyle(Color.accentColor)  // interactive
+.foregroundStyle(.red)            // destructive only
+```
+
+Do **not** hardcode hex colors in Swift views. The web tokens and the SwiftUI semantic colors intentionally diverge — let each platform use its native vocabulary.
+
+### 3.3 Liquid Glass
+
+On iOS/macOS 26+, the `.glassEffect()` modifier is available for navigation-chrome elements. Do not apply to content surfaces.
