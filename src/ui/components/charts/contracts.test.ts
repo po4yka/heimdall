@@ -70,8 +70,8 @@ describe('chart contracts', () => {
     expect(series.map(entry => entry.name)).toEqual([
       'Input',
       'Output',
-      'Cached Input',
-      'Cache Creation',
+      'Cached input',
+      'Cache creation',
     ]);
     expect(series[0]?.data).toEqual([10, 12]);
     expect((options['xaxis'] as { categories: string[] }).categories).toEqual([

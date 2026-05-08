@@ -10,7 +10,7 @@ export function HourlyChart({ data }: { data: HourlyRow[] }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div class="section-title" style={{ padding: '0', marginBottom: '12px' }}>
-        Activity by Hour of Day
+        Activity by hour of day
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', flex: 1, minHeight: '60px' }}>
         {Array.from({ length: 24 }, (_, h) => {

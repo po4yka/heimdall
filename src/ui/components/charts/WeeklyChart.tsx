@@ -19,8 +19,8 @@ export function WeeklyChart({ weekly }: { weekly: WeeklyAgg[] }) {
     series: [
       { name: 'Input',          data: weekly.map(w => w.input) },
       { name: 'Output',         data: weekly.map(w => w.output) },
-      { name: 'Cached Input',   data: weekly.map(w => w.cache_read) },
-      { name: 'Cache Creation', data: weekly.map(w => w.cache_creation) },
+      { name: 'Cached input',   data: weekly.map(w => w.cache_read) },
+      { name: 'Cache creation', data: weekly.map(w => w.cache_creation) },
     ],
     colors: tokenSeriesColors(),
     fill: { type: 'solid' },

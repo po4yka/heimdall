@@ -9018,7 +9018,7 @@
         el.id = "model-chart-card";
         el.className = "card chart-card";
         if (!el.querySelector("#chart-model")) {
-          el.innerHTML = '<h2>By Model</h2><div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>';
+          el.innerHTML = '<h2>By model</h2><div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>';
         }
       }
     },
@@ -9035,7 +9035,7 @@
         el.id = "project-chart-card";
         el.className = "card chart-card";
         if (!el.querySelector("#chart-project")) {
-          el.innerHTML = '<h2>Top Projects</h2><div class="chart-wrap"><div id="chart-project"></div></div>';
+          el.innerHTML = '<h2>Top projects</h2><div class="chart-wrap"><div id="chart-project"></div></div>';
         }
       }
     },
@@ -12620,8 +12620,8 @@
       series: [
         { name: "Input", data: daily.map((d5) => d5.input) },
         { name: "Output", data: daily.map((d5) => d5.output) },
-        { name: "Cached Input", data: daily.map((d5) => d5.cache_read) },
-        { name: "Cache Creation", data: daily.map((d5) => d5.cache_creation) }
+        { name: "Cached input", data: daily.map((d5) => d5.cache_read) },
+        { name: "Cache creation", data: daily.map((d5) => d5.cache_creation) }
       ],
       colors: tokenSeriesColors(),
       fill: { type: "solid" },
@@ -12770,7 +12770,7 @@
     if (!data.length) return null;
     const maxTurns = Math.max(...data.map((d5) => d5.turns), 1);
     return /* @__PURE__ */ u4("div", { style: { height: "100%", display: "flex", flexDirection: "column" }, children: [
-      /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: "0", marginBottom: "12px" }, children: "Activity by Hour of Day" }),
+      /* @__PURE__ */ u4("div", { class: "section-title", style: { padding: "0", marginBottom: "12px" }, children: "Activity by hour of day" }),
       /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", flex: 1, minHeight: "60px" }, children: Array.from({ length: 24 }, (_4, h5) => {
         const row = data.find((d5) => d5.hour === h5);
         const turns = row?.turns ?? 0;
@@ -15628,8 +15628,8 @@ ${row.project}` : row.project;
       series: [
         { name: "Input", data: weekly.map((w5) => w5.input) },
         { name: "Output", data: weekly.map((w5) => w5.output) },
-        { name: "Cached Input", data: weekly.map((w5) => w5.cache_read) },
-        { name: "Cache Creation", data: weekly.map((w5) => w5.cache_creation) }
+        { name: "Cached input", data: weekly.map((w5) => w5.cache_read) },
+        { name: "Cache creation", data: weekly.map((w5) => w5.cache_creation) }
       ],
       colors: tokenSeriesColors(),
       fill: { type: "solid" },

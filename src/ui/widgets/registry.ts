@@ -248,7 +248,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       el.className = 'card chart-card';
       if (!el.querySelector('#chart-model')) {
         // Static literal — no dynamic content, no XSS vector.
-        el.innerHTML = '<h2>By Model</h2><div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>';
+        el.innerHTML = '<h2>By model</h2><div class="chart-wrap model-chart-wrap"><div id="chart-model"></div></div>';
       }
     },
   },
@@ -266,7 +266,7 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       el.className = 'card chart-card';
       if (!el.querySelector('#chart-project')) {
         // Static literal — no dynamic content, no XSS vector.
-        el.innerHTML = '<h2>Top Projects</h2><div class="chart-wrap"><div id="chart-project"></div></div>';
+        el.innerHTML = '<h2>Top projects</h2><div class="chart-wrap"><div id="chart-project"></div></div>';
       }
     },
   },

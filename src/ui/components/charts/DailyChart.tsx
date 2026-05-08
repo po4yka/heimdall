@@ -12,8 +12,8 @@ export function DailyChart({ daily }: { daily: DailyAgg[] }) {
     series: [
       { name: 'Input',          data: daily.map(d => d.input) },
       { name: 'Output',         data: daily.map(d => d.output) },
-      { name: 'Cached Input',   data: daily.map(d => d.cache_read) },
-      { name: 'Cache Creation', data: daily.map(d => d.cache_creation) },
+      { name: 'Cached input',   data: daily.map(d => d.cache_read) },
+      { name: 'Cache creation', data: daily.map(d => d.cache_creation) },
     ],
     colors: tokenSeriesColors(),
     fill: { type: 'solid' },
