@@ -502,6 +502,7 @@ private struct MetaFooterSection: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Self.trendTint(trend))
                     .help(Self.trendTooltip(trend))
+                    .accessibilityLabel(Self.trendTooltip(trend))
             }
             Spacer(minLength: 0)
         }
@@ -1299,7 +1300,7 @@ private struct MenuActionRow: View {
                 }
                 .buttonStyle(SecondaryDashboardButtonStyle())
 
-                SettingsLink {
+                Button(action: { self.openWindow(id: "heimdall-settings-proxy") }) {
                     SecondaryActionLabel(title: "Open Settings", systemImage: "gearshape")
                 }
                 .buttonStyle(SecondaryDashboardButtonStyle())

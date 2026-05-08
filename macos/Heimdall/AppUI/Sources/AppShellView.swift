@@ -164,6 +164,7 @@ struct AppShellView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityLabel("More actions")
                 .help("More actions")
 
                 // Hidden ⌘K trigger so the shortcut works without opening the menu
@@ -1163,8 +1164,8 @@ private struct WindowLiveMonitorDetailSection: View {
 
             if !self.hiddenPanels.contains(.warnings), !self.provider.warnings.isEmpty {
                 WindowLiveMonitorDetailCard(title: "Warnings", density: self.density) {
-                    ForEach(self.provider.warnings, id: \.self) { warning in
-                        Text("• \(warning)")
+                    ForEach(Array(self.provider.warnings.enumerated()), id: \.offset) { item in
+                        Text("• \(item.element)")
                             .font(.body)
                     }
                 }

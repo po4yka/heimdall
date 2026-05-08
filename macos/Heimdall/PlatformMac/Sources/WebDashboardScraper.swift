@@ -38,6 +38,10 @@ public final class WebDashboardScraper {
             }
         }
 
+        deinit {
+            self.continuation?.resume(throwing: CancellationError())
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             self.continuation?.resume()
             self.continuation = nil

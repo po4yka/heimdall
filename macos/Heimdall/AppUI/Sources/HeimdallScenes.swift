@@ -185,6 +185,12 @@ public struct HeimdallScenes: Scene {
         }
         .menuBarExtraStyle(.window)
 
+        Window("Settings", id: "heimdall-settings-proxy") {
+            EmptyView()
+        }
+        .defaultSize(width: 0, height: 0)
+        .windowResizability(.contentSize)
+
         Settings {
             SettingsView(
                 model: self.model.settings,
