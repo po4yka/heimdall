@@ -95,6 +95,7 @@ mod tests {
             runtime: RuntimeState::NotRunning,
             log_probe: None,
             usage: None,
+            is_dormant: false,
         }
     }
 
@@ -113,6 +114,7 @@ mod tests {
             runtime: RuntimeState::NotRunning,
             log_probe: None,
             usage: None,
+            is_dormant: false,
         }
     }
 

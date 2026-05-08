@@ -54,6 +54,9 @@ pub struct Skill {
     pub frontmatter_status: FrontmatterStatus,
     pub is_symlink: bool,
     pub symlink_target: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<crate::skills::SkillInvocationStats>,
+    pub is_dormant: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +151,8 @@ pub fn enumerate_skill_dirs(
                 frontmatter_status: fm.status,
                 is_symlink: true,
                 symlink_target: target,
+                usage: None,
+                is_dormant: false,
             });
             continue;
         }
@@ -177,6 +182,8 @@ pub fn enumerate_skill_dirs(
             frontmatter_status: fm.status,
             is_symlink: false,
             symlink_target: None,
+            usage: None,
+            is_dormant: false,
         });
     }
 
@@ -250,6 +257,8 @@ pub fn enumerate_plugin_skills(
             frontmatter_status: fm.status,
             is_symlink: false,
             symlink_target: None,
+            usage: None,
+            is_dormant: false,
         });
     }
 
@@ -316,6 +325,8 @@ pub fn enumerate_codex_prompts(
             frontmatter_status: FrontmatterStatus::Missing,
             is_symlink: false,
             symlink_target: None,
+            usage: None,
+            is_dormant: false,
         });
     }
 

@@ -144,6 +144,21 @@ function ServerRow({ server }: { server: McpServerEntry }) {
         </span>
         <TransportPill transport={server.transport} />
         <RuntimeBadge runtime={server.runtime} />
+        {server.is_dormant && (
+          <span
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10px',
+              color: 'var(--text-secondary)',
+              marginLeft: '6px',
+              opacity: 0.6,
+            }}
+          >
+            {server.usage?.last_used
+              ? `[DORMANT ${Math.floor((Date.now() - new Date(server.usage.last_used).getTime()) / 86400000)}d]`
+              : '[NEVER]'}
+          </span>
+        )}
         <span
           style={{
             marginLeft: 'auto',
@@ -355,6 +370,14 @@ function McpServersCardInner({ report }: { report: McpServersReport }) {
           <div class="stat-label" style={{ fontSize: '10px' }}>Projects</div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '18px' }}>{t.project_count}</div>
         </div>
+        {t.dormant_count > 0 && (
+          <div>
+            <div class="stat-label" style={{ fontSize: '10px' }}>Dormant</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '18px', color: 'var(--text-secondary)', opacity: 0.7 }}>
+              {t.dormant_count}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Server lists */}

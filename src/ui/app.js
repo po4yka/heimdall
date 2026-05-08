@@ -6925,16 +6925,19 @@
           /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "NAME" }),
           /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "DISK" }),
           /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "TOK" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "LAST USED" }),
           /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "STATUS" })
         ] }) }),
         /* @__PURE__ */ u4("tbody", { children: scope.skills.map((s4) => /* @__PURE__ */ u4("tr", { title: s4.description ?? void 0, children: [
           /* @__PURE__ */ u4("td", { style: { padding: "2px 4px", fontFamily: "var(--font-mono)" }, children: [
             s4.name,
             s4.is_symlink && /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", marginLeft: "4px" }, children: "[link]" }),
-            s4.description_truncated && /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", marginLeft: "2px" }, children: "+" })
+            s4.description_truncated && /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", marginLeft: "2px" }, children: "+" }),
+            s4.is_dormant && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", marginLeft: "6px", opacity: 0.6 }, children: s4.usage?.last_used ? `[DORMANT ${Math.floor((Date.now() - new Date(s4.usage.last_used).getTime()) / 864e5)}d]` : "[NEVER]" })
           ] }),
           /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }, children: fmtBytes(s4.bytes) }),
           /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }, children: s4.listing_tokens }),
+          /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", opacity: 0.7 }, children: s4.usage ? s4.usage.last_used ? new Date(s4.usage.last_used).toLocaleDateString() : "\u2014" : "\u2014" }),
           /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: s4.frontmatter_status !== "ok" ? "var(--accent, #D71921)" : "var(--text-secondary)" }, children: s4.frontmatter_status })
         ] }, s4.path)) })
       ] })
@@ -7081,7 +7084,17 @@
         report.totals.duplicate_count > 0 && /* @__PURE__ */ u4("div", { children: [
           /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Duplicates" }),
           /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px", color: "var(--accent, #D71921)" }, children: report.totals.duplicate_count })
-        ] })
+        ] }),
+        (() => {
+          const dormantCount = report.scopes.reduce(
+            (acc, sc) => acc + sc.skills.filter((s4) => s4.is_dormant).length,
+            0
+          );
+          return dormantCount > 0 ? /* @__PURE__ */ u4("div", { children: [
+            /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Dormant" }),
+            /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px", color: "var(--text-secondary)", opacity: 0.7 }, children: dormantCount })
+          ] }) : null;
+        })()
       ] }),
       report.budget.map((row) => /* @__PURE__ */ u4(BudgetBar, { row }, row.model_label)),
       report.scopes.map((scope) => /* @__PURE__ */ u4(ScopeSection, { scope }, `${scope.kind}:${scope.root}`)),
@@ -7446,6 +7459,19 @@
                 /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", flexShrink: 0 }, children: server.name }),
                 /* @__PURE__ */ u4(TransportPill, { transport: server.transport }),
                 /* @__PURE__ */ u4(RuntimeBadge, { runtime: server.runtime }),
+                server.is_dormant && /* @__PURE__ */ u4(
+                  "span",
+                  {
+                    style: {
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "10px",
+                      color: "var(--text-secondary)",
+                      marginLeft: "6px",
+                      opacity: 0.6
+                    },
+                    children: server.usage?.last_used ? `[DORMANT ${Math.floor((Date.now() - new Date(server.usage.last_used).getTime()) / 864e5)}d]` : "[NEVER]"
+                  }
+                ),
                 /* @__PURE__ */ u4(
                   "span",
                   {
@@ -7613,6 +7639,10 @@
         /* @__PURE__ */ u4("div", { children: [
           /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Projects" }),
           /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: t4.project_count })
+        ] }),
+        t4.dormant_count > 0 && /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Dormant" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px", color: "var(--text-secondary)", opacity: 0.7 }, children: t4.dormant_count })
         ] })
       ] }),
       t4.configured_count === 0 ? /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)", opacity: 0.6 }, children: "No MCP servers configured." }) : /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "24px", alignItems: "flex-start" }, children: showTwoColumns ? /* @__PURE__ */ u4(S, { children: [
@@ -7655,6 +7685,278 @@
       ] });
     }
     return /* @__PURE__ */ u4(McpServersCardInner, { report });
+  }
+
+  // src/ui/components/ContextPressureCard.tsx
+  function bucketLabel(b4) {
+    if (b4 === "healthy") return "HEALTHY";
+    if (b4 === "warm") return "WARM";
+    if (b4 === "tight") return "TIGHT";
+    return "COMPACTED";
+  }
+  function bucketColor(b4) {
+    if (b4 === "healthy") return "var(--success, #4caf50)";
+    if (b4 === "warm") return "var(--warning, #ff9800)";
+    if (b4 === "tight") return "var(--accent, #D71921)";
+    return "var(--accent, #D71921)";
+  }
+  function pct(f5) {
+    return (f5 * 100).toFixed(1) + "%";
+  }
+  function truncate(s4, n3) {
+    return s4.length > n3 ? s4.slice(0, n3) + "\u2026" : s4;
+  }
+  function KpiTile({ label, value, color }) {
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: label }),
+      /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px", color: color ?? "var(--text-primary)" }, children: value })
+    ] });
+  }
+  function SessionRow({ row }) {
+    const color = bucketColor(row.bucket);
+    const label = bucketLabel(row.bucket);
+    const project = row.project ? truncate(row.project, 24) : null;
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        style: {
+          display: "grid",
+          gridTemplateColumns: "1fr auto auto auto",
+          gap: "8px",
+          alignItems: "center",
+          padding: "5px 0",
+          borderTop: "1px solid rgba(var(--text-primary-rgb,232,232,232),0.07)",
+          fontSize: "11px"
+        },
+        children: [
+          /* @__PURE__ */ u4("div", { children: [
+            /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: row.session_id.slice(0, 8) }),
+            project && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--text-secondary)", fontSize: "10px" }, children: project }),
+            row.compaction_count > 0 && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--accent,#D71921)" }, children: [
+              "[",
+              row.compaction_count,
+              "\xD7 compacted]"
+            ] })
+          ] }),
+          /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: row.model.replace("claude-", "").replace("gpt-", "") }),
+          /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                height: "4px",
+                width: "60px",
+                borderRadius: "2px",
+                background: "rgba(var(--text-primary-rgb,232,232,232),0.10)",
+                overflow: "hidden"
+              },
+              children: /* @__PURE__ */ u4(
+                "div",
+                {
+                  style: {
+                    height: "100%",
+                    width: `${Math.min(100, row.peak_fraction * 100).toFixed(1)}%`,
+                    background: color,
+                    borderRadius: "2px"
+                  }
+                }
+              )
+            }
+          ),
+          /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color, minWidth: "52px", textAlign: "right" }, children: [
+            "[",
+            label,
+            " ",
+            pct(row.peak_fraction),
+            "]"
+          ] })
+        ]
+      }
+    );
+  }
+  function ContextPressureCardInner({ summary }) {
+    const tightColor = summary.tight_count > 0 ? "var(--accent,#D71921)" : void 0;
+    const compactedColor = summary.overcompacted_count > 0 ? "var(--accent,#D71921)" : void 0;
+    const top = summary.rows.slice(0, 20);
+    return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "10px" }, children: "Context pressure" }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "14px" }, children: [
+        /* @__PURE__ */ u4(KpiTile, { label: "Healthy", value: summary.healthy_count }),
+        /* @__PURE__ */ u4(KpiTile, { label: "Warm", value: summary.warm_count, color: "var(--warning,#ff9800)" }),
+        /* @__PURE__ */ u4(KpiTile, { label: "Tight", value: summary.tight_count, ...tightColor ? { color: tightColor } : {} }),
+        /* @__PURE__ */ u4(KpiTile, { label: "Compacted", value: summary.overcompacted_count, ...compactedColor ? { color: compactedColor } : {} }),
+        /* @__PURE__ */ u4(KpiTile, { label: "Avg peak", value: pct(summary.avg_peak_fraction) })
+      ] }),
+      top.length === 0 && /* @__PURE__ */ u4("div", { style: { fontSize: "11px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }, children: "No session data yet." }),
+      top.map((row) => /* @__PURE__ */ u4(SessionRow, { row }, row.session_id))
+    ] });
+  }
+  function ContextPressureCard() {
+    const data = rawData.value;
+    if (!data) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Context pressure" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "loading..." })
+      ] });
+    }
+    const summary = data.context_pressure;
+    if (!summary) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Context pressure" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "No data available." })
+      ] });
+    }
+    return /* @__PURE__ */ u4(ContextPressureCardInner, { summary });
+  }
+
+  // src/ui/components/AgentTreeCard.tsx
+  function fmtCost2(nanos) {
+    const cents = nanos / 1e7;
+    if (cents >= 100) return "$" + (cents / 100).toFixed(2);
+    return cents.toFixed(2) + "\xA2";
+  }
+  function fmtTokens(n3) {
+    if (n3 >= 1e6) return (n3 / 1e6).toFixed(1) + "M";
+    if (n3 >= 1e3) return (n3 / 1e3).toFixed(0) + "K";
+    return String(n3);
+  }
+  function NodeRow({ node, indent = 0 }) {
+    const label = node.agent_id ? node.role ? `${node.role} (${node.agent_id.slice(0, 8)})` : node.agent_id.slice(0, 12) : "root";
+    return /* @__PURE__ */ u4(
+      "div",
+      {
+        style: {
+          display: "grid",
+          gridTemplateColumns: "1fr auto auto",
+          gap: "8px",
+          alignItems: "center",
+          paddingLeft: `${indent * 16}px`,
+          paddingTop: "3px",
+          paddingBottom: "3px",
+          borderTop: indent === 0 ? "1px solid rgba(var(--text-primary-rgb,232,232,232),0.08)" : "none",
+          fontSize: "11px"
+        },
+        children: [
+          /* @__PURE__ */ u4(
+            "span",
+            {
+              style: {
+                fontFamily: "var(--font-mono)",
+                fontSize: "10px",
+                color: indent === 0 ? "var(--text-primary)" : "var(--text-secondary)"
+              },
+              children: [
+                indent > 0 && /* @__PURE__ */ u4("span", { style: { opacity: 0.4, marginRight: "4px" }, children: "\u2514" }),
+                label,
+                node.role && indent === 0 && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", opacity: 0.5, fontSize: "9px" }, children: "root" })
+              ]
+            }
+          ),
+          /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
+            fmtTokens(node.input_tokens + node.output_tokens),
+            " tok"
+          ] }),
+          /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", minWidth: "40px", textAlign: "right" }, children: fmtCost2(node.estimated_cost_nanos) })
+        ]
+      }
+    );
+  }
+  function SessionTree({ tree }) {
+    const [open, setOpen] = d2(false);
+    const project = tree.project ? tree.project.slice(-28) : null;
+    return /* @__PURE__ */ u4("div", { style: { marginBottom: "2px" }, children: [
+      /* @__PURE__ */ u4(
+        "button",
+        {
+          type: "button",
+          onClick: () => setOpen(!open),
+          style: {
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            width: "100%",
+            textAlign: "left",
+            padding: "6px 0",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            borderTop: "1px solid rgba(var(--text-primary-rgb,232,232,232),0.08)",
+            color: "var(--text-primary)"
+          },
+          children: [
+            /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", opacity: 0.6 }, children: tree.session_id.slice(0, 8) }),
+            project && /* @__PURE__ */ u4("span", { style: { fontSize: "10px", color: "var(--text-secondary)" }, children: project }),
+            /* @__PURE__ */ u4(
+              "span",
+              {
+                style: {
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                  color: "var(--text-secondary)"
+                },
+                children: [
+                  tree.subagent_count,
+                  " subagent",
+                  tree.subagent_count !== 1 ? "s" : ""
+                ]
+              }
+            ),
+            /* @__PURE__ */ u4("span", { style: { marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: "10px" }, children: fmtCost2(tree.total_cost_nanos) }),
+            /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)", flexShrink: 0 }, children: open ? "\u25B2" : "\u25BC" })
+          ]
+        }
+      ),
+      open && /* @__PURE__ */ u4("div", { style: { paddingBottom: "6px" }, children: [
+        /* @__PURE__ */ u4(NodeRow, { node: tree.root, indent: 0 }),
+        tree.root.children.map((child, i4) => /* @__PURE__ */ u4(NodeRow, { node: child, indent: 1 }, child.agent_id ?? i4))
+      ] })
+    ] });
+  }
+  function AgentTreeCardInner({ summary }) {
+    const topRole = summary.top_subagent_roles[0];
+    const totalSubagentCost = summary.sessions.reduce(
+      (acc, s4) => acc + s4.root.children.reduce((a4, c4) => a4 + c4.estimated_cost_nanos, 0),
+      0
+    );
+    return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "10px" }, children: "Subagent cost attribution" }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "14px" }, children: [
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Sessions" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: summary.sessions.length })
+        ] }),
+        /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Subagent cost" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: fmtCost2(totalSubagentCost) })
+        ] }),
+        topRole && /* @__PURE__ */ u4("div", { children: [
+          /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Top role" }),
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "4px" }, children: [
+            topRole[0],
+            " \xB7 ",
+            fmtCost2(topRole[1])
+          ] })
+        ] })
+      ] }),
+      summary.sessions.length === 0 && /* @__PURE__ */ u4("div", { style: { fontSize: "11px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }, children: "No multi-agent sessions found." }),
+      summary.sessions.slice(0, 30).map((tree) => /* @__PURE__ */ u4(SessionTree, { tree }, tree.session_id))
+    ] });
+  }
+  function AgentTreeCard() {
+    const data = rawData.value;
+    if (!data) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Subagent cost attribution" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "loading..." })
+      ] });
+    }
+    const summary = data.agent_tree;
+    if (!summary) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Subagent cost attribution" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "No data available." })
+      ] });
+    }
+    return /* @__PURE__ */ u4(AgentTreeCardInner, { summary });
   }
 
   // src/ui/components/Sidebar.tsx
@@ -8383,6 +8685,34 @@
       render: (el) => {
         el.id = "mcp-servers";
         invokeMountCallback("mcp-servers", el);
+      }
+    },
+    {
+      id: "context-pressure",
+      title: "Context pressure",
+      description: "Sessions by context-window utilisation \u2014 healthy, warm, tight, compacted",
+      category: "system",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "context-pressure";
+        invokeMountCallback("context-pressure", el);
+      }
+    },
+    {
+      id: "agent-tree",
+      title: "Subagent cost attribution",
+      description: "Per-session cost breakdown across root agent and subagents",
+      category: "agent",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 4 },
+      minW: 2,
+      minH: 2,
+      render: (el) => {
+        el.id = "agent-tree";
+        invokeMountCallback("agent-tree", el);
       }
     },
     // ── Projects tab ──────────────────────────────────────────────────────────
@@ -9950,8 +10280,8 @@
             minHeight: "60px"
           },
           children: hours.map((h5) => {
-            const pct = h5.cost_nanos / maxCost * 100;
-            const background = h5.cost_nanos > 0 ? withAlpha("--text-display", 0.35 + pct / 100 * 0.55) : cssVar("--border");
+            const pct2 = h5.cost_nanos / maxCost * 100;
+            const background = h5.cost_nanos > 0 ? withAlpha("--text-display", 0.35 + pct2 / 100 * 0.55) : cssVar("--border");
             const costUsd = h5.cost_nanos / 1e9;
             const totalTokens2 = h5.input_tokens + h5.output_tokens + h5.cache_read_tokens + h5.cache_creation_tokens;
             const title = `${String(h5.hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${fmt(h5.turns)} turn${h5.turns !== 1 ? "s" : ""} / ${fmt(totalTokens2)} tokens`;
@@ -9961,7 +10291,7 @@
                 title,
                 style: {
                   flex: 1,
-                  height: `${Math.max(pct, 2)}%`,
+                  height: `${Math.max(pct2, 2)}%`,
                   background,
                   borderRadius: 0
                 }
@@ -11083,8 +11413,8 @@
     max: max2,
     label
   }) {
-    const pct = max2 > 0 ? value / max2 * 100 : 0;
-    const tooltip = `${value} (${pct.toFixed(1)}% of max ${max2})`;
+    const pct2 = max2 > 0 ? value / max2 * 100 : 0;
+    const tooltip = `${value} (${pct2.toFixed(1)}% of max ${max2})`;
     return /* @__PURE__ */ u4(
       "span",
       {
@@ -11100,7 +11430,7 @@
                 top: 0,
                 left: 0,
                 bottom: 0,
-                width: `${pct}%`,
+                width: `${pct2}%`,
                 backgroundColor: "var(--color-text-primary)",
                 opacity: 0.12,
                 pointerEvents: "none"
@@ -11167,13 +11497,13 @@
   }
 
   // src/ui/components/SegmentedProgressBar.tsx
-  function resolveStatus(pct, status) {
+  function resolveStatus(pct2, status) {
     if (status === "neutral") return "var(--accent-interactive)";
     if (status === "success") return "var(--success)";
     if (status === "warning") return "var(--warning)";
     if (status === "accent") return "var(--accent)";
-    if (pct >= 90) return "var(--accent)";
-    if (pct >= 70) return "var(--warning)";
+    if (pct2 >= 90) return "var(--accent)";
+    if (pct2 >= 70) return "var(--warning)";
     return "var(--success)";
   }
   function SegmentedProgressBar({
@@ -11186,23 +11516,23 @@
   }) {
     const safeMax = max2 > 0 ? max2 : 1;
     const ratio = value / safeMax;
-    const pct = Math.min(100, Math.max(0, ratio * 100));
+    const pct2 = Math.min(100, Math.max(0, ratio * 100));
     const overflow = ratio > 1;
-    const fillColor = overflow ? "var(--accent)" : resolveStatus(pct, status);
+    const fillColor = overflow ? "var(--accent)" : resolveStatus(pct2, status);
     return /* @__PURE__ */ u4(
       "div",
       {
         class: `segmented-bar segmented-bar--${size}`,
         role: "progressbar",
         "aria-label": ariaLabel,
-        "aria-valuenow": Math.round(pct),
+        "aria-valuenow": Math.round(pct2),
         "aria-valuemin": 0,
         "aria-valuemax": 100,
         children: /* @__PURE__ */ u4(
           "div",
           {
             class: "segmented-bar__fill",
-            style: { width: `${pct}%`, background: fillColor, minWidth: pct > 0 ? "8px" : "0" }
+            style: { width: `${pct2}%`, background: fillColor, minWidth: pct2 > 0 ? "8px" : "0" }
           }
         )
       }
@@ -11611,15 +11941,15 @@
       /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", flex: 1, minHeight: "60px" }, children: Array.from({ length: 24 }, (_4, h5) => {
         const row = data.find((d5) => d5.hour === h5);
         const turns = row?.turns ?? 0;
-        const pct = turns / maxTurns * 100;
-        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct / 100 * 0.6) : cssVar("--border");
+        const pct2 = turns / maxTurns * 100;
+        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct2 / 100 * 0.6) : cssVar("--border");
         return /* @__PURE__ */ u4(
           "div",
           {
             title: `${h5}:00 -- ${fmt(turns)} turns`,
             style: {
               flex: 1,
-              height: `${Math.max(pct, 2)}%`,
+              height: `${Math.max(pct2, 2)}%`,
               background,
               borderRadius: 0
             }
@@ -11934,7 +12264,7 @@
   var defaultSort2 = [{ id: "cost", desc: true }];
   function CostShareBar({ value, max: max2, label }) {
     if (max2 <= 0 || value <= 0) return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
-    const pct = value / max2 * 100;
+    const pct2 = value / max2 * 100;
     return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minWidth: "100px" }, children: [
       /* @__PURE__ */ u4("span", { class: "num", style: { fontSize: "var(--font-size-body)", minWidth: "52px", textAlign: "right" }, children: fmtCost(value) }),
       /* @__PURE__ */ u4(
@@ -11954,7 +12284,7 @@
             {
               style: {
                 height: "100%",
-                width: `${Math.min(100, pct).toFixed(1)}%`,
+                width: `${Math.min(100, pct2).toFixed(1)}%`,
                 background: "var(--accent-interactive)",
                 opacity: 0.6,
                 borderRadius: "var(--radius-1)"
@@ -12027,7 +12357,7 @@
             if (!row.is_billable || totalCost <= 0) {
               return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
             }
-            const pct = row.cost / totalCost * 100;
+            const pct2 = row.cost / totalCost * 100;
             return /* @__PURE__ */ u4("div", { style: { minWidth: "120px", display: "flex", alignItems: "center", gap: "8px" }, children: [
               /* @__PURE__ */ u4("div", { style: { flex: 1 }, children: /* @__PURE__ */ u4(
                 SegmentedProgressBar,
@@ -12041,7 +12371,7 @@
                 }
               ) }),
               /* @__PURE__ */ u4("span", { class: "num", style: { fontSize: "11px", color: "var(--text-secondary)", minWidth: "36px", textAlign: "right" }, children: [
-                pct.toFixed(0),
+                pct2.toFixed(0),
                 "%"
               ] })
             ] });
@@ -12498,13 +12828,13 @@
 
   // src/ui/components/RateWindowCard.tsx
   function RateWindowCard({ label, window: window2 }) {
-    const pct = Math.min(100, window2.used_percent);
+    const pct2 = Math.min(100, window2.used_percent);
     const resetText = window2.resets_in_minutes != null ? `Resets in ${fmtResetTime(window2.resets_in_minutes)}` : "";
     return /* @__PURE__ */ u4(
       KpiCard,
       {
         label,
-        value: `${pct.toFixed(1)}%`,
+        value: `${pct2.toFixed(1)}%`,
         bar: { value: window2.used_percent, max: 100, ariaLabel: `${label} usage` },
         sub: resetText || void 0
       }
@@ -13452,7 +13782,7 @@ ${row.project}` : row.project;
     if (data.context_window_size <= 0) return null;
     const used = data.total_input_tokens;
     const size = data.context_window_size;
-    const pct = Math.max(0, Math.min(999, (data.pct ?? used / size) * 100));
+    const pct2 = Math.max(0, Math.min(999, (data.pct ?? used / size) * 100));
     const severity = data.severity ?? "ok";
     return /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
       /* @__PURE__ */ u4("div", { class: "stat-content", children: [
@@ -13469,7 +13799,7 @@ ${row.project}` : row.project;
           "of ",
           fmt(size),
           " \xB7 ",
-          pct.toFixed(1),
+          pct2.toFixed(1),
           "%",
           " ",
           /* @__PURE__ */ u4(
@@ -13975,14 +14305,14 @@ ${row.project}` : row.project;
     if (c4.has_credits) return "Has credits";
     return "\u2014";
   }
-  function progressClass(pct) {
-    if (pct >= 85) return "codex-plan-progress codex-plan-progress--high";
-    if (pct >= 60) return "codex-plan-progress codex-plan-progress--mid";
+  function progressClass(pct2) {
+    if (pct2 >= 85) return "codex-plan-progress codex-plan-progress--high";
+    if (pct2 >= 60) return "codex-plan-progress codex-plan-progress--mid";
     return "codex-plan-progress codex-plan-progress--low";
   }
   function CodexPlanKpi({ today }) {
-    const pct = Math.min(100, Math.max(0, today.primary?.used_percent ?? 0));
-    const pctText = pct.toFixed(1) + "%";
+    const pct2 = Math.min(100, Math.max(0, today.primary?.used_percent ?? 0));
+    const pctText = pct2.toFixed(1) + "%";
     const plan = planLabel(today.plan_type);
     const credits = creditState(today);
     return /* @__PURE__ */ u4("div", { class: "card stat-card codex-plan-kpi", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
@@ -13991,9 +14321,9 @@ ${row.project}` : row.project;
       /* @__PURE__ */ u4("div", { class: "stat-sub", children: /* @__PURE__ */ u4(
         "span",
         {
-          class: progressClass(pct),
-          style: { width: `${pct}%` },
-          "aria-valuenow": pct,
+          class: progressClass(pct2),
+          style: { width: `${pct2}%` },
+          "aria-valuenow": pct2,
           "aria-valuemin": 0,
           "aria-valuemax": 100,
           role: "progressbar",
@@ -14035,17 +14365,17 @@ ${row.project}` : row.project;
         /* @__PURE__ */ u4("div", { class: "subscription-quota-section-label", children: "Published" }),
         snapshot.published.windows.length === 0 && /* @__PURE__ */ u4("div", { class: "subscription-quota-empty", children: "No active windows reported." }),
         snapshot.published.windows.map((window2) => {
-          const pct = Math.min(100, Math.max(0, window2.used_percent));
+          const pct2 = Math.min(100, Math.max(0, window2.used_percent));
           return /* @__PURE__ */ u4("div", { class: "subscription-quota-row", children: [
             /* @__PURE__ */ u4("div", { class: "subscription-quota-row-label", children: window2.label }),
             /* @__PURE__ */ u4("div", { class: "subscription-quota-row-value", children: [
-              pct.toFixed(1),
+              pct2.toFixed(1),
               "%"
             ] }),
             /* @__PURE__ */ u4("div", { class: "subscription-quota-row-bar", children: /* @__PURE__ */ u4(
               SegmentedProgressBar,
               {
-                value: pct,
+                value: pct2,
                 max: 100,
                 size: "standard",
                 "aria-label": `${window2.label} usage`
@@ -14339,7 +14669,7 @@ ${row.project}` : row.project;
         cell: ({ row }) => {
           const e4 = row.original.errors;
           if (!e4) return /* @__PURE__ */ u4("span", { class: "dim", children: "0" });
-          const pct = row.original.invocations > 0 ? (e4 / row.original.invocations * 100).toFixed(1) : "0";
+          const pct2 = row.original.invocations > 0 ? (e4 / row.original.invocations * 100).toFixed(1) : "0";
           const href = `/tool-errors?tool=${encodeURIComponent(row.original.tool_name)}&provider=${encodeURIComponent(row.original.provider)}&range=${selectedRange.value}`;
           return /* @__PURE__ */ u4(
             "button",
@@ -14354,7 +14684,7 @@ ${row.project}` : row.project;
               children: [
                 e4,
                 " (",
-                pct,
+                pct2,
                 "%)"
               ]
             }
@@ -23271,6 +23601,12 @@ ${row.project}` : row.project;
     });
     registerMountCallback("mcp-servers", (el) => {
       R(/* @__PURE__ */ u4(McpServersCard, {}), el);
+    });
+    registerMountCallback("context-pressure", (el) => {
+      R(/* @__PURE__ */ u4(ContextPressureCard, {}), el);
+    });
+    registerMountCallback("agent-tree", (el) => {
+      R(/* @__PURE__ */ u4(AgentTreeCard, {}), el);
     });
   }
   var backupModalMount = document.getElementById("backup-modal-mount");

@@ -1780,6 +1780,293 @@ pub(crate) fn query_dashboard_subagents(conn: &Connection) -> crate::models::Sub
     })
 }
 
+pub(crate) fn query_dashboard_context_pressure(conn: &Connection) -> crate::models::ContextPressureSummary {
+    use crate::models::{ContextPressureBucket, ContextPressureRow, ContextPressureSummary};
+    use crate::pricing::model_context_window;
+
+    // Compaction heuristic: a turn whose input_tokens is < 50% of the
+    // previous turn's input_tokens (and prev was >1000 tokens) is a reset.
+    let sql = "
+WITH turn_with_prev AS (
+    SELECT session_id, input_tokens, model,
+           LAG(input_tokens, 1, input_tokens) OVER (
+               PARTITION BY session_id ORDER BY timestamp
+           ) AS prev_input
+    FROM turns
+    WHERE input_tokens > 0
+),
+compactions AS (
+    SELECT session_id,
+           SUM(CASE WHEN prev_input > 1000
+                     AND CAST(input_tokens AS REAL) / prev_input < 0.5
+                THEN 1 ELSE 0 END) AS compaction_count
+    FROM turn_with_prev
+    GROUP BY session_id
+),
+session_peaks AS (
+    SELECT t.session_id,
+           COALESCE(s.project_name, '') AS project,
+           COALESCE(s.model, MAX(t.model), '') AS model,
+           COALESCE(s.first_timestamp, MIN(t.timestamp), '') AS started_at,
+           COUNT(t.id) AS turn_count,
+           MAX(t.input_tokens) AS peak_input_tokens
+    FROM turns t
+    LEFT JOIN sessions s ON t.session_id = s.session_id
+    WHERE t.input_tokens > 0
+    GROUP BY t.session_id
+)
+SELECT sp.session_id,
+       sp.project,
+       sp.model,
+       sp.started_at,
+       CAST(sp.turn_count AS INTEGER),
+       CAST(sp.peak_input_tokens AS INTEGER),
+       COALESCE(c.compaction_count, 0)
+FROM session_peaks sp
+LEFT JOIN compactions c ON sp.session_id = c.session_id
+ORDER BY sp.peak_input_tokens DESC
+LIMIT 200";
+
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("context_pressure prepare failed: {e}");
+            return ContextPressureSummary::default();
+        }
+    };
+
+    let raw_rows: Vec<(String, Option<String>, String, String, u32, u64, u32)> =
+        collect_warn(
+            match stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, i64>(4)? as u32,
+                    row.get::<_, i64>(5)? as u64,
+                    row.get::<_, i64>(6)? as u32,
+                ))
+            }) {
+                Ok(m) => m,
+                Err(e) => {
+                    warn!("context_pressure query failed: {e}");
+                    return ContextPressureSummary::default();
+                }
+            },
+            "context_pressure",
+        );
+
+    let mut rows = Vec::with_capacity(raw_rows.len());
+    let mut healthy_count = 0u32;
+    let mut warm_count = 0u32;
+    let mut tight_count = 0u32;
+    let mut overcompacted_count = 0u32;
+    let mut fraction_sum = 0.0f64;
+
+    for (session_id, project, model, started_at, turn_count, peak_input_tokens, compaction_count) in raw_rows {
+        let ctx_size = model_context_window(&model);
+        let peak_fraction = if ctx_size > 0 {
+            (peak_input_tokens as f64 / ctx_size as f64).min(1.0) as f32
+        } else {
+            0.0
+        };
+
+        let bucket = if compaction_count > 0 {
+            overcompacted_count += 1;
+            ContextPressureBucket::OverCompacted
+        } else if peak_fraction >= 0.90 {
+            tight_count += 1;
+            ContextPressureBucket::Tight
+        } else if peak_fraction >= 0.70 {
+            warm_count += 1;
+            ContextPressureBucket::Warm
+        } else {
+            healthy_count += 1;
+            ContextPressureBucket::Healthy
+        };
+
+        fraction_sum += peak_fraction as f64;
+        let project = if project.as_deref().unwrap_or("").is_empty() { None } else { project };
+
+        rows.push(ContextPressureRow {
+            session_id,
+            project,
+            model,
+            started_at,
+            turn_count,
+            peak_input_tokens,
+            context_window_size: ctx_size,
+            peak_fraction,
+            compaction_count,
+            bucket,
+        });
+    }
+
+    let avg_peak_fraction = if rows.is_empty() {
+        0.0
+    } else {
+        (fraction_sum / rows.len() as f64) as f32
+    };
+
+    ContextPressureSummary {
+        rows,
+        healthy_count,
+        warm_count,
+        tight_count,
+        overcompacted_count,
+        avg_peak_fraction,
+    }
+}
+
+pub(crate) fn query_dashboard_agent_tree(conn: &Connection) -> crate::models::AgentTreeSummary {
+    use crate::models::{AgentTreeNode, AgentTreeSummary, SessionAgentTree};
+
+    let sql = "
+WITH sessions_with_subagents AS (
+    SELECT DISTINCT session_id
+    FROM turns
+    WHERE is_subagent = 1 AND agent_id IS NOT NULL
+),
+per_agent AS (
+    SELECT t.session_id,
+           t.agent_id,
+           t.is_subagent,
+           COUNT(*) AS turn_count,
+           COALESCE(SUM(t.input_tokens), 0) AS input_tokens,
+           COALESCE(SUM(t.output_tokens), 0) AS output_tokens,
+           COALESCE(SUM(t.cache_read_tokens), 0) AS cache_read_tokens,
+           COALESCE(SUM(t.estimated_cost_nanos), 0) AS cost_nanos
+    FROM turns t
+    JOIN sessions_with_subagents sws ON t.session_id = sws.session_id
+    GROUP BY t.session_id, t.agent_id, t.is_subagent
+)
+SELECT pa.session_id,
+       s.project_name,
+       pa.agent_id,
+       CAST(pa.is_subagent AS INTEGER),
+       CAST(pa.turn_count AS INTEGER),
+       CAST(pa.input_tokens AS INTEGER),
+       CAST(pa.output_tokens AS INTEGER),
+       CAST(pa.cache_read_tokens AS INTEGER),
+       CAST(pa.cost_nanos AS INTEGER),
+       ass.role
+FROM per_agent pa
+LEFT JOIN sessions s ON pa.session_id = s.session_id
+LEFT JOIN agent_sessions ass ON pa.agent_id = ass.agent_id
+ORDER BY pa.session_id, pa.is_subagent ASC, pa.cost_nanos DESC
+LIMIT 500";
+
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("agent_tree prepare failed: {e}");
+            return AgentTreeSummary::default();
+        }
+    };
+
+    struct RawRow {
+        session_id: String,
+        project: Option<String>,
+        agent_id: Option<String>,
+        is_subagent: i64,
+        turn_count: u32,
+        input_tokens: u64,
+        output_tokens: u64,
+        cache_read_tokens: u64,
+        cost_nanos: i64,
+        role: Option<String>,
+    }
+
+    let raw: Vec<RawRow> = collect_warn(
+        match stmt.query_map([], |row| {
+            Ok(RawRow {
+                session_id: row.get(0)?,
+                project: row.get(1)?,
+                agent_id: row.get(2)?,
+                is_subagent: row.get(3)?,
+                turn_count: row.get::<_, i64>(4)? as u32,
+                input_tokens: row.get::<_, i64>(5)? as u64,
+                output_tokens: row.get::<_, i64>(6)? as u64,
+                cache_read_tokens: row.get::<_, i64>(7)? as u64,
+                cost_nanos: row.get(8)?,
+                role: row.get(9)?,
+            })
+        }) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("agent_tree query failed: {e}");
+                return AgentTreeSummary::default();
+            }
+        },
+        "agent_tree",
+    );
+
+    // Group by session_id
+    let mut session_map: std::collections::HashMap<String, (Option<String>, Vec<RawRow>)> =
+        std::collections::HashMap::new();
+    for row in raw {
+        let entry = session_map
+            .entry(row.session_id.clone())
+            .or_insert_with(|| (row.project.clone(), Vec::new()));
+        entry.1.push(row);
+    }
+
+    let mut role_cost: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    let mut sessions: Vec<SessionAgentTree> = Vec::new();
+
+    for (session_id, (project, rows)) in session_map {
+        let root_rows: Vec<&RawRow> = rows.iter().filter(|r| r.is_subagent == 0).collect();
+        let sub_rows: Vec<&RawRow> = rows.iter().filter(|r| r.is_subagent == 1).collect();
+
+        let root = AgentTreeNode {
+            agent_id: None,
+            role: None,
+            turn_count: root_rows.iter().map(|r| r.turn_count).sum(),
+            input_tokens: root_rows.iter().map(|r| r.input_tokens).sum(),
+            output_tokens: root_rows.iter().map(|r| r.output_tokens).sum(),
+            cache_read_tokens: root_rows.iter().map(|r| r.cache_read_tokens).sum(),
+            estimated_cost_nanos: root_rows.iter().map(|r| r.cost_nanos).sum(),
+            children: sub_rows.iter().map(|r| {
+                let role = r.role.clone();
+                if let Some(ref rn) = role {
+                    *role_cost.entry(rn.clone()).or_insert(0) += r.cost_nanos;
+                }
+                AgentTreeNode {
+                    agent_id: r.agent_id.clone(),
+                    role,
+                    turn_count: r.turn_count,
+                    input_tokens: r.input_tokens,
+                    output_tokens: r.output_tokens,
+                    cache_read_tokens: r.cache_read_tokens,
+                    estimated_cost_nanos: r.cost_nanos,
+                    children: vec![],
+                }
+            }).collect(),
+        };
+
+        let total_cost_nanos: i64 = rows.iter().map(|r| r.cost_nanos).sum();
+        let subagent_count = sub_rows.len() as u32;
+
+        sessions.push(SessionAgentTree {
+            session_id,
+            project,
+            root,
+            total_cost_nanos,
+            subagent_count,
+        });
+    }
+
+    sessions.sort_by(|a, b| b.total_cost_nanos.cmp(&a.total_cost_nanos));
+    sessions.truncate(50);
+
+    let mut top_subagent_roles: Vec<(String, i64)> = role_cost.into_iter().collect();
+    top_subagent_roles.sort_by(|a, b| b.1.cmp(&a.1));
+    top_subagent_roles.truncate(10);
+
+    AgentTreeSummary { sessions, top_subagent_roles }
+}
+
 pub(crate) fn query_dashboard_entrypoints(conn: &Connection) -> Result<Vec<EntrypointSummary>> {
     let mut stmt = conn.prepare(
         "SELECT s.provider, COALESCE(s.entrypoint, 'unknown') as ep,
@@ -2352,6 +2639,9 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         CodexPlanSection { today, history }
     };
 
+    let context_pressure = query_dashboard_context_pressure(conn);
+    let agent_tree = query_dashboard_agent_tree(conn);
+
     // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
     // summing across providers so the frontend gets a single series per model/week.
     let weekly_by_model: Vec<WeeklyModelRow> = {
@@ -2403,6 +2693,8 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         weekly_by_model,
         subscription_quota: None,
         codex_plan,
+        context_pressure,
+        agent_tree,
     })
 }
 

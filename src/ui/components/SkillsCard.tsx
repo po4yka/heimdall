@@ -95,6 +95,7 @@ function ScopeSection({ scope }: { scope: SkillScope }) {
               <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>NAME</th>
               <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>DISK</th>
               <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TOK</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>LAST USED</th>
               <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>STATUS</th>
             </tr>
           </thead>
@@ -105,12 +106,22 @@ function ScopeSection({ scope }: { scope: SkillScope }) {
                   {s.name}
                   {s.is_symlink && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px' }}>[link]</span>}
                   {s.description_truncated && <span style={{ color: 'var(--text-secondary)', marginLeft: '2px' }}>+</span>}
+                  {s.is_dormant && (
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', marginLeft: '6px', opacity: 0.6 }}>
+                      {s.usage?.last_used
+                        ? `[DORMANT ${Math.floor((Date.now() - new Date(s.usage.last_used).getTime()) / 86400000)}d]`
+                        : '[NEVER]'}
+                    </span>
+                  )}
                 </td>
                 <td style={{ textAlign: 'right', padding: '2px 4px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
                   {fmtBytes(s.bytes)}
                 </td>
                 <td style={{ textAlign: 'right', padding: '2px 4px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
                   {s.listing_tokens}
+                </td>
+                <td style={{ textAlign: 'right', padding: '2px 4px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', opacity: 0.7 }}>
+                  {s.usage ? (s.usage.last_used ? new Date(s.usage.last_used).toLocaleDateString() : '—') : '—'}
                 </td>
                 <td style={{ textAlign: 'right', padding: '2px 4px', fontFamily: 'var(--font-mono)', color: s.frontmatter_status !== 'ok' ? 'var(--accent, #D71921)' : 'var(--text-secondary)' }}>
                   {s.frontmatter_status}
@@ -262,6 +273,20 @@ function SkillsCardInner({ report }: { report: SkillsReport }) {
             </div>
           </div>
         )}
+        {(() => {
+          const dormantCount = report.scopes.reduce(
+            (acc, sc) => acc + sc.skills.filter((s) => s.is_dormant).length,
+            0,
+          );
+          return dormantCount > 0 ? (
+            <div>
+              <div class="stat-label" style={{ fontSize: '10px' }}>Dormant</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '18px', color: 'var(--text-secondary)', opacity: 0.7 }}>
+                {dormantCount}
+              </div>
+            </div>
+          ) : null;
+        })()}
       </div>
 
       {/* Budget bars */}

@@ -272,6 +272,35 @@ const PRICING_TABLE: &[(&str, ModelPricing)] = &[
     ),
 ];
 
+/// Context window sizes (in tokens) for known model families.
+const CONTEXT_WINDOW_TABLE: &[(&str, u64)] = &[
+    ("claude-opus-4", 200_000),
+    ("claude-sonnet-4", 200_000),
+    ("claude-haiku-4", 200_000),
+    ("claude-opus-3", 200_000),
+    ("claude-sonnet-3", 200_000),
+    ("claude-haiku-3", 200_000),
+    ("gpt-5", 128_000),
+    ("gpt-4", 128_000),
+    ("o1", 200_000),
+    ("o3", 200_000),
+    ("gemini", 1_000_000),
+];
+
+/// Return the context window size (tokens) for a model.
+/// Uses prefix matching (longest wins). Falls back to 200_000.
+pub fn model_context_window(model: &str) -> u64 {
+    if model.is_empty() {
+        return 200_000;
+    }
+    CONTEXT_WINDOW_TABLE
+        .iter()
+        .filter(|(prefix, _)| model.starts_with(prefix))
+        .max_by_key(|(prefix, _)| prefix.len())
+        .map(|(_, size)| *size)
+        .unwrap_or(200_000)
+}
+
 pub fn builtin_catalog() -> HashMap<String, ModelPricing> {
     PRICING_TABLE
         .iter()
@@ -1395,5 +1424,20 @@ mod tests {
             assert_eq!(est.pricing_model, model);
             assert_eq!(est.cost_confidence, COST_CONFIDENCE_HIGH);
         });
+    }
+
+    #[test]
+    fn context_window_sonnet() {
+        assert_eq!(model_context_window("claude-sonnet-4-6"), 200_000);
+    }
+
+    #[test]
+    fn context_window_gpt() {
+        assert_eq!(model_context_window("gpt-5.4-mini"), 128_000);
+    }
+
+    #[test]
+    fn context_window_unknown_default() {
+        assert_eq!(model_context_window("unknown-model-xyz"), 200_000);
     }
 }

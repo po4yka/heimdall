@@ -4,6 +4,7 @@ pub mod frontmatter;
 pub mod projects;
 pub mod sizing;
 pub mod tokens;
+pub mod usage;
 
 use std::path::PathBuf;
 
@@ -14,6 +15,7 @@ use serde::Serialize;
 
 pub use discovery::{ScopeKind, Skill, SkillScope};
 pub use tokens::Tokenizer;
+pub use usage::SkillInvocationStats;
 
 // ---------------------------------------------------------------------------
 // Report types
@@ -90,6 +92,8 @@ pub struct ScanOptions {
     pub budget_fraction: f64,
     /// DB path used to discover project CWDs (optional; omit to skip per-project scan).
     pub db_path: Option<PathBuf>,
+    /// Days without invocation before a skill is considered dormant (default 30).
+    pub dormant_threshold_days: u32,
 }
 
 impl Default for ScanOptions {
@@ -105,6 +109,7 @@ impl Default for ScanOptions {
             max_desc_chars: 1536,
             budget_fraction: 0.01,
             db_path: None,
+            dormant_threshold_days: 30,
         }
     }
 }
@@ -229,6 +234,43 @@ pub fn scan(opts: ScanOptions) -> Result<SkillsReport> {
 
         // Record project_count in totals via a side channel.
         let _ = project_count; // used below in totals computation
+    }
+
+    // --- Usage / dormancy join ---
+    let skill_stats: std::collections::HashMap<String, crate::skills::SkillInvocationStats> = {
+        if let Some(ref db) = opts.db_path {
+            match rusqlite::Connection::open(db) {
+                Ok(conn) => usage::fetch_skill_invocation_stats(&conn).unwrap_or_default(),
+                Err(e) => {
+                    tracing::warn!("skills: could not open DB for usage stats: {e}");
+                    std::collections::HashMap::new()
+                }
+            }
+        } else {
+            std::collections::HashMap::new()
+        }
+    };
+
+    let dormant_days = opts.dormant_threshold_days;
+    let threshold_dt = chrono::Utc::now() - chrono::Duration::days(dormant_days as i64);
+
+    for scope in &mut scopes {
+        for skill in &mut scope.skills {
+            let key = skill.name.to_lowercase();
+            if let Some(stats) = skill_stats.get(&key) {
+                let is_dormant = stats
+                    .last_used
+                    .as_deref()
+                    .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc) < threshold_dt)
+                    .unwrap_or(true);
+                skill.usage = Some(stats.clone());
+                skill.is_dormant = is_dormant;
+            } else {
+                skill.usage = None;
+                skill.is_dormant = true; // never invoked = dormant
+            }
+        }
     }
 
     // --- Totals ---

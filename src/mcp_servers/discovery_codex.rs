@@ -75,6 +75,7 @@ pub fn parse_codex_config_toml(path: &Path) -> Vec<McpServerEntry> {
             runtime: RuntimeState::NotRunning,
             log_probe: None,
             usage: None,
+            is_dormant: false,
         });
     }
 

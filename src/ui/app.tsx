@@ -8,6 +8,8 @@ import { ProjectsRegistry } from './components/projects/ProjectsRegistry';
 import { SkillsCard } from './components/SkillsCard';
 import { InstructionFilesCard } from './components/InstructionFilesCard';
 import { McpServersCard } from './components/McpServersCard';
+import { ContextPressureCard } from './components/ContextPressureCard';
+import { AgentTreeCard } from './components/AgentTreeCard';
 import { Sidebar } from './components/Sidebar';
 import { SavedViewsBar } from './components/SavedViewsBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -158,6 +160,12 @@ if (dashboardRuntime) {
   });
   registerMountCallback('mcp-servers', (el) => {
     render(<McpServersCard />, el);
+  });
+  registerMountCallback('context-pressure', (el) => {
+    render(<ContextPressureCard />, el);
+  });
+  registerMountCallback('agent-tree', (el) => {
+    render(<AgentTreeCard />, el);
   });
 }
 

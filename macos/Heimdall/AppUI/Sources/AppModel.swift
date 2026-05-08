@@ -19,6 +19,7 @@ public final class AppModel {
     public let skills: SkillsFeatureModel
     public let instructions: InstructionsFeatureModel
     public let mcpServers: McpServersFeatureModel
+    public let dashboardData: DashboardDataFeatureModel
     public let backup: BackupFeatureModel
     public let settings: SettingsFeatureModel
     public let filters: DashboardFiltersModel
@@ -59,6 +60,7 @@ public final class AppModel {
         self.skills = SkillsFeatureModel(helperPort: sessionStore.config.helperPort)
         self.instructions = InstructionsFeatureModel(helperPort: sessionStore.config.helperPort)
         self.mcpServers = McpServersFeatureModel(helperPort: sessionStore.config.helperPort)
+        self.dashboardData = DashboardDataFeatureModel(helperPort: sessionStore.config.helperPort)
         self.backup = BackupFeatureModel(helperPort: sessionStore.config.helperPort)
         self.liveMonitor = LiveMonitorFeatureModel(
             sessionStore: sessionStore,

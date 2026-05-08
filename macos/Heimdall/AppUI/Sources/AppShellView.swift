@@ -24,6 +24,7 @@ struct AppShellView: View {
     @Bindable var skills: SkillsFeatureModel
     @Bindable var instructions: InstructionsFeatureModel
     @Bindable var mcpServers: McpServersFeatureModel
+    @Bindable var dashboardData: DashboardDataFeatureModel
     @Bindable var backup: BackupFeatureModel
     @Bindable var filters: DashboardFiltersModel
 
@@ -64,11 +65,11 @@ struct AppShellView: View {
                         case .activity:
                             WindowActivityView(model: self.activity)
                         case .agents:
-                            WindowAgentsView(model: self.agents)
+                            WindowAgentsView(model: self.agents, dashboardData: self.dashboardData)
                         case .costModels:
                             WindowCostModelsView(model: self.costModels)
                         case .sessions:
-                            WindowSessionsView(model: self.sessions)
+                            WindowSessionsView(model: self.sessions, dashboardData: self.dashboardData)
                         case .projects:
                             WindowProjectsView(model: self.projects)
                         case .skills:

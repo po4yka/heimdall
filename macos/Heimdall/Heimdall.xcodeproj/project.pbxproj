@@ -13,6 +13,7 @@
 		C9CF3EC63CFD44BCA264A7FA /* WindowInstructionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F286D72EC5C45A7847291DA /* WindowInstructionsView.swift */; };
 		A1B2C3D4E5F6A7B8C9D0E1F2 /* McpServersFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* McpServersFeatureModel.swift */; };
 		C3D4E5F6A7B8C9D0E1F2A3B4 /* WindowMcpServersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6A7B8C9D0E1F2A3B4C5 /* WindowMcpServersView.swift */; };
+		F6A7B8C9D0E1F2A3B4C5D6E7 /* DashboardDataFeatureModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F6A7B8C9D0E1F2A3B4C5D6 /* DashboardDataFeatureModel.swift */; };
 		01A140AAC2121670D86F6416 /* ProviderVisualState+Rank.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10FAFE6026FE6D6116066AEF /* ProviderVisualState+Rank.swift */; };
 		0282A6F1545D499742D8A188 /* HeimdallDomain.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6DD3582B86CA2DDB6BDD805A /* HeimdallDomain.framework */; };
 		02F000363F01F8B96EE7FACD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4946CC1A3E8E241196B584BD /* Assets.xcassets */; };
@@ -562,6 +563,7 @@
 		8F286D72EC5C45A7847291DA /* WindowInstructionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WindowInstructionsView.swift; path = WindowInstructionsView.swift; sourceTree = "<group>"; };
 		B2C3D4E5F6A7B8C9D0E1F2A3 /* McpServersFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = McpServersFeatureModel.swift; path = McpServersFeatureModel.swift; sourceTree = "<group>"; };
 		D4E5F6A7B8C9D0E1F2A3B4C5 /* WindowMcpServersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WindowMcpServersView.swift; path = WindowMcpServersView.swift; sourceTree = "<group>"; };
+		E5F6A7B8C9D0E1F2A3B4C5D6 /* DashboardDataFeatureModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DashboardDataFeatureModel.swift; path = DashboardDataFeatureModel.swift; sourceTree = "<group>"; };
 		027DBA6179A20E8052957DB5 /* HistoryBarChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryBarChart.swift; sourceTree = "<group>"; };
 		03A7882CA3C6FAAD7B49FD64 /* SwitcherWidgetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwitcherWidgetView.swift; sourceTree = "<group>"; };
 		05B5804BC3378CA122A3BD39 /* LocalNotificationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotificationCoordinator.swift; sourceTree = "<group>"; };
@@ -969,6 +971,7 @@
 				8F286D72EC5C45A7847291DA /* WindowInstructionsView.swift */,
 				B2C3D4E5F6A7B8C9D0E1F2A3 /* McpServersFeatureModel.swift */,
 				D4E5F6A7B8C9D0E1F2A3B4C5 /* WindowMcpServersView.swift */,
+				E5F6A7B8C9D0E1F2A3B4C5D6 /* DashboardDataFeatureModel.swift */,
 				984DAE4914A65AC5AB23500A /* LiveMonitorFeatureModel.swift */,
 				20219CB528FF69CE9FA4675D /* LiveMonitorTimeFormatter.swift */,
 				B528BD8A44913B12965FF41E /* MenuBarMeterRenderer.swift */,
@@ -1637,6 +1640,7 @@
 				C9CF3EC63CFD44BCA264A7FA /* WindowInstructionsView.swift in Sources */,
 				A1B2C3D4E5F6A7B8C9D0E1F2 /* McpServersFeatureModel.swift in Sources */,
 				C3D4E5F6A7B8C9D0E1F2A3B4 /* WindowMcpServersView.swift in Sources */,
+				F6A7B8C9D0E1F2A3B4C5D6E7 /* DashboardDataFeatureModel.swift in Sources */,
 				EFAC46570AF8D0DDFCE96255 /* AppShellView.swift in Sources */,
 				996A69D4E0094AB247D0CD4F /* CacheHitTrendChart.swift in Sources */,
 				17B2D0C2B5ADED6B5EB06649 /* CacheMixRing.swift in Sources */,

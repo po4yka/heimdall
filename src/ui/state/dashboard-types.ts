@@ -115,6 +115,12 @@ export interface ToolErrorsResponse {
 
 // ── Skills inventory ────────────────────────────────────────────────────────
 
+export interface SkillInvocationStats {
+  total_calls: number;
+  last_used: string | null;
+  distinct_sessions: number;
+}
+
 export interface SkillRow {
   name: string;
   path: string;
@@ -127,6 +133,8 @@ export interface SkillRow {
   frontmatter_status: 'ok' | 'missing' | 'invalid';
   is_symlink: boolean;
   symlink_target: string | null;
+  usage: SkillInvocationStats | null;
+  is_dormant: boolean;
 }
 
 export interface SkillScope {
@@ -747,6 +755,8 @@ export interface DashboardData {
   subscription_quota?: SubscriptionQuotaSection | null;
   /** Feature 1: Codex plan utilisation per day. */
   codex_plan?: CodexPlanSection | null;
+  context_pressure?: ContextPressureSummary;
+  agent_tree?: AgentTreeSummary;
   error?: string;
 }
 
@@ -944,6 +954,7 @@ export interface McpServerEntry {
   runtime: McpRuntimeState;
   log_probe: McpLogProbe | null;
   usage: McpUsageStats | null;
+  is_dormant: boolean;
 }
 
 export interface McpServerTotals {
@@ -953,6 +964,7 @@ export interface McpServerTotals {
   claude_count: number;
   codex_count: number;
   project_count: number;
+  dormant_count: number;
 }
 
 export interface McpServersReport {
@@ -960,4 +972,56 @@ export interface McpServersReport {
   claude: McpServerEntry[];
   codex: McpServerEntry[];
   totals: McpServerTotals;
+}
+
+// ── Context pressure analytics ──────────────────────────────────────────────
+
+export type ContextPressureBucket = 'healthy' | 'warm' | 'tight' | 'over_compacted';
+
+export interface ContextPressureRow {
+  session_id: string;
+  project: string | null;
+  model: string;
+  started_at: string;
+  turn_count: number;
+  peak_input_tokens: number;
+  context_window_size: number;
+  peak_fraction: number;
+  compaction_count: number;
+  bucket: ContextPressureBucket;
+}
+
+export interface ContextPressureSummary {
+  rows: ContextPressureRow[];
+  healthy_count: number;
+  warm_count: number;
+  tight_count: number;
+  overcompacted_count: number;
+  avg_peak_fraction: number;
+}
+
+// ── Subagent cost attribution tree ──────────────────────────────────────────
+
+export interface AgentTreeNode {
+  agent_id: string | null;
+  role: string | null;
+  turn_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  estimated_cost_nanos: number;
+  children: AgentTreeNode[];
+}
+
+export interface SessionAgentTree {
+  session_id: string;
+  project: string | null;
+  root: AgentTreeNode;
+  total_cost_nanos: number;
+  subagent_count: number;
+}
+
+export interface AgentTreeSummary {
+  sessions: SessionAgentTree[];
+  top_subagent_roles: [string, number][];
 }

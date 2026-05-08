@@ -239,6 +239,7 @@ pub fn parse_server_entry(
         runtime: RuntimeState::NotRunning,
         log_probe: None,
         usage: None,
+        is_dormant: false,
     })
 }
 

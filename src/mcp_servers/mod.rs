@@ -84,6 +84,7 @@ pub struct McpServerEntry {
     pub runtime: RuntimeState,
     pub log_probe: Option<LogProbe>,
     pub usage: Option<McpUsageStats>,
+    pub is_dormant: bool,
 }
 
 impl McpServerEntry {
@@ -105,6 +106,7 @@ pub struct McpServerTotals {
     pub claude_count: usize,
     pub codex_count: usize,
     pub project_count: usize,
+    pub dormant_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -136,6 +138,8 @@ pub struct ScanOptions {
     pub probe_processes: bool,
     pub probe_logs: bool,
     pub db_path: Option<PathBuf>,
+    /// Days without invocation before a server is considered dormant (default 30).
+    pub dormant_threshold_days: u32,
 }
 
 impl Default for ScanOptions {
@@ -152,6 +156,7 @@ impl Default for ScanOptions {
             probe_processes: true,
             probe_logs: true,
             db_path: None,
+            dormant_threshold_days: 30,
         }
     }
 }
@@ -237,12 +242,25 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
         Default::default()
     };
 
-    // Join usage into entries
+    // Join usage into entries and compute dormancy
+    let dormant_days = opts.dormant_threshold_days;
+    let threshold_dt =
+        chrono::Utc::now() - chrono::Duration::days(dormant_days as i64);
+
     for entry in claude_entries.iter_mut().chain(codex_entries.iter_mut()) {
         let key = entry.name.to_lowercase();
         if let Some(stats) = usage_map.get(&key) {
             entry.usage = Some(stats.clone());
         }
+        entry.is_dormant = match &entry.usage {
+            None => true,
+            Some(u) => u
+                .last_used
+                .as_deref()
+                .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+                .map(|dt| dt.with_timezone(&chrono::Utc) < threshold_dt)
+                .unwrap_or(true),
+        };
     }
 
     // --- Log probe ---
@@ -288,6 +306,11 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
         .filter(|e| e.usage.is_none())
         .count();
     let configured_count = claude_entries.len() + codex_entries.len();
+    let dormant_count = claude_entries
+        .iter()
+        .chain(codex_entries.iter())
+        .filter(|e| e.is_dormant)
+        .count();
 
     Ok(McpServerReport {
         generated_at: Utc::now().to_rfc3339(),
@@ -298,6 +321,7 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
             claude_count: claude_entries.len(),
             codex_count: codex_entries.len(),
             project_count,
+            dormant_count,
         },
         claude: claude_entries,
         codex: codex_entries,

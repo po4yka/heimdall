@@ -307,6 +307,10 @@ pub struct DashboardData {
     /// Feature 1: Codex plan utilisation per day.
     #[serde(default)]
     pub codex_plan: CodexPlanSection,
+    #[serde(default)]
+    pub context_pressure: ContextPressureSummary,
+    #[serde(default)]
+    pub agent_tree: AgentTreeSummary,
 }
 
 /// One entry in the `weekly_by_model` array of `/api/data`.
@@ -334,6 +338,67 @@ pub struct SubagentSummary {
     pub subagent_input: i64,
     pub subagent_output: i64,
     pub unique_agents: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextPressureBucket {
+    Healthy,
+    Warm,
+    Tight,
+    OverCompacted,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContextPressureRow {
+    pub session_id: String,
+    pub project: Option<String>,
+    pub model: String,
+    pub started_at: String,
+    pub turn_count: u32,
+    pub peak_input_tokens: u64,
+    pub context_window_size: u64,
+    pub peak_fraction: f32,
+    pub compaction_count: u32,
+    pub bucket: ContextPressureBucket,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ContextPressureSummary {
+    pub rows: Vec<ContextPressureRow>,
+    pub healthy_count: u32,
+    pub warm_count: u32,
+    pub tight_count: u32,
+    pub overcompacted_count: u32,
+    pub avg_peak_fraction: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentTreeNode {
+    pub agent_id: Option<String>,
+    pub role: Option<String>,
+    pub turn_count: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub estimated_cost_nanos: i64,
+    pub children: Vec<AgentTreeNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SessionAgentTree {
+    pub session_id: String,
+    pub project: Option<String>,
+    pub root: AgentTreeNode,
+    pub total_cost_nanos: i64,
+    pub subagent_count: u32,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct AgentTreeSummary {
+    pub sessions: Vec<SessionAgentTree>,
+    /// (role_name, total_cost_nanos) sorted by cost desc, top 10
+    pub top_subagent_roles: Vec<(String, i64)>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

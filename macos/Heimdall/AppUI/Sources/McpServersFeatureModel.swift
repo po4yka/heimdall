@@ -173,6 +173,7 @@ public struct McpServerEntry: Codable, Sendable, Identifiable {
     public let runtime: McpRuntimeState
     public let logProbe: McpLogProbe?
     public let usage: McpUsageStats?
+    public let isDormant: Bool
 
     public var id: String { "\(scope):\(sourcePath):\(name)" }
 
@@ -184,6 +185,7 @@ public struct McpServerEntry: Codable, Sendable, Identifiable {
         case transport, env, runtime
         case logProbe = "log_probe"
         case usage
+        case isDormant = "is_dormant"
     }
 }
 
@@ -194,6 +196,7 @@ public struct McpServerTotals: Codable, Sendable {
     public let claudeCount: Int
     public let codexCount: Int
     public let projectCount: Int
+    public let dormantCount: Int
 
     enum CodingKeys: String, CodingKey {
         case configuredCount = "configured_count"
@@ -202,6 +205,7 @@ public struct McpServerTotals: Codable, Sendable {
         case claudeCount = "claude_count"
         case codexCount = "codex_count"
         case projectCount = "project_count"
+        case dormantCount = "dormant_count"
     }
 }
 

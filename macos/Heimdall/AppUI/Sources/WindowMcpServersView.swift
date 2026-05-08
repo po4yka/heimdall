@@ -69,6 +69,9 @@ private struct McpServersSummaryRow: View {
             WindowOverviewKpiTile(label: "Claude", value: "\(totals.claudeCount)")
             WindowOverviewKpiTile(label: "Codex", value: "\(totals.codexCount)")
             WindowOverviewKpiTile(label: "Projects", value: "\(totals.projectCount)")
+            if totals.dormantCount > 0 {
+                WindowOverviewKpiTile(label: "Dormant", value: "\(totals.dormantCount)")
+            }
         }
     }
 }
@@ -159,6 +162,19 @@ private struct McpServerCard: View {
                             .foregroundStyle(.tertiary)
                     }
                     Spacer()
+                    if entry.isDormant {
+                        let dormantBadge: String = {
+                            if let lastUsed = entry.usage?.lastUsed,
+                               let date = ISO8601DateFormatter().date(from: lastUsed) {
+                                let days = Int(Date().timeIntervalSince(date) / 86400)
+                                return "[DORMANT \(days)d]"
+                            }
+                            return "[NEVER]"
+                        }()
+                        Text(dormantBadge)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
                     Text(runtimeLabel)
                         .font(.caption2.monospaced())
                         .foregroundStyle(runtimeColor)

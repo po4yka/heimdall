@@ -117,6 +117,18 @@ public struct SkillScopeResponse: Codable, Sendable, Identifiable {
     }
 }
 
+public struct SkillInvocationStats: Codable, Sendable {
+    public let totalCalls: UInt64
+    public let lastUsed: String?
+    public let distinctSessions: UInt64
+
+    enum CodingKeys: String, CodingKey {
+        case totalCalls = "total_calls"
+        case lastUsed = "last_used"
+        case distinctSessions = "distinct_sessions"
+    }
+}
+
 public struct SkillRow: Codable, Sendable, Identifiable {
     public let name: String
     public let path: String
@@ -129,6 +141,8 @@ public struct SkillRow: Codable, Sendable, Identifiable {
     public let frontmatterStatus: String
     public let isSymlink: Bool
     public let symlinkTarget: String?
+    public let usage: SkillInvocationStats?
+    public let isDormant: Bool
 
     public var id: String { path }
 
@@ -142,6 +156,8 @@ public struct SkillRow: Codable, Sendable, Identifiable {
         case frontmatterStatus = "frontmatter_status"
         case isSymlink = "is_symlink"
         case symlinkTarget = "symlink_target"
+        case usage
+        case isDormant = "is_dormant"
     }
 }
 

@@ -690,6 +690,34 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       invokeMountCallback('mcp-servers', el);
     },
   },
+  {
+    id: 'context-pressure',
+    title: 'Context pressure',
+    description: 'Sessions by context-window utilisation — healthy, warm, tight, compacted',
+    category: 'system',
+    screens: ['tables'],
+    defaultSize: { w: 4, h: 4 },
+    minW: 2,
+    minH: 2,
+    render: (el: HTMLElement) => {
+      el.id = 'context-pressure';
+      invokeMountCallback('context-pressure', el);
+    },
+  },
+  {
+    id: 'agent-tree',
+    title: 'Subagent cost attribution',
+    description: 'Per-session cost breakdown across root agent and subagents',
+    category: 'agent',
+    screens: ['tables'],
+    defaultSize: { w: 4, h: 4 },
+    minW: 2,
+    minH: 2,
+    render: (el: HTMLElement) => {
+      el.id = 'agent-tree';
+      invokeMountCallback('agent-tree', el);
+    },
+  },
 
   // ── Projects tab ──────────────────────────────────────────────────────────
   {

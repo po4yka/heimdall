@@ -17,7 +17,8 @@ struct WindowSkillsView: View {
             if let error = self.model.errorMessage {
                 SkillsErrorView(message: error)
             } else if let report = self.model.report {
-                SkillsSummaryRow(totals: report.totals)
+                let dormantCount = report.scopes.flatMap(\.skills).filter(\.isDormant).count
+                SkillsSummaryRow(totals: report.totals, dormantCount: dormantCount)
                 SkillsBudgetSection(rows: report.budget)
                 SkillsScopesSection(scopes: report.scopes)
                 if !report.duplicates.isEmpty {
@@ -57,6 +58,7 @@ private struct SkillsErrorView: View {
 
 private struct SkillsSummaryRow: View {
     let totals: SkillsTotals
+    let dormantCount: Int
 
     var body: some View {
         LazyVGrid(
@@ -73,6 +75,9 @@ private struct SkillsSummaryRow: View {
             WindowOverviewKpiTile(label: "Claude disk", value: formatBytes(totals.claudeBytes))
             WindowOverviewKpiTile(label: "Codex disk", value: formatBytes(totals.codexBytes))
             WindowOverviewKpiTile(label: "Projects", value: "\(totals.projectCount)")
+            if dormantCount > 0 {
+                WindowOverviewKpiTile(label: "Dormant", value: "\(dormantCount)")
+            }
         }
     }
 }
@@ -225,6 +230,7 @@ private struct SkillsTableHeader: View {
             Text("NAME").frame(maxWidth: .infinity, alignment: .leading)
             Text("DISK").frame(width: 64, alignment: .trailing)
             Text("TOK").frame(width: 48, alignment: .trailing)
+            Text("LAST USED").frame(width: 80, alignment: .trailing)
             Text("STATUS").frame(width: 56, alignment: .trailing)
         }
         .font(.caption2.weight(.semibold).monospaced())
@@ -240,6 +246,16 @@ private struct SkillsTableRow: View {
         skill.frontmatterStatus == "ok" ? .secondary : .red
     }
 
+    var lastUsedLabel: String {
+        guard let lastUsed = skill.usage?.lastUsed else { return "never" }
+        if let date = ISO8601DateFormatter().date(from: lastUsed) {
+            let days = Int(Date().timeIntervalSince(date) / 86400)
+            if days == 0 { return "today" }
+            return "\(days)d ago"
+        }
+        return String(lastUsed.prefix(10))
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             HStack(spacing: 4) {
@@ -252,10 +268,17 @@ private struct SkillsTableRow: View {
                 if skill.descriptionTruncated {
                     Text("+").foregroundStyle(.tertiary)
                 }
+                if skill.isDormant {
+                    Text(skill.usage?.lastUsed != nil ? "[DORMANT]" : "[NEVER]")
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Text(formatBytes(skill.bytes)).frame(width: 64, alignment: .trailing)
             Text("\(skill.listingTokens)").frame(width: 48, alignment: .trailing)
+            Text(lastUsedLabel)
+                .foregroundStyle(.secondary)
+                .frame(width: 80, alignment: .trailing)
             Text(skill.frontmatterStatus)
                 .foregroundStyle(self.statusColor)
                 .frame(width: 56, alignment: .trailing)
