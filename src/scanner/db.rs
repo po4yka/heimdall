@@ -1872,6 +1872,7 @@ LIMIT 200";
         }
     };
 
+    #[allow(clippy::type_complexity)]
     let raw_rows: Vec<(String, Option<String>, String, String, u32, u64, u32)> = collect_warn(
         match stmt.query_map([], |row| {
             Ok((
@@ -3153,7 +3154,7 @@ pub fn query_dashboard_claude_md_size(conn: &Connection) -> crate::models::Claud
         let baseline_tokens = revisions
             .iter()
             .filter(|r| r.commit_ts <= cutoff_30d)
-            .last()
+            .next_back()
             .map(|r| r.token_count)
             .unwrap_or(0);
         let token_delta_30d = current_token_count - baseline_tokens;
@@ -3210,11 +3211,11 @@ pub fn query_dashboard_claude_md_size(conn: &Connection) -> crate::models::Claud
             if let Some(&t) = token_by_day.get(*day) {
                 last_tokens = t;
             }
-            if last_tokens > 0 {
-                if let Some(&cost) = cost_map.get(*day) {
-                    xs.push(last_tokens as f64);
-                    ys.push(cost);
-                }
+            if last_tokens > 0
+                && let Some(&cost) = cost_map.get(*day)
+            {
+                xs.push(last_tokens as f64);
+                ys.push(cost);
             }
         }
 
@@ -3697,10 +3698,10 @@ pub fn backfill_rate_window_history_from_turns(
     // Filter to days that need inserting before opening a write transaction.
     let mut to_insert: Vec<(String, f64, i64)> = Vec::new();
     for (day, observed) in daily {
-        if let Some(ref earliest) = earliest_real {
-            if day.as_str() >= earliest.as_str() {
-                continue;
-            }
+        if let Some(ref earliest) = earliest_real
+            && day.as_str() >= earliest.as_str()
+        {
+            continue;
         }
         let exists: bool = conn
             .query_row(

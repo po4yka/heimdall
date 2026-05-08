@@ -145,54 +145,54 @@ pub fn scan(opts: ScanOptions) -> Result<SkillsReport> {
     let mut scopes: Vec<SkillScope> = Vec::new();
 
     // --- Claude global skills ---
-    if opts.include_global {
-        if let Some(ref claude) = claude_home {
-            let skills_dir = claude.join("skills");
-            if let Some(scope) = discovery::enumerate_skill_dirs(
-                &skills_dir,
-                ScopeKind::ClaudeGlobal,
-                None,
-                max_desc,
-                tok,
-            ) {
-                scopes.push(scope);
-            }
+    if opts.include_global
+        && let Some(ref claude) = claude_home
+    {
+        let skills_dir = claude.join("skills");
+        if let Some(scope) = discovery::enumerate_skill_dirs(
+            &skills_dir,
+            ScopeKind::ClaudeGlobal,
+            None,
+            max_desc,
+            tok,
+        ) {
+            scopes.push(scope);
         }
     }
 
     // --- Claude plugin skills ---
-    if opts.include_plugins {
-        if let Some(ref claude) = claude_home {
-            let plugins_dir = claude.join("plugins");
-            if let Some(scope) = discovery::enumerate_plugin_skills(&plugins_dir, max_desc, tok) {
-                scopes.push(scope);
-            }
+    if opts.include_plugins
+        && let Some(ref claude) = claude_home
+    {
+        let plugins_dir = claude.join("plugins");
+        if let Some(scope) = discovery::enumerate_plugin_skills(&plugins_dir, max_desc, tok) {
+            scopes.push(scope);
         }
     }
 
     // --- Codex global skills ---
-    if opts.include_global {
-        if let Some(ref codex) = codex_home {
-            let skills_dir = codex.join("skills");
-            if let Some(scope) = discovery::enumerate_skill_dirs(
-                &skills_dir,
-                ScopeKind::CodexGlobal,
-                None,
-                max_desc,
-                tok,
-            ) {
-                scopes.push(scope);
-            }
+    if opts.include_global
+        && let Some(ref codex) = codex_home
+    {
+        let skills_dir = codex.join("skills");
+        if let Some(scope) = discovery::enumerate_skill_dirs(
+            &skills_dir,
+            ScopeKind::CodexGlobal,
+            None,
+            max_desc,
+            tok,
+        ) {
+            scopes.push(scope);
         }
     }
 
     // --- Codex prompts proxy ---
-    if opts.include_global {
-        if let Some(ref codex) = codex_home {
-            let prompts_dir = codex.join("prompts");
-            if let Some(scope) = discovery::enumerate_codex_prompts(&prompts_dir, max_desc, tok) {
-                scopes.push(scope);
-            }
+    if opts.include_global
+        && let Some(ref codex) = codex_home
+    {
+        let prompts_dir = codex.join("prompts");
+        if let Some(scope) = discovery::enumerate_codex_prompts(&prompts_dir, max_desc, tok) {
+            scopes.push(scope);
         }
     }
 

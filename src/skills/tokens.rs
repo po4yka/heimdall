@@ -53,7 +53,7 @@ pub fn count_listing_tokens(
 
 fn count_text(text: &str, tok: Tokenizer) -> usize {
     match tok {
-        Tokenizer::Heuristic => (text.chars().count() + 3) / 4,
+        Tokenizer::Heuristic => text.chars().count().div_ceil(4),
         #[cfg(feature = "accurate-tokens")]
         Tokenizer::TiktokenCl100k => tiktoken_rs::cl100k_base()
             .ok()

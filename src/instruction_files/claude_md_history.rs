@@ -51,18 +51,18 @@ pub fn refresh_claude_md_history(
         let rel_path_str = file.rel_path.to_string_lossy().into_owned();
 
         // Optionally wipe existing data for a full rebuild.
-        if rebuild {
-            if let Err(e) = crate::scanner::db::delete_claude_md_history_for_file(
+        if rebuild
+            && let Err(e) = crate::scanner::db::delete_claude_md_history_for_file(
                 conn,
                 &repo_root_str,
                 &rel_path_str,
-            ) {
-                warn!(
-                    "claude_md history: delete failed for {}/{}: {e}",
-                    repo_root_str, rel_path_str
-                );
-                // Continue — a failed delete is not fatal.
-            }
+            )
+        {
+            warn!(
+                "claude_md history: delete failed for {}/{}: {e}",
+                repo_root_str, rel_path_str
+            );
+            // Continue — a failed delete is not fatal.
         }
 
         // Find the most recent commit already stored so we can skip it.

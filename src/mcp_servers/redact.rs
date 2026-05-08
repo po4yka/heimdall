@@ -39,10 +39,9 @@ pub fn redact_args(args: &[String]) -> Vec<String> {
             if let Some((k, _v)) = arg.strip_prefix("--").and_then(|s| {
                 let idx = s.find('=')?;
                 Some((&s[..idx], &s[idx + 1..]))
-            }) {
-                if SECRET_RE.is_match(k) {
-                    return format!("--{}=[REDACTED]", k);
-                }
+            }) && SECRET_RE.is_match(k)
+            {
+                return format!("--{}=[REDACTED]", k);
             }
             arg.clone()
         })

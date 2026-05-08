@@ -3,6 +3,7 @@ use rusqlite::Connection;
 
 use super::{Detector, Finding, Severity};
 
+#[derive(Default)]
 pub struct ClaudeMdImpactDetector;
 
 impl ClaudeMdImpactDetector {

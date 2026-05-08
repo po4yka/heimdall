@@ -194,22 +194,22 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
     let mut codex_entries: Vec<McpServerEntry> = Vec::new();
 
     // --- Claude ~/.claude.json (global + projects) ---
-    if opts.include_claude_global {
-        if let Some(ref p) = claude_dotjson {
-            let (global, project_es) = discovery_claude::parse_claude_dotjson(p);
-            claude_entries.extend(global);
-            if opts.include_claude_projects {
-                claude_entries.extend(project_es);
-            }
+    if opts.include_claude_global
+        && let Some(ref p) = claude_dotjson
+    {
+        let (global, project_es) = discovery_claude::parse_claude_dotjson(p);
+        claude_entries.extend(global);
+        if opts.include_claude_projects {
+            claude_entries.extend(project_es);
         }
     }
 
     // --- Claude ~/.claude/.mcp.json ---
-    if opts.include_claude_global {
-        if let Some(ref home) = claude_home {
-            let alt = home.join(".mcp.json");
-            claude_entries.extend(discovery_claude::parse_claude_mcp_json(&alt));
-        }
+    if opts.include_claude_global
+        && let Some(ref home) = claude_home
+    {
+        let alt = home.join(".mcp.json");
+        claude_entries.extend(discovery_claude::parse_claude_mcp_json(&alt));
     }
 
     // --- Per-project <root>/.mcp.json ---
@@ -228,12 +228,12 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
     }
 
     // --- Codex ~/.codex/config.toml ---
-    if opts.include_codex_global {
-        if let Some(ref home) = codex_home {
-            codex_entries.extend(discovery_codex::parse_codex_config_toml(
-                &home.join("config.toml"),
-            ));
-        }
+    if opts.include_codex_global
+        && let Some(ref home) = codex_home
+    {
+        codex_entries.extend(discovery_codex::parse_codex_config_toml(
+            &home.join("config.toml"),
+        ));
     }
 
     // --- Usage join ---
