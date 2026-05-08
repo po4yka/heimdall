@@ -732,6 +732,20 @@ export const WIDGET_CATALOG: WidgetDef[] = [
       invokeMountCallback('cost-forecast', el);
     },
   },
+  {
+    id: 'session-quality-card',
+    title: 'Session quality distribution',
+    description: 'Turn depth histogram and category × depth heatmap for session quality analysis',
+    category: 'table',
+    screens: ['tables'],
+    defaultSize: { w: 4, h: 5 },
+    minW: 2,
+    minH: 3,
+    render: (el: HTMLElement) => {
+      el.id = 'session-quality-card';
+      invokeMountCallback('session-quality-card', el);
+    },
+  },
 
   // ── Projects tab ──────────────────────────────────────────────────────────
   {

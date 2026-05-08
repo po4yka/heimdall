@@ -758,6 +758,7 @@ export interface DashboardData {
   context_pressure?: ContextPressureSummary;
   agent_tree?: AgentTreeSummary;
   cost_forecast?: CostForecastSummary;
+  session_quality?: SessionQualitySummary;
   error?: string;
 }
 
@@ -1025,6 +1026,35 @@ export interface SessionAgentTree {
 export interface AgentTreeSummary {
   sessions: SessionAgentTree[];
   top_subagent_roles: [string, number][];
+}
+
+// ── Session quality distribution ────────────────────────────────────────────
+
+export interface SessionDepthBucket {
+  label: string;           // "1", "2", "3-5", "6-10", "11-20", "21+"
+  min_turns: number;
+  max_turns: number | null;
+  session_count: number;
+}
+
+export interface SessionCategoryQualityRow {
+  category: string;
+  session_count: number;
+  abandoned_count: number;
+  long_pause_count: number;
+  avg_turns: number;
+  bucket_counts: number[];  // length 6
+}
+
+export interface SessionQualitySummary {
+  depth_buckets: SessionDepthBucket[];
+  category_rows: SessionCategoryQualityRow[];
+  total_sessions: number;
+  abandoned_session_count: number;
+  abandonment_rate: number;
+  long_pause_session_count: number;
+  avg_turns_per_session: number;
+  generated_at: string;
 }
 
 // ── Cost forecasting ────────────────────────────────────────────────────────

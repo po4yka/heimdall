@@ -2067,6 +2067,198 @@ LIMIT 500";
     AgentTreeSummary { sessions, top_subagent_roles }
 }
 
+pub fn query_dashboard_session_quality(
+    conn: &Connection,
+) -> crate::models::SessionQualitySummary {
+    use crate::models::{SessionCategoryQualityRow, SessionDepthBucket, SessionQualitySummary};
+    use chrono::{Duration, Utc};
+    use std::collections::HashMap;
+
+    let cutoff = (Utc::now() - Duration::days(29))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let sql = "
+WITH window_sessions AS (
+    SELECT s.session_id,
+           CAST(s.turn_count AS INTEGER) AS turn_count
+    FROM sessions s
+    WHERE s.first_timestamp >= ?1
+      AND s.turn_count > 0
+),
+turn_gaps AS (
+    SELECT t.session_id,
+           (julianday(t.timestamp) - julianday(
+               LAG(t.timestamp) OVER (PARTITION BY t.session_id ORDER BY t.timestamp)
+           )) * 24 * 60 AS gap_minutes
+    FROM turns t
+    INNER JOIN window_sessions ws ON ws.session_id = t.session_id
+    WHERE t.timestamp != ''
+),
+turn_pauses AS (
+    SELECT session_id,
+           MAX(gap_minutes) AS max_gap_minutes
+    FROM turn_gaps
+    GROUP BY session_id
+),
+session_top_category AS (
+    SELECT session_id, category
+    FROM (
+        SELECT t.session_id,
+               COALESCE(NULLIF(t.category, ''), 'uncategorized') AS category,
+               COUNT(*) AS n,
+               ROW_NUMBER() OVER (
+                   PARTITION BY t.session_id
+                   ORDER BY COUNT(*) DESC, COALESCE(NULLIF(t.category, ''), 'uncategorized') ASC
+               ) AS rk
+        FROM turns t
+        INNER JOIN window_sessions ws ON ws.session_id = t.session_id
+        GROUP BY t.session_id, COALESCE(NULLIF(t.category, ''), 'uncategorized')
+    )
+    WHERE rk = 1
+)
+SELECT ws.session_id,
+       ws.turn_count,
+       COALESCE(stc.category, 'uncategorized') AS category,
+       COALESCE(tp.max_gap_minutes, 0.0)        AS max_gap_minutes
+FROM window_sessions ws
+LEFT JOIN session_top_category stc ON stc.session_id = ws.session_id
+LEFT JOIN turn_pauses             tp  ON tp.session_id  = ws.session_id";
+
+    let mut stmt = match conn.prepare(sql) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("session_quality prepare failed: {e}");
+            return SessionQualitySummary::default();
+        }
+    };
+
+    let raw_rows: Vec<(String, u32, String, f64)> = collect_warn(
+        match stmt.query_map(rusqlite::params![cutoff], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)? as u32,
+                row.get::<_, String>(2)?,
+                row.get::<_, f64>(3)?,
+            ))
+        }) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("session_quality query failed: {e}");
+                return SessionQualitySummary::default();
+            }
+        },
+        "session_quality",
+    );
+
+    // Bucket definitions: (label, min_turns, max_turns)
+    const BUCKET_DEFS: [(&str, u32, Option<u32>); 6] = [
+        ("1", 1, Some(1)),
+        ("2", 2, Some(2)),
+        ("3-5", 3, Some(5)),
+        ("6-10", 6, Some(10)),
+        ("11-20", 11, Some(20)),
+        ("21+", 21, None),
+    ];
+
+    fn bucket_index(turn_count: u32) -> usize {
+        match turn_count {
+            1 => 0,
+            2 => 1,
+            3..=5 => 2,
+            6..=10 => 3,
+            11..=20 => 4,
+            _ => 5,
+        }
+    }
+
+    let mut total_sessions = 0u32;
+    let mut abandoned_session_count = 0u32;
+    let mut long_pause_session_count = 0u32;
+    let mut sum_turns = 0u32;
+    let mut bucket_counts = [0u32; 6];
+
+    // Per-category accumulators: (session_count, abandoned_count, long_pause_count, sum_turns, bucket_counts[6])
+    let mut cat_map: HashMap<String, (u32, u32, u32, u32, [u32; 6])> = HashMap::new();
+
+    for (_session_id, turn_count, category, max_gap_minutes) in raw_rows {
+        total_sessions += 1;
+        let is_abandoned = turn_count <= 2;
+        let is_long_pause = max_gap_minutes >= 30.0;
+        if is_abandoned {
+            abandoned_session_count += 1;
+        }
+        if is_long_pause {
+            long_pause_session_count += 1;
+        }
+        sum_turns += turn_count;
+        let bi = bucket_index(turn_count);
+        bucket_counts[bi] += 1;
+
+        let entry = cat_map.entry(category).or_insert((0, 0, 0, 0, [0u32; 6]));
+        entry.0 += 1;
+        if is_abandoned {
+            entry.1 += 1;
+        }
+        if is_long_pause {
+            entry.2 += 1;
+        }
+        entry.3 += turn_count;
+        entry.4[bi] += 1;
+    }
+
+    let abandonment_rate = if total_sessions > 0 {
+        abandoned_session_count as f32 / total_sessions as f32
+    } else {
+        0.0
+    };
+    let avg_turns_per_session = if total_sessions > 0 {
+        sum_turns as f32 / total_sessions as f32
+    } else {
+        0.0
+    };
+
+    let depth_buckets: Vec<SessionDepthBucket> = BUCKET_DEFS
+        .iter()
+        .enumerate()
+        .map(|(i, (label, min_t, max_t))| SessionDepthBucket {
+            label: (*label).to_string(),
+            min_turns: *min_t,
+            max_turns: *max_t,
+            session_count: bucket_counts[i],
+        })
+        .collect();
+
+    let mut category_rows: Vec<SessionCategoryQualityRow> = cat_map
+        .into_iter()
+        .map(|(cat, (sc, ac, lpc, st, bc))| SessionCategoryQualityRow {
+            category: cat,
+            session_count: sc,
+            abandoned_count: ac,
+            long_pause_count: lpc,
+            avg_turns: if sc > 0 { st as f32 / sc as f32 } else { 0.0 },
+            bucket_counts: bc.to_vec(),
+        })
+        .collect();
+
+    category_rows.sort_by(|a, b| {
+        b.session_count
+            .cmp(&a.session_count)
+            .then(a.category.cmp(&b.category))
+    });
+
+    SessionQualitySummary {
+        depth_buckets,
+        category_rows,
+        total_sessions,
+        abandoned_session_count,
+        abandonment_rate,
+        long_pause_session_count,
+        avg_turns_per_session,
+        generated_at: Utc::now().to_rfc3339(),
+    }
+}
+
 pub(crate) fn query_dashboard_entrypoints(conn: &Connection) -> Result<Vec<EntrypointSummary>> {
     let mut stmt = conn.prepare(
         "SELECT s.provider, COALESCE(s.entrypoint, 'unknown') as ep,
@@ -2642,6 +2834,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
     let context_pressure = query_dashboard_context_pressure(conn);
     let agent_tree = query_dashboard_agent_tree(conn);
     let cost_forecast = crate::analytics::forecast::compute_cost_forecast(conn, &tz);
+    let session_quality = query_dashboard_session_quality(conn);
 
     // Phase 3: populate weekly_by_model — group sum_by_week rows by (week, model),
     // summing across providers so the frontend gets a single series per model/week.
@@ -2697,6 +2890,7 @@ pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardDa
         context_pressure,
         agent_tree,
         cost_forecast,
+        session_quality,
     })
 }
 
@@ -10353,6 +10547,236 @@ mod tests {
         assert!(
             (daily_project_cost_total - (N as f64 / 1e9)).abs() < 1e-9,
             "daily_by_project must not double-count subagent cost",
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Session quality distribution tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn session_quality_empty_db() {
+        let conn = test_conn();
+        let summary = query_dashboard_session_quality(&conn);
+        assert_eq!(summary.total_sessions, 0);
+        assert_eq!(summary.abandoned_session_count, 0);
+        assert_eq!(summary.long_pause_session_count, 0);
+        assert_eq!(summary.abandonment_rate, 0.0);
+        assert!(summary.category_rows.is_empty());
+    }
+
+    #[test]
+    fn session_quality_buckets_correct() {
+        use chrono::{Duration, Utc};
+        let conn = test_conn();
+        let now = Utc::now();
+        let ts = |days_ago: i64| (now - Duration::days(days_ago)).to_rfc3339();
+        // Insert sessions with turn counts hitting each bucket.
+        let counts = [1u32, 2, 4, 8, 15, 25];
+        for (i, &tc) in counts.iter().enumerate() {
+            let sid = format!("claude:sq_bucket_{i}");
+            conn.execute(
+                "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp, turn_count)
+                 VALUES (?1, 'claude', ?2, ?2, ?3)",
+                rusqlite::params![sid, ts(1), tc],
+            )
+            .unwrap();
+            // Insert one turn per session so turn_pauses CTE doesn't fail.
+            conn.execute(
+                "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos)
+                 VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000)",
+                rusqlite::params![sid, ts(1)],
+            )
+            .unwrap();
+        }
+        let summary = query_dashboard_session_quality(&conn);
+        assert_eq!(summary.total_sessions, 6);
+        let bucket_counts: Vec<u32> = summary
+            .depth_buckets
+            .iter()
+            .map(|b| b.session_count)
+            .collect();
+        assert_eq!(bucket_counts, vec![1, 1, 1, 1, 1, 1]);
+    }
+
+    #[test]
+    fn session_quality_abandonment_rate() {
+        use chrono::{Duration, Utc};
+        let conn = test_conn();
+        let now = Utc::now();
+        let ts = |days_ago: i64| (now - Duration::days(days_ago)).to_rfc3339();
+        // 4 sessions: 2 abandoned (turn_count<=2), 2 not.
+        for (i, tc) in [1u32, 2, 5, 10].iter().enumerate() {
+            let sid = format!("claude:sq_abandon_{i}");
+            conn.execute(
+                "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp, turn_count)
+                 VALUES (?1, 'claude', ?2, ?2, ?3)",
+                rusqlite::params![sid, ts(1), tc],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos)
+                 VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000)",
+                rusqlite::params![sid, ts(1)],
+            )
+            .unwrap();
+        }
+        let summary = query_dashboard_session_quality(&conn);
+        assert_eq!(summary.total_sessions, 4);
+        assert_eq!(summary.abandoned_session_count, 2);
+        assert!((summary.abandonment_rate - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn session_quality_long_pause_detection() {
+        use chrono::{Duration, Utc};
+        let conn = test_conn();
+        let now = Utc::now();
+        let ts = |mins_ago: i64| (now - Duration::minutes(mins_ago)).to_rfc3339();
+
+        // Session A: two turns 35 minutes apart — should be long-pause.
+        let sid_a = "claude:sq_long_pause_a";
+        conn.execute(
+            "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp, turn_count)
+             VALUES (?1, 'claude', ?2, ?3, 2)",
+            rusqlite::params![sid_a, ts(40), ts(5)],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos)
+             VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000)",
+            rusqlite::params![sid_a, ts(40)],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos)
+             VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000)",
+            rusqlite::params![sid_a, ts(5)],
+        )
+        .unwrap();
+
+        // Session B: two turns 5 minutes apart — should NOT be long-pause.
+        let sid_b = "claude:sq_long_pause_b";
+        conn.execute(
+            "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp, turn_count)
+             VALUES (?1, 'claude', ?2, ?3, 2)",
+            rusqlite::params![sid_b, ts(10), ts(5)],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos)
+             VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000)",
+            rusqlite::params![sid_b, ts(10)],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos)
+             VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000)",
+            rusqlite::params![sid_b, ts(5)],
+        )
+        .unwrap();
+
+        let summary = query_dashboard_session_quality(&conn);
+        assert_eq!(summary.total_sessions, 2);
+        assert_eq!(summary.long_pause_session_count, 1);
+    }
+
+    #[test]
+    fn session_quality_modal_category() {
+        use chrono::{Duration, Utc};
+        let conn = test_conn();
+        let now = Utc::now();
+        let ts = |mins_ago: i64| (now - Duration::minutes(mins_ago)).to_rfc3339();
+        let sid = "claude:sq_modal_cat";
+        conn.execute(
+            "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp, turn_count)
+             VALUES (?1, 'claude', ?2, ?2, 7)",
+            rusqlite::params![sid, ts(60)],
+        )
+        .unwrap();
+        // 5 coding turns + 2 debugging turns -> modal = coding.
+        for i in 0..5 {
+            conn.execute(
+                "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos, category)
+                 VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000, 'coding')",
+                rusqlite::params![sid, ts(60 - i)],
+            )
+            .unwrap();
+        }
+        for i in 0..2 {
+            conn.execute(
+                "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos, category)
+                 VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000, 'debugging')",
+                rusqlite::params![sid, ts(54 - i)],
+            )
+            .unwrap();
+        }
+        let summary = query_dashboard_session_quality(&conn);
+        assert_eq!(summary.total_sessions, 1);
+        assert_eq!(summary.category_rows.len(), 1);
+        assert_eq!(summary.category_rows[0].category, "coding");
+    }
+
+    #[test]
+    fn session_quality_uncategorized_fallback() {
+        use chrono::{Duration, Utc};
+        let conn = test_conn();
+        let now = Utc::now();
+        let ts = |mins_ago: i64| (now - Duration::minutes(mins_ago)).to_rfc3339();
+        let sid = "claude:sq_uncat";
+        conn.execute(
+            "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp, turn_count)
+             VALUES (?1, 'claude', ?2, ?2, 3)",
+            rusqlite::params![sid, ts(30)],
+        )
+        .unwrap();
+        // Turns with NULL category.
+        for i in 0..3 {
+            conn.execute(
+                "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos)
+                 VALUES (?1, 'claude', 'claude-3-5-sonnet', ?2, 100, 50, 1000)",
+                rusqlite::params![sid, ts(30 - i)],
+            )
+            .unwrap();
+        }
+        let summary = query_dashboard_session_quality(&conn);
+        assert_eq!(summary.total_sessions, 1);
+        assert_eq!(summary.category_rows.len(), 1);
+        assert_eq!(summary.category_rows[0].category, "uncategorized");
+    }
+
+    #[test]
+    fn session_quality_30day_cutoff() {
+        use chrono::{Duration, Utc};
+        let conn = test_conn();
+        let now = Utc::now();
+        let old_ts = (now - Duration::days(35)).to_rfc3339();
+        let new_ts = (now - Duration::days(1)).to_rfc3339();
+        // Old session (35 days ago) should be excluded.
+        conn.execute(
+            "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp, turn_count)
+             VALUES ('claude:sq_old', 'claude', ?1, ?1, 5)",
+            rusqlite::params![old_ts],
+        )
+        .unwrap();
+        // New session (1 day ago) should be included.
+        conn.execute(
+            "INSERT INTO sessions (session_id, provider, first_timestamp, last_timestamp, turn_count)
+             VALUES ('claude:sq_new', 'claude', ?1, ?1, 5)",
+            rusqlite::params![new_ts],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO turns (session_id, provider, model, timestamp, input_tokens, output_tokens, estimated_cost_nanos)
+             VALUES ('claude:sq_new', 'claude', 'claude-3-5-sonnet', ?1, 100, 50, 1000)",
+            rusqlite::params![new_ts],
+        )
+        .unwrap();
+        let summary = query_dashboard_session_quality(&conn);
+        assert_eq!(
+            summary.total_sessions,
+            1,
+            "only the recent session should be included"
         );
     }
 }

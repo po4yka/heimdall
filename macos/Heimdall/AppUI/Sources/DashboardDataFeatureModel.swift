@@ -176,17 +176,79 @@ public struct CostForecastSummary: Codable, Sendable {
     }
 }
 
+// MARK: - Session quality types
+
+public struct SessionDepthBucket: Codable, Sendable, Identifiable {
+    public let label: String
+    public let minTurns: UInt32
+    public let maxTurns: UInt32?
+    public let sessionCount: UInt32
+
+    public var id: String { label }
+
+    enum CodingKeys: String, CodingKey {
+        case label
+        case minTurns = "min_turns"
+        case maxTurns = "max_turns"
+        case sessionCount = "session_count"
+    }
+}
+
+public struct SessionCategoryQualityRow: Codable, Sendable, Identifiable {
+    public let category: String
+    public let sessionCount: UInt32
+    public let abandonedCount: UInt32
+    public let longPauseCount: UInt32
+    public let avgTurns: Float
+    public let bucketCounts: [UInt32]
+
+    public var id: String { category }
+
+    enum CodingKeys: String, CodingKey {
+        case category
+        case sessionCount = "session_count"
+        case abandonedCount = "abandoned_count"
+        case longPauseCount = "long_pause_count"
+        case avgTurns = "avg_turns"
+        case bucketCounts = "bucket_counts"
+    }
+}
+
+public struct SessionQualitySummary: Codable, Sendable {
+    public let depthBuckets: [SessionDepthBucket]
+    public let categoryRows: [SessionCategoryQualityRow]
+    public let totalSessions: UInt32
+    public let abandonedSessionCount: UInt32
+    public let abandonmentRate: Float
+    public let longPauseSessionCount: UInt32
+    public let avgTurnsPerSession: Float
+    public let generatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case depthBuckets = "depth_buckets"
+        case categoryRows = "category_rows"
+        case totalSessions = "total_sessions"
+        case abandonedSessionCount = "abandoned_session_count"
+        case abandonmentRate = "abandonment_rate"
+        case longPauseSessionCount = "long_pause_session_count"
+        case avgTurnsPerSession = "avg_turns_per_session"
+        case generatedAt = "generated_at"
+    }
+}
+
 // MARK: - Partial dashboard decode
 
 private struct DashboardDataPartial: Codable {
     let contextPressure: ContextPressureSummary?
     let agentTree: AgentTreeSummary?
     let costForecast: CostForecastSummary?
+    let sessionQuality: SessionQualitySummary?
 
     enum CodingKeys: String, CodingKey {
         case contextPressure = "context_pressure"
         case agentTree = "agent_tree"
         case costForecast = "cost_forecast"
+        case sessionQuality = "session_quality"
     }
 }
 
@@ -200,6 +262,7 @@ public final class DashboardDataFeatureModel {
     public var contextPressure: ContextPressureSummary?
     public var agentTree: AgentTreeSummary?
     public var costForecast: CostForecastSummary?
+    public var sessionQuality: SessionQualitySummary?
     public var isLoading: Bool = false
 
     public init(helperPort: Int) {
@@ -218,6 +281,7 @@ public final class DashboardDataFeatureModel {
             self.contextPressure = partial.contextPressure
             self.agentTree = partial.agentTree
             self.costForecast = partial.costForecast
+            self.sessionQuality = partial.sessionQuality
         } catch {
             // supplemental sections — silently ignore fetch failures
         }

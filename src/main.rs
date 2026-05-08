@@ -3257,6 +3257,16 @@ pub(crate) fn cmd_today(
             );
         }
     }
+    let sq = scanner::db::query_dashboard_session_quality(&conn);
+    if sq.total_sessions > 0 {
+        println!(
+            "Session quality (30d): {} sessions, {:.0}% abandoned, {} long-pause, avg {:.1} turns",
+            sq.total_sessions,
+            sq.abandonment_rate * 100.0,
+            sq.long_pause_session_count,
+            sq.avg_turns_per_session,
+        );
+    }
     println!();
     Ok(())
 }

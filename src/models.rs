@@ -313,6 +313,8 @@ pub struct DashboardData {
     pub agent_tree: AgentTreeSummary,
     #[serde(default)]
     pub cost_forecast: CostForecastSummary,
+    #[serde(default)]
+    pub session_quality: SessionQualitySummary,
 }
 
 /// One entry in the `weekly_by_model` array of `/api/data`.
@@ -355,6 +357,39 @@ pub enum CostTrend {
     Rising,
     Flat,
     Falling,
+}
+
+/// One depth bucket in the session-quality distribution.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct SessionDepthBucket {
+    pub label: String,           // "1", "2", "3-5", "6-10", "11-20", "21+"
+    pub min_turns: u32,
+    pub max_turns: Option<u32>,  // None for "21+"
+    pub session_count: u32,
+}
+
+/// Per-category row in the cross-tab quality breakdown.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct SessionCategoryQualityRow {
+    pub category: String,        // 13-category slug or "uncategorized"
+    pub session_count: u32,
+    pub abandoned_count: u32,    // sessions with turn_count <= 2
+    pub long_pause_count: u32,   // sessions with max inter-turn gap >= 30 min
+    pub avg_turns: f32,
+    pub bucket_counts: Vec<u32>, // length 6, parallel to depth_buckets order
+}
+
+/// Aggregate session quality summary for the last 30 days.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct SessionQualitySummary {
+    pub depth_buckets: Vec<SessionDepthBucket>,
+    pub category_rows: Vec<SessionCategoryQualityRow>,
+    pub total_sessions: u32,
+    pub abandoned_session_count: u32,
+    pub abandonment_rate: f32,
+    pub long_pause_session_count: u32,
+    pub avg_turns_per_session: f32,
+    pub generated_at: String,
 }
 
 /// Rolling 7/30-day burn rate and projected monthly spend via simple linear regression.

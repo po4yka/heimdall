@@ -8090,6 +8090,221 @@
     return /* @__PURE__ */ u4(CostForecastCardInner, { summary });
   }
 
+  // src/ui/components/SessionQualityCard.tsx
+  var BUCKET_LABELS = ["1", "2", "3-5", "6-10", "11-20", "21+"];
+  function pct2(f5) {
+    return (f5 * 100).toFixed(0) + "%";
+  }
+  function KpiTile3({ label, value }) {
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: label }),
+      /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px" }, children: value })
+    ] });
+  }
+  function DepthHistogram({ buckets }) {
+    if (buckets.length === 0) return null;
+    const maxCount = Math.max(...buckets.map((b4) => b4.session_count), 1);
+    return /* @__PURE__ */ u4("div", { style: { marginBottom: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "8px", fontSize: "10px" }, children: "Turn depth distribution" }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            display: "flex",
+            gap: "6px",
+            alignItems: "flex-end",
+            padding: "12px",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            height: "120px"
+          },
+          children: buckets.map((b4) => {
+            const heightPct = (b4.session_count / maxCount * 100).toFixed(1);
+            const opacity = b4.session_count > 0 ? 0.9 : 0.15;
+            return /* @__PURE__ */ u4(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "4px",
+                  flex: "1"
+                },
+                children: [
+                  /* @__PURE__ */ u4(
+                    "span",
+                    {
+                      style: {
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "9px",
+                        color: "var(--text-secondary)"
+                      },
+                      children: b4.session_count
+                    }
+                  ),
+                  /* @__PURE__ */ u4("div", { style: { width: "100%", flex: "1", display: "flex", alignItems: "flex-end" }, children: /* @__PURE__ */ u4(
+                    "div",
+                    {
+                      style: {
+                        width: "100%",
+                        height: `${heightPct}%`,
+                        background: `rgba(var(--text-primary-rgb,232,232,232),${opacity})`,
+                        borderRadius: "2px 2px 0 0",
+                        minHeight: "2px"
+                      }
+                    }
+                  ) }),
+                  /* @__PURE__ */ u4(
+                    "span",
+                    {
+                      style: {
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "9px",
+                        color: "var(--text-secondary)"
+                      },
+                      children: b4.label
+                    }
+                  )
+                ]
+              },
+              b4.label
+            );
+          })
+        }
+      )
+    ] });
+  }
+  function CategoryHeatmap({ rows: rows2 }) {
+    if (rows2.length === 0) return null;
+    const topRows = rows2.slice(0, 8);
+    return /* @__PURE__ */ u4("div", { children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "8px", fontSize: "10px" }, children: "Category \xD7 depth" }),
+      /* @__PURE__ */ u4(
+        "div",
+        {
+          style: {
+            padding: "12px",
+            border: "1px solid var(--border)",
+            borderRadius: "8px",
+            overflowX: "auto"
+          },
+          children: /* @__PURE__ */ u4(
+            "div",
+            {
+              style: {
+                display: "grid",
+                gridTemplateColumns: "120px repeat(6, 1fr)",
+                gap: "3px",
+                alignItems: "center",
+                minWidth: "360px"
+              },
+              children: [
+                /* @__PURE__ */ u4("div", {}),
+                BUCKET_LABELS.map((l5) => /* @__PURE__ */ u4(
+                  "div",
+                  {
+                    style: {
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "10px",
+                      color: "var(--text-secondary)",
+                      textAlign: "center",
+                      opacity: 0.6
+                    },
+                    children: l5
+                  },
+                  l5
+                )),
+                topRows.map((row) => {
+                  const rowTotal = Math.max(row.session_count, 1);
+                  return /* @__PURE__ */ u4(S, { children: [
+                    /* @__PURE__ */ u4(
+                      "div",
+                      {
+                        style: {
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "10px",
+                          color: "var(--text-secondary)",
+                          textAlign: "right",
+                          paddingRight: "8px",
+                          lineHeight: "20px",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis"
+                        },
+                        children: row.category
+                      },
+                      `label-${row.category}`
+                    ),
+                    row.bucket_counts.map((count2, i4) => {
+                      const intensity = count2 / rowTotal;
+                      const opacity = count2 > 0 ? Math.max(0.08, intensity * 0.9) : 0.04;
+                      return /* @__PURE__ */ u4(
+                        "div",
+                        {
+                          style: {
+                            background: `rgba(var(--text-primary-rgb,232,232,232),${opacity.toFixed(2)})`,
+                            borderRadius: "2px",
+                            height: "20px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center"
+                          },
+                          children: count2 > 0 && /* @__PURE__ */ u4(
+                            "span",
+                            {
+                              style: {
+                                fontFamily: "var(--font-mono)",
+                                fontSize: "9px",
+                                opacity: 0.8
+                              },
+                              children: count2
+                            }
+                          )
+                        },
+                        `cell-${row.category}-${i4}`
+                      );
+                    })
+                  ] });
+                })
+              ]
+            }
+          )
+        }
+      )
+    ] });
+  }
+  function SessionQualityCardInner({ summary }) {
+    return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+      /* @__PURE__ */ u4("div", { class: "stat-label", style: { marginBottom: "10px" }, children: "Session quality distribution" }),
+      /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "16px" }, children: [
+        /* @__PURE__ */ u4(KpiTile3, { label: "Sessions (30d)", value: summary.total_sessions }),
+        /* @__PURE__ */ u4(KpiTile3, { label: "Abandonment rate", value: pct2(summary.abandonment_rate) }),
+        /* @__PURE__ */ u4(KpiTile3, { label: "Long-pause sessions", value: summary.long_pause_session_count }),
+        /* @__PURE__ */ u4(KpiTile3, { label: "Avg turns / session", value: summary.avg_turns_per_session.toFixed(1) })
+      ] }),
+      /* @__PURE__ */ u4(DepthHistogram, { buckets: summary.depth_buckets }),
+      /* @__PURE__ */ u4(CategoryHeatmap, { rows: summary.category_rows })
+    ] });
+  }
+  function SessionQualityCard() {
+    const data = rawData.value;
+    if (!data) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Session quality distribution" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "loading..." })
+      ] });
+    }
+    const summary = data.session_quality;
+    if (!summary || summary.total_sessions === 0) {
+      return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
+        /* @__PURE__ */ u4("div", { class: "stat-label", children: "Session quality distribution" }),
+        /* @__PURE__ */ u4("div", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "No data available." })
+      ] });
+    }
+    return /* @__PURE__ */ u4(SessionQualityCardInner, { summary });
+  }
+
   // src/ui/components/Sidebar.tsx
   var NAV_ITEMS = [
     { key: "overview", label: "Overview", abbr: "OV" },
@@ -8860,6 +9075,20 @@
         invokeMountCallback("cost-forecast", el);
       }
     },
+    {
+      id: "session-quality-card",
+      title: "Session quality distribution",
+      description: "Turn depth histogram and category \xD7 depth heatmap for session quality analysis",
+      category: "table",
+      screens: ["tables"],
+      defaultSize: { w: 4, h: 5 },
+      minW: 2,
+      minH: 3,
+      render: (el) => {
+        el.id = "session-quality-card";
+        invokeMountCallback("session-quality-card", el);
+      }
+    },
     // ── Projects tab ──────────────────────────────────────────────────────────
     {
       id: "projects-registry",
@@ -8953,7 +9182,8 @@
   var TABLES_WIDGETS = stack([
     { id: "model-cost-mount", h: 4 },
     { id: "sessions-mount", h: 5 },
-    { id: "project-cost-mount", h: 4 }
+    { id: "project-cost-mount", h: 4 },
+    { id: "session-quality-card", h: 5 }
   ]);
   var PROJECTS_WIDGETS = stack([
     { id: "projects-registry", h: 8 }
@@ -10425,8 +10655,8 @@
             minHeight: "60px"
           },
           children: hours.map((h5) => {
-            const pct2 = h5.cost_nanos / maxCost * 100;
-            const background = h5.cost_nanos > 0 ? withAlpha("--text-display", 0.35 + pct2 / 100 * 0.55) : cssVar("--border");
+            const pct3 = h5.cost_nanos / maxCost * 100;
+            const background = h5.cost_nanos > 0 ? withAlpha("--text-display", 0.35 + pct3 / 100 * 0.55) : cssVar("--border");
             const costUsd = h5.cost_nanos / 1e9;
             const totalTokens2 = h5.input_tokens + h5.output_tokens + h5.cache_read_tokens + h5.cache_creation_tokens;
             const title = `${String(h5.hour).padStart(2, "0")}:00 \u2014 ${fmtCost(costUsd)} / ${fmt(h5.turns)} turn${h5.turns !== 1 ? "s" : ""} / ${fmt(totalTokens2)} tokens`;
@@ -10436,7 +10666,7 @@
                 title,
                 style: {
                   flex: 1,
-                  height: `${Math.max(pct2, 2)}%`,
+                  height: `${Math.max(pct3, 2)}%`,
                   background,
                   borderRadius: 0
                 }
@@ -11558,8 +11788,8 @@
     max: max2,
     label
   }) {
-    const pct2 = max2 > 0 ? value / max2 * 100 : 0;
-    const tooltip = `${value} (${pct2.toFixed(1)}% of max ${max2})`;
+    const pct3 = max2 > 0 ? value / max2 * 100 : 0;
+    const tooltip = `${value} (${pct3.toFixed(1)}% of max ${max2})`;
     return /* @__PURE__ */ u4(
       "span",
       {
@@ -11575,7 +11805,7 @@
                 top: 0,
                 left: 0,
                 bottom: 0,
-                width: `${pct2}%`,
+                width: `${pct3}%`,
                 backgroundColor: "var(--color-text-primary)",
                 opacity: 0.12,
                 pointerEvents: "none"
@@ -11642,13 +11872,13 @@
   }
 
   // src/ui/components/SegmentedProgressBar.tsx
-  function resolveStatus(pct2, status) {
+  function resolveStatus(pct3, status) {
     if (status === "neutral") return "var(--accent-interactive)";
     if (status === "success") return "var(--success)";
     if (status === "warning") return "var(--warning)";
     if (status === "accent") return "var(--accent)";
-    if (pct2 >= 90) return "var(--accent)";
-    if (pct2 >= 70) return "var(--warning)";
+    if (pct3 >= 90) return "var(--accent)";
+    if (pct3 >= 70) return "var(--warning)";
     return "var(--success)";
   }
   function SegmentedProgressBar({
@@ -11661,23 +11891,23 @@
   }) {
     const safeMax = max2 > 0 ? max2 : 1;
     const ratio = value / safeMax;
-    const pct2 = Math.min(100, Math.max(0, ratio * 100));
+    const pct3 = Math.min(100, Math.max(0, ratio * 100));
     const overflow = ratio > 1;
-    const fillColor = overflow ? "var(--accent)" : resolveStatus(pct2, status);
+    const fillColor = overflow ? "var(--accent)" : resolveStatus(pct3, status);
     return /* @__PURE__ */ u4(
       "div",
       {
         class: `segmented-bar segmented-bar--${size}`,
         role: "progressbar",
         "aria-label": ariaLabel,
-        "aria-valuenow": Math.round(pct2),
+        "aria-valuenow": Math.round(pct3),
         "aria-valuemin": 0,
         "aria-valuemax": 100,
         children: /* @__PURE__ */ u4(
           "div",
           {
             class: "segmented-bar__fill",
-            style: { width: `${pct2}%`, background: fillColor, minWidth: pct2 > 0 ? "8px" : "0" }
+            style: { width: `${pct3}%`, background: fillColor, minWidth: pct3 > 0 ? "8px" : "0" }
           }
         )
       }
@@ -12086,15 +12316,15 @@
       /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "flex-end", gap: "2px", flex: 1, minHeight: "60px" }, children: Array.from({ length: 24 }, (_4, h5) => {
         const row = data.find((d5) => d5.hour === h5);
         const turns = row?.turns ?? 0;
-        const pct2 = turns / maxTurns * 100;
-        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct2 / 100 * 0.6) : cssVar("--border");
+        const pct3 = turns / maxTurns * 100;
+        const background = turns > 0 ? withAlpha("--text-display", 0.4 + pct3 / 100 * 0.6) : cssVar("--border");
         return /* @__PURE__ */ u4(
           "div",
           {
             title: `${h5}:00 -- ${fmt(turns)} turns`,
             style: {
               flex: 1,
-              height: `${Math.max(pct2, 2)}%`,
+              height: `${Math.max(pct3, 2)}%`,
               background,
               borderRadius: 0
             }
@@ -12409,7 +12639,7 @@
   var defaultSort2 = [{ id: "cost", desc: true }];
   function CostShareBar({ value, max: max2, label }) {
     if (max2 <= 0 || value <= 0) return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
-    const pct2 = value / max2 * 100;
+    const pct3 = value / max2 * 100;
     return /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minWidth: "100px" }, children: [
       /* @__PURE__ */ u4("span", { class: "num", style: { fontSize: "var(--font-size-body)", minWidth: "52px", textAlign: "right" }, children: fmtCost(value) }),
       /* @__PURE__ */ u4(
@@ -12429,7 +12659,7 @@
             {
               style: {
                 height: "100%",
-                width: `${Math.min(100, pct2).toFixed(1)}%`,
+                width: `${Math.min(100, pct3).toFixed(1)}%`,
                 background: "var(--accent-interactive)",
                 opacity: 0.6,
                 borderRadius: "var(--radius-1)"
@@ -12502,7 +12732,7 @@
             if (!row.is_billable || totalCost <= 0) {
               return /* @__PURE__ */ u4("span", { class: "cost-na", children: "\u2014" });
             }
-            const pct2 = row.cost / totalCost * 100;
+            const pct3 = row.cost / totalCost * 100;
             return /* @__PURE__ */ u4("div", { style: { minWidth: "120px", display: "flex", alignItems: "center", gap: "8px" }, children: [
               /* @__PURE__ */ u4("div", { style: { flex: 1 }, children: /* @__PURE__ */ u4(
                 SegmentedProgressBar,
@@ -12516,7 +12746,7 @@
                 }
               ) }),
               /* @__PURE__ */ u4("span", { class: "num", style: { fontSize: "11px", color: "var(--text-secondary)", minWidth: "36px", textAlign: "right" }, children: [
-                pct2.toFixed(0),
+                pct3.toFixed(0),
                 "%"
               ] })
             ] });
@@ -12973,13 +13203,13 @@
 
   // src/ui/components/RateWindowCard.tsx
   function RateWindowCard({ label, window: window2 }) {
-    const pct2 = Math.min(100, window2.used_percent);
+    const pct3 = Math.min(100, window2.used_percent);
     const resetText = window2.resets_in_minutes != null ? `Resets in ${fmtResetTime(window2.resets_in_minutes)}` : "";
     return /* @__PURE__ */ u4(
       KpiCard,
       {
         label,
-        value: `${pct2.toFixed(1)}%`,
+        value: `${pct3.toFixed(1)}%`,
         bar: { value: window2.used_percent, max: 100, ariaLabel: `${label} usage` },
         sub: resetText || void 0
       }
@@ -13927,7 +14157,7 @@ ${row.project}` : row.project;
     if (data.context_window_size <= 0) return null;
     const used = data.total_input_tokens;
     const size = data.context_window_size;
-    const pct2 = Math.max(0, Math.min(999, (data.pct ?? used / size) * 100));
+    const pct3 = Math.max(0, Math.min(999, (data.pct ?? used / size) * 100));
     const severity = data.severity ?? "ok";
     return /* @__PURE__ */ u4("div", { class: "card stat-card", children: [
       /* @__PURE__ */ u4("div", { class: "stat-content", children: [
@@ -13944,7 +14174,7 @@ ${row.project}` : row.project;
           "of ",
           fmt(size),
           " \xB7 ",
-          pct2.toFixed(1),
+          pct3.toFixed(1),
           "%",
           " ",
           /* @__PURE__ */ u4(
@@ -14450,14 +14680,14 @@ ${row.project}` : row.project;
     if (c4.has_credits) return "Has credits";
     return "\u2014";
   }
-  function progressClass(pct2) {
-    if (pct2 >= 85) return "codex-plan-progress codex-plan-progress--high";
-    if (pct2 >= 60) return "codex-plan-progress codex-plan-progress--mid";
+  function progressClass(pct3) {
+    if (pct3 >= 85) return "codex-plan-progress codex-plan-progress--high";
+    if (pct3 >= 60) return "codex-plan-progress codex-plan-progress--mid";
     return "codex-plan-progress codex-plan-progress--low";
   }
   function CodexPlanKpi({ today }) {
-    const pct2 = Math.min(100, Math.max(0, today.primary?.used_percent ?? 0));
-    const pctText = pct2.toFixed(1) + "%";
+    const pct3 = Math.min(100, Math.max(0, today.primary?.used_percent ?? 0));
+    const pctText = pct3.toFixed(1) + "%";
     const plan = planLabel(today.plan_type);
     const credits = creditState(today);
     return /* @__PURE__ */ u4("div", { class: "card stat-card codex-plan-kpi", children: /* @__PURE__ */ u4("div", { class: "stat-content", children: [
@@ -14466,9 +14696,9 @@ ${row.project}` : row.project;
       /* @__PURE__ */ u4("div", { class: "stat-sub", children: /* @__PURE__ */ u4(
         "span",
         {
-          class: progressClass(pct2),
-          style: { width: `${pct2}%` },
-          "aria-valuenow": pct2,
+          class: progressClass(pct3),
+          style: { width: `${pct3}%` },
+          "aria-valuenow": pct3,
           "aria-valuemin": 0,
           "aria-valuemax": 100,
           role: "progressbar",
@@ -14510,17 +14740,17 @@ ${row.project}` : row.project;
         /* @__PURE__ */ u4("div", { class: "subscription-quota-section-label", children: "Published" }),
         snapshot.published.windows.length === 0 && /* @__PURE__ */ u4("div", { class: "subscription-quota-empty", children: "No active windows reported." }),
         snapshot.published.windows.map((window2) => {
-          const pct2 = Math.min(100, Math.max(0, window2.used_percent));
+          const pct3 = Math.min(100, Math.max(0, window2.used_percent));
           return /* @__PURE__ */ u4("div", { class: "subscription-quota-row", children: [
             /* @__PURE__ */ u4("div", { class: "subscription-quota-row-label", children: window2.label }),
             /* @__PURE__ */ u4("div", { class: "subscription-quota-row-value", children: [
-              pct2.toFixed(1),
+              pct3.toFixed(1),
               "%"
             ] }),
             /* @__PURE__ */ u4("div", { class: "subscription-quota-row-bar", children: /* @__PURE__ */ u4(
               SegmentedProgressBar,
               {
-                value: pct2,
+                value: pct3,
                 max: 100,
                 size: "standard",
                 "aria-label": `${window2.label} usage`
@@ -14814,7 +15044,7 @@ ${row.project}` : row.project;
         cell: ({ row }) => {
           const e4 = row.original.errors;
           if (!e4) return /* @__PURE__ */ u4("span", { class: "dim", children: "0" });
-          const pct2 = row.original.invocations > 0 ? (e4 / row.original.invocations * 100).toFixed(1) : "0";
+          const pct3 = row.original.invocations > 0 ? (e4 / row.original.invocations * 100).toFixed(1) : "0";
           const href = `/tool-errors?tool=${encodeURIComponent(row.original.tool_name)}&provider=${encodeURIComponent(row.original.provider)}&range=${selectedRange.value}`;
           return /* @__PURE__ */ u4(
             "button",
@@ -14829,7 +15059,7 @@ ${row.project}` : row.project;
               children: [
                 e4,
                 " (",
-                pct2,
+                pct3,
                 "%)"
               ]
             }
@@ -23755,6 +23985,9 @@ ${row.project}` : row.project;
     });
     registerMountCallback("cost-forecast", (el) => {
       R(/* @__PURE__ */ u4(CostForecastCard, {}), el);
+    });
+    registerMountCallback("session-quality-card", (el) => {
+      R(/* @__PURE__ */ u4(SessionQualityCard, {}), el);
     });
   }
   var backupModalMount = document.getElementById("backup-modal-mount");

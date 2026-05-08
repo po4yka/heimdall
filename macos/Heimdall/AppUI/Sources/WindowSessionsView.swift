@@ -23,6 +23,10 @@ struct WindowSessionsView: View {
                 ContextPressureSection(summary: cp)
             }
 
+            if let sq = self.dashboardData.sessionQuality, sq.totalSessions > 0 {
+                SessionQualitySection(summary: sq)
+            }
+
             SessionsRecentSection(model: self.model)
 
             SessionsModelSection(model: self.model)
@@ -209,6 +213,123 @@ private struct ContextPressureSection: View {
                     }
                 }
                 .padding(18)
+                .menuCardBackground(opacity: 0.04, cornerRadius: 16)
+            }
+        }
+    }
+}
+
+// MARK: - Session quality section
+
+private struct SessionQualitySection: View {
+    let summary: SessionQualitySummary
+
+    private let bucketLabels = ["1", "2", "3-5", "6-10", "11-20", "21+"]
+
+    private func pct(_ f: Float) -> String { String(format: "%.0f%%", f * 100) }
+    private func fmt(_ f: Float) -> String { String(format: "%.1f", f) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            WindowSectionHeader(
+                title: "Session quality",
+                subtitle: "Turn-depth distribution and abandonment over 30 days"
+            )
+
+            // KPI grid
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible()), GridItem(.flexible()),
+                    GridItem(.flexible()), GridItem(.flexible()),
+                ],
+                spacing: 12
+            ) {
+                WindowOverviewKpiTile(label: "Sessions", value: "\(summary.totalSessions)")
+                WindowOverviewKpiTile(label: "Abandoned", value: pct(summary.abandonmentRate))
+                WindowOverviewKpiTile(label: "Long-pause", value: "\(summary.longPauseSessionCount)")
+                WindowOverviewKpiTile(label: "Avg turns", value: fmt(summary.avgTurnsPerSession))
+            }
+
+            // Depth histogram
+            if !summary.depthBuckets.isEmpty {
+                let maxCount = summary.depthBuckets.map(\.sessionCount).max() ?? 1
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Turn depth")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    HStack(alignment: .bottom, spacing: 6) {
+                        ForEach(summary.depthBuckets) { bucket in
+                            VStack(spacing: 2) {
+                                Text("\(bucket.sessionCount)")
+                                    .font(.system(size: 9).monospaced())
+                                    .foregroundStyle(.secondary)
+                                let fraction = maxCount > 0
+                                    ? CGFloat(bucket.sessionCount) / CGFloat(maxCount)
+                                    : 0
+                                Rectangle()
+                                    .fill(Color.primary.opacity(bucket.sessionCount > 0
+                                        ? 0.4 + 0.5 * fraction : 0.1))
+                                    .frame(height: max(2, 60 * fraction))
+                                    .cornerRadius(2)
+                                Text(bucket.label)
+                                    .font(.system(size: 9).monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .frame(height: 80, alignment: .bottom)
+                }
+                .padding(14)
+                .menuCardBackground(opacity: 0.04, cornerRadius: 16)
+            }
+
+            // Category × bucket heatmap (top 8 categories)
+            if !summary.categoryRows.isEmpty {
+                let topRows = Array(summary.categoryRows.prefix(8))
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Category × depth")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    // Header row
+                    HStack(spacing: 0) {
+                        Text("").frame(width: 88, alignment: .leading)
+                        ForEach(bucketLabels, id: \.self) { lbl in
+                            Text(lbl)
+                                .font(.system(size: 9).monospaced())
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+
+                    ForEach(topRows) { row in
+                        HStack(spacing: 0) {
+                            Text(row.category)
+                                .font(.system(size: 9).monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .frame(width: 88, alignment: .leading)
+                            ForEach(Array(row.bucketCounts.enumerated()), id: \.offset) { _, count in
+                                let intensity = row.sessionCount > 0
+                                    ? Double(count) / Double(row.sessionCount)
+                                    : 0
+                                Rectangle()
+                                    .fill(Color.primary.opacity(count > 0
+                                        ? max(0.08, intensity * 0.85) : 0.03))
+                                    .frame(height: 16)
+                                    .cornerRadius(2)
+                                    .frame(maxWidth: .infinity)
+                                    .overlay(
+                                        Text(count > 0 ? "\(count)" : "")
+                                            .font(.system(size: 8).monospaced())
+                                            .foregroundStyle(.primary.opacity(0.7))
+                                    )
+                            }
+                        }
+                    }
+                }
+                .padding(14)
                 .menuCardBackground(opacity: 0.04, cornerRadius: 16)
             }
         }

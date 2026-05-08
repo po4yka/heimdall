@@ -95,9 +95,10 @@ const BREAKDOWNS_WIDGETS = stack([
 ]);
 
 const TABLES_WIDGETS = stack([
-  { id: 'model-cost-mount',   h: 4 },
-  { id: 'sessions-mount',     h: 5 },
-  { id: 'project-cost-mount', h: 4 },
+  { id: 'model-cost-mount',       h: 4 },
+  { id: 'sessions-mount',         h: 5 },
+  { id: 'project-cost-mount',     h: 4 },
+  { id: 'session-quality-card',   h: 5 },
 ]);
 
 const PROJECTS_WIDGETS = stack([
