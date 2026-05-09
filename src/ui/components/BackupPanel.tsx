@@ -50,10 +50,10 @@ export function BackupPanel({ onSnapshot, onReload }: BackupPanelProps) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>SNAPSHOT</th>
-              <th>CREATED</th>
-              <th>FILES</th>
-              <th>BYTES</th>
+              <th>Snapshot</th>
+              <th>Created</th>
+              <th>Files</th>
+              <th>Bytes</th>
             </tr>
           </thead>
           <tbody>

@@ -6,7 +6,7 @@ import { DataTable } from '../tables/DataTable';
 const columns: ColumnDef<AgentRoleAggregate, unknown>[] = [
   {
     accessorKey: 'role',
-    header: 'ROLE',
+    header: 'Role',
     cell: ({ row }) => {
       const agg = row.original;
       const display = agg.display_name ?? agg.role;
@@ -15,22 +15,22 @@ const columns: ColumnDef<AgentRoleAggregate, unknown>[] = [
   },
   {
     accessorKey: 'sessions',
-    header: 'SESSIONS',
+    header: 'Sessions',
     cell: ({ getValue }) => <span class="num">{Number(getValue() ?? 0).toLocaleString()}</span>,
   },
   {
     accessorKey: 'total_tokens',
-    header: 'TOKENS',
+    header: 'Tokens',
     cell: ({ getValue }) => <span class="num">{fmt(getValue() as number)}</span>,
   },
   {
     accessorKey: 'cost_usd',
-    header: 'COST',
+    header: 'Cost',
     cell: ({ getValue }) => <span class="num">{fmtCostBig(getValue() as number)}</span>,
   },
   {
     accessorKey: 'tool_uses',
-    header: 'TOOL USES',
+    header: 'Tool uses',
     cell: ({ getValue }) => <span class="num">{Number(getValue() ?? 0).toLocaleString()}</span>,
   },
 ];

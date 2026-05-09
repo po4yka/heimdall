@@ -92,11 +92,11 @@ function ScopeSection({ scope }: { scope: SkillScope }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8px', fontSize: '11px' }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>NAME</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>DISK</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TOK</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>LAST USED</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>STATUS</th>
+              <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Name</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Disk</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Tok</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Last used</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Status</th>
             </tr>
           </thead>
           <tbody>

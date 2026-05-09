@@ -114,12 +114,12 @@ function ScopeSection({ scope }: { scope: InstructionScope }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8px', fontSize: '11px' }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PATH</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>BYTES</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TOK</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>LINES</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>MODIFIED</th>
-              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>STATUS</th>
+              <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Path</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Bytes</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Tok</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Lines</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Modified</th>
+              <th style={{ textAlign: 'right', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Status</th>
             </tr>
           </thead>
           <tbody>

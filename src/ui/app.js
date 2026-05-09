@@ -1525,10 +1525,10 @@
       snapshots.length === 0 && state === "idle" && /* @__PURE__ */ u4("p", { class: "backup-panel-empty", children: 'No snapshots yet \u2014 click "Snapshot now" to create one.' }),
       snapshots.length > 0 && /* @__PURE__ */ u4("table", { class: "data-table", children: [
         /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
-          /* @__PURE__ */ u4("th", { children: "SNAPSHOT" }),
-          /* @__PURE__ */ u4("th", { children: "CREATED" }),
-          /* @__PURE__ */ u4("th", { children: "FILES" }),
-          /* @__PURE__ */ u4("th", { children: "BYTES" })
+          /* @__PURE__ */ u4("th", { children: "Snapshot" }),
+          /* @__PURE__ */ u4("th", { children: "Created" }),
+          /* @__PURE__ */ u4("th", { children: "Files" }),
+          /* @__PURE__ */ u4("th", { children: "Bytes" })
         ] }) }),
         /* @__PURE__ */ u4("tbody", { children: snapshots.map((s4) => /* @__PURE__ */ u4("tr", { children: [
           /* @__PURE__ */ u4("td", { children: esc(s4.snapshot_id) }),
@@ -3408,13 +3408,13 @@
           /* @__PURE__ */ u4("div", { style: { padding: "0 20px 8px" }, children: /* @__PURE__ */ u4(InlineStatus, { placement: "agent-registry", inline: true }) }),
           loading ? /* @__PURE__ */ u4("div", { style: { padding: "var(--space-4)" }, children: /* @__PURE__ */ u4(TableSkeleton, { rows: 4, columns: 3 }) }) : allRoles.length === 0 ? /* @__PURE__ */ u4("div", { class: "empty-state", style: { margin: "20px" }, children: "No agent roles detected for this project" }) : /* @__PURE__ */ u4("div", { class: "agent-registry-table-wrap", children: /* @__PURE__ */ u4("table", { class: "agent-registry-table", children: [
             /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
-              /* @__PURE__ */ u4("th", { children: "ROLE" }),
-              /* @__PURE__ */ u4("th", { children: "DISPLAY NAME" }),
-              /* @__PURE__ */ u4("th", { children: "DESCRIPTION" }),
-              /* @__PURE__ */ u4("th", { children: "ENABLED" }),
-              /* @__PURE__ */ u4("th", { children: "MERGED INTO" }),
-              /* @__PURE__ */ u4("th", { children: "CONFIDENCE" }),
-              /* @__PURE__ */ u4("th", { children: "ACTIONS" })
+              /* @__PURE__ */ u4("th", { children: "Role" }),
+              /* @__PURE__ */ u4("th", { children: "Display name" }),
+              /* @__PURE__ */ u4("th", { children: "Description" }),
+              /* @__PURE__ */ u4("th", { children: "Enabled" }),
+              /* @__PURE__ */ u4("th", { children: "Merged into" }),
+              /* @__PURE__ */ u4("th", { children: "Confidence" }),
+              /* @__PURE__ */ u4("th", { children: "Actions" })
             ] }) }),
             /* @__PURE__ */ u4("tbody", { children: allRoles.map((rawRole) => {
               const state = rowStates[rawRole] ?? initialRowState(void 0);
@@ -6928,11 +6928,11 @@
       ),
       open && scope.skills.length > 0 && /* @__PURE__ */ u4("table", { style: { width: "100%", borderCollapse: "collapse", marginTop: "8px", fontSize: "11px" }, children: [
         /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
-          /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "NAME" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "DISK" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "TOK" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "LAST USED" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "STATUS" })
+          /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Name" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Disk" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Tok" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Last used" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Status" })
         ] }) }),
         /* @__PURE__ */ u4("tbody", { children: scope.skills.map((s4) => /* @__PURE__ */ u4("tr", { title: s4.description ?? void 0, children: [
           /* @__PURE__ */ u4("td", { style: { padding: "2px 4px", fontFamily: "var(--font-mono)" }, children: [
@@ -7253,12 +7253,12 @@
       ),
       open && scope.files.length > 0 && /* @__PURE__ */ u4("table", { style: { width: "100%", borderCollapse: "collapse", marginTop: "8px", fontSize: "11px" }, children: [
         /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
-          /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "PATH" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "BYTES" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "TOK" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "LINES" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "MODIFIED" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "STATUS" })
+          /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Path" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Bytes" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Tok" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Lines" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Modified" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Status" })
         ] }) }),
         /* @__PURE__ */ u4("tbody", { children: scope.files.map((f5) => /* @__PURE__ */ u4("tr", { children: [
           /* @__PURE__ */ u4("td", { style: { padding: "2px 4px", fontFamily: "var(--font-mono)", wordBreak: "break-all" }, children: [
@@ -7522,8 +7522,8 @@
               /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "10px", display: "block", marginBottom: "4px" }, children: "Environment" }),
               /* @__PURE__ */ u4("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: "10px" }, children: [
                 /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
-                  /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em", width: "40%" }, children: "KEY" }),
-                  /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", textTransform: "uppercase", letterSpacing: "0.05em" }, children: "VALUE" })
+                  /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em", width: "40%" }, children: "Key" }),
+                  /* @__PURE__ */ u4("th", { style: { textAlign: "left", padding: "2px 4px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontWeight: "normal", letterSpacing: "0.05em" }, children: "Value" })
                 ] }) }),
                 /* @__PURE__ */ u4("tbody", { children: envKeys.map((key) => {
                   const val = server.env[key];
@@ -11394,7 +11394,7 @@
   var columns = [
     {
       accessorKey: "role",
-      header: "ROLE",
+      header: "Role",
       cell: ({ row }) => {
         const agg = row.original;
         const display = agg.display_name ?? agg.role;
@@ -11403,22 +11403,22 @@
     },
     {
       accessorKey: "sessions",
-      header: "SESSIONS",
+      header: "Sessions",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0).toLocaleString() })
     },
     {
       accessorKey: "total_tokens",
-      header: "TOKENS",
+      header: "Tokens",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
     },
     {
       accessorKey: "cost_usd",
-      header: "COST",
+      header: "Cost",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtCostBig(getValue()) })
     },
     {
       accessorKey: "tool_uses",
-      header: "TOOL USES",
+      header: "Tool uses",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0).toLocaleString() })
     }
   ];
@@ -11568,22 +11568,22 @@
   var columns2 = [
     {
       accessorKey: "spawned_at",
-      header: "SPAWNED",
+      header: "Spawned",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", title: String(getValue() ?? ""), children: fmtRelativeTime(String(getValue() ?? "")) })
     },
     {
       accessorKey: "project",
-      header: "PROJECT",
+      header: "Project",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { children: esc(String(getValue() ?? "")) })
     },
     {
       accessorKey: "size",
-      header: "SIZE",
+      header: "Size",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
     },
     {
       accessorKey: "roles",
-      header: "ROLES",
+      header: "Roles",
       cell: ({ getValue }) => {
         const roles = getValue();
         const sorted = [...roles].sort();
@@ -11594,12 +11594,12 @@
     },
     {
       accessorKey: "total_tokens",
-      header: "TOKENS",
+      header: "Tokens",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
     },
     {
       accessorKey: "cost_usd",
-      header: "COST",
+      header: "Cost",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtCostBig(getValue()) })
     }
   ];
@@ -11869,17 +11869,17 @@
   var columns3 = [
     {
       accessorKey: "ts_start",
-      header: "STARTED",
+      header: "Started",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", title: String(getValue() ?? ""), children: fmtRelativeTime(String(getValue() ?? "")) })
     },
     {
       accessorKey: "role",
-      header: "ROLE",
+      header: "Role",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { children: esc(String(getValue() ?? "")) })
     },
     {
       accessorKey: "description",
-      header: "DESCRIPTION",
+      header: "Description",
       cell: ({ getValue }) => {
         const raw = String(getValue() ?? "");
         const truncated = raw.length > 60 ? raw.slice(0, 60) + "\u2026" : raw;
@@ -11888,27 +11888,27 @@
     },
     {
       accessorKey: "model",
-      header: "MODEL",
+      header: "Model",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: esc(String(getValue() ?? "")) })
     },
     {
       accessorKey: "duration_s",
-      header: "DURATION",
+      header: "Duration",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtDuration(getValue()) })
     },
     {
       accessorKey: "total_tokens",
-      header: "TOKENS",
+      header: "Tokens",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(getValue()) })
     },
     {
       accessorKey: "cost_usd",
-      header: "COST",
+      header: "Cost",
       cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmtCostBig(getValue()) })
     },
     {
       accessorKey: "stop_reason",
-      header: "STOP",
+      header: "Stop",
       cell: ({ getValue }) => /* @__PURE__ */ u4(StopReasonBadge, { reason: getValue() })
     }
   ];
@@ -12572,9 +12572,9 @@
       ] }),
       data.breakdown && data.breakdown.length > 0 && /* @__PURE__ */ u4("div", { style: { overflowX: "auto" }, children: /* @__PURE__ */ u4("table", { children: [
         /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
-          /* @__PURE__ */ u4("th", { children: "DAY" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right" }, children: "HOOK" }),
-          /* @__PURE__ */ u4("th", { style: { textAlign: "right" }, children: "LOCAL" }),
+          /* @__PURE__ */ u4("th", { children: "Day" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right" }, children: "Hook" }),
+          /* @__PURE__ */ u4("th", { style: { textAlign: "right" }, children: "Local" }),
           /* @__PURE__ */ u4("th", { style: { textAlign: "right" }, children: "\u0394" })
         ] }) }),
         /* @__PURE__ */ u4("tbody", { children: data.breakdown.slice().reverse().slice(0, 30).map((r4) => {

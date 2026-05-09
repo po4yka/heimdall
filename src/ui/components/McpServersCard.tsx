@@ -231,8 +231,8 @@ function ServerRow({ server }: { server: McpServerEntry }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em', width: '40%' }}>KEY</th>
-                    <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', textTransform: 'uppercase', letterSpacing: '0.05em' }}>VALUE</th>
+                    <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em', width: '40%' }}>Key</th>
+                    <th style={{ textAlign: 'left', padding: '2px 4px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: 'normal', letterSpacing: '0.05em' }}>Value</th>
                   </tr>
                 </thead>
                 <tbody>

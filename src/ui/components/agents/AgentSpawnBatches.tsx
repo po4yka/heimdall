@@ -6,7 +6,7 @@ import { DataTable } from '../tables/DataTable';
 const columns: ColumnDef<SpawnBatch, unknown>[] = [
   {
     accessorKey: 'spawned_at',
-    header: 'SPAWNED',
+    header: 'Spawned',
     cell: ({ getValue }) => (
       <span class="num" title={String(getValue() ?? '')}>
         {fmtRelativeTime(String(getValue() ?? ''))}
@@ -15,19 +15,19 @@ const columns: ColumnDef<SpawnBatch, unknown>[] = [
   },
   {
     accessorKey: 'project',
-    header: 'PROJECT',
+    header: 'Project',
     cell: ({ getValue }) => <span>{esc(String(getValue() ?? ''))}</span>,
   },
   {
     accessorKey: 'size',
-    header: 'SIZE',
+    header: 'Size',
     cell: ({ getValue }) => (
       <span class="num">{Number(getValue() ?? 0)}</span>
     ),
   },
   {
     accessorKey: 'roles',
-    header: 'ROLES',
+    header: 'Roles',
     cell: ({ getValue }) => {
       const roles = getValue() as string[];
       const sorted = [...roles].sort();
@@ -38,12 +38,12 @@ const columns: ColumnDef<SpawnBatch, unknown>[] = [
   },
   {
     accessorKey: 'total_tokens',
-    header: 'TOKENS',
+    header: 'Tokens',
     cell: ({ getValue }) => <span class="num">{fmt(getValue() as number)}</span>,
   },
   {
     accessorKey: 'cost_usd',
-    header: 'COST',
+    header: 'Cost',
     cell: ({ getValue }) => <span class="num">{fmtCostBig(getValue() as number)}</span>,
   },
 ];

@@ -100,9 +100,9 @@ export function CostReconciliationPanel({ data }: Props) {
           <table>
             <thead>
               <tr>
-                <th>DAY</th>
-                <th style={{ textAlign: 'right' as const }}>HOOK</th>
-                <th style={{ textAlign: 'right' as const }}>LOCAL</th>
+                <th>Day</th>
+                <th style={{ textAlign: 'right' as const }}>Hook</th>
+                <th style={{ textAlign: 'right' as const }}>Local</th>
                 <th style={{ textAlign: 'right' as const }}>&Delta;</th>
               </tr>
             </thead>

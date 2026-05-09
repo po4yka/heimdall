@@ -22,7 +22,7 @@ function StopReasonBadge({ reason }: { reason: string | null }) {
 const columns: ColumnDef<AgentSessionRow, unknown>[] = [
   {
     accessorKey: 'ts_start',
-    header: 'STARTED',
+    header: 'Started',
     cell: ({ getValue }) => (
       <span class="num" title={String(getValue() ?? '')}>
         {fmtRelativeTime(String(getValue() ?? ''))}
@@ -31,12 +31,12 @@ const columns: ColumnDef<AgentSessionRow, unknown>[] = [
   },
   {
     accessorKey: 'role',
-    header: 'ROLE',
+    header: 'Role',
     cell: ({ getValue }) => <span>{esc(String(getValue() ?? ''))}</span>,
   },
   {
     accessorKey: 'description',
-    header: 'DESCRIPTION',
+    header: 'Description',
     cell: ({ getValue }) => {
       const raw = String(getValue() ?? '');
       const truncated = raw.length > 60 ? raw.slice(0, 60) + '…' : raw;
@@ -45,29 +45,29 @@ const columns: ColumnDef<AgentSessionRow, unknown>[] = [
   },
   {
     accessorKey: 'model',
-    header: 'MODEL',
+    header: 'Model',
     cell: ({ getValue }) => <span class="model-tag">{esc(String(getValue() ?? ''))}</span>,
   },
   {
     accessorKey: 'duration_s',
-    header: 'DURATION',
+    header: 'Duration',
     cell: ({ getValue }) => (
       <span class="num">{fmtDuration(getValue() as number)}</span>
     ),
   },
   {
     accessorKey: 'total_tokens',
-    header: 'TOKENS',
+    header: 'Tokens',
     cell: ({ getValue }) => <span class="num">{fmt(getValue() as number)}</span>,
   },
   {
     accessorKey: 'cost_usd',
-    header: 'COST',
+    header: 'Cost',
     cell: ({ getValue }) => <span class="num">{fmtCostBig(getValue() as number)}</span>,
   },
   {
     accessorKey: 'stop_reason',
-    header: 'STOP',
+    header: 'Stop',
     cell: ({ getValue }) => <StopReasonBadge reason={getValue() as string | null} />,
   },
 ];

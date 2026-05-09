@@ -164,13 +164,13 @@ export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegist
             <table class="agent-registry-table">
               <thead>
                 <tr>
-                  <th>ROLE</th>
-                  <th>DISPLAY NAME</th>
-                  <th>DESCRIPTION</th>
-                  <th>ENABLED</th>
-                  <th>MERGED INTO</th>
-                  <th>CONFIDENCE</th>
-                  <th>ACTIONS</th>
+                  <th>Role</th>
+                  <th>Display name</th>
+                  <th>Description</th>
+                  <th>Enabled</th>
+                  <th>Merged into</th>
+                  <th>Confidence</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
