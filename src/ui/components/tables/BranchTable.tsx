@@ -1,5 +1,5 @@
 import { type ColumnDef } from '@tanstack/table-core';
-import { fmt, fmtCost } from '../../lib/format';
+import { fmt, fmtCost, fmtLabel } from '../../lib/format';
 import type { BranchSummary } from '../../state/types';
 import { InlineRankBar } from '../shared/InlineRankBar';
 import { DataTable } from './DataTable';
@@ -8,7 +8,7 @@ function makeColumns(data: BranchSummary[]): ColumnDef<BranchSummary, unknown>[]
   const maxSessions = data.reduce((m, r) => Math.max(m, r.sessions), 0);
   return [
     { accessorKey: 'provider', header: 'Provider',
-      cell: ({ getValue }) => <span class="model-tag">{String(getValue()).toUpperCase()}</span> },
+      cell: ({ getValue }) => <span class="model-tag">{fmtLabel(String(getValue()))}</span> },
     { accessorKey: 'branch', header: 'Branch',
       cell: ({ getValue }) => <span class="model-tag">{String(getValue())}</span> },
     { accessorKey: 'sessions', header: 'Sessions',

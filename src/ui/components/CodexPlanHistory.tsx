@@ -34,7 +34,7 @@ function buildOptions(history: CodexPlanDailyRow[]): ApexOptions | null {
 
   // Stacked bar series: one per plan type.
   const barSeries = plans.map((plan, i) => {
-    const opacity = OPACITY_LADDER[i % OPACITY_LADDER.length];
+    const opacity = OPACITY_LADDER[i % OPACITY_LADDER.length] ?? 1.0;
     return {
       name: plan.charAt(0).toUpperCase() + plan.slice(1),
       type: 'bar' as const,

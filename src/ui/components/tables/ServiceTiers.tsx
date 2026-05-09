@@ -5,7 +5,7 @@ import { DataTable } from './DataTable';
 
 const columns: ColumnDef<ServiceTierSummary, unknown>[] = [
   { accessorKey: 'provider', header: 'Provider',
-    cell: ({ getValue }) => <span class="model-tag">{String(getValue()).toUpperCase()}</span> },
+    cell: ({ getValue }) => <span class="model-tag">{fmtLabel(String(getValue()))}</span> },
   { accessorKey: 'service_tier', header: 'Tier',
     cell: ({ getValue }) => <span>{fmtLabel(getValue() as string)}</span> },
   { accessorKey: 'inference_geo', header: 'Region',

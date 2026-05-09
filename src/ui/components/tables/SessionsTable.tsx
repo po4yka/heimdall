@@ -106,7 +106,7 @@ function useSessionColumns(
         header: 'Provider',
         enableSorting: false,
         cell: (info: CellContext<SessionRow, unknown>) => (
-          <span class="model-tag">{String(info.getValue()).toUpperCase()}</span>
+          <span class="model-tag">{fmtLabel(String(info.getValue()))}</span>
         ),
       },
       {

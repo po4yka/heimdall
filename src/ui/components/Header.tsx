@@ -35,7 +35,7 @@ export function Header({
   useSignalEffect(() => {
     const themeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (!themeColorMeta) return;
-    themeColorMeta.setAttribute('content', themeMode.value === 'light' ? '#F5F5F5' : '#000000');
+    themeColorMeta.setAttribute('content', themeMode.value === 'light' ? '#F5F5F5' : '#0A0A0A');
   });
 
   useEffect(() => {

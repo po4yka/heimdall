@@ -1,5 +1,5 @@
 import { type ColumnDef } from '@tanstack/table-core';
-import { fmt } from '../../lib/format';
+import { fmt, fmtLabel } from '../../lib/format';
 import { selectedRange } from '../../state/store';
 import type { ToolSummary } from '../../state/types';
 import { InlineRankBar } from '../shared/InlineRankBar';
@@ -9,7 +9,7 @@ function makeColumns(data: ToolSummary[]): ColumnDef<ToolSummary, unknown>[] {
   const maxInvocations = data.reduce((m, r) => Math.max(m, r.invocations), 0);
   return [
     { accessorKey: 'provider', header: 'Provider',
-      cell: ({ getValue }) => <span class="model-tag">{String(getValue()).toUpperCase()}</span> },
+      cell: ({ getValue }) => <span class="model-tag">{fmtLabel(String(getValue()))}</span> },
     { accessorKey: 'tool_name', header: 'Tool',
       cell: ({ row }) => {
         const cat = row.original.category;

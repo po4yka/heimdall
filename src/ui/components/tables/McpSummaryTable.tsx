@@ -1,5 +1,5 @@
 import { type ColumnDef } from '@tanstack/table-core';
-import { fmt } from '../../lib/format';
+import { fmt, fmtLabel } from '../../lib/format';
 import type { McpServerSummary } from '../../state/types';
 import { InlineRankBar } from '../shared/InlineRankBar';
 import { DataTable } from './DataTable';
@@ -8,7 +8,7 @@ function makeColumns(data: McpServerSummary[]): ColumnDef<McpServerSummary, unkn
   const maxInvocations = data.reduce((m, r) => Math.max(m, r.invocations), 0);
   return [
     { accessorKey: 'provider', header: 'Provider',
-      cell: ({ getValue }) => <span class="model-tag">{String(getValue()).toUpperCase()}</span> },
+      cell: ({ getValue }) => <span class="model-tag">{fmtLabel(String(getValue()))}</span> },
     { accessorKey: 'server', header: 'MCP Server',
       cell: ({ getValue }) => <span class="model-tag mcp">{String(getValue())}</span> },
     { accessorKey: 'tools_used', header: 'Tools',

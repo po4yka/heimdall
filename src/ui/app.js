@@ -3467,7 +3467,7 @@
                 /* @__PURE__ */ u4("td", { children: [
                   /* @__PURE__ */ u4("span", { class: `confidence-badge ${confidence}`, children: [
                     "[",
-                    confidence.toUpperCase(),
+                    fmtLabel(confidence),
                     "]"
                   ] }),
                   sessionCount > 0 && /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "10px", marginLeft: "6px" }, children: [
@@ -10603,7 +10603,7 @@
     useSignalEffect(() => {
       const themeColorMeta = document.querySelector('meta[name="theme-color"]');
       if (!themeColorMeta) return;
-      themeColorMeta.setAttribute("content", themeMode.value === "light" ? "#F5F5F5" : "#000000");
+      themeColorMeta.setAttribute("content", themeMode.value === "light" ? "#F5F5F5" : "#0A0A0A");
     });
     y2(() => {
       if (!headerRef.current) return;
@@ -12282,7 +12282,7 @@
       {
         accessorKey: "provider",
         header: "Provider",
-        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: fmtLabel(String(getValue())) })
       },
       {
         accessorKey: "branch",
@@ -12641,7 +12641,7 @@
     {
       accessorKey: "provider",
       header: "Provider",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: fmtLabel(String(getValue())) })
     },
     {
       accessorKey: "entrypoint",
@@ -12811,7 +12811,7 @@
       {
         accessorKey: "provider",
         header: "Provider",
-        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: fmtLabel(String(getValue())) })
       },
       {
         accessorKey: "server",
@@ -13933,7 +13933,7 @@
     {
       accessorKey: "provider",
       header: "Provider",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: fmtLabel(String(getValue())) })
     },
     {
       accessorKey: "service_tier",
@@ -14019,7 +14019,7 @@ ${row.project}` : row.project;
           accessorKey: "provider",
           header: "Provider",
           enableSorting: false,
-          cell: (info) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(info.getValue()).toUpperCase() })
+          cell: (info) => /* @__PURE__ */ u4("span", { class: "model-tag", children: fmtLabel(String(info.getValue())) })
         },
         {
           id: "last",
@@ -14995,7 +14995,7 @@ ${row.project}` : row.project;
     const plans = Array.from(planSet).sort();
     const categories = rows2.map((r4) => r4.day);
     const barSeries = plans.map((plan, i4) => {
-      const opacity = OPACITY_LADDER[i4 % OPACITY_LADDER.length];
+      const opacity = OPACITY_LADDER[i4 % OPACITY_LADDER.length] ?? 1;
       return {
         name: plan.charAt(0).toUpperCase() + plan.slice(1),
         type: "bar",
@@ -15445,7 +15445,7 @@ ${row.project}` : row.project;
       {
         accessorKey: "provider",
         header: "Provider",
-        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: fmtLabel(String(getValue())) })
       },
       {
         accessorKey: "tool_name",
@@ -15583,7 +15583,7 @@ ${row.project}` : row.project;
     {
       accessorKey: "provider",
       header: "Provider",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: String(getValue()).toUpperCase() })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "model-tag", children: fmtLabel(String(getValue())) })
     },
     {
       accessorKey: "version",

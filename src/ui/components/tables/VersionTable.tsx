@@ -1,11 +1,11 @@
 import { type ColumnDef } from '@tanstack/table-core';
-import { fmt } from '../../lib/format';
+import { fmt, fmtLabel } from '../../lib/format';
 import type { VersionSummary } from '../../state/types';
 import { DataTable } from './DataTable';
 
 const columns: ColumnDef<VersionSummary, unknown>[] = [
   { accessorKey: 'provider', header: 'Provider',
-    cell: ({ getValue }) => <span class="model-tag">{String(getValue()).toUpperCase()}</span> },
+    cell: ({ getValue }) => <span class="model-tag">{fmtLabel(String(getValue()))}</span> },
   { accessorKey: 'version', header: 'Version',
     cell: ({ getValue }) => <span class="model-tag">{String(getValue())}</span> },
   { accessorKey: 'turns', header: 'Turns',

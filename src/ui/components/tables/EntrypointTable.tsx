@@ -1,11 +1,11 @@
 import { type ColumnDef } from '@tanstack/table-core';
-import { fmt } from '../../lib/format';
+import { fmt, fmtLabel } from '../../lib/format';
 import type { EntrypointSummary } from '../../state/types';
 import { DataTable } from './DataTable';
 
 const columns: ColumnDef<EntrypointSummary, unknown>[] = [
   { accessorKey: 'provider', header: 'Provider',
-    cell: ({ getValue }) => <span class="model-tag">{String(getValue()).toUpperCase()}</span> },
+    cell: ({ getValue }) => <span class="model-tag">{fmtLabel(String(getValue()))}</span> },
   { accessorKey: 'entrypoint', header: 'Entrypoint',
     cell: ({ getValue }) => <span class="model-tag">{String(getValue())}</span> },
   { accessorKey: 'sessions', header: 'Sessions',
