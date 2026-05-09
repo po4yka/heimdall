@@ -194,7 +194,7 @@ export interface ApexOptions {
       };
     }>;
   };
-  markers?: { size?: number; strokeWidth?: number; hover?: { size?: number } };
+  markers?: { size?: number | number[]; strokeWidth?: number; hover?: { size?: number } };
 }
 
 export interface ApexChartInstance {

@@ -15290,7 +15290,10 @@ ${row.project}` : row.project;
     codex_primary: "Codex \xB7 primary",
     codex_secondary: "Codex \xB7 secondary"
   };
-  var DASH_LADDER = [0, 3, 6, 9, 12, 15];
+  var OPACITY_LADDER2 = [1, 0.68, 0.46, 0.3, 0.2, 0.14];
+  var DASH_LADDER = [0, 4, 8, 4, 8, 12];
+  var WIDTH_LADDER = [2.5, 2, 2, 1.5, 1.5, 1.5];
+  var MARKER_LADDER = [4, 3, 3, 2, 2, 2];
   function inferProvider(windowType) {
     return windowType.startsWith("codex_") ? "codex" : "claude";
   }
@@ -15319,10 +15322,18 @@ ${row.project}` : row.project;
       name: WINDOW_LABELS[key] ?? key,
       data: (seriesMap.get(key) ?? []).sort((a4, b4) => a4.x - b4.x)
     }));
+    const seriesColors = seriesKeys.map(
+      (_4, i4) => withAlpha("--text-display", OPACITY_LADDER2[i4 % OPACITY_LADDER2.length] ?? 1)
+    );
     const dashArray = seriesKeys.map(
       (_4, i4) => DASH_LADDER[i4 % DASH_LADDER.length] ?? 0
     );
-    const textPrimary = resolveCssVar("--text-primary", CHART_CSS_FALLBACKS["--text-primary"]);
+    const strokeWidths = seriesKeys.map(
+      (_4, i4) => WIDTH_LADDER[i4 % WIDTH_LADDER.length] ?? 2
+    );
+    const markerSizes = seriesKeys.map(
+      (_4, i4) => MARKER_LADDER[i4 % MARKER_LADDER.length] ?? 3
+    );
     const textSecondary = resolveCssVar("--text-secondary", CHART_CSS_FALLBACKS["--text-secondary"]);
     const borderColor = resolveCssVar("--border", CHART_CSS_FALLBACKS["--border"]);
     const annotationsX = changelog.filter((entry) => provider === "all" || entry.provider === provider).map((entry) => ({
@@ -15350,9 +15361,9 @@ ${row.project}` : row.project;
       // via transparent background + CSS-variable colours, so it works in both
       // light and dark dashboard themes.
       series,
-      colors: series.map(() => textPrimary),
+      colors: seriesColors,
       stroke: {
-        width: 2,
+        width: strokeWidths,
         curve: "smooth",
         dashArray
       },
@@ -15365,7 +15376,7 @@ ${row.project}` : row.project;
       },
       legend: {
         position: "top",
-        labels: { colors: textPrimary, fontFamily: "var(--font-mono)" },
+        labels: { colors: textSecondary, fontFamily: "var(--font-mono)" },
         itemMargin: { horizontal: 12, vertical: 4 },
         markers: { width: 20, height: 2, radius: 0 }
       },
@@ -15397,10 +15408,10 @@ ${row.project}` : row.project;
           formatter: (val) => Number.isFinite(val) ? `${val.toLocaleString("en-US")} tokens` : "\u2014"
         }
       },
-      // Show data points as small markers — line strokes can't render with a
-      // single observation per series (which is the common case for users with
-      // only a few days of local history).
-      markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
+      // Per-series marker sizes reinforce the opacity ladder: prominent series
+      // get larger dots, faint series get smaller ones. This ensures a single
+      // observation (common for short history) is still visible per series.
+      markers: { size: markerSizes, strokeWidth: 0, hover: { size: 6 } },
       dataLabels: { enabled: false }
     };
     if (annotationsX.length > 0) {

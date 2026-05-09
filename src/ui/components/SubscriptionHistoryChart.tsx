@@ -6,7 +6,7 @@ import type {
 import type { ApexOptions } from '../lib/apex';
 import { ApexChart } from './charts/ApexChart';
 import { resolveCssVar } from '../lib/colors';
-import { CHART_CSS_FALLBACKS } from '../lib/charts';
+import { CHART_CSS_FALLBACKS, withAlpha } from '../lib/charts';
 
 interface Props {
   history: RateWindowHistoryRow[];
@@ -25,10 +25,14 @@ const WINDOW_LABELS: Record<string, string> = {
 };
 
 // Monochrome category differentiation per industrial-design skill: never
-// colour-encode series. ApexCharts can't accept rgba() expressions with CSS
-// vars at runtime, so we differentiate via `stroke.dashArray` patterns
-// instead — solid, short, medium, long — cycling through the 6 series.
-const DASH_LADDER = [0, 3, 6, 9, 12, 15];
+// colour-encode series. Three visual dimensions in combination — opacity,
+// dash pattern, and stroke weight — make 6 series distinguishable even when
+// dense. ApexCharts can't resolve var() in SVG fill attributes, so we bake
+// rgba() from the resolved --text-display token at build time via withAlpha.
+const OPACITY_LADDER = [1.0, 0.68, 0.46, 0.30, 0.20, 0.14];
+const DASH_LADDER    = [0, 4, 8, 4, 8, 12];
+const WIDTH_LADDER   = [2.5, 2.0, 2.0, 1.5, 1.5, 1.5];
+const MARKER_LADDER  = [4, 3, 3, 2, 2, 2];
 
 function inferProvider(windowType: string): 'claude' | 'codex' {
   return windowType.startsWith('codex_') ? 'codex' : 'claude';
@@ -66,14 +70,22 @@ function buildOptions(
     name: WINDOW_LABELS[key] ?? key,
     data: (seriesMap.get(key) ?? []).sort((a, b) => a.x - b.x),
   }));
+  const seriesColors = seriesKeys.map(
+    (_, i) => withAlpha('--text-display', OPACITY_LADDER[i % OPACITY_LADDER.length] ?? 1.0),
+  );
   const dashArray = seriesKeys.map(
     (_, i) => DASH_LADDER[i % DASH_LADDER.length] ?? 0,
+  );
+  const strokeWidths = seriesKeys.map(
+    (_, i) => WIDTH_LADDER[i % WIDTH_LADDER.length] ?? 2,
+  );
+  const markerSizes = seriesKeys.map(
+    (_, i) => MARKER_LADDER[i % MARKER_LADDER.length] ?? 3,
   );
 
   // Resolve CSS variables to concrete colours so ApexCharts can paint them
   // into SVG attributes that don't accept `var(...)` expressions (legend
   // marker fills, annotation markers, axis labels rendered to canvas).
-  const textPrimary = resolveCssVar('--text-primary', CHART_CSS_FALLBACKS['--text-primary']!);
   const textSecondary = resolveCssVar('--text-secondary', CHART_CSS_FALLBACKS['--text-secondary']!);
   const borderColor = resolveCssVar('--border', CHART_CSS_FALLBACKS['--border']!);
 
@@ -112,9 +124,9 @@ function buildOptions(
     // via transparent background + CSS-variable colours, so it works in both
     // light and dark dashboard themes.
     series,
-    colors: series.map(() => textPrimary),
+    colors: seriesColors,
     stroke: {
-      width: 2,
+      width: strokeWidths,
       curve: 'smooth',
       dashArray,
     },
@@ -127,7 +139,7 @@ function buildOptions(
     },
     legend: {
       position: 'top',
-      labels: { colors: textPrimary, fontFamily: 'var(--font-mono)' },
+      labels: { colors: textSecondary, fontFamily: 'var(--font-mono)' },
       itemMargin: { horizontal: 12, vertical: 4 },
       markers: { width: 20, height: 2, radius: 0 },
     },
@@ -160,10 +172,10 @@ function buildOptions(
           Number.isFinite(val) ? `${val.toLocaleString('en-US')} tokens` : '—',
       },
     },
-    // Show data points as small markers — line strokes can't render with a
-    // single observation per series (which is the common case for users with
-    // only a few days of local history).
-    markers: { size: 3, strokeWidth: 0, hover: { size: 5 } },
+    // Per-series marker sizes reinforce the opacity ladder: prominent series
+    // get larger dots, faint series get smaller ones. This ensures a single
+    // observation (common for short history) is still visible per series.
+    markers: { size: markerSizes, strokeWidth: 0, hover: { size: 6 } },
     dataLabels: { enabled: false },
   };
   if (annotationsX.length > 0) {
