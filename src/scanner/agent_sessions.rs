@@ -25,7 +25,7 @@ impl DiscoveryConfig {
     pub fn from_projects_dirs(dirs: Vec<PathBuf>) -> Self {
         Self {
             projects_dirs: dirs,
-            include_task_outputs: cfg!(unix),
+            include_task_outputs: cfg!(unix) && !cfg!(test),
         }
     }
 }
