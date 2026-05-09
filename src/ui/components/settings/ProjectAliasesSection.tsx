@@ -256,8 +256,8 @@ export function ProjectAliasesSection() {
       <div class="settings-aliases-table">
         {/* Column headers */}
         <div class="settings-aliases-thead">
-          <div class="settings-aliases-th settings-aliases-th--slug">SLUG</div>
-          <div class="settings-aliases-th settings-aliases-th--name">DISPLAY NAME</div>
+          <div class="settings-aliases-th settings-aliases-th--slug">Slug</div>
+          <div class="settings-aliases-th settings-aliases-th--name">Display name</div>
           <div class="settings-aliases-th settings-aliases-th--action"></div>
         </div>
 

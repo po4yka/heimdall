@@ -3,6 +3,7 @@ import type { ApexOptions } from '../lib/apex';
 import type { CodexPlanDailyRow } from '../state/dashboard-types';
 import { ApexChart } from './charts/ApexChart';
 import { apexThemeMode, withAlpha } from '../lib/charts';
+import { fmtLabel } from '../lib/format';
 
 interface Props {
   history: CodexPlanDailyRow[];
@@ -36,7 +37,7 @@ function buildOptions(history: CodexPlanDailyRow[]): ApexOptions | null {
   const barSeries = plans.map((plan, i) => {
     const opacity = OPACITY_LADDER[i % OPACITY_LADDER.length] ?? 1.0;
     return {
-      name: plan.charAt(0).toUpperCase() + plan.slice(1),
+      name: fmtLabel(plan),
       type: 'bar' as const,
       data: rows.map(r => {
         const v = r.by_plan[plan];

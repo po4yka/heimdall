@@ -411,11 +411,11 @@ export function PricingSection() {
       <div class="settings-pricing-table">
         {/* Column headers */}
         <div class="settings-pricing-thead">
-          <div class="settings-pricing-th settings-pricing-th--model">MODEL</div>
-          <div class="settings-pricing-th settings-pricing-th--rate">INPUT</div>
-          <div class="settings-pricing-th settings-pricing-th--rate">OUTPUT</div>
-          <div class="settings-pricing-th settings-pricing-th--rate">CACHE WRITE</div>
-          <div class="settings-pricing-th settings-pricing-th--rate">CACHE READ</div>
+          <div class="settings-pricing-th settings-pricing-th--model">Model</div>
+          <div class="settings-pricing-th settings-pricing-th--rate">Input</div>
+          <div class="settings-pricing-th settings-pricing-th--rate">Output</div>
+          <div class="settings-pricing-th settings-pricing-th--rate">Cache write</div>
+          <div class="settings-pricing-th settings-pricing-th--rate">Cache read</div>
           <div class="settings-pricing-th settings-pricing-th--action"></div>
         </div>
 

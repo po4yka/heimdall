@@ -2517,8 +2517,8 @@
       ] }),
       /* @__PURE__ */ u4("div", { class: "settings-aliases-table", children: [
         /* @__PURE__ */ u4("div", { class: "settings-aliases-thead", children: [
-          /* @__PURE__ */ u4("div", { class: "settings-aliases-th settings-aliases-th--slug", children: "SLUG" }),
-          /* @__PURE__ */ u4("div", { class: "settings-aliases-th settings-aliases-th--name", children: "DISPLAY NAME" }),
+          /* @__PURE__ */ u4("div", { class: "settings-aliases-th settings-aliases-th--slug", children: "Slug" }),
+          /* @__PURE__ */ u4("div", { class: "settings-aliases-th settings-aliases-th--name", children: "Display name" }),
           /* @__PURE__ */ u4("div", { class: "settings-aliases-th settings-aliases-th--action" })
         ] }),
         entries.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-aliases-empty", children: "No project aliases configured yet. Click [+ Add alias] to create one." }) : visibleIndices.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-aliases-empty", children: [
@@ -2870,11 +2870,11 @@
       ] }),
       /* @__PURE__ */ u4("div", { class: "settings-pricing-table", children: [
         /* @__PURE__ */ u4("div", { class: "settings-pricing-thead", children: [
-          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--model", children: "MODEL" }),
-          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "INPUT" }),
-          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "OUTPUT" }),
-          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "CACHE WRITE" }),
-          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "CACHE READ" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--model", children: "Model" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "Input" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "Output" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "Cache write" }),
+          /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--rate", children: "Cache read" }),
           /* @__PURE__ */ u4("div", { class: "settings-pricing-th settings-pricing-th--action" })
         ] }),
         overrides.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-pricing-empty", children: "No pricing overrides configured yet. Click [+ Add override] to override a model's price." }) : visibleIndices.length === 0 ? /* @__PURE__ */ u4("div", { class: "settings-pricing-empty", children: [
@@ -14997,7 +14997,7 @@ ${row.project}` : row.project;
     const barSeries = plans.map((plan, i4) => {
       const opacity = OPACITY_LADDER[i4 % OPACITY_LADDER.length] ?? 1;
       return {
-        name: plan.charAt(0).toUpperCase() + plan.slice(1),
+        name: fmtLabel(plan),
         type: "bar",
         data: rows2.map((r4) => {
           const v4 = r4.by_plan[plan];
