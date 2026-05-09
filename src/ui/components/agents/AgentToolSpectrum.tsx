@@ -88,7 +88,7 @@ export function AgentToolSpectrum({ data }: AgentToolSpectrumProps) {
                 : 0;
               const bg = opacity > 0 ? withAlpha('--text-primary', opacity) : 'transparent';
               const textColor = opacity > 0.5
-                ? 'var(--black)'
+                ? 'var(--canvas)'
                 : opacity > 0
                 ? 'var(--text-primary)'
                 : 'var(--text-disabled)';

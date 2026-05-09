@@ -22,7 +22,7 @@ const columns: ColumnDef<SpawnBatch, unknown>[] = [
     accessorKey: 'size',
     header: 'Size',
     cell: ({ getValue }) => (
-      <span class="num">{Number(getValue() ?? 0)}</span>
+      <span class="num">{fmt(Number(getValue() ?? 0))}</span>
     ),
   },
   {

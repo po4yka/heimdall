@@ -1,5 +1,5 @@
 import { type ColumnDef } from '@tanstack/table-core';
-import { fmt, fmtCostBig, fmtRelativeTime, esc } from '../../lib/format';
+import { fmt, fmtCostBig, fmtRelativeTime, fmtLabel, esc } from '../../lib/format';
 import type { AgentSessionRow } from '../../state/types';
 import { DataTable } from '../tables/DataTable';
 
@@ -32,7 +32,7 @@ const columns: ColumnDef<AgentSessionRow, unknown>[] = [
   {
     accessorKey: 'role',
     header: 'Role',
-    cell: ({ getValue }) => <span>{esc(String(getValue() ?? ''))}</span>,
+    cell: ({ getValue }) => <span>{fmtLabel(esc(String(getValue() ?? '')))}</span>,
   },
   {
     accessorKey: 'description',

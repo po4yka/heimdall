@@ -1,5 +1,5 @@
 import { type ColumnDef } from '@tanstack/table-core';
-import { fmt, fmtCostBig, esc } from '../../lib/format';
+import { fmt, fmtCostBig, fmtLabel, esc } from '../../lib/format';
 import type { AgentRoleAggregate } from '../../state/types';
 import { DataTable } from '../tables/DataTable';
 
@@ -9,14 +9,14 @@ const columns: ColumnDef<AgentRoleAggregate, unknown>[] = [
     header: 'Role',
     cell: ({ row }) => {
       const agg = row.original;
-      const display = agg.display_name ?? agg.role;
+      const display = agg.display_name ?? fmtLabel(agg.role);
       return <span title={agg.role}>{esc(display)}</span>;
     },
   },
   {
     accessorKey: 'sessions',
     header: 'Sessions',
-    cell: ({ getValue }) => <span class="num">{Number(getValue() ?? 0).toLocaleString()}</span>,
+    cell: ({ getValue }) => <span class="num">{fmt(Number(getValue() ?? 0))}</span>,
   },
   {
     accessorKey: 'total_tokens',
@@ -31,7 +31,7 @@ const columns: ColumnDef<AgentRoleAggregate, unknown>[] = [
   {
     accessorKey: 'tool_uses',
     header: 'Tool uses',
-    cell: ({ getValue }) => <span class="num">{Number(getValue() ?? 0).toLocaleString()}</span>,
+    cell: ({ getValue }) => <span class="num">{fmt(Number(getValue() ?? 0))}</span>,
   },
 ];
 

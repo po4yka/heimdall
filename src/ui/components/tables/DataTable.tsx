@@ -187,7 +187,7 @@ export function DataTable<T>({
               </button>
             )}
             {exportFn && (
-              <button class="export-btn" type="button" onClick={exportFn} title="Export to CSV">
+              <button class="export-btn" type="button" onClick={exportFn} title="Export to CSV" aria-label="Export to CSV">
                 &#x2913; CSV
               </button>
             )}
@@ -251,13 +251,21 @@ export function DataTable<T>({
             ))}
           </thead>
           <tbody>
-            {rows.map(row => (
-              <tr key={row.id} class={costRows ? 'cost-row' : undefined}>
-                {row.getVisibleCells().map(cell => (
-                  <td key={cell.id}>{renderCell(cell)}</td>
-                ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} style={{ textAlign: 'center', padding: '16px', color: 'var(--text-secondary)' }}>
+                  No data
+                </td>
               </tr>
-            ))}
+            ) : (
+              rows.map(row => (
+                <tr key={row.id} class={costRows ? 'cost-row' : undefined}>
+                  {row.getVisibleCells().map(cell => (
+                    <td key={cell.id}>{renderCell(cell)}</td>
+                  ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
 
@@ -276,6 +284,7 @@ export function DataTable<T>({
                 class="filter-btn"
                 disabled={!table.getCanPreviousPage()}
                 onClick={() => table.previousPage()}
+                aria-label="Previous page"
               >
                 &laquo; Prev
               </button>
@@ -283,6 +292,7 @@ export function DataTable<T>({
                 class="filter-btn"
                 disabled={!table.getCanNextPage()}
                 onClick={() => table.nextPage()}
+                aria-label="Next page"
               >
                 Next &raquo;
               </button>

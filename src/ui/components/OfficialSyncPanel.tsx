@@ -1,5 +1,6 @@
 import type { OfficialSyncSummary } from '../state/types';
 import { official_sync_expanded, syncDashboardUrl } from '../state/store';
+import { fmtLabel } from '../lib/format';
 
 type ProviderFilter = 'claude' | 'codex' | 'both';
 
@@ -20,7 +21,7 @@ function statusLabel(status: string): string {
   if (status === 'skipped') return 'SKIP';
   if (status === 'parse_error') return 'PARSE';
   if (status === 'fetch_error') return 'FETCH';
-  return status.toUpperCase();
+  return fmtLabel(status);
 }
 
 function statusColor(status: string): string {
@@ -123,7 +124,7 @@ export function OfficialSyncPanel({ summary, providerFilter }: OfficialSyncPanel
                       letterSpacing: '0.06em',
                     }}
                   >
-                    LATEST SOURCES
+                    Latest sources
                   </div>
                   <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
                     <thead>
@@ -138,16 +139,16 @@ export function OfficialSyncPanel({ summary, providerFilter }: OfficialSyncPanel
                       {sources.map(source => (
                         <tr key={source.source_slug}>
                           <td style={{ padding: '2px 8px 2px 0', fontFamily: 'var(--font-mono)' }}>
-                            {source.source_slug}
+                            {fmtLabel(source.source_slug)}
                           </td>
                           <td style={{ padding: '2px 8px 2px 0', color: 'var(--text-secondary)' }}>
-                            {source.source_kind}
+                            {fmtLabel(source.source_kind)}
                           </td>
                           <td style={{ padding: '2px 8px 2px 0', color: statusColor(source.status), fontFamily: 'var(--font-mono)' }}>
                             {statusLabel(source.status)}
                           </td>
                           <td style={{ padding: '2px 0', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-                            {source.record_count.toLocaleString()}
+                            {(source.record_count ?? 0).toLocaleString()}
                           </td>
                         </tr>
                       ))}
@@ -165,7 +166,7 @@ export function OfficialSyncPanel({ summary, providerFilter }: OfficialSyncPanel
                       letterSpacing: '0.06em',
                     }}
                   >
-                    RECORD TYPES
+                    Record types
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {recordCounts.map(record => (
@@ -178,10 +179,10 @@ export function OfficialSyncPanel({ summary, providerFilter }: OfficialSyncPanel
                         }}
                       >
                         <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                          {record.record_type}
+                          {fmtLabel(record.record_type)}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                          {record.count.toLocaleString()} rows
+                          {(record.count ?? 0).toLocaleString()} rows
                         </div>
                       </div>
                     ))}

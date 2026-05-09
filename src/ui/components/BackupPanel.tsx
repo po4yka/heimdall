@@ -1,6 +1,6 @@
 import { backupSnapshots, backupLoadState, type SnapshotMeta } from '../state/store';
 import { setStatus } from '../lib/status';
-import { esc } from '../lib/format';
+import { fmt, esc } from '../lib/format';
 import { TableSkeleton } from './_primitives/Skeleton';
 
 export interface BackupPanelProps {
@@ -61,8 +61,8 @@ export function BackupPanel({ onSnapshot, onReload }: BackupPanelProps) {
               <tr key={s.snapshot_id}>
                 <td>{esc(s.snapshot_id)}</td>
                 <td>{esc(s.created_at)}</td>
-                <td>{s.total_files}</td>
-                <td>{s.total_bytes}</td>
+                <td class="num">{fmt(s.total_files)}</td>
+                <td class="num">{fmt(s.total_bytes)}</td>
               </tr>
             ))}
           </tbody>

@@ -11,7 +11,7 @@ const columns: ColumnDef<VersionSummary, unknown>[] = [
   { accessorKey: 'turns', header: 'Turns',
     cell: ({ getValue }) => <span class="num">{fmt(getValue() as number)}</span> },
   { accessorKey: 'sessions', header: 'Sessions',
-    cell: ({ getValue }) => <span class="num">{Number(getValue() ?? 0)}</span> },
+    cell: ({ getValue }) => <span class="num">{fmt(Number(getValue() ?? 0))}</span> },
 ];
 
 export function VersionTable({ data, title = 'CLI Versions' }: { data: VersionSummary[]; title?: string | null }) {

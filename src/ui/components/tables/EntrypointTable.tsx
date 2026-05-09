@@ -9,7 +9,7 @@ const columns: ColumnDef<EntrypointSummary, unknown>[] = [
   { accessorKey: 'entrypoint', header: 'Entrypoint',
     cell: ({ getValue }) => <span class="model-tag">{String(getValue())}</span> },
   { accessorKey: 'sessions', header: 'Sessions',
-    cell: ({ getValue }) => <span class="num">{Number(getValue() ?? 0)}</span> },
+    cell: ({ getValue }) => <span class="num">{fmt(Number(getValue() ?? 0))}</span> },
   { accessorKey: 'turns', header: 'Turns',
     cell: ({ getValue }) => <span class="num">{fmt(getValue() as number)}</span> },
   { accessorKey: 'input', header: 'Input',

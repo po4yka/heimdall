@@ -1,4 +1,5 @@
 import { rawData } from '../state/store';
+import { fmtLabel } from '../lib/format';
 import type { HookTelemetrySummary, HookLatencyBucket, HookOutcomeRow, HookBypassAncestorRow } from '../state/dashboard-types';
 
 function fmtMs(us: number): string {
@@ -114,7 +115,7 @@ function OutcomeTable({ rows }: { rows: HookOutcomeRow[] }) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text-secondary)', textAlign: 'right' }}>p95</div>
           {rows.map((r) => (
             <>
-              <div key={`outcome-${r.outcome}`} style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-primary)', lineHeight: '20px' }}>{r.outcome}</div>
+              <div key={`outcome-${r.outcome}`} style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-primary)', lineHeight: '20px' }}>{fmtLabel(r.outcome)}</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textAlign: 'right', fontFeatureSettings: '"tnum"', color: 'var(--text-primary)' }}>{r.count}</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textAlign: 'right', fontFeatureSettings: '"tnum"', color: 'var(--text-secondary)' }}>{fmtMs(r.p50_us)}</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', textAlign: 'right', fontFeatureSettings: '"tnum"', color: 'var(--text-secondary)' }}>{fmtMs(r.p95_us)}</div>

@@ -12,7 +12,7 @@ function makeColumns(data: McpServerSummary[]): ColumnDef<McpServerSummary, unkn
     { accessorKey: 'server', header: 'MCP Server',
       cell: ({ getValue }) => <span class="model-tag mcp">{String(getValue())}</span> },
     { accessorKey: 'tools_used', header: 'Tools',
-      cell: ({ getValue }) => <span class="num">{Number(getValue() ?? 0)}</span> },
+      cell: ({ getValue }) => <span class="num">{fmt(Number(getValue() ?? 0))}</span> },
     { accessorKey: 'invocations', header: 'Calls',
       cell: ({ getValue }) => (
         <InlineRankBar

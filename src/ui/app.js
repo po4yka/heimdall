@@ -1533,8 +1533,8 @@
         /* @__PURE__ */ u4("tbody", { children: snapshots.map((s4) => /* @__PURE__ */ u4("tr", { children: [
           /* @__PURE__ */ u4("td", { children: esc(s4.snapshot_id) }),
           /* @__PURE__ */ u4("td", { children: esc(s4.created_at) }),
-          /* @__PURE__ */ u4("td", { children: s4.total_files }),
-          /* @__PURE__ */ u4("td", { children: s4.total_bytes })
+          /* @__PURE__ */ u4("td", { class: "num", children: fmt(s4.total_files) }),
+          /* @__PURE__ */ u4("td", { class: "num", children: fmt(s4.total_bytes) })
         ] }, s4.snapshot_id)) })
       ] })
     ] });
@@ -6412,7 +6412,7 @@
               children: collapsed ? "Show" : "Hide"
             }
           ),
-          exportFn && /* @__PURE__ */ u4("button", { class: "export-btn", type: "button", onClick: exportFn, title: "Export to CSV", children: "\u2913 CSV" })
+          exportFn && /* @__PURE__ */ u4("button", { class: "export-btn", type: "button", onClick: exportFn, title: "Export to CSV", "aria-label": "Export to CSV", children: "\u2913 CSV" })
         ] })
       ] }),
       /* @__PURE__ */ u4("div", { id: sectionContentId, style: collapsed ? { display: "none" } : void 0, children: [
@@ -6461,7 +6461,7 @@
               header.id
             );
           }) }, headerGroup.id)) }),
-          /* @__PURE__ */ u4("tbody", { children: rows2.map((row) => /* @__PURE__ */ u4("tr", { class: costRows ? "cost-row" : void 0, children: row.getVisibleCells().map((cell) => /* @__PURE__ */ u4("td", { children: renderCell(cell) }, cell.id)) }, row.id)) })
+          /* @__PURE__ */ u4("tbody", { children: rows2.length === 0 ? /* @__PURE__ */ u4("tr", { children: /* @__PURE__ */ u4("td", { colSpan: columns7.length, style: { textAlign: "center", padding: "16px", color: "var(--text-secondary)" }, children: "No data" }) }) : rows2.map((row) => /* @__PURE__ */ u4("tr", { class: costRows ? "cost-row" : void 0, children: row.getVisibleCells().map((cell) => /* @__PURE__ */ u4("td", { children: renderCell(cell) }, cell.id)) }, row.id)) })
         ] }),
         pageSize && /* @__PURE__ */ u4("div", { class: "pagination", children: [
           /* @__PURE__ */ u4("span", { children: table.getRowCount() > 0 ? `Showing ${pagination.pageIndex * pagination.pageSize + 1}\u2013${Math.min(
@@ -6475,6 +6475,7 @@
                 class: "filter-btn",
                 disabled: !table.getCanPreviousPage(),
                 onClick: () => table.previousPage(),
+                "aria-label": "Previous page",
                 children: "\xAB Prev"
               }
             ),
@@ -6484,6 +6485,7 @@
                 class: "filter-btn",
                 disabled: !table.getCanNextPage(),
                 onClick: () => table.nextPage(),
+                "aria-label": "Next page",
                 children: "Next \xBB"
               }
             )
@@ -8426,7 +8428,7 @@
                 /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textAlign: "right" }, children: "p50" }),
                 /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "9px", color: "var(--text-secondary)", textAlign: "right" }, children: "p95" }),
                 rows2.map((r4) => /* @__PURE__ */ u4(S, { children: [
-                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-primary)", lineHeight: "20px" }, children: r4.outcome }, `outcome-${r4.outcome}`),
+                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-primary)", lineHeight: "20px" }, children: fmtLabel(r4.outcome) }, `outcome-${r4.outcome}`),
                   /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-primary)" }, children: r4.count }),
                   /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-secondary)" }, children: fmtMs(r4.p50_us) }),
                   /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", textAlign: "right", fontFeatureSettings: '"tnum"', color: "var(--text-secondary)" }, children: fmtMs(r4.p95_us) })
@@ -11397,14 +11399,14 @@
       header: "Role",
       cell: ({ row }) => {
         const agg = row.original;
-        const display = agg.display_name ?? agg.role;
+        const display = agg.display_name ?? fmtLabel(agg.role);
         return /* @__PURE__ */ u4("span", { title: agg.role, children: esc(display) });
       }
     },
     {
       accessorKey: "sessions",
       header: "Sessions",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0).toLocaleString() })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(getValue() ?? 0)) })
     },
     {
       accessorKey: "total_tokens",
@@ -11419,7 +11421,7 @@
     {
       accessorKey: "tool_uses",
       header: "Tool uses",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0).toLocaleString() })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(getValue() ?? 0)) })
     }
   ];
   function AgentDistribution({ data }) {
@@ -11579,7 +11581,7 @@
     {
       accessorKey: "size",
       header: "Size",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(getValue() ?? 0)) })
     },
     {
       accessorKey: "roles",
@@ -11831,7 +11833,7 @@
                   const count2 = row?.get(tool) ?? 0;
                   const opacity = maxVal > 0 && count2 > 0 ? Math.min(0.08 + 0.82 * (count2 / maxVal), 0.9) : 0;
                   const bg = opacity > 0 ? withAlpha("--text-primary", opacity) : "transparent";
-                  const textColor = opacity > 0.5 ? "var(--black)" : opacity > 0 ? "var(--text-primary)" : "var(--text-disabled)";
+                  const textColor = opacity > 0.5 ? "var(--canvas)" : opacity > 0 ? "var(--text-primary)" : "var(--text-disabled)";
                   return /* @__PURE__ */ u4(
                     "div",
                     {
@@ -11875,7 +11877,7 @@
     {
       accessorKey: "role",
       header: "Role",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { children: esc(String(getValue() ?? "")) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { children: fmtLabel(esc(String(getValue() ?? ""))) })
     },
     {
       accessorKey: "description",
@@ -12651,7 +12653,7 @@
     {
       accessorKey: "sessions",
       header: "Sessions",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(getValue() ?? 0)) })
     },
     {
       accessorKey: "turns",
@@ -12821,7 +12823,7 @@
       {
         accessorKey: "tools_used",
         header: "Tools",
-        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
+        cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(getValue() ?? 0)) })
       },
       {
         accessorKey: "invocations",
@@ -13299,7 +13301,7 @@
     if (status === "skipped") return "SKIP";
     if (status === "parse_error") return "PARSE";
     if (status === "fetch_error") return "FETCH";
-    return status.toUpperCase();
+    return fmtLabel(status);
   }
   function statusColor2(status) {
     if (status === "success") return "var(--text-primary)";
@@ -13409,7 +13411,7 @@
                   marginBottom: "6px",
                   letterSpacing: "0.06em"
                 },
-                children: "LATEST SOURCES"
+                children: "Latest sources"
               }
             ),
             /* @__PURE__ */ u4("table", { style: { width: "100%", fontSize: "12px", borderCollapse: "collapse" }, children: [
@@ -13420,10 +13422,10 @@
                 /* @__PURE__ */ u4("th", { style: { textAlign: "right", padding: "2px 0", fontWeight: 500 }, children: "Rows" })
               ] }) }),
               /* @__PURE__ */ u4("tbody", { children: sources.map((source) => /* @__PURE__ */ u4("tr", { children: [
-                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: source.source_slug }),
-                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", color: "var(--text-secondary)" }, children: source.source_kind }),
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", fontFamily: "var(--font-mono)" }, children: fmtLabel(source.source_slug) }),
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", color: "var(--text-secondary)" }, children: fmtLabel(source.source_kind) }),
                 /* @__PURE__ */ u4("td", { style: { padding: "2px 8px 2px 0", color: statusColor2(source.status), fontFamily: "var(--font-mono)" }, children: statusLabel(source.status) }),
-                /* @__PURE__ */ u4("td", { style: { padding: "2px 0", textAlign: "right", fontFamily: "var(--font-mono)" }, children: source.record_count.toLocaleString() })
+                /* @__PURE__ */ u4("td", { style: { padding: "2px 0", textAlign: "right", fontFamily: "var(--font-mono)" }, children: (source.record_count ?? 0).toLocaleString() })
               ] }, source.source_slug)) })
             ] })
           ] }),
@@ -13438,7 +13440,7 @@
                   marginBottom: "6px",
                   letterSpacing: "0.06em"
                 },
-                children: "RECORD TYPES"
+                children: "Record types"
               }
             ),
             /* @__PURE__ */ u4("div", { style: { display: "flex", flexWrap: "wrap", gap: "8px" }, children: recordCounts.map((record) => /* @__PURE__ */ u4(
@@ -13450,9 +13452,9 @@
                   minWidth: "140px"
                 },
                 children: [
-                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "12px" }, children: record.record_type }),
+                  /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "12px" }, children: fmtLabel(record.record_type) }),
                   /* @__PURE__ */ u4("div", { style: { fontSize: "11px", color: "var(--text-secondary)" }, children: [
-                    record.count.toLocaleString(),
+                    (record.count ?? 0).toLocaleString(),
                     " rows"
                   ] })
                 ]
@@ -15609,7 +15611,7 @@ ${row.project}` : row.project;
     {
       accessorKey: "sessions",
       header: "Sessions",
-      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: Number(getValue() ?? 0) })
+      cell: ({ getValue }) => /* @__PURE__ */ u4("span", { class: "num", children: fmt(Number(getValue() ?? 0)) })
     }
   ];
   function VersionTable({ data, title = "CLI Versions" }) {
