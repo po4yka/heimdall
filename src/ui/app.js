@@ -6844,7 +6844,7 @@
   function BudgetBar({ row }) {
     const fill = Math.min(1, row.budget_tokens > 0 ? row.used_tokens / row.budget_tokens : 0);
     const isOver = row.headroom_tokens < 0;
-    const barColor = isOver ? "var(--accent, #D71921)" : fill > 0.8 ? "rgba(var(--text-primary-rgb, 232,232,232), 0.80)" : "rgba(var(--text-primary-rgb, 232,232,232), 0.55)";
+    const barColor = isOver ? "var(--accent)" : fill > 0.8 ? "rgba(var(--text-primary-rgb, 232,232,232), 0.80)" : "rgba(var(--text-primary-rgb, 232,232,232), 0.55)";
     return /* @__PURE__ */ u4("div", { style: { marginBottom: "10px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "4px" }, children: [
         /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "11px" }, children: row.model_label }),
@@ -6854,7 +6854,7 @@
             style: {
               fontFamily: "var(--font-mono)",
               fontSize: "11px",
-              color: isOver ? "var(--accent, #D71921)" : "var(--text-secondary)"
+              color: isOver ? "var(--accent)" : "var(--text-secondary)"
             },
             children: isOver ? `[OVER: ${Math.abs(row.headroom_tokens)} tok over, ~${row.simulated_drop_count} skills dropped]` : `${row.used_tokens} / ${row.budget_tokens} tok`
           }
@@ -6946,7 +6946,7 @@
           /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }, children: fmtBytes(s4.bytes) }),
           /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }, children: s4.listing_tokens }),
           /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: "var(--text-secondary)", opacity: 0.7 }, children: s4.usage ? s4.usage.last_used ? new Date(s4.usage.last_used).toLocaleDateString() : "\u2014" : "\u2014" }),
-          /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: s4.frontmatter_status !== "ok" ? "var(--accent, #D71921)" : "var(--text-secondary)" }, children: s4.frontmatter_status })
+          /* @__PURE__ */ u4("td", { style: { textAlign: "right", padding: "2px 4px", fontFamily: "var(--font-mono)", color: s4.frontmatter_status !== "ok" ? "var(--accent)" : "var(--text-secondary)" }, children: fmtLabel(s4.frontmatter_status) })
         ] }, s4.path)) })
       ] })
     ] });
@@ -6968,9 +6968,9 @@
           " \xB7 ",
           occ.listing_tokens,
           " tok",
-          occ.frontmatter_status !== "ok" && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent, #D71921)" }, children: [
+          occ.frontmatter_status !== "ok" && /* @__PURE__ */ u4("span", { style: { marginLeft: "4px", color: "var(--accent)" }, children: [
             "[",
-            occ.frontmatter_status,
+            fmtLabel(occ.frontmatter_status),
             "]"
           ] })
         ] })
@@ -7006,7 +7006,7 @@
           children: [
             /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px" }, children: [
               group.name,
-              !allSameDesc && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--accent, #D71921)", fontSize: "10px" }, children: "[differs]" })
+              !allSameDesc && /* @__PURE__ */ u4("span", { style: { marginLeft: "6px", color: "var(--accent)", fontSize: "10px" }, children: "[differs]" })
             ] }),
             /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-secondary)" }, children: [
               group.count,
@@ -7052,7 +7052,7 @@
           children: [
             /* @__PURE__ */ u4("div", { class: "stat-label", style: { display: "flex", alignItems: "center", gap: "8px" }, children: [
               "Duplicates",
-              hasConflicts && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--accent, #D71921)" }, children: "[WARN: conflicting descriptions]" })
+              hasConflicts && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--accent)" }, children: "[WARN: conflicting descriptions]" })
             ] }),
             /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)" }, children: [
               groups.length,
@@ -7074,7 +7074,7 @@
     return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }, children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Skills inventory" }),
-        anyOver && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--accent, #D71921)" }, children: "[WARN: skills will be dropped from listing]" })
+        anyOver && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--accent)" }, children: "[WARN: skills will be dropped from listing]" })
       ] }),
       /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "16px", marginBottom: "14px" }, children: [
         /* @__PURE__ */ u4("div", { children: [
@@ -7091,7 +7091,7 @@
         ] }),
         report.totals.duplicate_count > 0 && /* @__PURE__ */ u4("div", { children: [
           /* @__PURE__ */ u4("div", { class: "stat-label", style: { fontSize: "10px" }, children: "Duplicates" }),
-          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px", color: "var(--accent, #D71921)" }, children: report.totals.duplicate_count })
+          /* @__PURE__ */ u4("div", { style: { fontFamily: "var(--font-mono)", fontSize: "18px", color: "var(--accent)" }, children: report.totals.duplicate_count })
         ] }),
         (() => {
           const dormantCount = report.scopes.reduce(
@@ -7138,7 +7138,7 @@
     if (loadState3 === "error" || !report) {
       return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Skills inventory" }),
-        /* @__PURE__ */ u4("div", { style: { color: "var(--accent, #D71921)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "[ERROR: failed to load skills data]" })
+        /* @__PURE__ */ u4("div", { style: { color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "[ERROR: failed to load skills data]" })
       ] });
     }
     return /* @__PURE__ */ u4(SkillsCardInner, { report });
@@ -7160,7 +7160,7 @@
   function BudgetBar2({ row }) {
     const fill = Math.min(1, row.budget_tokens > 0 ? row.used_tokens / row.budget_tokens : 0);
     const isOver = row.headroom_tokens < 0;
-    const barColor = isOver ? "var(--accent, #D71921)" : fill > 0.8 ? "rgba(var(--text-primary-rgb, 232,232,232), 0.80)" : "rgba(var(--text-primary-rgb, 232,232,232), 0.55)";
+    const barColor = isOver ? "var(--accent)" : fill > 0.8 ? "rgba(var(--text-primary-rgb, 232,232,232), 0.80)" : "rgba(var(--text-primary-rgb, 232,232,232), 0.55)";
     return /* @__PURE__ */ u4("div", { style: { marginBottom: "10px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "4px" }, children: [
         /* @__PURE__ */ u4("span", { class: "stat-label", style: { fontSize: "11px" }, children: row.model_label }),
@@ -7170,7 +7170,7 @@
             style: {
               fontFamily: "var(--font-mono)",
               fontSize: "11px",
-              color: isOver ? "var(--accent, #D71921)" : "var(--text-secondary)"
+              color: isOver ? "var(--accent)" : "var(--text-secondary)"
             },
             children: isOver ? `[OVER: ${Math.abs(row.headroom_tokens)} tok over, ~${row.simulated_drop_count} files dropped]` : `${row.used_tokens} / ${row.budget_tokens} tok`
           }
@@ -7205,7 +7205,7 @@
   }
   function FileStatusCell({ status }) {
     if (status === "invalid") {
-      return /* @__PURE__ */ u4("span", { style: { color: "var(--accent, #D71921)", fontFamily: "var(--font-mono)" }, children: "[INVALID]" });
+      return /* @__PURE__ */ u4("span", { style: { color: "var(--accent)", fontFamily: "var(--font-mono)" }, children: "[INVALID]" });
     }
     if (status === "not_applicable") {
       return /* @__PURE__ */ u4("span", { style: { color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }, children: "\u2014" });
@@ -7281,7 +7281,7 @@
     return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }, children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Instruction files inventory" }),
-        anyOver && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--accent, #D71921)" }, children: "[WARN: skills will be dropped...]" })
+        anyOver && /* @__PURE__ */ u4("span", { style: { fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--accent)" }, children: "[WARN: skills will be dropped...]" })
       ] }),
       /* @__PURE__ */ u4("div", { style: { display: "flex", gap: "16px", marginBottom: "14px" }, children: [
         /* @__PURE__ */ u4("div", { children: [
@@ -7334,7 +7334,7 @@
     if (loadState3 === "error" || !report) {
       return /* @__PURE__ */ u4("div", { class: "card", style: { padding: "16px" }, children: [
         /* @__PURE__ */ u4("div", { class: "stat-label", children: "Instruction files inventory" }),
-        /* @__PURE__ */ u4("div", { style: { color: "var(--accent, #D71921)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "[ERROR: failed to load instruction files data]" })
+        /* @__PURE__ */ u4("div", { style: { color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: "12px", marginTop: "8px" }, children: "[ERROR: failed to load instruction files data]" })
       ] });
     }
     return /* @__PURE__ */ u4(InstructionFilesCardInner, { report });
@@ -7379,7 +7379,7 @@
           style: {
             fontFamily: "var(--font-mono)",
             fontSize: "10px",
-            color: "var(--success, #4caf50)",
+            color: "var(--success)",
             marginLeft: "8px"
           },
           children: [
@@ -7615,7 +7615,7 @@
               style: {
                 fontFamily: "var(--font-mono)",
                 fontSize: "18px",
-                color: t4.running_count > 0 ? "var(--success, #4caf50)" : void 0
+                color: t4.running_count > 0 ? "var(--success)" : void 0
               },
               children: t4.running_count
             }
@@ -13845,7 +13845,7 @@
         /* @__PURE__ */ u4("span", { children: reconciliation.error ?? "Unavailable" })
       ] }) });
     }
-    const statusBracket = deltaMatch ? { label: "[OK]", color: "var(--success, var(--text-primary))" } : { label: `[DRIFT: ${reconciliation.delta_cost >= 0 ? "+" : ""}$${reconciliation.delta_cost.toFixed(4)}]`, color: "var(--accent)" };
+    const statusBracket = deltaMatch ? { label: "[OK]", color: "var(--success)" } : { label: `[DRIFT: ${reconciliation.delta_cost >= 0 ? "+" : ""}$${reconciliation.delta_cost.toFixed(4)}]`, color: "var(--accent)" };
     return /* @__PURE__ */ u4("div", { class: "card card-flat bento-full", children: [
       /* @__PURE__ */ u4("div", { style: { display: "flex", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }, children: [
         /* @__PURE__ */ u4("h2", { style: { margin: 0 }, children: "Subagent cost reconciliation" }),

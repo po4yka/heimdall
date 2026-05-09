@@ -35,7 +35,7 @@ export function SubagentReconciliationBlock({ reconciliation }: SubagentReconcil
   }
 
   const statusBracket = deltaMatch
-    ? { label: '[OK]', color: 'var(--success, var(--text-primary))' }
+    ? { label: '[OK]', color: 'var(--success)' }
     : { label: `[DRIFT: ${reconciliation.delta_cost >= 0 ? '+' : ''}$${reconciliation.delta_cost.toFixed(4)}]`, color: 'var(--accent)' };
 
   return (

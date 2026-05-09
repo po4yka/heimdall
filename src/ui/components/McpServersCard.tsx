@@ -48,7 +48,7 @@ function RuntimeBadge({ runtime }: { runtime: McpRuntimeState }) {
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: '10px',
-          color: 'var(--success, #4caf50)',
+          color: 'var(--success)',
           marginLeft: '8px',
         }}
       >
@@ -339,7 +339,7 @@ function McpServersCardInner({ report }: { report: McpServersReport }) {
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '18px',
-              color: t.running_count > 0 ? 'var(--success, #4caf50)' : undefined,
+              color: t.running_count > 0 ? 'var(--success)' : undefined,
             }}
           >
             {t.running_count}

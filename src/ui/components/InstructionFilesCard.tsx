@@ -20,7 +20,7 @@ function BudgetBar({ row }: { row: SkillsBudgetRow }) {
   const fill = Math.min(1, row.budget_tokens > 0 ? row.used_tokens / row.budget_tokens : 0);
   const isOver = row.headroom_tokens < 0;
   const barColor = isOver
-    ? 'var(--accent, #D71921)'
+    ? 'var(--accent)'
     : fill > 0.8
       ? 'rgba(var(--text-primary-rgb, 232,232,232), 0.80)'
       : 'rgba(var(--text-primary-rgb, 232,232,232), 0.55)';
@@ -33,7 +33,7 @@ function BudgetBar({ row }: { row: SkillsBudgetRow }) {
           style={{
             fontFamily: 'var(--font-mono)',
             fontSize: '11px',
-            color: isOver ? 'var(--accent, #D71921)' : 'var(--text-secondary)',
+            color: isOver ? 'var(--accent)' : 'var(--text-secondary)',
           }}
         >
           {isOver
@@ -68,7 +68,7 @@ function BudgetBar({ row }: { row: SkillsBudgetRow }) {
 function FileStatusCell({ status }: { status: InstructionFile['frontmatter_status'] }) {
   if (status === 'invalid') {
     return (
-      <span style={{ color: 'var(--accent, #D71921)', fontFamily: 'var(--font-mono)' }}>
+      <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
         [INVALID]
       </span>
     );
@@ -161,7 +161,7 @@ function InstructionFilesCardInner({ report }: { report: InstructionFilesReport 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
         <div class="stat-label">Instruction files inventory</div>
         {anyOver && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--accent, #D71921)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--accent)' }}>
             [WARN: skills will be dropped...]
           </span>
         )}
@@ -237,7 +237,7 @@ export function InstructionFilesCard() {
     return (
       <div class="card" style={{ padding: '16px' }}>
         <div class="stat-label">Instruction files inventory</div>
-        <div style={{ color: 'var(--accent, #D71921)', fontFamily: 'var(--font-mono)', fontSize: '12px', marginTop: '8px' }}>
+        <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: '12px', marginTop: '8px' }}>
           [ERROR: failed to load instruction files data]
         </div>
       </div>

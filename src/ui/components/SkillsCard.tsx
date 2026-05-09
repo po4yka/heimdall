@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
+import { fmtLabel } from '../lib/format';
 import type { SkillsReport, SkillScope, SkillsBudgetRow, SkillsDuplicateGroup, SkillsDuplicateOccurrence } from '../state/dashboard-types';
 import { skillsReport, skillsLoadState } from '../state/store';
 
@@ -12,7 +13,7 @@ function BudgetBar({ row }: { row: SkillsBudgetRow }) {
   const fill = Math.min(1, row.budget_tokens > 0 ? row.used_tokens / row.budget_tokens : 0);
   const isOver = row.headroom_tokens < 0;
   const barColor = isOver
-    ? 'var(--accent, #D71921)'
+    ? 'var(--accent)'
     : fill > 0.8
       ? 'rgba(var(--text-primary-rgb, 232,232,232), 0.80)'
       : 'rgba(var(--text-primary-rgb, 232,232,232), 0.55)';
@@ -25,7 +26,7 @@ function BudgetBar({ row }: { row: SkillsBudgetRow }) {
           style={{
             fontFamily: 'var(--font-mono)',
             fontSize: '11px',
-            color: isOver ? 'var(--accent, #D71921)' : 'var(--text-secondary)',
+            color: isOver ? 'var(--accent)' : 'var(--text-secondary)',
           }}
         >
           {isOver
@@ -123,8 +124,8 @@ function ScopeSection({ scope }: { scope: SkillScope }) {
                 <td style={{ textAlign: 'right', padding: '2px 4px', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', opacity: 0.7 }}>
                   {s.usage ? (s.usage.last_used ? new Date(s.usage.last_used).toLocaleDateString() : '—') : '—'}
                 </td>
-                <td style={{ textAlign: 'right', padding: '2px 4px', fontFamily: 'var(--font-mono)', color: s.frontmatter_status !== 'ok' ? 'var(--accent, #D71921)' : 'var(--text-secondary)' }}>
-                  {s.frontmatter_status}
+                <td style={{ textAlign: 'right', padding: '2px 4px', fontFamily: 'var(--font-mono)', color: s.frontmatter_status !== 'ok' ? 'var(--accent)' : 'var(--text-secondary)' }}>
+                  {fmtLabel(s.frontmatter_status)}
                 </td>
               </tr>
             ))}
@@ -148,7 +149,7 @@ function DuplicateOccurrenceRow({ occ }: { occ: SkillsDuplicateOccurrence }) {
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>
           {fmtBytes(occ.bytes)} · {occ.listing_tokens} tok
           {occ.frontmatter_status !== 'ok' && (
-            <span style={{ marginLeft: '4px', color: 'var(--accent, #D71921)' }}>[{occ.frontmatter_status}]</span>
+            <span style={{ marginLeft: '4px', color: 'var(--accent)' }}>[{fmtLabel(occ.frontmatter_status)}]</span>
           )}
         </span>
       </div>
@@ -180,7 +181,7 @@ function DuplicateGroupRow({ group }: { group: SkillsDuplicateGroup }) {
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
           {group.name}
           {!allSameDesc && (
-            <span style={{ marginLeft: '6px', color: 'var(--accent, #D71921)', fontSize: '10px' }}>[differs]</span>
+            <span style={{ marginLeft: '6px', color: 'var(--accent)', fontSize: '10px' }}>[differs]</span>
           )}
         </span>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>
@@ -221,7 +222,7 @@ function DuplicatesSection({ groups }: { groups: SkillsDuplicateGroup[] }) {
         <div class="stat-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           Duplicates
           {hasConflicts && (
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--accent, #D71921)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--accent)' }}>
               [WARN: conflicting descriptions]
             </span>
           )}
@@ -245,7 +246,7 @@ function SkillsCardInner({ report }: { report: SkillsReport }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
         <div class="stat-label">Skills inventory</div>
         {anyOver && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--accent, #D71921)' }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--accent)' }}>
             [WARN: skills will be dropped from listing]
           </span>
         )}
@@ -268,7 +269,7 @@ function SkillsCardInner({ report }: { report: SkillsReport }) {
         {report.totals.duplicate_count > 0 && (
           <div>
             <div class="stat-label" style={{ fontSize: '10px' }}>Duplicates</div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '18px', color: 'var(--accent, #D71921)' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '18px', color: 'var(--accent)' }}>
               {report.totals.duplicate_count}
             </div>
           </div>
@@ -342,7 +343,7 @@ export function SkillsCard() {
     return (
       <div class="card" style={{ padding: '16px' }}>
         <div class="stat-label">Skills inventory</div>
-        <div style={{ color: 'var(--accent, #D71921)', fontFamily: 'var(--font-mono)', fontSize: '12px', marginTop: '8px' }}>
+        <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: '12px', marginTop: '8px' }}>
           [ERROR: failed to load skills data]
         </div>
       </div>
