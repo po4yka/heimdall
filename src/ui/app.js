@@ -1066,6 +1066,20 @@
   var mcpServersLoadState = y3("idle");
   var webConversations = y3([]);
   var companionHeartbeat = y3(null);
+  var webConversationDetail = y3(null);
+  var webConversationDetailLoading = y3(false);
+  async function loadWebConversation(vendor, id) {
+    webConversationDetailLoading.value = true;
+    try {
+      const resp = await fetch(`/api/archive/web-conversation/${encodeURIComponent(vendor)}/${encodeURIComponent(id)}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      webConversationDetail.value = await resp.json();
+    } catch {
+      webConversationDetail.value = null;
+    } finally {
+      webConversationDetailLoading.value = false;
+    }
+  }
   var archiveImports = y3([]);
   var selectedDate = y3(null);
   var todayData = y3(null);
@@ -3197,6 +3211,198 @@
     ] });
   }
 
+  // src/ui/lib/payload/anthropic.ts
+  var ARTIFACT_RE = /(?:<antartifact([^>]*)>([\s\S]*?)<\/antartifact>)/g;
+  var ATTR_RE = /([\w-]+)="([^"]*)"/g;
+  function parseAttrs(attrs) {
+    const out = {};
+    let m5;
+    ATTR_RE.lastIndex = 0;
+    while ((m5 = ATTR_RE.exec(attrs)) !== null) {
+      out[m5[1]] = m5[2];
+    }
+    return out;
+  }
+  function extractArtifacts(payload) {
+    const precomputed = payload?.heimdall_extracted?.artifacts;
+    if (Array.isArray(precomputed)) return precomputed;
+    const artifacts = [];
+    const messages = Array.isArray(payload?.chat_messages) ? payload.chat_messages : [];
+    for (const msg of messages) {
+      if (typeof msg !== "object" || msg === null) continue;
+      const m5 = msg;
+      const msgId = typeof m5["uuid"] === "string" ? m5["uuid"] : "";
+      const text2 = typeof m5["text"] === "string" ? m5["text"] : "";
+      if (!text2) continue;
+      ARTIFACT_RE.lastIndex = 0;
+      let cap;
+      while ((cap = ARTIFACT_RE.exec(text2)) !== null) {
+        const attrs = parseAttrs(cap[1] ?? "");
+        const start = cap.index;
+        const end = start + cap[0].length;
+        artifacts.push({
+          message_id: msgId,
+          identifier: attrs["identifier"] ?? "",
+          type: attrs["type"] ?? "",
+          title: attrs["title"] ?? "",
+          body: cap[2] ?? "",
+          byte_range: [start, end]
+        });
+      }
+    }
+    return artifacts;
+  }
+
+  // src/ui/lib/payload/openai.ts
+  var CITATION_RE = /【(\d+)†(L\d+(?:-L\d+)?)】/g;
+  function extractBrowsingSteps(payload) {
+    const precomputed = payload?.heimdall_extracted?.browsing_steps;
+    if (Array.isArray(precomputed)) return precomputed;
+    const steps = [];
+    const mapping = payload?.mapping;
+    if (!mapping || typeof mapping !== "object") return steps;
+    for (const [nodeId, node] of Object.entries(mapping)) {
+      const n3 = node;
+      const msg = n3["message"];
+      if (!msg || typeof msg !== "object") continue;
+      const m5 = msg;
+      const content = m5["content"];
+      if (!content || typeof content !== "object") continue;
+      const c4 = content;
+      if (c4["content_type"] !== "tether_browsing_display") continue;
+      steps.push({
+        node_id: nodeId,
+        query: typeof c4["tether_id"] === "string" ? c4["tether_id"] : "",
+        result: c4["result"] ?? null,
+        results: Array.isArray(c4["results"]) ? c4["results"] : []
+      });
+    }
+    return steps;
+  }
+  function extractCitations(payload) {
+    const precomputed = payload?.heimdall_extracted?.citations;
+    if (Array.isArray(precomputed)) return precomputed;
+    const citations = [];
+    const mapping = payload?.mapping;
+    if (!mapping || typeof mapping !== "object") return citations;
+    for (const node of Object.values(mapping)) {
+      const n3 = node;
+      const msg = n3["message"];
+      if (!msg || typeof msg !== "object") continue;
+      const m5 = msg;
+      const author = m5["author"];
+      if (author?.["role"] !== "assistant") continue;
+      const msgId = typeof m5["id"] === "string" ? m5["id"] : "";
+      const content = m5["content"];
+      const parts = content?.["parts"];
+      if (!Array.isArray(parts)) continue;
+      for (const part of parts) {
+        if (typeof part !== "string") continue;
+        CITATION_RE.lastIndex = 0;
+        let cap;
+        while ((cap = CITATION_RE.exec(part)) !== null) {
+          citations.push({
+            marker: cap[0],
+            index: cap[1] ?? "",
+            anchor_text: cap[2] ?? "",
+            message_id: msgId
+          });
+        }
+      }
+    }
+    return citations;
+  }
+
+  // src/ui/components/WebConversationDetail.tsx
+  function WebConversationDetail() {
+    const loading = webConversationDetailLoading.value;
+    const conv = webConversationDetail.value;
+    if (loading) {
+      return /* @__PURE__ */ u4("p", { class: "web-conv-detail-loading", children: "Loading\u2026" });
+    }
+    if (!conv) return null;
+    const vendor = conv.vendor;
+    const payload = conv.payload ?? {};
+    const artifacts = vendor === "claude.ai" ? extractArtifacts(payload) : [];
+    const browsingSteps = vendor === "chatgpt.com" ? extractBrowsingSteps(payload) : [];
+    const citations = vendor === "chatgpt.com" ? extractCitations(payload) : [];
+    const hasContent = artifacts.length > 0 || browsingSteps.length > 0 || citations.length > 0;
+    return /* @__PURE__ */ u4("section", { class: "web-conv-detail", children: [
+      /* @__PURE__ */ u4("header", { class: "web-conv-detail-header", children: [
+        /* @__PURE__ */ u4("span", { class: "web-conv-detail-vendor", children: esc(vendor) }),
+        /* @__PURE__ */ u4("code", { class: "web-conv-detail-id", children: esc(conv.conversation_id) }),
+        /* @__PURE__ */ u4("span", { class: "web-conv-detail-ts", children: esc(conv.captured_at) })
+      ] }),
+      !hasContent && /* @__PURE__ */ u4("p", { class: "web-conv-detail-empty", children: "No artifacts, citations, or browsing steps found in this conversation." }),
+      artifacts.length > 0 && /* @__PURE__ */ u4("div", { class: "web-conv-detail-section", children: [
+        /* @__PURE__ */ u4("h3", { children: [
+          "Artifacts (",
+          artifacts.length,
+          ")"
+        ] }),
+        artifacts.map((a4, i4) => /* @__PURE__ */ u4("details", { class: "web-conv-detail-artifact", children: [
+          /* @__PURE__ */ u4("summary", { children: [
+            /* @__PURE__ */ u4("span", { class: "web-conv-detail-artifact-type", children: esc(a4.type || "unknown") }),
+            " ",
+            /* @__PURE__ */ u4("strong", { children: esc(a4.title || a4.identifier || "(untitled)") })
+          ] }),
+          /* @__PURE__ */ u4("pre", { class: "web-conv-detail-artifact-body", children: esc(a4.body) })
+        ] }, `art-${i4}`))
+      ] }),
+      citations.length > 0 && /* @__PURE__ */ u4("div", { class: "web-conv-detail-section", children: [
+        /* @__PURE__ */ u4("h3", { children: [
+          "Citations (",
+          citations.length,
+          ")"
+        ] }),
+        /* @__PURE__ */ u4("table", { class: "data-table", children: [
+          /* @__PURE__ */ u4("thead", { children: /* @__PURE__ */ u4("tr", { children: [
+            /* @__PURE__ */ u4("th", { children: "MARKER" }),
+            /* @__PURE__ */ u4("th", { children: "URL" }),
+            /* @__PURE__ */ u4("th", { children: "TITLE" })
+          ] }) }),
+          /* @__PURE__ */ u4("tbody", { children: citations.map((c4, i4) => /* @__PURE__ */ u4("tr", { children: [
+            /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("code", { children: esc(c4.marker) }) }),
+            /* @__PURE__ */ u4("td", { children: c4.url ? /* @__PURE__ */ u4("a", { href: esc(c4.url), target: "_blank", rel: "noopener noreferrer", children: esc(c4.url) }) : /* @__PURE__ */ u4("span", { class: "web-conv-detail-unresolved", children: "(URL unresolved \u2014 re-capture from a logged-in tab to fill)" }) }),
+            /* @__PURE__ */ u4("td", { children: esc(c4.title ?? c4.anchor_text) })
+          ] }, `cit-${i4}`)) })
+        ] })
+      ] }),
+      browsingSteps.length > 0 && /* @__PURE__ */ u4("div", { class: "web-conv-detail-section", children: [
+        /* @__PURE__ */ u4("h3", { children: [
+          "Browsing steps (",
+          browsingSteps.length,
+          ")"
+        ] }),
+        browsingSteps.map((s4, i4) => {
+          const results = Array.isArray(s4.results) ? s4.results : [];
+          return /* @__PURE__ */ u4("details", { class: "web-conv-detail-browsing-step", children: [
+            /* @__PURE__ */ u4("summary", { children: [
+              esc(s4.query || s4.node_id || `Step ${i4 + 1}`),
+              results.length > 0 && /* @__PURE__ */ u4("span", { class: "web-conv-detail-count", children: [
+                " (",
+                results.length,
+                " result",
+                results.length !== 1 ? "s" : "",
+                ")"
+              ] })
+            ] }),
+            results.length > 0 && /* @__PURE__ */ u4("ul", { class: "web-conv-detail-results", children: results.map((r4, j4) => {
+              const res = r4;
+              const title = typeof res["title"] === "string" ? res["title"] : "";
+              const url = typeof res["url"] === "string" ? res["url"] : "";
+              const snippet = typeof res["snippet"] === "string" ? res["snippet"] : "";
+              return /* @__PURE__ */ u4("li", { children: [
+                url ? /* @__PURE__ */ u4("a", { href: esc(url), target: "_blank", rel: "noopener noreferrer", children: esc(title || url) }) : /* @__PURE__ */ u4("strong", { children: esc(title) }),
+                snippet && /* @__PURE__ */ u4("p", { class: "web-conv-detail-snippet", children: esc(snippet) })
+              ] }, `res-${j4}`);
+            }) })
+          ] }, `step-${i4}`);
+        })
+      ] })
+    ] });
+  }
+
   // src/ui/components/WebCapturesPanel.tsx
   function vendorCounts(rows2) {
     const out = {};
@@ -3213,10 +3419,24 @@
     if (hrs < 48) return `${hrs}h ago`;
     return `${Math.round(hrs / 24)}d ago`;
   }
+  function rowKey(r4) {
+    return `${r4.vendor}/${r4.conversation_id}`;
+  }
   function WebCapturesPanel({ onReload }) {
     const rows2 = webConversations.value;
     const heartbeat = companionHeartbeat.value;
     const counts = vendorCounts(rows2);
+    const detail = webConversationDetail.value;
+    const detailLoading = webConversationDetailLoading.value;
+    const selectedKey = detail ? `${detail.vendor}/${detail.conversation_id}` : null;
+    function handleRowClick(r4) {
+      const key = rowKey(r4);
+      if (selectedKey === key) {
+        webConversationDetail.value = null;
+        return;
+      }
+      void loadWebConversation(r4.vendor, r4.conversation_id);
+    }
     return /* @__PURE__ */ u4("section", { class: "web-captures-panel", children: [
       /* @__PURE__ */ u4("header", { class: "web-captures-panel-header", children: [
         /* @__PURE__ */ u4("h2", { children: "Web captures" }),
@@ -3248,14 +3468,30 @@
             /* @__PURE__ */ u4("th", { children: "CAPTURED" }),
             /* @__PURE__ */ u4("th", { children: "HISTORY" })
           ] }) }),
-          /* @__PURE__ */ u4("tbody", { children: rows2.map((r4) => /* @__PURE__ */ u4("tr", { children: [
-            /* @__PURE__ */ u4("td", { children: esc(r4.vendor) }),
-            /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("code", { children: esc(r4.conversation_id) }) }),
-            /* @__PURE__ */ u4("td", { children: esc(relativeMinutes(r4.captured_at)) }),
-            /* @__PURE__ */ u4("td", { children: r4.history_count })
-          ] }, `${r4.vendor}/${r4.conversation_id}`)) })
+          /* @__PURE__ */ u4("tbody", { children: rows2.map((r4) => {
+            const key = rowKey(r4);
+            const isSelected = key === selectedKey;
+            return /* @__PURE__ */ u4(
+              "tr",
+              {
+                class: isSelected ? "web-captures-panel-row--selected" : void 0,
+                style: "cursor:pointer",
+                onClick: () => handleRowClick(r4),
+                role: "button",
+                "aria-expanded": isSelected,
+                children: [
+                  /* @__PURE__ */ u4("td", { children: esc(r4.vendor) }),
+                  /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("code", { children: esc(r4.conversation_id) }) }),
+                  /* @__PURE__ */ u4("td", { children: esc(relativeMinutes(r4.captured_at)) }),
+                  /* @__PURE__ */ u4("td", { children: r4.history_count })
+                ]
+              },
+              key
+            );
+          }) })
         ] })
-      ] })
+      ] }),
+      (detailLoading || detail) && /* @__PURE__ */ u4(WebConversationDetail, {})
     ] });
   }
 
@@ -17702,11 +17938,11 @@ ${row.project}` : row.project;
     else next.add(key);
     set.value = next;
   }
-  function ExpandableCell({ value, rowKey, store }) {
+  function ExpandableCell({ value, rowKey: rowKey2, store }) {
     if (!value) return /* @__PURE__ */ u4("span", { class: "dim", children: "\u2014" });
     const PREVIEW = 200;
     const isLong = value.length > PREVIEW;
-    const isExpanded = store.value.has(rowKey);
+    const isExpanded = store.value.has(rowKey2);
     const display = isLong && !isExpanded ? value.slice(0, PREVIEW) + "\u2026" : value;
     return /* @__PURE__ */ u4("div", { children: [
       /* @__PURE__ */ u4(
@@ -17731,7 +17967,7 @@ ${row.project}` : row.project;
           type: "button",
           class: "table-action-btn",
           style: { fontSize: "11px", marginTop: "2px" },
-          onClick: () => toggle(store, rowKey),
+          onClick: () => toggle(store, rowKey2),
           children: isExpanded ? "show less" : "show full"
         }
       )

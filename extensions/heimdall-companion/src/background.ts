@@ -25,6 +25,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, send) => {
     runSyncAll().then(send).catch(err => send({ error: String(err) }));
     return true;
   }
+  if (msg?.type === 'chatgptCitations' && msg.convId && Array.isArray(msg.mapping)) {
+    // Store citation mapping from the content-script sidebar scrape.
+    // Keyed by convId so fetchChatgptConv can merge it before POSTing.
+    const key = `citations:${msg.convId as string}`;
+    chrome.storage.session.set({ [key]: msg.mapping }).catch(() => {/* best-effort */});
+    send({ ok: true });
+    return false;
+  }
   return false;
 });
 

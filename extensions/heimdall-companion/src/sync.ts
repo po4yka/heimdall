@@ -98,9 +98,35 @@ export async function syncVendor(
   const observedMap = new Map(observed.map(o => [o.id, o]));
 
   const fetchResults = await runCapped(changed, MAX_FETCH_CONCURRENCY, async (id) => {
-    const payload = await adapter.fetch(id);
+    let payload = await adapter.fetch(id);
     if (payload === undefined) {
       throw new Error('undefined payload — possible Cloudflare challenge or parse error');
+    }
+    // For ChatGPT, merge any citation mapping the content-script scraped from
+    // the sidebar DOM (keyed by the bare conversation id).
+    if (adapter.vendor === 'chatgpt.com') {
+      const bareId = id.includes('/') ? id.split('/').pop()! : id;
+      const key = `citations:${bareId}`;
+      try {
+        const stored = await chrome.storage.session.get(key);
+        const mapping = stored[key];
+        if (Array.isArray(mapping) && mapping.length > 0) {
+          const p = payload as Record<string, unknown>;
+          const extracted = (typeof p['heimdall_extracted'] === 'object' && p['heimdall_extracted'] !== null)
+            ? p['heimdall_extracted'] as Record<string, unknown>
+            : {};
+          // Extension wins: only attach if citations not already set.
+          if (!Array.isArray((extracted as Record<string, unknown>)['citations'])) {
+            extracted['citations'] = mapping;
+            p['heimdall_extracted'] = extracted;
+            payload = p;
+          }
+          // Consumed — remove from session storage.
+          chrome.storage.session.remove(key).catch(() => {});
+        }
+      } catch {
+        // chrome.storage unavailable in test environment — ignore.
+      }
     }
     const fingerprint = await schemaFingerprint(payload);
     const conv: WebConversation = {

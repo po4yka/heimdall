@@ -53,6 +53,31 @@ export interface CompanionHeartbeat {
 export const webConversations = signal<WebConversationSummary[]>([]);
 export const companionHeartbeat = signal<CompanionHeartbeat | null>(null);
 
+export interface WebConversationDetail {
+  vendor: string;
+  conversation_id: string;
+  captured_at: string;
+  schema_fingerprint: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: Record<string, any>;
+}
+
+export const webConversationDetail = signal<WebConversationDetail | null>(null);
+export const webConversationDetailLoading = signal<boolean>(false);
+
+export async function loadWebConversation(vendor: string, id: string): Promise<void> {
+  webConversationDetailLoading.value = true;
+  try {
+    const resp = await fetch(`/api/archive/web-conversation/${encodeURIComponent(vendor)}/${encodeURIComponent(id)}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    webConversationDetail.value = await resp.json() as WebConversationDetail;
+  } catch {
+    webConversationDetail.value = null;
+  } finally {
+    webConversationDetailLoading.value = false;
+  }
+}
+
 // ── Imports (chat-export ingests) ─────────────────────────────────────
 export interface ImportMeta {
   import_id: string;

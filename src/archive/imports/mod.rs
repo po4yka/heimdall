@@ -143,7 +143,8 @@ fn write_openai_conversations<R: std::io::Read + std::io::Seek>(
     let mut count = 0;
     for c in &convs {
         let key = openai::conversation_key(c).unwrap_or_else(|| format!("conv-{count}"));
-        let value = serde_json::to_value(c)?;
+        let mut value = serde_json::to_value(c)?;
+        crate::archive::payload::openai::extract(&mut value).ok();
         if let Err(e) = dir.write_conversation_json(&key, &value) {
             warnings.push(format!("{key}: {e}"));
         } else {
@@ -166,7 +167,8 @@ fn write_anthropic_conversations<R: std::io::Read + std::io::Seek>(
 
     let mut warnings = Vec::new();
     let mut count = 0;
-    for value in all_convs {
+    for mut value in all_convs {
+        crate::archive::payload::anthropic::extract(&mut value).ok();
         match anthropic::normalize(value.clone()) {
             Some(c) => {
                 if let Err(e) = dir.write_conversation_json(&c.id, &value) {

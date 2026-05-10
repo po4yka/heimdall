@@ -8,6 +8,7 @@ pub mod index;
 pub mod macos_cache;
 pub mod manifest;
 pub mod objects;
+pub mod payload;
 pub mod web;
 
 use std::collections::HashSet;

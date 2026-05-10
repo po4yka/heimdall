@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use axum::extract::{Query, Request, State};
+use axum::extract::{Path, Query, Request, State};
 use axum::http::StatusCode;
 use axum::response::Json;
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -2951,8 +2951,15 @@ pub async fn api_archive_web_conversation(
     let body_bytes = axum::body::to_bytes(request.into_body(), 50 * 1024 * 1024)
         .await
         .map_err(|_| StatusCode::PAYLOAD_TOO_LARGE)?;
-    let conv: crate::archive::web::WebConversation =
+    let mut conv: crate::archive::web::WebConversation =
         serde_json::from_slice(&body_bytes).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    // Best-effort enrichment — extraction failure must not block the write.
+    match conv.vendor.as_str() {
+        "claude.ai" => crate::archive::payload::anthropic::extract(&mut conv.payload).ok(),
+        "chatgpt.com" => crate::archive::payload::openai::extract(&mut conv.payload).ok(),
+        _ => None,
+    };
 
     let archive_root = crate::archive::default_root();
     let outcome = tokio::task::spawn_blocking(move || {
@@ -2967,6 +2974,44 @@ pub async fn api_archive_web_conversation(
         crate::archive::web::WriteOutcome::Unchanged => serde_json::json!({"unchanged": true}),
     };
     Ok(Json(body))
+}
+
+/// `GET /api/archive/web-conversation/:vendor/:id` — fetch one conversation payload.
+///
+/// Loopback-only. No bearer required (consistent with the list endpoint).
+pub async fn api_archive_web_conversation_get(
+    Path((vendor, id)): Path<(String, String)>,
+    request: Request,
+) -> Result<Json<Value>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let archive_root = crate::archive::default_root();
+    let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<Value>> {
+        fn sanitize(raw: &str) -> String {
+            raw.chars()
+                .filter(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_'))
+                .collect()
+        }
+        let vendor_s = sanitize(&vendor);
+        let raw_id = sanitize(&id);
+        let conv_id: String = raw_id.chars().take(120).collect();
+
+        let dir = archive_root.join("web").join(&vendor_s);
+        let path = dir.join(format!("{conv_id}.json"));
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let bytes = std::fs::read(&path)?;
+        let value: Value = serde_json::from_slice(&bytes)?;
+        Ok(Some(value))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match result {
+        Some(value) => Ok(Json(value)),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }
 
 #[derive(Debug, serde::Deserialize)]

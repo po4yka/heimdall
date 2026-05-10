@@ -1,5 +1,6 @@
-import { webConversations, companionHeartbeat, type WebConversationSummary } from '../state/store';
+import { webConversations, companionHeartbeat, webConversationDetail, webConversationDetailLoading, loadWebConversation, type WebConversationSummary } from '../state/store';
 import { esc } from '../lib/format';
+import { WebConversationDetail } from './WebConversationDetail';
 
 export interface WebCapturesPanelProps {
   onReload: () => Promise<void>;
@@ -22,10 +23,28 @@ function relativeMinutes(iso: string): string {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
+function rowKey(r: WebConversationSummary): string {
+  return `${r.vendor}/${r.conversation_id}`;
+}
+
 export function WebCapturesPanel({ onReload }: WebCapturesPanelProps) {
   const rows = webConversations.value;
   const heartbeat = companionHeartbeat.value;
   const counts = vendorCounts(rows);
+  const detail = webConversationDetail.value;
+  const detailLoading = webConversationDetailLoading.value;
+  const selectedKey = detail ? `${detail.vendor}/${detail.conversation_id}` : null;
+
+  function handleRowClick(r: WebConversationSummary) {
+    const key = rowKey(r);
+    if (selectedKey === key) {
+      // Toggle: clicking the selected row clears the detail panel.
+      webConversationDetail.value = null;
+      return;
+    }
+    void loadWebConversation(r.vendor, r.conversation_id);
+  }
+
   return (
     <section class="web-captures-panel">
       <header class="web-captures-panel-header">
@@ -65,18 +84,30 @@ export function WebCapturesPanel({ onReload }: WebCapturesPanelProps) {
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={`${r.vendor}/${r.conversation_id}`}>
-                  <td>{esc(r.vendor)}</td>
-                  <td><code>{esc(r.conversation_id)}</code></td>
-                  <td>{esc(relativeMinutes(r.captured_at))}</td>
-                  <td>{r.history_count}</td>
-                </tr>
-              ))}
+              {rows.map(r => {
+                const key = rowKey(r);
+                const isSelected = key === selectedKey;
+                return (
+                  <tr
+                    key={key}
+                    class={isSelected ? 'web-captures-panel-row--selected' : undefined}
+                    style="cursor:pointer"
+                    onClick={() => handleRowClick(r)}
+                    role="button"
+                    aria-expanded={isSelected}
+                  >
+                    <td>{esc(r.vendor)}</td>
+                    <td><code>{esc(r.conversation_id)}</code></td>
+                    <td>{esc(relativeMinutes(r.captured_at))}</td>
+                    <td>{r.history_count}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </>
       )}
+      {(detailLoading || detail) && <WebConversationDetail />}
     </section>
   );
 }

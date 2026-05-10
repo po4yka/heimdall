@@ -16,7 +16,7 @@ const common = {
 
 await build({
   ...common,
-  entryPoints: ['src/background.ts', 'src/options/options.ts', 'src/popup/popup.ts'],
+  entryPoints: ['src/background.ts', 'src/options/options.ts', 'src/popup/popup.ts', 'src/content/observer.ts'],
   outdir: out,
   entryNames: '[name]',
 });
