@@ -1,5 +1,7 @@
 import { loadConfig, saveConfig } from './storage';
 import { syncVendor, type VendorAdapter } from './sync';
+import { listClaude, fetchClaudeConv } from './in-page/claude';
+import { getChatgptToken, listChatgpt, fetchChatgptConv } from './in-page/chatgpt';
 
 const ALARM_NAME = 'heimdall-sync';
 
@@ -46,96 +48,67 @@ async function runSyncAll(): Promise<{ results: unknown[] }> {
 }
 
 async function adapterFor(vendor: string): Promise<VendorAdapter | null> {
-  // Find a tab on the vendor's origin and run the fetcher there.
   const origin = vendorOrigin(vendor);
   if (!origin) return null;
   const tabs = await chrome.tabs.query({ url: `${origin}/*` });
   const tab = tabs[0];
   if (!tab?.id) return null;
   const tabId = tab.id;
-  return {
-    vendor,
-    async list() {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: vendor === 'claude.ai' ? listClaude : listChatgpt,
-      });
-      const first = results[0];
-      return (first?.result as Array<{ id: string; updated_at?: string }> | undefined) ?? [];
-    },
-    async fetch(id: string) {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: vendor === 'claude.ai' ? fetchClaudeConv : fetchChatgptConv,
-        args: [id],
-      });
-      const first = results[0];
-      return first?.result;
-    },
-  };
+
+  if (vendor === 'claude.ai') {
+    return {
+      vendor,
+      async list() {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: listClaude,
+        });
+        return (res?.result as Array<{ id: string; updated_at?: string }>) ?? [];
+      },
+      async fetch(id: string) {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: fetchClaudeConv,
+          args: [id],
+        });
+        return res?.result;
+      },
+    };
+  }
+
+  if (vendor === 'chatgpt.com') {
+    // Fetch the bearer token once per sync run; memoized in this closure.
+    const [tokenRes] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: getChatgptToken,
+    });
+    const token = (tokenRes?.result as string | undefined) ?? '';
+    return {
+      vendor,
+      async list() {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: listChatgpt,
+          args: [token],
+        });
+        return (res?.result as Array<{ id: string; updated_at?: string }>) ?? [];
+      },
+      async fetch(id: string) {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId },
+          func: fetchChatgptConv,
+          args: [id, token],
+        });
+        return res?.result;
+      },
+    };
+  }
+
+  return null;
 }
 
 function vendorOrigin(vendor: string): string | null {
   if (vendor === 'claude.ai') return 'https://claude.ai';
   if (vendor === 'chatgpt.com') return 'https://chatgpt.com';
   return null;
-}
-
-// In-page functions — must be self-contained (no imports), since
-// chrome.scripting.executeScript serializes the function source.
-
-function listClaude(): Promise<Array<{ id: string; updated_at?: string }>> {
-  return (async () => {
-    const orgs = await fetch('/api/organizations', { credentials: 'include' }).then(r => r.json()) as Array<{ uuid: string }>;
-    const out: Array<{ id: string; updated_at?: string }> = [];
-    for (const o of orgs) {
-      const convs = await fetch(`/api/organizations/${o.uuid}/chat_conversations`, { credentials: 'include' }).then(r => r.json()) as Array<{ uuid: string; updated_at?: string }>;
-      for (const c of convs) {
-        out.push({ id: `${o.uuid}/${c.uuid}`, updated_at: c.updated_at });
-      }
-    }
-    return out;
-  })();
-}
-
-function fetchClaudeConv(combinedId: string): Promise<unknown> {
-  return (async () => {
-    const [orgId, convId] = combinedId.split('/', 2) as [string, string];
-    const r = await fetch(`/api/organizations/${orgId}/chat_conversations/${convId}`, { credentials: 'include' });
-    return r.json();
-  })();
-}
-
-function listChatgpt(): Promise<Array<{ id: string; updated_at?: string }>> {
-  return (async () => {
-    const session = await fetch('/api/auth/session', { credentials: 'include' }).then(r => r.json()) as { accessToken?: string };
-    const token = session.accessToken;
-    const out: Array<{ id: string; updated_at?: string }> = [];
-    let offset = 0;
-    for (;;) {
-      const r = await fetch(`/backend-api/conversations?offset=${offset}&limit=28&order=updated`, {
-        credentials: 'include',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const body = await r.json() as { items?: Array<{ id: string; update_time?: number }>; total?: number };
-      const items = body.items ?? [];
-      for (const it of items) out.push({ id: it.id, updated_at: it.update_time?.toString() });
-      offset += items.length;
-      if (items.length < 28) break;
-      if (typeof body.total === 'number' && offset >= body.total) break;
-    }
-    return out;
-  })();
-}
-
-function fetchChatgptConv(convId: string): Promise<unknown> {
-  return (async () => {
-    const session = await fetch('/api/auth/session', { credentials: 'include' }).then(r => r.json()) as { accessToken?: string };
-    const token = session.accessToken;
-    const r = await fetch(`/backend-api/conversation/${convId}`, {
-      credentials: 'include',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    return r.json();
-  })();
 }

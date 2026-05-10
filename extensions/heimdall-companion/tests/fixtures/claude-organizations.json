@@ -1,0 +1,4 @@
+[
+  { "uuid": "org-abc123", "name": "Personal" },
+  { "uuid": "org-def456", "name": "Work" }
+]

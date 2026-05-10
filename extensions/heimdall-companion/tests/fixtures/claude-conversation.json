@@ -1,0 +1,20 @@
+{
+  "uuid": "conv-1111",
+  "name": "Rust async patterns",
+  "created_at": "2026-05-10T11:00:00.000000Z",
+  "updated_at": "2026-05-10T12:00:00.000000Z",
+  "chat_messages": [
+    {
+      "uuid": "msg-aaaa",
+      "sender": "human",
+      "text": "How do I use tokio::select! with timeouts?",
+      "created_at": "2026-05-10T11:00:00.000000Z"
+    },
+    {
+      "uuid": "msg-bbbb",
+      "sender": "assistant",
+      "text": "Use tokio::time::timeout wrapping your future, or select! with sleep...",
+      "created_at": "2026-05-10T12:00:00.000000Z"
+    }
+  ]
+}

@@ -3,13 +3,16 @@
 Browser extension that captures your claude.ai and chatgpt.com chat history
 and ships it to a local Heimdall instance for archival and analysis.
 
-> Tasks 5-6 add the runtime code (background service worker, content scripts,
-> popup and options UI). This task scaffolds the build tooling only.
+The runtime fetch-and-POST loop is fully implemented: a background service
+worker syncs on an alarm schedule (default every 6 hours) and on manual
+trigger, posting each changed conversation to the local heimdall daemon at
+`POST /api/archive/web-conversation`.
 
 ## Requirements
 
 - Node.js 20+ (build only)
-- Heimdall >= the version that ships the `/api/companion/*` endpoints (Phase 3b)
+- Heimdall >= the version that ships `/api/archive/companion-*` endpoints
+  (Phase 3b; `companion-token` subcommand must be available)
 
 ## Sideload — Chrome
 
@@ -25,18 +28,19 @@ and ships it to a local Heimdall instance for archival and analysis.
 2. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`.
 3. Click **Load Temporary Add-on**.
 4. Select `dist/firefox/manifest.json`.
-5. The extension reloads on every browser restart; repeat step 3-4 each session
-   (or use a signed build for permanent install).
+5. The extension reloads on every browser restart; repeat steps 3-4 each
+   session (or use a signed build for permanent install).
 
 ## Pair with Heimdall
 
 1. Start the Heimdall dashboard: `heimdall dashboard`.
-2. Generate a companion token: `heimdall companion-token show`.
-   Copy the hex string that is printed.
-3. Click the extension icon and open **Options**.
-4. Paste the token into the **Companion token** field and set the
-   **Heimdall URL** (default `http://localhost:11434`).
-5. Click **Save**. The status indicator should turn green.
+2. Print your companion token: `heimdall companion-token show`.
+   Copy the 64-character hex string that is printed.
+3. Click the Heimdall Companion icon → **Options**.
+4. Set **Heimdall URL** to `http://127.0.0.1:8787` (or the port you passed
+   to `heimdall dashboard --port`).
+5. Paste the token into **Companion token** and click **Save**.
+6. Click **Sync now** to run an immediate capture.
 
 ## Privacy
 
@@ -44,15 +48,15 @@ and ships it to a local Heimdall instance for archival and analysis.
   declared in `manifest.json`.
 - All captured data is sent only to your local Heimdall instance.
 - Your session credentials (cookies, tokens) never leave your browser.
-- You own your account data. Heimdall stores it in a local SQLite database
-  under `~/.local/share/heimdall/` (or the path set by `$HEIMDALL_DATA_DIR`).
+- You own your account data. Heimdall stores conversations under
+  `~/.heimdall/archive/web/`.
 
 ## Development
 
 ```bash
-npm install          # install deps
-npm run typecheck    # tsc --noEmit (no .ts sources yet until Tasks 5-6)
-npm run build:chrome # esbuild -> dist/chrome/
-npm run build:firefox
-npm test             # vitest run (no tests yet until Tasks 5-6)
+npm install           # install deps
+npm run typecheck     # tsc --noEmit
+npm run build:chrome  # esbuild -> dist/chrome/
+npm run build:firefox # esbuild + firefox manifest -> dist/firefox/
+npm test              # vitest — unit + HAR-replay tests
 ```

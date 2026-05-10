@@ -43,6 +43,37 @@ export interface VendorAdapter {
   fetch(id: string): Promise<unknown>;
 }
 
+const MAX_FETCH_CONCURRENCY = 2;
+const RATE_LIMIT_BACKOFF_MS = 5_000;
+const RATE_LIMIT_RE = /429|rate.?limit/i;
+
+type PoolResult<T> = { ok: true; value: T } | { ok: false; error: Error };
+
+/** Run `fn` over `items` with at most `limit` concurrent calls in flight. */
+async function runCapped<T>(
+  items: string[],
+  limit: number,
+  fn: (id: string) => Promise<T>,
+): Promise<Array<PoolResult<T>>> {
+  if (items.length === 0) return [];
+  const out: Array<PoolResult<T>> = new Array(items.length);
+  // Queue carries [originalIndex, id] pairs so results land in input order.
+  const queue: Array<[number, string]> = items.map((id, i) => [i, id]);
+  const worker = async () => {
+    let next: [number, string] | undefined;
+    while ((next = queue.shift()) !== undefined) {
+      const [i, id] = next;
+      try {
+        out[i] = { ok: true, value: await fn(id) };
+      } catch (e) {
+        out[i] = { ok: false, error: e instanceof Error ? e : new Error(String(e)) };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 export async function syncVendor(
   cfg: ExtensionConfig,
   adapter: VendorAdapter,
@@ -63,27 +94,44 @@ export async function syncVendor(
   result.listed = observed.length;
   const changed = pickChanged(state.lastSeenUpdatedAt, observed);
 
-  for (const id of changed) {
-    try {
-      const payload = await adapter.fetch(id);
-      const fingerprint = await schemaFingerprint(payload);
-      const conv: WebConversation = {
-        vendor: adapter.vendor,
-        conversation_id: id,
-        captured_at: new Date().toISOString(),
-        schema_fingerprint: fingerprint,
-        payload,
-      };
-      const { saved, unchanged } = await postConversation(cfg, conv);
-      if (saved) result.written++;
-      if (unchanged) result.unchanged++;
-      const observedItem = observed.find(o => o.id === id);
-      state.lastSeenUpdatedAt[id] = observedItem?.updated_at ?? new Date().toISOString();
-    } catch (e) {
-      result.errors.push(`${id}: ${(e as Error).message}`);
+  // Build lookup for updated_at values (O(1) per fetch result).
+  const observedMap = new Map(observed.map(o => [o.id, o]));
+
+  const fetchResults = await runCapped(changed, MAX_FETCH_CONCURRENCY, async (id) => {
+    const payload = await adapter.fetch(id);
+    if (payload === undefined) {
+      throw new Error('undefined payload — possible Cloudflare challenge or parse error');
+    }
+    const fingerprint = await schemaFingerprint(payload);
+    const conv: WebConversation = {
+      vendor: adapter.vendor,
+      conversation_id: id,
+      captured_at: new Date().toISOString(),
+      schema_fingerprint: fingerprint,
+      payload,
+    };
+    const { saved, unchanged } = await postConversation(cfg, conv);
+    return { id, saved, unchanged, observedItem: observedMap.get(id) };
+  });
+
+  for (let i = 0; i < fetchResults.length; i++) {
+    const r = fetchResults[i]!;
+    const id = changed[i]!;
+    if (r.ok) {
+      if (r.value.saved) result.written++;
+      if (r.value.unchanged) result.unchanged++;
+      state.lastSeenUpdatedAt[id] = r.value.observedItem?.updated_at ?? new Date().toISOString();
+    } else {
+      const msg = r.error.message;
+      result.errors.push(`${id}: ${msg}`);
       cfg.telemetry.totalErrors++;
+      // Back off when rate-limited to avoid hammering the vendor API.
+      if (RATE_LIMIT_RE.test(msg)) {
+        await new Promise(res => setTimeout(res, RATE_LIMIT_BACKOFF_MS));
+      }
     }
   }
+
   state.lastSyncAt = new Date().toISOString();
   cfg.telemetry.totalCaptures += result.written;
 

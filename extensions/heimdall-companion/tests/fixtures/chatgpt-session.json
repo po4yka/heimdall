@@ -1,0 +1,9 @@
+{
+  "user": {
+    "id": "user-xyz789",
+    "name": "Test User",
+    "email": "test@example.com"
+  },
+  "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.dGVzdA.dGVzdA",
+  "expires": "2026-05-11T00:00:00.000Z"
+}

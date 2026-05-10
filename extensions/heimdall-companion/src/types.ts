@@ -25,7 +25,7 @@ export const DEFAULT_VENDORS = ['claude.ai', 'chatgpt.com'] as const;
 
 export const DEFAULT_CONFIG: ExtensionConfig = {
   version: 1,
-  heimdallUrl: 'http://localhost:8080',
+  heimdallUrl: 'http://127.0.0.1:8787',
   companionToken: null,
   syncIntervalMinutes: 360,
   vendors: Object.fromEntries(DEFAULT_VENDORS.map(v => [v, {

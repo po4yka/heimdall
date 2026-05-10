@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "id": "chatgpt-conv-aaaa",
+      "title": "Python dataclasses overview",
+      "update_time": 1746878400.123
+    },
+    {
+      "id": "chatgpt-conv-bbbb",
+      "title": "SQL window functions",
+      "update_time": 1746792000.456
+    }
+  ],
+  "total": 2,
+  "limit": 28,
+  "offset": 0
+}
