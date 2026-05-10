@@ -45,7 +45,7 @@ fn openai_zip_round_trips_through_import() {
     let zip_path = tmp.path().join("openai.zip");
     build_openai_zip(&zip_path);
 
-    let report = imports::import_zip(&archive_root, &zip_path).unwrap();
+    let report = imports::import_zip(&archive_root, &zip_path, None).unwrap();
     assert_eq!(report.vendor, imports::detect::Vendor::OpenAI);
     assert_eq!(report.conversation_count, 2);
     assert!(report.root.join("original.zip").is_file());
@@ -61,7 +61,7 @@ fn anthropic_zip_round_trips_through_import() {
     let zip_path = tmp.path().join("anthropic.zip");
     build_anthropic_zip(&zip_path);
 
-    let report = imports::import_zip(&archive_root, &zip_path).unwrap();
+    let report = imports::import_zip(&archive_root, &zip_path, None).unwrap();
     assert_eq!(report.vendor, imports::detect::Vendor::Anthropic);
     assert_eq!(report.conversation_count, 1);
     assert!(report.root.join("conversations").join("abc.json").is_file());
@@ -83,7 +83,7 @@ fn unknown_zip_fails_clearly() {
     w.write_all(b"hi").unwrap();
     w.finish().unwrap();
 
-    let result = imports::import_zip(&archive_root, &zip_path);
+    let result = imports::import_zip(&archive_root, &zip_path, None);
     assert!(result.is_err());
     assert!(
         result

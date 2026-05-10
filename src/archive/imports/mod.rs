@@ -2,6 +2,7 @@
 
 pub mod anthropic;
 pub mod detect;
+pub mod ingest;
 pub mod openai;
 pub mod storage;
 pub mod watch;
@@ -31,7 +32,16 @@ pub struct ImportReport {
 }
 
 /// Import a single ZIP into the archive at `archive_root`.
-pub fn import_zip(archive_root: &Path, zip_path: &Path) -> Result<ImportReport> {
+///
+/// `db_path` is optional.  When provided, each parsed conversation is also
+/// inserted into the scanner SQLite database so it appears in the dashboard
+/// alongside live sessions.  Pass `None` when a DB is not available (e.g. the
+/// file-watcher background thread).
+pub fn import_zip(
+    archive_root: &Path,
+    zip_path: &Path,
+    db_path: Option<&Path>,
+) -> Result<ImportReport> {
     // Ensure archive root exists; reuses Archive::at semantics.
     let _archive = Archive::at(archive_root.to_path_buf())?;
 
@@ -51,8 +61,8 @@ pub fn import_zip(archive_root: &Path, zip_path: &Path) -> Result<ImportReport> 
     dir.copy_original(zip_path)?;
 
     let (count, fingerprint, warnings) = match vendor {
-        Vendor::OpenAI => write_openai_conversations(&mut zip, &dir)?,
-        Vendor::Anthropic => write_anthropic_conversations(&mut zip, &dir)?,
+        Vendor::OpenAI => write_openai_conversations(&mut zip, &dir, db_path)?,
+        Vendor::Anthropic => write_anthropic_conversations(&mut zip, &dir, db_path)?,
         Vendor::Unknown => unreachable!(),
     };
 
@@ -137,8 +147,14 @@ pub fn list_imports(archive_root: &Path) -> Result<Vec<ImportSummary>> {
 fn write_openai_conversations<R: std::io::Read + std::io::Seek>(
     zip: &mut zip::ZipArchive<R>,
     dir: &ImportDir,
+    db_path: Option<&Path>,
 ) -> Result<(usize, Option<String>, Vec<String>)> {
     let convs = openai::read_conversations_from_zip(zip)?;
+    let db_conn = db_path.and_then(|p| {
+        crate::scanner::db::open_db(p)
+            .map_err(|e| tracing::warn!("import ingest: open_db failed: {e:#}"))
+            .ok()
+    });
     let mut warnings = Vec::new();
     let mut count = 0;
     for c in &convs {
@@ -149,6 +165,11 @@ fn write_openai_conversations<R: std::io::Read + std::io::Seek>(
             warnings.push(format!("{key}: {e}"));
         } else {
             count += 1;
+            if let Some(ref conn) = db_conn {
+                if let Err(e) = ingest::ingest_openai(conn, c) {
+                    tracing::warn!("import ingest: openai {key}: {e:#}");
+                }
+            }
         }
     }
     Ok((count, None, warnings))
@@ -157,6 +178,7 @@ fn write_openai_conversations<R: std::io::Read + std::io::Seek>(
 fn write_anthropic_conversations<R: std::io::Read + std::io::Seek>(
     zip: &mut zip::ZipArchive<R>,
     dir: &ImportDir,
+    db_path: Option<&Path>,
 ) -> Result<(usize, Option<String>, Vec<String>)> {
     let entries = anthropic::read_json_entries_from_zip(zip)?;
     let mut all_convs: Vec<Value> = Vec::new();
@@ -165,6 +187,11 @@ fn write_anthropic_conversations<R: std::io::Read + std::io::Seek>(
     }
     let fingerprint = anthropic::schema_fingerprint(&all_convs);
 
+    let db_conn = db_path.and_then(|p| {
+        crate::scanner::db::open_db(p)
+            .map_err(|e| tracing::warn!("import ingest: open_db failed: {e:#}"))
+            .ok()
+    });
     let mut warnings = Vec::new();
     let mut count = 0;
     for mut value in all_convs {
@@ -175,6 +202,11 @@ fn write_anthropic_conversations<R: std::io::Read + std::io::Seek>(
                     warnings.push(format!("{}: {e}", c.id));
                 } else {
                     count += 1;
+                    if let Some(ref conn) = db_conn {
+                        if let Err(e) = ingest::ingest_anthropic(conn, &c) {
+                            tracing::warn!("import ingest: anthropic {}: {e:#}", c.id);
+                        }
+                    }
                 }
             }
             None => {

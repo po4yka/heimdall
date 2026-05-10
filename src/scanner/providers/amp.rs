@@ -128,7 +128,7 @@ impl Provider for AmpProvider {
     }
 
     fn parse(&self, path: &Path) -> Result<Vec<Turn>> {
-        Ok(parse_amp_thread_file(path))
+        Ok(parse_amp_thread_file(path).0)
     }
 
     fn archive_paths(&self) -> Vec<PathBuf> {
@@ -140,18 +140,18 @@ impl Provider for AmpProvider {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Parse an Amp thread JSON file into `Turn` records.
+/// Parse an Amp thread JSON file into `(turns, title)`.
 ///
 /// Each `usageLedger.events` entry becomes one Turn. Cache tokens are resolved
 /// from the `messages` array by matching `toMessageId`. Malformed files are
 /// silently skipped. Dedup is handled by the `(provider, message_id)` unique
 /// index on insert; within a single file we deduplicate by event `id`.
-pub(crate) fn parse_amp_thread_file(path: &Path) -> Vec<Turn> {
+pub(crate) fn parse_amp_thread_file(path: &Path) -> (Vec<Turn>, Option<String>) {
     let file = match std::fs::File::open(path) {
         Ok(f) => f,
         Err(e) => {
             warn!("amp: cannot open {}: {}", path.display(), e);
-            return Vec::new();
+            return (Vec::new(), None);
         }
     };
 
@@ -160,14 +160,14 @@ pub(crate) fn parse_amp_thread_file(path: &Path) -> Vec<Turn> {
     let mut content = String::new();
     if let Err(e) = std::io::Read::read_to_string(&mut reader, &mut content) {
         warn!("amp: cannot read {}: {}", path.display(), e);
-        return Vec::new();
+        return (Vec::new(), None);
     }
 
     let thread: serde_json::Value = match serde_json::from_str(&content) {
         Ok(v) => v,
         Err(e) => {
             warn!("amp: cannot parse {}: {}", path.display(), e);
-            return Vec::new();
+            return (Vec::new(), None);
         }
     };
 
@@ -175,9 +175,15 @@ pub(crate) fn parse_amp_thread_file(path: &Path) -> Vec<Turn> {
         Some(id) if !id.is_empty() => id.to_string(),
         _ => {
             warn!("amp: missing thread id in {}", path.display());
-            return Vec::new();
+            return (Vec::new(), None);
         }
     };
+
+    let title: Option<String> = thread
+        .get("title")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
 
     let session_id = format!("amp:{thread_id}");
     let source_path = path.to_string_lossy().to_string();
@@ -216,7 +222,7 @@ pub(crate) fn parse_amp_thread_file(path: &Path) -> Vec<Turn> {
         .and_then(|v| v.as_array())
     {
         Some(arr) => arr,
-        None => return Vec::new(),
+        None => return (Vec::new(), None),
     };
 
     let mut seen_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -310,7 +316,7 @@ pub(crate) fn parse_amp_thread_file(path: &Path) -> Vec<Turn> {
             .then_with(|| a.message_id.cmp(&b.message_id))
     });
 
-    turns
+    (turns, title)
 }
 
 // ---------------------------------------------------------------------------

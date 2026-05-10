@@ -453,6 +453,23 @@ fn create_schema(conn: &Connection) -> Result<()> {
             ON codex_plan_daily(day);",
     )?;
 
+    // Provider identity & budget: one row per vendor (last-known-good value).
+    // Covers both Claude OAuth (budget fields populated) and Codex (credits field).
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS provider_identity_snapshots (
+            vendor          TEXT PRIMARY KEY,
+            captured_at     TEXT NOT NULL,
+            account_email   TEXT,
+            plan            TEXT,
+            rate_limit_tier TEXT,
+            budget_used     REAL,
+            budget_limit    REAL,
+            budget_currency TEXT,
+            login_method    TEXT,
+            credits         REAL
+        );",
+    )?;
+
     Ok(())
 }
 
@@ -1292,6 +1309,52 @@ pub fn insert_tool_invocations(
             ])?;
         }
     }
+    Ok(())
+}
+
+/// Upsert last-known provider identity and budget into `provider_identity_snapshots`.
+/// One row per vendor (PRIMARY KEY = vendor). All optional fields may be NULL.
+pub fn upsert_provider_identity(
+    conn: &Connection,
+    vendor: &str,
+    captured_at: &str,
+    account_email: Option<&str>,
+    plan: Option<&str>,
+    rate_limit_tier: Option<&str>,
+    budget_used: Option<f64>,
+    budget_limit: Option<f64>,
+    budget_currency: Option<&str>,
+    login_method: Option<&str>,
+    credits: Option<f64>,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO provider_identity_snapshots
+             (vendor, captured_at, account_email, plan, rate_limit_tier,
+              budget_used, budget_limit, budget_currency, login_method, credits)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT(vendor) DO UPDATE SET
+             captured_at     = excluded.captured_at,
+             account_email   = excluded.account_email,
+             plan            = excluded.plan,
+             rate_limit_tier = excluded.rate_limit_tier,
+             budget_used     = excluded.budget_used,
+             budget_limit    = excluded.budget_limit,
+             budget_currency = excluded.budget_currency,
+             login_method    = excluded.login_method,
+             credits         = excluded.credits",
+        rusqlite::params![
+            vendor,
+            captured_at,
+            account_email,
+            plan,
+            rate_limit_tier,
+            budget_used,
+            budget_limit,
+            budget_currency,
+            login_method,
+            credits,
+        ],
+    )?;
     Ok(())
 }
 

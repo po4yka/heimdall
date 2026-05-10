@@ -998,6 +998,48 @@ where
         *cache = Some((Instant::now(), to_store.clone()));
     }
 
+    // Persist identity + budget to SQLite so they survive restarts.
+    // Best-effort: failure must not block the response.
+    if to_store.available {
+        let db_path = state.db_path.clone();
+        let identity = to_store.identity.clone();
+        let budget = to_store.budget.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = match crate::scanner::db::open_db(&db_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("provider_identity persist: open_db failed: {e:#}");
+                    return;
+                }
+            };
+            let plan_str = identity
+                .as_ref()
+                .and_then(|id| id.plan.as_ref())
+                .map(|p| format!("{p:?}").to_lowercase());
+            let tier = identity.as_ref().and_then(|id| id.rate_limit_tier.as_deref());
+            let (b_used, b_limit, b_currency) = budget
+                .as_ref()
+                .map(|b| (Some(b.used), Some(b.limit), Some(b.currency.as_str())))
+                .unwrap_or((None, None, None));
+            let now = chrono::Utc::now().to_rfc3339();
+            if let Err(e) = crate::scanner::db::upsert_provider_identity(
+                &conn,
+                "claude",
+                &now,
+                None,
+                plan_str.as_deref(),
+                tier,
+                b_used,
+                b_limit,
+                b_currency,
+                None,
+                None,
+            ) {
+                tracing::warn!("provider_identity persist: upsert failed: {e:#}");
+            }
+        });
+    }
+
     to_store
 }
 

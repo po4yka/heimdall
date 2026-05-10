@@ -219,7 +219,7 @@ pub fn parse_jsonl_file(provider: &str, filepath: &Path, skip_lines: i64) -> Par
         PROVIDER_AMP => parse_amp_result(
             crate::scanner::providers::amp::parse_amp_thread_file(filepath),
             filepath,
-        ),
+        ), // returns (Vec<Turn>, Option<String>)
         PROVIDER_OPENCODE | PROVIDER_COPILOT => {
             // These providers are SQLite-backed or mixed-format and must be
             // parsed via their Provider trait `parse()`. The JSONL dispatcher
@@ -259,6 +259,10 @@ fn progress_marker_fallback(filepath: &Path) -> i64 {
         .ok()
         .map(|m| m.len() as i64)
         .unwrap_or(0)
+}
+
+pub fn session_metas_from_turns_pub(provider: &str, turns: &[Turn]) -> Vec<SessionMeta> {
+    session_metas_from_turns(provider, turns)
 }
 
 fn session_metas_from_turns(provider: &str, turns: &[Turn]) -> Vec<SessionMeta> {
@@ -309,15 +313,25 @@ fn parse_pi_result(turns: Vec<crate::models::Turn>, filepath: &Path) -> ParseRes
     parse_provider_turns_result(PROVIDER_PI, turns, filepath, Some(progress_marker))
 }
 
-/// Wrap a `Vec<Turn>` from the Amp provider into a `ParseResult`.
+/// Wrap Amp parse output into a `ParseResult`, carrying the thread title.
 ///
-/// Each Amp thread file (`.json`) maps to one session.  Session metas are
+/// Each Amp thread file (`.json`) maps to one session. Session metas are
 /// built from the turns in the same way as Pi.
-fn parse_amp_result(turns: Vec<crate::models::Turn>, _filepath: &Path) -> ParseResult {
+fn parse_amp_result(
+    (turns, title): (Vec<crate::models::Turn>, Option<String>),
+    _filepath: &Path,
+) -> ParseResult {
     // Use turns.len() as the incremental-scan guard: if events are added to the
     // thread file, the count grows and triggers reprocessing on the next scan.
     let progress_marker = turns.len() as i64;
-    parse_provider_turns_result(PROVIDER_AMP, turns, Path::new(""), Some(progress_marker))
+    let mut result =
+        parse_provider_turns_result(PROVIDER_AMP, turns, Path::new(""), Some(progress_marker));
+    if let (Some(title), Some(meta)) = (title, result.session_metas.first()) {
+        result
+            .session_titles
+            .insert(meta.session_id.clone(), title);
+    }
+    result
 }
 
 /// Rewrite a Claude-parsed result so it carries the Xcode provider tag on

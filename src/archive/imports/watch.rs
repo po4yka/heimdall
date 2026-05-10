@@ -65,7 +65,7 @@ pub fn run_watch(archive_root: &Path, watch_dir: &Path) -> Result<()> {
             if !path.is_file() {
                 continue;
             }
-            match import_zip(archive_root, &path) {
+            match import_zip(archive_root, &path, None) {
                 Ok(report) => info!(
                     target: "archive::imports::watch",
                     "imported {} ({} convs) from {}",

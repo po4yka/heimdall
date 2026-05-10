@@ -1276,7 +1276,8 @@ fn main() -> Result<()> {
             let zip = zip.ok_or_else(|| {
                 anyhow::anyhow!("either <zip> argument or --watch <dir> is required")
             })?;
-            let report = archive::imports::import_zip(&root, &zip)?;
+            let db_path = scanner::default_db_path();
+            let report = archive::imports::import_zip(&root, &zip, Some(&db_path))?;
             if json {
                 println!(
                     "{}",

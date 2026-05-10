@@ -1634,6 +1634,31 @@ pub(super) async fn build_codex_snapshot(
         build_depletion_forecast(signals)
     };
 
+    // Persist identity + credits so they survive restarts. Best-effort.
+    if resolution.available {
+        let db_path = state.db_path.clone();
+        let identity = resolution.identity.clone();
+        let credits = resolution.credits;
+        tokio::task::spawn_blocking(move || {
+            let conn = match crate::scanner::db::open_db(&db_path) {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("codex identity persist: open_db failed: {e:#}");
+                    return;
+                }
+            };
+            let email = identity.as_ref().and_then(|id| id.account_email.as_deref());
+            let plan = identity.as_ref().and_then(|id| id.plan.as_deref());
+            let login = identity.as_ref().and_then(|id| id.login_method.as_deref());
+            let now = chrono::Utc::now().to_rfc3339();
+            if let Err(e) = crate::scanner::db::upsert_provider_identity(
+                &conn, "codex", &now, email, plan, None, None, None, None, login, credits,
+            ) {
+                tracing::warn!("codex identity persist: upsert failed: {e:#}");
+            }
+        });
+    }
+
     Ok(LiveProviderSnapshot {
         provider: "codex".into(),
         available: resolution.available,
