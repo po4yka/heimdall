@@ -10,6 +10,7 @@ export interface ArtifactBlock {
   message_id: string;
   identifier: string;
   type: string;
+  language: string;
   title: string;
   body: string;
   byte_range: [number, number];
@@ -31,11 +32,11 @@ function parseAttrs(attrs: string): Record<string, string> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractArtifacts(payload: Record<string, any>): ArtifactBlock[] {
   // Prefer pre-computed server-side extraction.
-  const precomputed = payload?.heimdall_extracted?.artifacts;
+  const precomputed = payload?.['heimdall_extracted']?.artifacts;
   if (Array.isArray(precomputed)) return precomputed as ArtifactBlock[];
 
   const artifacts: ArtifactBlock[] = [];
-  const messages: unknown[] = Array.isArray(payload?.chat_messages) ? payload.chat_messages : [];
+  const messages: unknown[] = Array.isArray(payload?.['chat_messages']) ? payload['chat_messages'] : [];
 
   for (const msg of messages) {
     if (typeof msg !== 'object' || msg === null) continue;
@@ -54,6 +55,7 @@ export function extractArtifacts(payload: Record<string, any>): ArtifactBlock[] 
         message_id: msgId,
         identifier: attrs['identifier'] ?? '',
         type: attrs['type'] ?? '',
+        language: attrs['language'] ?? '',
         title: attrs['title'] ?? '',
         body: cap[2] ?? '',
         byte_range: [start, end],

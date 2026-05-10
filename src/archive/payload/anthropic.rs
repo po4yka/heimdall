@@ -59,6 +59,7 @@ pub fn extract(payload: &mut Value) -> Result<()> {
                     let mut identifier = String::new();
                     let mut artifact_type = String::new();
                     let mut title = String::new();
+                    let mut language = String::new();
 
                     for attr in attr_re().captures_iter(attrs_str) {
                         let key = attr.get(1).map_or("", |m| m.as_str());
@@ -67,6 +68,7 @@ pub fn extract(payload: &mut Value) -> Result<()> {
                             "identifier" => identifier = val.to_string(),
                             "type" => artifact_type = val.to_string(),
                             "title" => title = val.to_string(),
+                            "language" => language = val.to_string(),
                             _ => {}
                         }
                     }
@@ -75,6 +77,7 @@ pub fn extract(payload: &mut Value) -> Result<()> {
                         "message_id": msg_id,
                         "identifier": identifier,
                         "type": artifact_type,
+                        "language": language,
                         "title": title,
                         "body": body,
                         "byte_range": [full.start(), full.end()],

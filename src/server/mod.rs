@@ -218,6 +218,10 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             get(api::api_archive_web_conversation_get),
         )
         .route(
+            "/api/archive/web-conversations/reextract",
+            post(api::api_archive_web_conversations_reextract),
+        )
+        .route(
             "/api/archive/companion-heartbeat",
             post(api::api_archive_companion_heartbeat),
         )

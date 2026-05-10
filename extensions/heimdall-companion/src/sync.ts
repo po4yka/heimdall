@@ -108,7 +108,7 @@ export async function syncVendor(
       const bareId = id.includes('/') ? id.split('/').pop()! : id;
       const key = `citations:${bareId}`;
       try {
-        const stored = await chrome.storage.session.get(key);
+        const stored = await chrome.storage.local.get(key);
         const mapping = stored[key];
         if (Array.isArray(mapping) && mapping.length > 0) {
           const p = payload as Record<string, unknown>;
@@ -122,7 +122,7 @@ export async function syncVendor(
             payload = p;
           }
           // Consumed — remove from session storage.
-          chrome.storage.session.remove(key).catch(() => {});
+          chrome.storage.local.remove(key).catch(() => {});
         }
       } catch {
         // chrome.storage unavailable in test environment — ignore.

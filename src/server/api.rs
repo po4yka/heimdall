@@ -2963,7 +2963,10 @@ pub async fn api_archive_web_conversation(
 
     let archive_root = crate::archive::default_root();
     let outcome = tokio::task::spawn_blocking(move || {
-        crate::archive::web::write_web_conversation(&archive_root, &conv)
+        let result = crate::archive::web::write_web_conversation(&archive_root, &conv)?;
+        // Best-effort cross-tier index update — failure must not block the write response.
+        crate::archive::index::index_web_conversation(&archive_root, &conv).ok();
+        Ok::<_, anyhow::Error>(result)
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -3012,6 +3015,88 @@ pub async fn api_archive_web_conversation_get(
         Some(value) => Ok(Json(value)),
         None => Err(StatusCode::NOT_FOUND),
     }
+}
+
+/// `POST /api/archive/web-conversations/reextract` — re-run payload extractors on all
+/// already-archived web conversations, enriching `heimdall_extracted` in-place.
+///
+/// Idempotent: conversations that already have `browsing_steps` are skipped by the
+/// extractor's own guard. Loopback-only, no bearer.
+pub async fn api_archive_web_conversations_reextract(
+    request: Request,
+) -> Result<Json<Value>, StatusCode> {
+    enforce_loopback_request(&request)?;
+    let archive_root = crate::archive::default_root();
+    let result = tokio::task::spawn_blocking(move || -> anyhow::Result<Value> {
+        use std::fs;
+        let web_root = archive_root.join("web");
+        if !web_root.is_dir() {
+            return Ok(serde_json::json!({"updated": 0, "skipped": 0, "errors": 0}));
+        }
+        let mut updated = 0usize;
+        let mut skipped = 0usize;
+        let mut errors = 0usize;
+
+        for vendor_entry in fs::read_dir(&web_root)? {
+            let vendor_entry = vendor_entry?;
+            if !vendor_entry.file_type()?.is_dir() {
+                continue;
+            }
+            let vendor_path = vendor_entry.path();
+            for file_entry in fs::read_dir(&vendor_path)? {
+                let file_entry = file_entry?;
+                let fname = file_entry.file_name();
+                let fname_str = fname.to_string_lossy();
+                if fname_str.starts_with(".tmp-") || !fname_str.ends_with(".json") {
+                    continue;
+                }
+                let file_path = file_entry.path();
+                let bytes = match fs::read(&file_path) {
+                    Ok(b) => b,
+                    Err(_) => { errors += 1; continue; }
+                };
+                let mut conv: crate::archive::web::WebConversation =
+                    match serde_json::from_slice(&bytes) {
+                        Ok(c) => c,
+                        Err(_) => { errors += 1; continue; }
+                    };
+                match conv.vendor.as_str() {
+                    "claude.ai" => {
+                        crate::archive::payload::anthropic::extract(&mut conv.payload).ok();
+                    }
+                    "chatgpt.com" => {
+                        crate::archive::payload::openai::extract(&mut conv.payload).ok();
+                    }
+                    _ => {}
+                }
+                // Also update the cross-tier index.
+                crate::archive::index::index_web_conversation(&archive_root, &conv).ok();
+
+                let new_bytes = match serde_json::to_vec_pretty(&conv) {
+                    Ok(b) => b,
+                    Err(_) => { errors += 1; continue; }
+                };
+                if new_bytes == bytes {
+                    skipped += 1;
+                    continue;
+                }
+                let tmp = file_path.with_file_name(format!(
+                    ".tmp-reextract-{}",
+                    fname_str.trim_end_matches(".json")
+                ));
+                if fs::write(&tmp, &new_bytes).is_err() || fs::rename(&tmp, &file_path).is_err() {
+                    errors += 1;
+                } else {
+                    updated += 1;
+                }
+            }
+        }
+        Ok(serde_json::json!({"updated": updated, "skipped": skipped, "errors": errors}))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(result))
 }
 
 #[derive(Debug, serde::Deserialize)]

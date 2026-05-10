@@ -3244,6 +3244,7 @@
           message_id: msgId,
           identifier: attrs["identifier"] ?? "",
           type: attrs["type"] ?? "",
+          language: attrs["language"] ?? "",
           title: attrs["title"] ?? "",
           body: cap[2] ?? "",
           byte_range: [start, end]
@@ -3313,6 +3314,498 @@
     return citations;
   }
 
+  // src/ui/lib/highlight.ts
+  var KEYWORDS = {
+    python: [
+      "False",
+      "None",
+      "True",
+      "and",
+      "as",
+      "assert",
+      "async",
+      "await",
+      "break",
+      "class",
+      "continue",
+      "def",
+      "del",
+      "elif",
+      "else",
+      "except",
+      "finally",
+      "for",
+      "from",
+      "global",
+      "if",
+      "import",
+      "in",
+      "is",
+      "lambda",
+      "not",
+      "or",
+      "pass",
+      "raise",
+      "return",
+      "try",
+      "while",
+      "with",
+      "yield"
+    ],
+    rust: [
+      "Self",
+      "as",
+      "async",
+      "await",
+      "break",
+      "const",
+      "continue",
+      "crate",
+      "dyn",
+      "else",
+      "enum",
+      "extern",
+      "false",
+      "fn",
+      "for",
+      "if",
+      "impl",
+      "in",
+      "let",
+      "loop",
+      "match",
+      "mod",
+      "move",
+      "mut",
+      "pub",
+      "ref",
+      "return",
+      "self",
+      "static",
+      "struct",
+      "super",
+      "trait",
+      "true",
+      "type",
+      "union",
+      "unsafe",
+      "use",
+      "where",
+      "while"
+    ],
+    javascript: [
+      "async",
+      "await",
+      "break",
+      "case",
+      "catch",
+      "class",
+      "const",
+      "continue",
+      "debugger",
+      "default",
+      "delete",
+      "do",
+      "else",
+      "export",
+      "extends",
+      "false",
+      "finally",
+      "for",
+      "from",
+      "function",
+      "if",
+      "import",
+      "in",
+      "instanceof",
+      "let",
+      "new",
+      "null",
+      "of",
+      "return",
+      "static",
+      "super",
+      "switch",
+      "this",
+      "throw",
+      "true",
+      "try",
+      "typeof",
+      "undefined",
+      "var",
+      "void",
+      "while",
+      "with",
+      "yield"
+    ],
+    typescript: [
+      "abstract",
+      "any",
+      "as",
+      "async",
+      "await",
+      "boolean",
+      "break",
+      "case",
+      "catch",
+      "class",
+      "const",
+      "constructor",
+      "continue",
+      "declare",
+      "default",
+      "delete",
+      "do",
+      "else",
+      "enum",
+      "export",
+      "extends",
+      "false",
+      "finally",
+      "for",
+      "from",
+      "function",
+      "if",
+      "implements",
+      "import",
+      "in",
+      "infer",
+      "instanceof",
+      "interface",
+      "is",
+      "keyof",
+      "let",
+      "module",
+      "namespace",
+      "never",
+      "new",
+      "null",
+      "number",
+      "object",
+      "of",
+      "override",
+      "private",
+      "protected",
+      "public",
+      "readonly",
+      "return",
+      "static",
+      "string",
+      "super",
+      "switch",
+      "symbol",
+      "this",
+      "throw",
+      "true",
+      "try",
+      "type",
+      "typeof",
+      "undefined",
+      "unique",
+      "unknown",
+      "var",
+      "void",
+      "while",
+      "with",
+      "yield"
+    ],
+    go: [
+      "break",
+      "case",
+      "chan",
+      "const",
+      "continue",
+      "default",
+      "defer",
+      "else",
+      "fallthrough",
+      "for",
+      "func",
+      "go",
+      "goto",
+      "if",
+      "import",
+      "interface",
+      "map",
+      "package",
+      "range",
+      "return",
+      "select",
+      "struct",
+      "switch",
+      "type",
+      "var",
+      "true",
+      "false",
+      "nil"
+    ],
+    java: [
+      "abstract",
+      "assert",
+      "boolean",
+      "break",
+      "byte",
+      "case",
+      "catch",
+      "char",
+      "class",
+      "const",
+      "continue",
+      "default",
+      "do",
+      "double",
+      "else",
+      "enum",
+      "extends",
+      "final",
+      "finally",
+      "float",
+      "for",
+      "goto",
+      "if",
+      "implements",
+      "import",
+      "instanceof",
+      "int",
+      "interface",
+      "long",
+      "native",
+      "new",
+      "null",
+      "package",
+      "private",
+      "protected",
+      "public",
+      "return",
+      "short",
+      "static",
+      "strictfp",
+      "super",
+      "switch",
+      "synchronized",
+      "this",
+      "throw",
+      "throws",
+      "transient",
+      "true",
+      "try",
+      "var",
+      "void",
+      "volatile",
+      "while"
+    ],
+    sql: [
+      "SELECT",
+      "FROM",
+      "WHERE",
+      "JOIN",
+      "LEFT",
+      "RIGHT",
+      "INNER",
+      "OUTER",
+      "ON",
+      "AS",
+      "AND",
+      "OR",
+      "NOT",
+      "IN",
+      "LIKE",
+      "BETWEEN",
+      "IS",
+      "NULL",
+      "ORDER",
+      "BY",
+      "GROUP",
+      "HAVING",
+      "LIMIT",
+      "OFFSET",
+      "INSERT",
+      "INTO",
+      "VALUES",
+      "UPDATE",
+      "SET",
+      "DELETE",
+      "CREATE",
+      "TABLE",
+      "INDEX",
+      "DROP",
+      "ALTER",
+      "ADD",
+      "COLUMN",
+      "PRIMARY",
+      "KEY",
+      "FOREIGN",
+      "REFERENCES",
+      "UNIQUE",
+      "DEFAULT",
+      "CONSTRAINT",
+      "IF",
+      "EXISTS",
+      "WITH",
+      "UNION",
+      "ALL",
+      "DISTINCT",
+      "COUNT",
+      "SUM",
+      "AVG",
+      "MIN",
+      "MAX",
+      "CASE",
+      "WHEN",
+      "THEN",
+      "ELSE",
+      "END"
+    ],
+    bash: [
+      "if",
+      "then",
+      "else",
+      "elif",
+      "fi",
+      "for",
+      "in",
+      "do",
+      "done",
+      "while",
+      "until",
+      "case",
+      "esac",
+      "function",
+      "return",
+      "break",
+      "continue",
+      "exit",
+      "export",
+      "local",
+      "readonly",
+      "declare",
+      "unset",
+      "set",
+      "shift",
+      "source",
+      "alias",
+      "true",
+      "false"
+    ]
+  };
+  KEYWORDS["js"] = KEYWORDS["javascript"];
+  KEYWORDS["ts"] = KEYWORDS["typescript"];
+  KEYWORDS["sh"] = KEYWORDS["bash"];
+  KEYWORDS["shell"] = KEYWORDS["bash"];
+  KEYWORDS["zsh"] = KEYWORDS["bash"];
+  KEYWORDS["kotlin"] = KEYWORDS["java"];
+  function escHtml(s4) {
+    return s4.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function tokenize(code, lang) {
+    const kw = new Set(KEYWORDS[lang.toLowerCase()] ?? []);
+    const isHtmlLike = ["html", "xml", "svg"].includes(lang.toLowerCase());
+    const isPyLike = ["python", "py", "bash", "sh", "shell", "zsh"].includes(lang.toLowerCase());
+    const tokens = [];
+    let i4 = 0;
+    const n3 = code.length;
+    while (i4 < n3) {
+      const ch = code[i4];
+      if (isHtmlLike && ch === "<" && code.startsWith("!--", i4 + 1)) {
+        const end = code.indexOf("-->", i4 + 4);
+        const j4 = end === -1 ? n3 : end + 3;
+        tokens.push({ t: "comment", v: code.slice(i4, j4) });
+        i4 = j4;
+        continue;
+      }
+      if (ch === "/" && code[i4 + 1] === "*") {
+        const end = code.indexOf("*/", i4 + 2);
+        const j4 = end === -1 ? n3 : end + 2;
+        tokens.push({ t: "comment", v: code.slice(i4, j4) });
+        i4 = j4;
+        continue;
+      }
+      if (ch === "/" && code[i4 + 1] === "/" && !isHtmlLike) {
+        const end = code.indexOf("\n", i4);
+        const j4 = end === -1 ? n3 : end;
+        tokens.push({ t: "comment", v: code.slice(i4, j4) });
+        i4 = j4;
+        continue;
+      }
+      if (ch === "#" && isPyLike) {
+        const end = code.indexOf("\n", i4);
+        const j4 = end === -1 ? n3 : end;
+        tokens.push({ t: "comment", v: code.slice(i4, j4) });
+        i4 = j4;
+        continue;
+      }
+      if (ch === "-" && code[i4 + 1] === "-" && lang.toLowerCase() === "sql") {
+        const end = code.indexOf("\n", i4);
+        const j4 = end === -1 ? n3 : end;
+        tokens.push({ t: "comment", v: code.slice(i4, j4) });
+        i4 = j4;
+        continue;
+      }
+      if (isPyLike && (ch === '"' || ch === "'") && code[i4 + 1] === ch && code[i4 + 2] === ch) {
+        const q4 = ch.repeat(3);
+        const end = code.indexOf(q4, i4 + 3);
+        const j4 = end === -1 ? n3 : end + 3;
+        tokens.push({ t: "string", v: code.slice(i4, j4) });
+        i4 = j4;
+        continue;
+      }
+      if (ch === "`" || ch === '"' || ch === "'") {
+        const q4 = ch;
+        let j4 = i4 + 1;
+        while (j4 < n3) {
+          if (code[j4] === "\\") {
+            j4 += 2;
+            continue;
+          }
+          if (code[j4] === q4) {
+            j4++;
+            break;
+          }
+          if (q4 !== "`" && code[j4] === "\n") break;
+          j4++;
+        }
+        tokens.push({ t: "string", v: code.slice(i4, j4) });
+        i4 = j4;
+        continue;
+      }
+      if (ch >= "0" && ch <= "9") {
+        let j4 = i4 + 1;
+        while (j4 < n3) {
+          const c4 = code[j4];
+          if (c4 >= "0" && c4 <= "9" || c4 === "." || c4 === "_" || c4 === "x" || c4 === "X" || c4 === "b" || c4 === "B" || c4 === "o" || c4 === "O" || c4 >= "a" && c4 <= "f" || c4 >= "A" && c4 <= "F" || c4 === "e" || c4 === "E" || c4 === "+" || c4 === "-") {
+            j4++;
+          } else break;
+        }
+        tokens.push({ t: "number", v: code.slice(i4, j4) });
+        i4 = j4;
+        continue;
+      }
+      if (ch >= "a" && ch <= "z" || ch >= "A" && ch <= "Z" || ch === "_" || ch === "$") {
+        let j4 = i4 + 1;
+        while (j4 < n3) {
+          const c4 = code[j4];
+          if (c4 >= "a" && c4 <= "z" || c4 >= "A" && c4 <= "Z" || c4 >= "0" && c4 <= "9" || c4 === "_" || c4 === "$") {
+            j4++;
+          } else break;
+        }
+        const word = code.slice(i4, j4);
+        tokens.push({ t: kw.has(word) ? "keyword" : "plain", v: word });
+        i4 = j4;
+        continue;
+      }
+      tokens.push({ t: "plain", v: ch });
+      i4++;
+    }
+    return tokens;
+  }
+  function highlight(code, lang) {
+    if (!lang || lang === "text" || lang === "plain" || lang === "plaintext") {
+      return escHtml(code);
+    }
+    const tokens = tokenize(code, lang);
+    return tokens.map(({ t: t4, v: v4 }) => t4 === "plain" ? escHtml(v4) : `<span class="hl-${t4}">${escHtml(v4)}</span>`).join("");
+  }
+
   // src/ui/components/WebConversationDetail.tsx
   function WebConversationDetail() {
     const loading = webConversationDetailLoading.value;
@@ -3340,14 +3833,24 @@
           artifacts.length,
           ")"
         ] }),
-        artifacts.map((a4, i4) => /* @__PURE__ */ u4("details", { class: "web-conv-detail-artifact", children: [
-          /* @__PURE__ */ u4("summary", { children: [
-            /* @__PURE__ */ u4("span", { class: "web-conv-detail-artifact-type", children: esc(a4.type || "unknown") }),
-            " ",
-            /* @__PURE__ */ u4("strong", { children: esc(a4.title || a4.identifier || "(untitled)") })
-          ] }),
-          /* @__PURE__ */ u4("pre", { class: "web-conv-detail-artifact-body", children: esc(a4.body) })
-        ] }, `art-${i4}`))
+        artifacts.map((a4, i4) => {
+          const lang = a4.language || (a4.type === "text/html" ? "html" : "");
+          const highlighted = highlight(a4.body, lang);
+          return /* @__PURE__ */ u4("details", { class: "web-conv-detail-artifact", children: [
+            /* @__PURE__ */ u4("summary", { children: [
+              /* @__PURE__ */ u4("span", { class: "web-conv-detail-artifact-type", children: esc(a4.type || "unknown") }),
+              lang && /* @__PURE__ */ u4("span", { class: "web-conv-detail-artifact-lang", children: esc(lang) }),
+              " ",
+              /* @__PURE__ */ u4("strong", { children: esc(a4.title || a4.identifier || "(untitled)") })
+            ] }),
+            /* @__PURE__ */ u4("pre", { class: "web-conv-detail-artifact-body", children: /* @__PURE__ */ u4(
+              "code",
+              {
+                dangerouslySetInnerHTML: { __html: highlighted }
+              }
+            ) })
+          ] }, `art-${i4}`);
+        })
       ] }),
       citations.length > 0 && /* @__PURE__ */ u4("div", { class: "web-conv-detail-section", children: [
         /* @__PURE__ */ u4("h3", { children: [
@@ -10320,7 +10823,7 @@
   function CommandPalette({ triggerRescan, toggleTheme: toggleTheme2 }) {
     const open = commandPaletteOpen.value;
     const [query, setQuery] = d2("");
-    const [highlight, setHighlight] = d2(0);
+    const [highlight2, setHighlight] = d2(0);
     const inputRef = A2(null);
     const listRef = A2(null);
     const commands = T2(
@@ -10338,17 +10841,17 @@
       window.setTimeout(() => inputRef.current?.focus(), 0);
     }, [open]);
     y2(() => {
-      if (highlight >= filtered.length) {
+      if (highlight2 >= filtered.length) {
         setHighlight(Math.max(0, filtered.length - 1));
       }
-    }, [filtered.length, highlight]);
+    }, [filtered.length, highlight2]);
     y2(() => {
       if (!open) return;
       const el = listRef.current?.querySelector(
-        `[data-cmd-index="${highlight}"]`
+        `[data-cmd-index="${highlight2}"]`
       );
       el?.scrollIntoView({ block: "nearest" });
-    }, [highlight, open]);
+    }, [highlight2, open]);
     if (!open) return null;
     const close = () => {
       commandPaletteOpen.value = false;
@@ -10371,7 +10874,7 @@
       }
       if (e4.key === "Enter") {
         e4.preventDefault();
-        const cmd = filtered[highlight];
+        const cmd = filtered[highlight2];
         if (cmd) {
           cmd.run();
           close();
@@ -10428,7 +10931,7 @@
                 /* @__PURE__ */ u4("div", { class: "cmd-palette__group-label", children: GROUP_LABEL[group] }),
                 items.map((cmd) => {
                   const idx = flatIndex.get(cmd.id) ?? 0;
-                  const isActive = idx === highlight;
+                  const isActive = idx === highlight2;
                   return /* @__PURE__ */ u4(
                     "button",
                     {

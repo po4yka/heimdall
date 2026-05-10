@@ -24,6 +24,16 @@ async function render(): Promise<void> {
 document.getElementById('syncNow')!.addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'syncNow' });
 });
+document.getElementById('forceResync')!.addEventListener('click', () => {
+  const btn = document.getElementById('forceResync') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Re-syncing…';
+  chrome.runtime.sendMessage({ type: 'forceResyncNow' }, () => {
+    btn.disabled = false;
+    btn.textContent = 'Force resync all';
+    void render();
+  });
+});
 document.getElementById('options')!.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
 });

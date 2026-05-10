@@ -2,6 +2,7 @@ import { webConversationDetail, webConversationDetailLoading } from '../state/st
 import { esc } from '../lib/format';
 import { extractArtifacts } from '../lib/payload/anthropic';
 import { extractBrowsingSteps, extractCitations } from '../lib/payload/openai';
+import { highlight } from '../lib/highlight';
 
 export function WebConversationDetail() {
   const loading = webConversationDetailLoading.value;
@@ -38,16 +39,23 @@ export function WebConversationDetail() {
       {artifacts.length > 0 && (
         <div class="web-conv-detail-section">
           <h3>Artifacts ({artifacts.length})</h3>
-          {artifacts.map((a, i) => (
-            <details key={`art-${i}`} class="web-conv-detail-artifact">
-              <summary>
-                <span class="web-conv-detail-artifact-type">{esc(a.type || 'unknown')}</span>
-                {' '}
-                <strong>{esc(a.title || a.identifier || '(untitled)')}</strong>
-              </summary>
-              <pre class="web-conv-detail-artifact-body">{esc(a.body)}</pre>
-            </details>
-          ))}
+          {artifacts.map((a, i) => {
+            const lang = a.language || (a.type === 'text/html' ? 'html' : '');
+            const highlighted = highlight(a.body, lang);
+            return (
+              <details key={`art-${i}`} class="web-conv-detail-artifact">
+                <summary>
+                  <span class="web-conv-detail-artifact-type">{esc(a.type || 'unknown')}</span>
+                  {lang && <span class="web-conv-detail-artifact-lang">{esc(lang)}</span>}
+                  {' '}
+                  <strong>{esc(a.title || a.identifier || '(untitled)')}</strong>
+                </summary>
+                <pre class="web-conv-detail-artifact-body"><code
+                  dangerouslySetInnerHTML={{ __html: highlighted }}
+                /></pre>
+              </details>
+            );
+          })}
         </div>
       )}
 

@@ -24,11 +24,11 @@ const CITATION_RE = /【(\d+)†(L\d+(?:-L\d+)?)】/g;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractBrowsingSteps(payload: Record<string, any>): BrowsingStep[] {
-  const precomputed = payload?.heimdall_extracted?.browsing_steps;
+  const precomputed = payload?.['heimdall_extracted']?.browsing_steps;
   if (Array.isArray(precomputed)) return precomputed as BrowsingStep[];
 
   const steps: BrowsingStep[] = [];
-  const mapping = payload?.mapping;
+  const mapping = payload?.['mapping'];
   if (!mapping || typeof mapping !== 'object') return steps;
 
   for (const [nodeId, node] of Object.entries(mapping)) {
@@ -53,11 +53,11 @@ export function extractBrowsingSteps(payload: Record<string, any>): BrowsingStep
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractCitations(payload: Record<string, any>): Citation[] {
-  const precomputed = payload?.heimdall_extracted?.citations;
+  const precomputed = payload?.['heimdall_extracted']?.citations;
   if (Array.isArray(precomputed)) return precomputed as Citation[];
 
   const citations: Citation[] = [];
-  const mapping = payload?.mapping;
+  const mapping = payload?.['mapping'];
   if (!mapping || typeof mapping !== 'object') return citations;
 
   for (const node of Object.values(mapping)) {

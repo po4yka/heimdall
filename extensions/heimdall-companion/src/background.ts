@@ -4,6 +4,8 @@ import { listClaude, fetchClaudeConv } from './in-page/claude';
 import { getChatgptToken, listChatgpt, fetchChatgptConv } from './in-page/chatgpt';
 
 const ALARM_NAME = 'heimdall-sync';
+// Minimum time between tab-focus-triggered syncs to avoid hammering the vendor APIs.
+const FOCUS_COOLDOWN_MS = 5 * 60 * 1000;
 
 chrome.runtime.onInstalled.addListener(async () => {
   const cfg = await loadConfig();
@@ -20,16 +22,48 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   await runSyncAll();
 });
 
+// Tab-focus trigger: sync vendor when user switches to a claude.ai or
+// chatgpt.com tab, subject to a 5-minute cooldown per vendor.
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    const vendor = vendorFromHostname(tab.url ?? '');
+    if (!vendor) return;
+    const cfg = await loadConfig();
+    const state = cfg.vendors[vendor];
+    if (!state) return;
+    if (state.lastSyncAt) {
+      const age = Date.now() - Date.parse(state.lastSyncAt);
+      if (age < FOCUS_COOLDOWN_MS) return;
+    }
+    await runSyncAll();
+  } catch {
+    // Tab may have been closed or URL inaccessible — ignore.
+  }
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, send) => {
   if (msg?.type === 'syncNow') {
     runSyncAll().then(send).catch(err => send({ error: String(err) }));
     return true;
   }
+  if (msg?.type === 'forceResyncNow') {
+    // Clear lastSeenUpdatedAt so every conversation is re-fetched.
+    loadConfig().then(async cfg => {
+      for (const state of Object.values(cfg.vendors)) {
+        state.lastSeenUpdatedAt = {};
+      }
+      await saveConfig(cfg);
+      return runSyncAll();
+    }).then(send).catch(err => send({ error: String(err) }));
+    return true;
+  }
   if (msg?.type === 'chatgptCitations' && msg.convId && Array.isArray(msg.mapping)) {
     // Store citation mapping from the content-script sidebar scrape.
-    // Keyed by convId so fetchChatgptConv can merge it before POSTing.
+    // Uses chrome.storage.local (not session) so the mapping survives
+    // service-worker restarts between scrape and next sync run.
     const key = `citations:${msg.convId as string}`;
-    chrome.storage.session.set({ [key]: msg.mapping }).catch(() => {/* best-effort */});
+    chrome.storage.local.set({ [key]: msg.mapping }).catch(() => {/* best-effort */});
     send({ ok: true });
     return false;
   }
@@ -119,4 +153,13 @@ function vendorOrigin(vendor: string): string | null {
   if (vendor === 'claude.ai') return 'https://claude.ai';
   if (vendor === 'chatgpt.com') return 'https://chatgpt.com';
   return null;
+}
+
+function vendorFromHostname(url: string): string | null {
+  try {
+    const { hostname } = new URL(url);
+    return ['claude.ai', 'chatgpt.com'].includes(hostname) ? hostname : null;
+  } catch {
+    return null;
+  }
 }
