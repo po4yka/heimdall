@@ -3023,7 +3023,7 @@ pub async fn api_archive_web_conversation(
     Ok(Json(body))
 }
 
-/// `GET /api/archive/web-conversation/:vendor/:id` — fetch one conversation payload.
+/// `GET /api/archive/web-conversation/{vendor}/{id}` — fetch one conversation payload.
 ///
 /// Loopback-only. No bearer required (consistent with the list endpoint).
 pub async fn api_archive_web_conversation_get(
