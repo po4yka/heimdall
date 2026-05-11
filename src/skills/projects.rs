@@ -82,7 +82,7 @@ mod tests {
     fn overrides_bypass_db() {
         let (dir, conn) = init_db();
         let existing = dir.path().to_path_buf();
-        let paths = discover_project_paths(&conn, &[existing.clone()]);
+        let paths = discover_project_paths(&conn, std::slice::from_ref(&existing));
         assert_eq!(paths, vec![existing]);
     }
 
