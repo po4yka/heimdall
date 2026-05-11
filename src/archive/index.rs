@@ -7,7 +7,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 use crate::archive::web::WebConversation;
 
@@ -123,7 +123,9 @@ pub fn index_web_conversation(archive_root: &Path, conv: &WebConversation) -> Re
                          (vendor, conversation_id, message_id, identifier,
                           artifact_type, language, title, byte_range_start, byte_range_end)
                      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-                    params![vendor, conv_id, msg_id, identifier, art_type, language, title, rs, re],
+                    params![
+                        vendor, conv_id, msg_id, identifier, art_type, language, title, rs, re
+                    ],
                 )?;
             }
         }
@@ -133,7 +135,10 @@ pub fn index_web_conversation(archive_root: &Path, conv: &WebConversation) -> Re
                 let msg_id = cit.get("message_id").and_then(|v| v.as_str()).unwrap_or("");
                 let marker = cit.get("marker").and_then(|v| v.as_str()).unwrap_or("");
                 let index = cit.get("index").and_then(|v| v.as_str()).unwrap_or("");
-                let anchor = cit.get("anchor_text").and_then(|v| v.as_str()).unwrap_or("");
+                let anchor = cit
+                    .get("anchor_text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 let url = cit.get("url").and_then(|v| v.as_str()).unwrap_or("");
                 let title = cit.get("title").and_then(|v| v.as_str()).unwrap_or("");
                 tx.execute(
@@ -188,21 +193,25 @@ mod tests {
     #[test]
     fn indexes_artifacts_with_language() {
         let tmp = TempDir::new().unwrap();
-        let c = make_conv("claude.ai", "conv-1", json!({
-            "heimdall_extracted": {
-                "artifacts": [{
-                    "message_id": "m1",
-                    "identifier": "foo",
-                    "type": "application/vnd.ant.code",
-                    "language": "rust",
-                    "title": "Hello",
-                    "body": "fn main() {}",
-                    "byte_range": [0, 50]
-                }],
-                "citations": [],
-                "browsing_steps": []
-            }
-        }));
+        let c = make_conv(
+            "claude.ai",
+            "conv-1",
+            json!({
+                "heimdall_extracted": {
+                    "artifacts": [{
+                        "message_id": "m1",
+                        "identifier": "foo",
+                        "type": "application/vnd.ant.code",
+                        "language": "rust",
+                        "title": "Hello",
+                        "body": "fn main() {}",
+                        "byte_range": [0, 50]
+                    }],
+                    "citations": [],
+                    "browsing_steps": []
+                }
+            }),
+        );
         index_web_conversation(tmp.path(), &c).unwrap();
 
         let conn = Connection::open(tmp.path().join("web/index.sqlite")).unwrap();
@@ -223,16 +232,26 @@ mod tests {
     #[test]
     fn replace_on_reindex() {
         let tmp = TempDir::new().unwrap();
-        let art = |id: &str| json!({
-            "message_id": "m1", "identifier": id, "type": "text",
-            "language": "", "title": "T", "body": "", "byte_range": [0, 1]
-        });
-        let c1 = make_conv("claude.ai", "conv-1", json!({
-            "heimdall_extracted": { "artifacts": [art("a")], "citations": [], "browsing_steps": [] }
-        }));
-        let c2 = make_conv("claude.ai", "conv-1", json!({
-            "heimdall_extracted": { "artifacts": [art("b"), art("c")], "citations": [], "browsing_steps": [] }
-        }));
+        let art = |id: &str| {
+            json!({
+                "message_id": "m1", "identifier": id, "type": "text",
+                "language": "", "title": "T", "body": "", "byte_range": [0, 1]
+            })
+        };
+        let c1 = make_conv(
+            "claude.ai",
+            "conv-1",
+            json!({
+                "heimdall_extracted": { "artifacts": [art("a")], "citations": [], "browsing_steps": [] }
+            }),
+        );
+        let c2 = make_conv(
+            "claude.ai",
+            "conv-1",
+            json!({
+                "heimdall_extracted": { "artifacts": [art("b"), art("c")], "citations": [], "browsing_steps": [] }
+            }),
+        );
         index_web_conversation(tmp.path(), &c1).unwrap();
         index_web_conversation(tmp.path(), &c2).unwrap();
 

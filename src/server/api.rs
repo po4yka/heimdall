@@ -1016,7 +1016,9 @@ where
                 .as_ref()
                 .and_then(|id| id.plan.as_ref())
                 .map(|p| format!("{p:?}").to_lowercase());
-            let tier = identity.as_ref().and_then(|id| id.rate_limit_tier.as_deref());
+            let tier = identity
+                .as_ref()
+                .and_then(|id| id.rate_limit_tier.as_deref());
             let (b_used, b_limit, b_currency) = budget
                 .as_ref()
                 .map(|b| (Some(b.used), Some(b.limit), Some(b.currency.as_str())))
@@ -3095,12 +3097,18 @@ pub async fn api_archive_web_conversations_reextract(
                 let file_path = file_entry.path();
                 let bytes = match fs::read(&file_path) {
                     Ok(b) => b,
-                    Err(_) => { errors += 1; continue; }
+                    Err(_) => {
+                        errors += 1;
+                        continue;
+                    }
                 };
                 let mut conv: crate::archive::web::WebConversation =
                     match serde_json::from_slice(&bytes) {
                         Ok(c) => c,
-                        Err(_) => { errors += 1; continue; }
+                        Err(_) => {
+                            errors += 1;
+                            continue;
+                        }
                     };
                 match conv.vendor.as_str() {
                     "claude.ai" => {
@@ -3116,7 +3124,10 @@ pub async fn api_archive_web_conversations_reextract(
 
                 let new_bytes = match serde_json::to_vec_pretty(&conv) {
                     Ok(b) => b,
-                    Err(_) => { errors += 1; continue; }
+                    Err(_) => {
+                        errors += 1;
+                        continue;
+                    }
                 };
                 if new_bytes == bytes {
                     skipped += 1;

@@ -8,13 +8,11 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn artifact_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?s)<antartifact([^>]*)>(.*?)</antartifact>").unwrap()
-    })
+    RE.get_or_init(|| Regex::new(r"(?s)<antartifact([^>]*)>(.*?)</antartifact>").unwrap())
 }
 
 fn attr_re() -> &'static Regex {
@@ -113,7 +111,9 @@ mod tests {
             "text": "Here is an artifact:\n<antartifact identifier=\"foo\" type=\"text/html\" title=\"My Page\"><h1>Hello</h1></antartifact>\nAnd another:\n<antartifact identifier=\"bar\" type=\"application/vnd.ant.code\" title=\"Code\">fn main() {}</antartifact>"
         }]));
         extract(&mut payload).unwrap();
-        let arts = payload["heimdall_extracted"]["artifacts"].as_array().unwrap();
+        let arts = payload["heimdall_extracted"]["artifacts"]
+            .as_array()
+            .unwrap();
         assert_eq!(arts.len(), 2);
         assert_eq!(arts[0]["identifier"], "foo");
         assert_eq!(arts[0]["type"], "text/html");
@@ -130,7 +130,9 @@ mod tests {
             "text": "No artifacts here, just text."
         }]));
         extract(&mut payload).unwrap();
-        let arts = payload["heimdall_extracted"]["artifacts"].as_array().unwrap();
+        let arts = payload["heimdall_extracted"]["artifacts"]
+            .as_array()
+            .unwrap();
         assert!(arts.is_empty());
     }
 
@@ -154,7 +156,9 @@ mod tests {
             "text": "<antartifact identifier=\"doc\" type=\"text/markdown\" title=\"Doc\">\n# Heading\n\nParagraph.\n</antartifact>"
         }]));
         extract(&mut payload).unwrap();
-        let arts = payload["heimdall_extracted"]["artifacts"].as_array().unwrap();
+        let arts = payload["heimdall_extracted"]["artifacts"]
+            .as_array()
+            .unwrap();
         assert_eq!(arts.len(), 1);
         assert!(arts[0]["body"].as_str().unwrap().contains("Heading"));
     }
