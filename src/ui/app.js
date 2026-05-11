@@ -3224,10 +3224,10 @@
     return out;
   }
   function extractArtifacts(payload) {
-    const precomputed = payload?.heimdall_extracted?.artifacts;
+    const precomputed = payload?.["heimdall_extracted"]?.artifacts;
     if (Array.isArray(precomputed)) return precomputed;
     const artifacts = [];
-    const messages = Array.isArray(payload?.chat_messages) ? payload.chat_messages : [];
+    const messages = Array.isArray(payload?.["chat_messages"]) ? payload["chat_messages"] : [];
     for (const msg of messages) {
       if (typeof msg !== "object" || msg === null) continue;
       const m5 = msg;
@@ -3257,10 +3257,10 @@
   // src/ui/lib/payload/openai.ts
   var CITATION_RE = /【(\d+)†(L\d+(?:-L\d+)?)】/g;
   function extractBrowsingSteps(payload) {
-    const precomputed = payload?.heimdall_extracted?.browsing_steps;
+    const precomputed = payload?.["heimdall_extracted"]?.browsing_steps;
     if (Array.isArray(precomputed)) return precomputed;
     const steps = [];
-    const mapping = payload?.mapping;
+    const mapping = payload?.["mapping"];
     if (!mapping || typeof mapping !== "object") return steps;
     for (const [nodeId, node] of Object.entries(mapping)) {
       const n3 = node;
@@ -3281,10 +3281,10 @@
     return steps;
   }
   function extractCitations(payload) {
-    const precomputed = payload?.heimdall_extracted?.citations;
+    const precomputed = payload?.["heimdall_extracted"]?.citations;
     if (Array.isArray(precomputed)) return precomputed;
     const citations = [];
-    const mapping = payload?.mapping;
+    const mapping = payload?.["mapping"];
     if (!mapping || typeof mapping !== "object") return citations;
     for (const node of Object.values(mapping)) {
       const n3 = node;
@@ -18803,13 +18803,19 @@ ${row.project}` : row.project;
       }
     };
     st.bc.postMessage({ type: "hello" });
-    navigator.locks.request(LOCK_NAME, { mode: "exclusive" }, async () => {
-      st.isLeader = true;
-      await tick();
-      await new Promise(() => {
+    const locks = globalThis.navigator?.locks;
+    if (locks) {
+      locks.request(LOCK_NAME, { mode: "exclusive" }, async () => {
+        st.isLeader = true;
+        await tick();
+        await new Promise(() => {
+        });
+      }).catch(() => {
       });
-    }).catch(() => {
-    });
+    } else {
+      st.isLeader = true;
+      void tick();
+    }
   }
 
   // node_modules/gridstack/dist/utils.js

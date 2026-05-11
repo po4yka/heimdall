@@ -89,14 +89,22 @@ export function startVersionPoll(): void {
   st.bc.postMessage({ type: 'hello' });
 
   // Web Locks: only one tab holds the exclusive lock; all others wait.
-  navigator.locks
-    .request(LOCK_NAME, { mode: 'exclusive' }, async () => {
-      st.isLeader = true;
-      await tick();
-      // Hold the lock for the lifetime of this tab.
-      await new Promise<void>(() => {});
-    })
-    .catch(() => { /* ignore — browser may not support locks */ });
+  // Optional chaining: `navigator.locks` is undefined in Node test envs and
+  // older browsers; treat its absence as "this tab leads, no coordination."
+  const locks = (globalThis as { navigator?: { locks?: LockManager } }).navigator?.locks;
+  if (locks) {
+    locks
+      .request(LOCK_NAME, { mode: 'exclusive' }, async () => {
+        st.isLeader = true;
+        await tick();
+        // Hold the lock for the lifetime of this tab.
+        await new Promise<void>(() => {});
+      })
+      .catch(() => { /* ignore — browser may not support locks */ });
+  } else {
+    st.isLeader = true;
+    void tick();
+  }
 }
 
 export function pokeVersionPoll(): void {
