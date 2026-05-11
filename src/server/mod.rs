@@ -214,7 +214,7 @@ pub(crate) fn build_router(state: Arc<AppState>) -> Router {
             get(api::api_archive_web_conversations),
         )
         .route(
-            "/api/archive/web-conversation/:vendor/:id",
+            "/api/archive/web-conversation/{vendor}/{id}",
             get(api::api_archive_web_conversation_get),
         )
         .route(
