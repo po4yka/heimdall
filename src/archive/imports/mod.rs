@@ -165,10 +165,10 @@ fn write_openai_conversations<R: std::io::Read + std::io::Seek>(
             warnings.push(format!("{key}: {e}"));
         } else {
             count += 1;
-            if let Some(ref conn) = db_conn {
-                if let Err(e) = ingest::ingest_openai(conn, c) {
-                    tracing::warn!("import ingest: openai {key}: {e:#}");
-                }
+            if let Some(ref conn) = db_conn
+                && let Err(e) = ingest::ingest_openai(conn, c)
+            {
+                tracing::warn!("import ingest: openai {key}: {e:#}");
             }
         }
     }
@@ -202,10 +202,10 @@ fn write_anthropic_conversations<R: std::io::Read + std::io::Seek>(
                     warnings.push(format!("{}: {e}", c.id));
                 } else {
                     count += 1;
-                    if let Some(ref conn) = db_conn {
-                        if let Err(e) = ingest::ingest_anthropic(conn, &c) {
-                            tracing::warn!("import ingest: anthropic {}: {e:#}", c.id);
-                        }
+                    if let Some(ref conn) = db_conn
+                        && let Err(e) = ingest::ingest_anthropic(conn, &c)
+                    {
+                        tracing::warn!("import ingest: anthropic {}: {e:#}", c.id);
                     }
                 }
             }
