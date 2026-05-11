@@ -121,10 +121,7 @@ pub fn ingest_anthropic(
 
 /// Ingest a single OpenAI `Conversation` into the scanner DB.
 /// Token counts are always 0 — the public export format omits them.
-pub fn ingest_openai(
-    conn: &Connection,
-    conv: &super::openai::Conversation,
-) -> Result<usize> {
+pub fn ingest_openai(conn: &Connection, conv: &super::openai::Conversation) -> Result<usize> {
     let key = super::openai::conversation_key(conv).unwrap_or_else(|| "unknown".to_string());
     let session_id = format!("{}:{}", PROVIDER_CHATGPT_EXPORT, key);
 
@@ -155,10 +152,7 @@ pub fn ingest_openai(
             None => continue,
         };
 
-        let timestamp = msg
-            .create_time
-            .map(epoch_to_rfc3339)
-            .unwrap_or_default();
+        let timestamp = msg.create_time.map(epoch_to_rfc3339).unwrap_or_default();
 
         let msg_id = format!("{}:{}:{}", PROVIDER_CHATGPT_EXPORT, key, msg.id);
 
@@ -305,7 +299,11 @@ mod tests {
         assert_eq!(count, 2);
 
         let n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM turns WHERE provider = 'claude_export'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM turns WHERE provider = 'claude_export'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(n, 2);
 
@@ -377,7 +375,11 @@ mod tests {
         assert_eq!(count, 2);
 
         let n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM turns WHERE provider = 'chatgpt_export'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM turns WHERE provider = 'chatgpt_export'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(n, 2);
     }
@@ -400,7 +402,11 @@ mod tests {
         ingest_anthropic(&conn, &conv).unwrap(); // second call must not duplicate
 
         let n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM turns WHERE session_id = 'claude_export:conv-idem'", [], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM turns WHERE session_id = 'claude_export:conv-idem'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(n, 1, "idempotent: second ingest must not duplicate rows");
     }

@@ -327,9 +327,7 @@ fn parse_amp_result(
     let mut result =
         parse_provider_turns_result(PROVIDER_AMP, turns, Path::new(""), Some(progress_marker));
     if let (Some(title), Some(meta)) = (title, result.session_metas.first()) {
-        result
-            .session_titles
-            .insert(meta.session_id.clone(), title);
+        result.session_titles.insert(meta.session_id.clone(), title);
     }
     result
 }
