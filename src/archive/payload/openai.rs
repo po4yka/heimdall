@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 
 use anyhow::Result;
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn citation_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -194,19 +194,33 @@ mod tests {
 
     #[test]
     fn extracts_browsing_step_and_citations() {
-        let (bid, bnode) = browsing_node("n1", "query-abc", json!([{"title":"Page","url":"https://example.com"}]));
-        let (aid, anode) = node("n2", "assistant", "text", json!(["Hello 【1†L1-L4】 and 【2†L7】"]));
+        let (bid, bnode) = browsing_node(
+            "n1",
+            "query-abc",
+            json!([{"title":"Page","url":"https://example.com"}]),
+        );
+        let (aid, anode) = node(
+            "n2",
+            "assistant",
+            "text",
+            json!(["Hello 【1†L1-L4】 and 【2†L7】"]),
+        );
 
-        let mapping: serde_json::Map<String, Value> = [(bid, bnode), (aid, anode)].into_iter().collect();
+        let mapping: serde_json::Map<String, Value> =
+            [(bid, bnode), (aid, anode)].into_iter().collect();
         let mut payload = json!({ "mapping": mapping });
 
         extract(&mut payload).unwrap();
 
-        let steps = payload["heimdall_extracted"]["browsing_steps"].as_array().unwrap();
+        let steps = payload["heimdall_extracted"]["browsing_steps"]
+            .as_array()
+            .unwrap();
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0]["node_id"], "n1");
 
-        let cits = payload["heimdall_extracted"]["citations"].as_array().unwrap();
+        let cits = payload["heimdall_extracted"]["citations"]
+            .as_array()
+            .unwrap();
         assert_eq!(cits.len(), 2);
         assert_eq!(cits[0]["index"], "1");
         assert_eq!(cits[0]["anchor_text"], "L1-L4");
@@ -227,7 +241,9 @@ mod tests {
         extract(&mut payload).unwrap();
 
         // Extractor must not overwrite the extension-supplied citation with url.
-        let cits = payload["heimdall_extracted"]["citations"].as_array().unwrap();
+        let cits = payload["heimdall_extracted"]["citations"]
+            .as_array()
+            .unwrap();
         assert_eq!(cits.len(), 1);
         assert_eq!(cits[0]["url"], "https://example.com");
     }
@@ -249,7 +265,17 @@ mod tests {
     fn no_mapping_writes_empty_arrays() {
         let mut payload = json!({ "title": "no mapping" });
         extract(&mut payload).unwrap();
-        assert!(payload["heimdall_extracted"]["browsing_steps"].as_array().unwrap().is_empty());
-        assert!(payload["heimdall_extracted"]["citations"].as_array().unwrap().is_empty());
+        assert!(
+            payload["heimdall_extracted"]["browsing_steps"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            payload["heimdall_extracted"]["citations"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
     }
 }
