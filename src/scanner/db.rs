@@ -1314,6 +1314,7 @@ pub fn insert_tool_invocations(
 
 /// Upsert last-known provider identity and budget into `provider_identity_snapshots`.
 /// One row per vendor (PRIMARY KEY = vendor). All optional fields may be NULL.
+#[allow(clippy::too_many_arguments)]
 pub fn upsert_provider_identity(
     conn: &Connection,
     vendor: &str,
