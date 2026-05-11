@@ -170,9 +170,9 @@ mod tests {
                     "CLAUDE.md",
                     format!("sha{day_offset}"),
                     ts_epoch,
-                    (1000 + day_offset * 100) as i64,
-                    (100 + day_offset * 10) as i64,
-                    (10 + day_offset) as i64,
+                    1000 + day_offset * 100,
+                    100 + day_offset * 10,
+                    10 + day_offset,
                 ],
             )
             .unwrap();
