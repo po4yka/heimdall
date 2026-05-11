@@ -236,15 +236,15 @@ fn build_sessions(
         }
     }
     let mut sessions = aggregate_sessions(&metas, turns);
-    if let (Some(title), Some(s)) = (title, sessions.first_mut()) {
-        if s.title.is_none() {
-            s.title = Some(title.to_string());
-        }
+    if let (Some(title), Some(s)) = (title, sessions.first_mut())
+        && s.title.is_none()
+    {
+        s.title = Some(title.to_string());
     }
-    if let Some(s) = sessions.first_mut() {
-        if s.session_id.is_empty() {
-            s.session_id = session_id.to_string();
-        }
+    if let Some(s) = sessions.first_mut()
+        && s.session_id.is_empty()
+    {
+        s.session_id = session_id.to_string();
     }
     sessions
 }
