@@ -295,7 +295,8 @@ pub fn scan(opts: ScanOptions) -> Result<McpServerReport> {
     // --- Live process matching ---
     if opts.probe_processes {
         let sys = sysinfo::System::new_with_specifics(
-            sysinfo::RefreshKind::new().with_processes(sysinfo::ProcessRefreshKind::new()),
+            sysinfo::RefreshKind::nothing()
+                .with_processes(sysinfo::ProcessRefreshKind::nothing()),
         );
         for entry in claude_entries.iter_mut().chain(codex_entries.iter_mut()) {
             process::match_runtime(entry, &sys);
