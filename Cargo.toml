@@ -27,7 +27,7 @@ clap = { version = "4", features = ["derive"] }
 csv = "1"
 regex = "1"
 dirs = "6"
-sysinfo = { version = "0.32", default-features = false, features = ["system"] }
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 which = "7"
 open = "5"
 reqwest = { version = "0.13", features = ["json", "rustls", "webpki-roots", "query", "form"], default-features = false }
