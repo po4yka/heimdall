@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Instant;
+use std::path::{Path as FsPath, PathBuf};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
+use std::time::{Instant, UNIX_EPOCH};
 
 use axum::extract::{Path, Query, Request, State};
 use axum::http::StatusCode;
@@ -23,6 +24,7 @@ use crate::instruction_files;
 use crate::live_providers;
 use crate::models::ClaudeAdminSummary;
 use crate::models::ClaudeUsageResponse;
+use crate::models::DashboardData;
 use crate::models::DepletionForecast;
 use crate::models::LIVE_MONITOR_CONTRACT_VERSION;
 use crate::models::LiveFloatPercentiles;
@@ -116,6 +118,129 @@ pub struct AppState {
     pub settings: Arc<RwLock<LiveSettings>>,
 }
 
+const DASHBOARD_DATA_CACHE_MAX_ENTRIES: usize = 16;
+
+type DashboardDataCache = StdMutex<HashMap<DashboardDataCacheKey, DashboardDataCacheEntry>>;
+
+static DASHBOARD_DATA_CACHE: OnceLock<DashboardDataCache> = OnceLock::new();
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct DashboardDataCacheKey {
+    db_path: PathBuf,
+    tz_offset_min: i32,
+    week_starts_on: u8,
+    openai_start_date: String,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct DashboardFileFingerprint {
+    len: u64,
+    modified_ns: u128,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DashboardDbFingerprint {
+    db: DashboardFileFingerprint,
+    wal: DashboardFileFingerprint,
+    shm: DashboardFileFingerprint,
+}
+
+#[derive(Debug, Clone)]
+struct CachedDashboardPayload {
+    data: DashboardData,
+    openai_local_cost_nanos: i64,
+    subagent_recon_totals: db::SubagentReconciliationTotals,
+}
+
+#[derive(Debug, Clone)]
+struct DashboardDataCacheEntry {
+    fingerprint: DashboardDbFingerprint,
+    payload: CachedDashboardPayload,
+}
+
+fn dashboard_data_cache() -> &'static DashboardDataCache {
+    DASHBOARD_DATA_CACHE.get_or_init(|| StdMutex::new(HashMap::new()))
+}
+
+fn cached_dashboard_payload(
+    db_path: &FsPath,
+    tz: TzParams,
+    openai_start_date: &str,
+) -> anyhow::Result<CachedDashboardPayload> {
+    let key = DashboardDataCacheKey {
+        db_path: db_path.to_path_buf(),
+        tz_offset_min: tz.normalized_offset_min(),
+        week_starts_on: tz.normalized_week_starts_on(),
+        openai_start_date: openai_start_date.to_string(),
+    };
+    let fingerprint = dashboard_db_fingerprint(db_path);
+
+    if let Ok(cache) = dashboard_data_cache().lock()
+        && let Some(entry) = cache.get(&key)
+        && entry.fingerprint == fingerprint
+    {
+        return Ok(entry.payload.clone());
+    }
+
+    let conn = db::open_db(db_path)?;
+    db::init_db(&conn)?;
+    let payload = CachedDashboardPayload {
+        data: db::get_dashboard_data(&conn, tz)?,
+        openai_local_cost_nanos: db::get_provider_estimated_cost_nanos_since(
+            &conn,
+            "codex",
+            openai_start_date,
+        )?,
+        subagent_recon_totals: db::query_subagent_reconciliation(&conn, openai_start_date)?,
+    };
+
+    if let Ok(mut cache) = dashboard_data_cache().lock() {
+        if cache.len() >= DASHBOARD_DATA_CACHE_MAX_ENTRIES {
+            cache.clear();
+        }
+        cache.insert(
+            key,
+            DashboardDataCacheEntry {
+                fingerprint,
+                payload: payload.clone(),
+            },
+        );
+    }
+
+    Ok(payload)
+}
+
+fn dashboard_db_fingerprint(db_path: &FsPath) -> DashboardDbFingerprint {
+    DashboardDbFingerprint {
+        db: dashboard_file_fingerprint(db_path),
+        wal: dashboard_file_fingerprint(&sqlite_sidecar_path(db_path, "-wal")),
+        shm: dashboard_file_fingerprint(&sqlite_sidecar_path(db_path, "-shm")),
+    }
+}
+
+fn sqlite_sidecar_path(db_path: &FsPath, suffix: &str) -> PathBuf {
+    let mut path = db_path.as_os_str().to_os_string();
+    path.push(suffix);
+    PathBuf::from(path)
+}
+
+fn dashboard_file_fingerprint(path: &FsPath) -> DashboardFileFingerprint {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return DashboardFileFingerprint::default();
+    };
+    let modified_ns = metadata
+        .modified()
+        .ok()
+        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+
+    DashboardFileFingerprint {
+        len: metadata.len(),
+        modified_ns,
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct BillingBlockViewResponse {
     pub start: String,
@@ -199,40 +324,38 @@ pub async fn api_data(
     .to_string();
     let subagent_start_date = openai_start_date.clone();
     let subagent_end_date = chrono::Utc::now().date_naive().to_string();
-    let (mut result, openai_local_cost_nanos, subagent_recon_totals) =
-        tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
-            let conn = db::open_db(&db_path)?;
-            db::init_db(&conn)?;
-            let data = db::get_dashboard_data(&conn, tz)?;
-            let local_cost_nanos =
-                db::get_provider_estimated_cost_nanos_since(&conn, "codex", &openai_start_date)?;
-            let subagent_totals = db::query_subagent_reconciliation(&conn, &openai_start_date)?;
-            Ok((data, local_cost_nanos, subagent_totals))
-        })
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let CachedDashboardPayload {
+        mut data,
+        openai_local_cost_nanos,
+        subagent_recon_totals,
+    } = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+        cached_dashboard_payload(&db_path, tz, &openai_start_date)
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    data.generated_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     if state.openai_enabled {
-        result.openai_reconciliation =
+        data.openai_reconciliation =
             Some(refresh_openai_reconciliation(&state, Some(openai_local_cost_nanos)).await);
     }
 
-    result.subagent_reconciliation = Some(build_subagent_reconciliation(
+    data.subagent_reconciliation = Some(build_subagent_reconciliation(
         openai_lookback_days,
         subagent_start_date,
         subagent_end_date,
         subagent_recon_totals,
     ));
 
-    maybe_send_cost_threshold_webhook(&state, &result).await;
+    maybe_send_cost_threshold_webhook(&state, &data).await;
 
     // Display-name precedence: custom_label (from project_settings) > config
     // alias > raw project_name. custom_label is populated by the LEFT JOIN in
     // the underlying SQL queries; aliases come from the static config map
     // pre-loaded into AppState at startup (no per-request disk read).
     let aliases = &state.project_aliases;
-    for row in &mut result.daily_by_project {
+    for row in &mut data.daily_by_project {
         row.display_name = row
             .custom_label
             .as_deref()
@@ -240,7 +363,7 @@ pub async fn api_data(
             .unwrap_or(&row.project)
             .to_string();
     }
-    for row in &mut result.sessions_all {
+    for row in &mut data.sessions_all {
         row.display_name = row
             .custom_label
             .as_deref()
@@ -249,9 +372,9 @@ pub async fn api_data(
             .to_string();
     }
 
-    result.subscription_quota = build_subscription_quota_section(&state).await;
+    data.subscription_quota = build_subscription_quota_section(&state).await;
 
-    let value = serde_json::to_value(result).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let value = serde_json::to_value(data).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(value))
 }
 

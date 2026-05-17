@@ -611,6 +611,7 @@ public struct LaneDetailProjection: Sendable, Identifiable {
 
 public struct ProviderMenuProjection: Sendable, Identifiable {
     public var provider: ProviderID
+    public var derivedDataRevision: String
     public var title: String
     public var sourceLabel: String
     public var sourceExplanationLabel: String?
@@ -675,6 +676,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
 
     public init(
         provider: ProviderID,
+        derivedDataRevision: String = "",
         title: String,
         sourceLabel: String,
         sourceExplanationLabel: String?,
@@ -728,6 +730,7 @@ public struct ProviderMenuProjection: Sendable, Identifiable {
         dailyByModel: [ProviderDailyModelRow] = []
     ) {
         self.provider = provider
+        self.derivedDataRevision = derivedDataRevision
         self.title = title
         self.sourceLabel = sourceLabel
         self.sourceExplanationLabel = sourceExplanationLabel

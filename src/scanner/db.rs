@@ -2249,40 +2249,45 @@ LIMIT 500";
     let mut sessions: Vec<SessionAgentTree> = Vec::new();
 
     for (session_id, (project, rows)) in session_map {
-        let root_rows: Vec<&RawRow> = rows.iter().filter(|r| r.is_subagent == 0).collect();
-        let sub_rows: Vec<&RawRow> = rows.iter().filter(|r| r.is_subagent == 1).collect();
-
-        let root = AgentTreeNode {
+        let mut root = AgentTreeNode {
             agent_id: None,
             role: None,
-            turn_count: root_rows.iter().map(|r| r.turn_count).sum(),
-            input_tokens: root_rows.iter().map(|r| r.input_tokens).sum(),
-            output_tokens: root_rows.iter().map(|r| r.output_tokens).sum(),
-            cache_read_tokens: root_rows.iter().map(|r| r.cache_read_tokens).sum(),
-            estimated_cost_nanos: root_rows.iter().map(|r| r.cost_nanos).sum(),
-            children: sub_rows
-                .iter()
-                .map(|r| {
-                    let role = r.role.clone();
-                    if let Some(ref rn) = role {
-                        *role_cost.entry(rn.clone()).or_insert(0) += r.cost_nanos;
-                    }
-                    AgentTreeNode {
-                        agent_id: r.agent_id.clone(),
-                        role,
-                        turn_count: r.turn_count,
-                        input_tokens: r.input_tokens,
-                        output_tokens: r.output_tokens,
-                        cache_read_tokens: r.cache_read_tokens,
-                        estimated_cost_nanos: r.cost_nanos,
-                        children: vec![],
-                    }
-                })
-                .collect(),
+            turn_count: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            estimated_cost_nanos: 0,
+            children: Vec::new(),
         };
 
-        let total_cost_nanos: i64 = rows.iter().map(|r| r.cost_nanos).sum();
-        let subagent_count = sub_rows.len() as u32;
+        let mut total_cost_nanos = 0;
+        let mut subagent_count = 0;
+
+        for row in rows {
+            total_cost_nanos += row.cost_nanos;
+            if row.is_subagent == 0 {
+                root.turn_count += row.turn_count;
+                root.input_tokens += row.input_tokens;
+                root.output_tokens += row.output_tokens;
+                root.cache_read_tokens += row.cache_read_tokens;
+                root.estimated_cost_nanos += row.cost_nanos;
+            } else if row.is_subagent == 1 {
+                if let Some(ref role) = row.role {
+                    *role_cost.entry(role.clone()).or_insert(0) += row.cost_nanos;
+                }
+                subagent_count += 1;
+                root.children.push(AgentTreeNode {
+                    agent_id: row.agent_id,
+                    role: row.role,
+                    turn_count: row.turn_count,
+                    input_tokens: row.input_tokens,
+                    output_tokens: row.output_tokens,
+                    cache_read_tokens: row.cache_read_tokens,
+                    estimated_cost_nanos: row.cost_nanos,
+                    children: vec![],
+                });
+            }
+        }
 
         sessions.push(SessionAgentTree {
             session_id,

@@ -173,17 +173,11 @@ private struct CostModelsDerivedSignature: Equatable {
 }
 
 private struct CostModelsProviderSignature: Equatable {
-    var provider: String
-    var byModel: [ProviderModelRow]
-    var byTool: [ProviderToolRow]
-    var byMcp: [ProviderMcpRow]
-    var versionBreakdown: [ProviderVersionRow]
+    var provider: ProviderID
+    var revision: String
 
     init(item: ProviderMenuProjection) {
-        self.provider = item.provider.rawValue
-        self.byModel = item.byModel
-        self.byTool = item.byTool
-        self.byMcp = item.byMcp
-        self.versionBreakdown = item.versionBreakdown
+        self.provider = item.provider
+        self.revision = item.derivedDataRevision
     }
 }

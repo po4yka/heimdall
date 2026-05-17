@@ -254,7 +254,7 @@ export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegist
                           onChange={(e) => updateRow(rawRole, { merged_into: (e.target as HTMLSelectElement).value })}
                         >
                           <option value="">(none)</option>
-                          {mergeOptions.filter(r => r !== rawRole).map(r => (
+                          {mergeOptions.map(r => (
                             <option key={r} value={r}>{esc(r)}</option>
                           ))}
                         </select>

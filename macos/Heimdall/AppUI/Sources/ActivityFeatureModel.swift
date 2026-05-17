@@ -215,35 +215,11 @@ private struct ActivityDerivedSignature: Equatable {
 }
 
 private struct ActivityProviderSignature: Equatable {
-    var provider: String
-    var dailyCosts: [ActivityDailyCostSignature]
-    var historyBreakdowns: [TokenBreakdown]
-    var byModel: [ProviderModelRow]
-    var byProject: [ProviderProjectRow]
-    var hourlyActivity: [ProviderHourlyBucket]
-    var activityHeatmap: [ProviderHeatmapCell]
+    var provider: ProviderID
+    var revision: String
 
     init(item: ProviderMenuProjection) {
-        self.provider = item.provider.rawValue
-        self.dailyCosts = item.dailyCosts.map(ActivityDailyCostSignature.init(point:))
-        self.historyBreakdowns = item.historyBreakdowns
-        self.byModel = item.byModel
-        self.byProject = item.byProject
-        self.hourlyActivity = item.hourlyActivity
-        self.activityHeatmap = item.activityHeatmap
-    }
-}
-
-private struct ActivityDailyCostSignature: Equatable {
-    var day: String
-    var totalTokens: Int
-    var costUSD: Double
-    var breakdown: TokenBreakdown?
-
-    init(point: CostHistoryPoint) {
-        self.day = point.day
-        self.totalTokens = point.totalTokens
-        self.costUSD = point.costUSD
-        self.breakdown = point.breakdown
+        self.provider = item.provider
+        self.revision = item.derivedDataRevision
     }
 }

@@ -4232,7 +4232,7 @@
                     onChange: (e4) => updateRow(rawRole, { merged_into: e4.target.value }),
                     children: [
                       /* @__PURE__ */ u4("option", { value: "", children: "(none)" }),
-                      mergeOptions.filter((r4) => r4 !== rawRole).map((r4) => /* @__PURE__ */ u4("option", { value: r4, children: esc(r4) }, r4))
+                      mergeOptions.map((r4) => /* @__PURE__ */ u4("option", { value: r4, children: esc(r4) }, r4))
                     ]
                   }
                 ) }),

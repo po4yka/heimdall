@@ -22,6 +22,7 @@ public enum MenuProjectionBuilder {
         let snapshot = presentation.snapshot
         let adjunct = presentation.adjunct
         let resolution = presentation.resolution
+        let derivedDataRevision = self.derivedDataRevision(snapshot: snapshot, adjunct: adjunct)
         let history = snapshot.map { historyFractions($0.costSummary.daily) } ?? []
         let normalizedStatusIndicator = snapshot?.status?.indicator
             .lowercased()
@@ -125,6 +126,7 @@ public enum MenuProjectionBuilder {
 
         return ProviderMenuProjection(
             provider: provider,
+            derivedDataRevision: derivedDataRevision,
             title: provider.title,
             sourceLabel: resolution.sourceLabel,
             sourceExplanationLabel: resolution.explanation,
@@ -177,6 +179,15 @@ public enum MenuProjectionBuilder {
             versionBreakdown: snapshot?.costSummary.versionBreakdown ?? [],
             dailyByModel: snapshot?.costSummary.dailyByModel ?? []
         )
+    }
+
+    private static func derivedDataRevision(
+        snapshot: ProviderSnapshot?,
+        adjunct: DashboardAdjunctSnapshot?
+    ) -> String {
+        let snapshotRevision = snapshot.map { "snapshot:\($0.lastRefresh)" } ?? "snapshot:none"
+        let adjunctRevision = adjunct?.lastUpdated.map { "adjunct:\($0)" } ?? "adjunct:none"
+        return "\(snapshotRevision)|\(adjunctRevision)"
     }
 
     public static func overview(
