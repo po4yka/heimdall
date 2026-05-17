@@ -59,6 +59,17 @@ fn extract_tool_result_text(block: &serde_json::Value) -> String {
     }
 }
 
+fn truncate_at_char_boundary(value: &str, max_len: usize) -> &str {
+    if value.len() <= max_len {
+        return value;
+    }
+    let mut end = max_len;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
+}
+
 /// Derive a friendly project name from cwd (last 2 path components).
 pub fn project_name_from_cwd(cwd: &str) -> String {
     if cwd.is_empty() {
@@ -500,109 +511,63 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
 
             let content_arr = msg.get("content").and_then(|c| c.as_array());
 
-            let tool_name = content_arr
-                .and_then(|arr| {
-                    arr.iter()
-                        .find(|item| item.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
-                })
-                .and_then(|item| item.get("name").and_then(|n| n.as_str()))
-                .map(String::from);
-
-            let all_tools: Vec<String> = content_arr
-                .map(|arr| {
-                    arr.iter()
-                        .filter(|item| {
-                            item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
-                        })
-                        .filter_map(|item| {
-                            item.get("name").and_then(|n| n.as_str()).map(String::from)
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            let tool_use_ids: Vec<(String, String)> = content_arr
-                .map(|arr| {
-                    arr.iter()
-                        .filter(|item| {
-                            item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
-                        })
-                        .filter_map(|item| {
-                            let id = item.get("id").and_then(|v| v.as_str())?.to_string();
-                            let name = item.get("name").and_then(|v| v.as_str())?.to_string();
-                            Some((id, name))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            // Extract the single most-relevant argument per tool invocation.
-            // File tools: `file_path` argument.
-            // Bash: first 120 chars of `command` (truncated with `…`).
-            // Everything else: empty string (caller falls back to tool name).
-            let tool_inputs: Vec<(String, String)> = content_arr
-                .map(|arr| {
-                    arr.iter()
-                        .filter(|item| {
-                            item.get("type").and_then(|t| t.as_str()) == Some("tool_use")
-                        })
-                        .filter_map(|item| {
-                            let id = item.get("id").and_then(|v| v.as_str())?.to_string();
-                            let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                            let input = item.get("input");
-                            let arg = match name {
-                                "Edit" | "Write" | "MultiEdit" | "NotebookEdit" | "Read" => input
-                                    .and_then(|inp| inp.get("file_path"))
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                "Bash" => {
-                                    let cmd = input
-                                        .and_then(|inp| inp.get("command"))
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
-                                    // Truncate to 120 bytes at a valid char boundary; append
-                                    // ellipsis if truncated. Raw byte slicing would panic on
-                                    // multi-byte UTF-8 characters that straddle the boundary.
-                                    const MAX_CMD: usize = 120;
-                                    if cmd.len() > MAX_CMD {
-                                        let mut end = MAX_CMD;
-                                        while end > 0 && !cmd.is_char_boundary(end) {
-                                            end -= 1;
-                                        }
-                                        let truncated = &cmd[..end];
-                                        format!("{truncated}\u{2026}")
-                                    } else {
-                                        cmd.to_string()
-                                    }
-                                }
-                                _ => String::new(),
-                            };
-                            Some((id, arg))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-
-            // Capture full compact input JSON per tool_use_id for the error detail view.
-            // content_arr is Option<&Vec<_>> (Copy), so re-use after tool_inputs above.
+            let mut tool_name: Option<String> = None;
+            let mut all_tools: Vec<String> = Vec::new();
+            let mut tool_use_ids: Vec<(String, String)> = Vec::new();
+            let mut tool_inputs: Vec<(String, String)> = Vec::new();
             if let Some(arr) = content_arr {
                 const MAX_INPUT: usize = 4096;
                 for item in arr {
                     if item.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
                         continue;
                     }
+                    let name = item.get("name").and_then(|v| v.as_str());
+                    if tool_name.is_none()
+                        && let Some(name) = name
+                    {
+                        tool_name = Some(name.to_string());
+                    }
+                    if let Some(name) = name {
+                        all_tools.push(name.to_string());
+                    }
+
                     let Some(id) = item.get("id").and_then(|v| v.as_str()) else {
                         continue;
                     };
+                    if let Some(name) = name {
+                        tool_use_ids.push((id.to_string(), name.to_string()));
+                    }
+
+                    let input = item.get("input");
+                    // Extract the single most-relevant argument per tool invocation.
+                    // File tools: `file_path`; Bash: command capped at 120 bytes.
+                    let arg = match name.unwrap_or("") {
+                        "Edit" | "Write" | "MultiEdit" | "NotebookEdit" | "Read" => input
+                            .and_then(|inp| inp.get("file_path"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string(),
+                        "Bash" => {
+                            let cmd = input
+                                .and_then(|inp| inp.get("command"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            const MAX_CMD: usize = 120;
+                            if cmd.len() > MAX_CMD {
+                                let truncated = truncate_at_char_boundary(cmd, MAX_CMD);
+                                format!("{truncated}\u{2026}")
+                            } else {
+                                cmd.to_string()
+                            }
+                        }
+                        _ => String::new(),
+                    };
+                    tool_inputs.push((id.to_string(), arg));
+
                     if let Some(input) = item.get("input") {
                         let s = serde_json::to_string(input).unwrap_or_default();
                         let truncated = if s.len() > MAX_INPUT {
-                            let mut end = MAX_INPUT;
-                            while end > 0 && !s.is_char_boundary(end) {
-                                end -= 1;
-                            }
-                            s[..end].to_string()
+                            truncate_at_char_boundary(&s, MAX_INPUT).to_string()
                         } else {
                             s
                         };
@@ -710,11 +675,7 @@ pub(crate) fn parse_claude_jsonl_file(filepath: &Path, skip_lines: i64) -> Parse
                         if !text.is_empty() {
                             const MAX_ERROR: usize = 4096;
                             let truncated = if text.len() > MAX_ERROR {
-                                let mut end = MAX_ERROR;
-                                while end > 0 && !text.is_char_boundary(end) {
-                                    end -= 1;
-                                }
-                                text[..end].to_string()
+                                truncate_at_char_boundary(&text, MAX_ERROR).to_string()
                             } else {
                                 text
                             };

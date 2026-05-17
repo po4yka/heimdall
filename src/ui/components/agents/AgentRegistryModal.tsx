@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'preact/hooks';
+import { useState, useEffect, useCallback, useMemo } from 'preact/hooks';
 import { registryModalOpen } from '../../state/store';
 import { InlineStatus } from '../InlineStatus';
 import { TableSkeleton } from '../_primitives/Skeleton';
@@ -34,31 +34,70 @@ function initialRowState(row: AgentRegistryRow | undefined): RowState {
   };
 }
 
+function collectDisplayRoles(
+  detectedRows: Array<{ raw_role: string }>,
+  registryRows: Array<{ raw_role: string }>,
+): string[] {
+  const seen = new Set<string>();
+  const roles: string[] = [];
+  const add = (rawRole: string) => {
+    if (rawRole === 'unknown' || seen.has(rawRole)) return;
+    seen.add(rawRole);
+    roles.push(rawRole);
+  };
+  for (const row of detectedRows) add(row.raw_role);
+  for (const row of registryRows) add(row.raw_role);
+  return roles;
+}
+
+function firstByRawRole<T extends { raw_role: string }>(rows: T[]): Map<string, T> {
+  const byRole = new Map<string, T>();
+  for (const row of rows) {
+    if (!byRole.has(row.raw_role)) byRole.set(row.raw_role, row);
+  }
+  return byRole;
+}
+
 export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegistryModalProps) {
   const [registryRows, setRegistryRows] = useState<AgentRegistryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
 
   // All detected roles for this project (classified or not)
-  const detectedForProject = telemetry.detected.filter(d => d.project === project);
+  const detectedForProject = useMemo(
+    () => telemetry.detected.filter(d => d.project === project),
+    [project, telemetry.detected],
+  );
 
   // All raw roles to display: union of detected + registry rows
-  const allRoles = [
-    ...new Set([
-      ...detectedForProject.map(d => d.raw_role),
-      ...registryRows.map(r => r.raw_role),
-    ]),
-  ].filter(r => r !== 'unknown');
+  const allRoles = useMemo(
+    () => collectDisplayRoles(detectedForProject, registryRows),
+    [detectedForProject, registryRows],
+  );
+
+  const registryByRole = useMemo(() => firstByRawRole(registryRows), [registryRows]);
+  const detectedByRole = useMemo(() => firstByRawRole(detectedForProject), [detectedForProject]);
+  const mergeOptionsByRole = useMemo(() => {
+    const optionsByRole = new Map<string, string[]>();
+    for (const rawRole of allRoles) {
+      const options: string[] = [];
+      for (const option of allRoles) {
+        if (option !== rawRole) options.push(option);
+      }
+      optionsByRole.set(rawRole, options);
+    }
+    return optionsByRole;
+  }, [allRoles]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const resp = await fetchRegistry(project);
       setRegistryRows(resp.registry);
+      const fetchedRegistryByRole = firstByRawRole(resp.registry);
       const states: Record<string, RowState> = {};
-      for (const rawRole of allRoles) {
-        const existing = resp.registry.find(r => r.raw_role === rawRole);
-        states[rawRole] = initialRowState(existing);
+      for (const rawRole of collectDisplayRoles(detectedForProject, resp.registry)) {
+        states[rawRole] = initialRowState(fetchedRegistryByRole.get(rawRole));
       }
       setRowStates(states);
     } catch {
@@ -66,8 +105,7 @@ export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegist
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project]);
+  }, [project, detectedForProject]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -125,9 +163,6 @@ export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegist
     }
   }
 
-  // Other detected roles for merged_into dropdown
-  const mergeOptions = allRoles.filter(r => r !== 'unknown');
-
   return (
     <div class="agent-registry-overlay" onClick={() => registryModalOpen.value = null}>
       <div
@@ -176,10 +211,11 @@ export function AgentRegistryModal({ project, telemetry, onReload }: AgentRegist
               <tbody>
                 {allRoles.map(rawRole => {
                   const state = rowStates[rawRole] ?? initialRowState(undefined);
-                  const registered = registryRows.find(r => r.raw_role === rawRole);
-                  const detected = detectedForProject.find(d => d.raw_role === rawRole);
+                  const registered = registryByRole.get(rawRole);
+                  const detected = detectedByRole.get(rawRole);
                   const confidence: RoleConfidenceLevel = detected?.confidence ?? 'unknown';
                   const sessionCount = detected?.count ?? 0;
+                  const mergeOptions = mergeOptionsByRole.get(rawRole) ?? [];
 
                   return (
                     <tr key={rawRole} class={!registered ? 'agent-row-unclassified' : ''}>

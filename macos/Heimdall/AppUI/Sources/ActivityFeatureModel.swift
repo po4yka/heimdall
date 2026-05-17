@@ -7,6 +7,7 @@ import Observation
 @Observable
 public final class ActivityFeatureModel {
     private let overview: OverviewFeatureModel
+    @ObservationIgnored private var derivedCache: ActivityDerivedCache?
 
     public init(overview: OverviewFeatureModel) {
         self.overview = overview
@@ -26,8 +27,75 @@ public final class ActivityFeatureModel {
 
     /// Merged daily costs across all providers, summed by day.
     public var dailyCosts: [CostHistoryPoint] {
+        self.derivedProjection.dailyCosts
+    }
+
+    /// Merged token history breakdowns aligned by index.
+    public var historyBreakdowns: [TokenBreakdown] {
+        self.derivedProjection.historyBreakdowns
+    }
+
+    /// Combined model rows from all providers, merged by model name.
+    public var byModel: [ProviderModelRow] {
+        self.derivedProjection.byModel
+    }
+
+    /// Combined project rows, merged by project name.
+    public var byProject: [ProviderProjectRow] {
+        self.derivedProjection.byProject
+    }
+
+    /// Merged hourly activity across all providers.
+    public var hourlyActivity: [ProviderHourlyBucket] {
+        self.derivedProjection.hourlyActivity
+    }
+
+    /// Merged activity heatmap cells across all providers.
+    public var activityHeatmap: [ProviderHeatmapCell] {
+        self.derivedProjection.activityHeatmap
+    }
+
+    private var derivedProjection: ActivityDerivedProjection {
+        let items = self.overview.projection.items
+        let signature = ActivityDerivedSignature(items: items)
+        if let cache = self.derivedCache, cache.signature == signature {
+            return cache.projection
+        }
+        let projection = ActivityDerivedProjection(items: items)
+        self.derivedCache = ActivityDerivedCache(signature: signature, projection: projection)
+        return projection
+    }
+
+    public func refreshAll() async {
+        await self.overview.refreshAll()
+    }
+}
+
+private struct ActivityDerivedCache {
+    var signature: ActivityDerivedSignature
+    var projection: ActivityDerivedProjection
+}
+
+private struct ActivityDerivedProjection {
+    var dailyCosts: [CostHistoryPoint]
+    var historyBreakdowns: [TokenBreakdown]
+    var byModel: [ProviderModelRow]
+    var byProject: [ProviderProjectRow]
+    var hourlyActivity: [ProviderHourlyBucket]
+    var activityHeatmap: [ProviderHeatmapCell]
+
+    init(items: [ProviderMenuProjection]) {
+        self.dailyCosts = Self.mergeDailyCosts(items)
+        self.historyBreakdowns = Self.mergeHistoryBreakdowns(items)
+        self.byModel = Self.mergeByModel(items)
+        self.byProject = Self.mergeByProject(items)
+        self.hourlyActivity = Self.mergeHourlyActivity(items)
+        self.activityHeatmap = Self.mergeActivityHeatmap(items)
+    }
+
+    private static func mergeDailyCosts(_ items: [ProviderMenuProjection]) -> [CostHistoryPoint] {
         var byDay: [String: CostHistoryPoint] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for point in item.dailyCosts {
                 if let existing = byDay[point.day] {
                     let merged = existing.breakdown.flatMap { a in
@@ -47,9 +115,8 @@ public final class ActivityFeatureModel {
         return byDay.values.sorted { $0.day < $1.day }
     }
 
-    /// Merged token history breakdowns aligned by index.
-    public var historyBreakdowns: [TokenBreakdown] {
-        let all = self.overview.projection.items.map { $0.historyBreakdowns }
+    private static func mergeHistoryBreakdowns(_ items: [ProviderMenuProjection]) -> [TokenBreakdown] {
+        let all = items.map { $0.historyBreakdowns }
         guard let maxLen = all.map(\.count).max(), maxLen > 0 else { return [] }
         return (0..<maxLen).map { i in
             let slices = all.compactMap { $0.indices.contains(i) ? $0[i] : nil }
@@ -57,10 +124,9 @@ public final class ActivityFeatureModel {
         }
     }
 
-    /// Combined model rows from all providers, merged by model name.
-    public var byModel: [ProviderModelRow] {
+    private static func mergeByModel(_ items: [ProviderMenuProjection]) -> [ProviderModelRow] {
         var byName: [String: ProviderModelRow] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for row in item.byModel {
                 if let existing = byName[row.model] {
                     byName[row.model] = ProviderModelRow(
@@ -81,10 +147,9 @@ public final class ActivityFeatureModel {
         return byName.values.sorted { $0.costUSD > $1.costUSD }
     }
 
-    /// Combined project rows, merged by project name.
-    public var byProject: [ProviderProjectRow] {
+    private static func mergeByProject(_ items: [ProviderMenuProjection]) -> [ProviderProjectRow] {
         var byName: [String: ProviderProjectRow] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for row in item.byProject {
                 if let existing = byName[row.project] {
                     byName[row.project] = ProviderProjectRow(
@@ -102,10 +167,9 @@ public final class ActivityFeatureModel {
         return byName.values.sorted { $0.costUSD > $1.costUSD }
     }
 
-    /// Merged hourly activity across all providers.
-    public var hourlyActivity: [ProviderHourlyBucket] {
+    private static func mergeHourlyActivity(_ items: [ProviderMenuProjection]) -> [ProviderHourlyBucket] {
         var byHour: [Int: ProviderHourlyBucket] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for bucket in item.hourlyActivity {
                 if let existing = byHour[bucket.hour] {
                     byHour[bucket.hour] = ProviderHourlyBucket(
@@ -122,10 +186,9 @@ public final class ActivityFeatureModel {
         return byHour.values.sorted { $0.hour < $1.hour }
     }
 
-    /// Merged activity heatmap cells across all providers.
-    public var activityHeatmap: [ProviderHeatmapCell] {
+    private static func mergeActivityHeatmap(_ items: [ProviderMenuProjection]) -> [ProviderHeatmapCell] {
         var byKey: [String: ProviderHeatmapCell] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for cell in item.activityHeatmap {
                 let key = "\(cell.dayOfWeek)-\(cell.hour)"
                 if let existing = byKey[key] {
@@ -141,8 +204,46 @@ public final class ActivityFeatureModel {
         }
         return Array(byKey.values)
     }
+}
 
-    public func refreshAll() async {
-        await self.overview.refreshAll()
+private struct ActivityDerivedSignature: Equatable {
+    var providers: [ActivityProviderSignature]
+
+    init(items: [ProviderMenuProjection]) {
+        self.providers = items.map(ActivityProviderSignature.init(item:))
+    }
+}
+
+private struct ActivityProviderSignature: Equatable {
+    var provider: String
+    var dailyCosts: [ActivityDailyCostSignature]
+    var historyBreakdowns: [TokenBreakdown]
+    var byModel: [ProviderModelRow]
+    var byProject: [ProviderProjectRow]
+    var hourlyActivity: [ProviderHourlyBucket]
+    var activityHeatmap: [ProviderHeatmapCell]
+
+    init(item: ProviderMenuProjection) {
+        self.provider = item.provider.rawValue
+        self.dailyCosts = item.dailyCosts.map(ActivityDailyCostSignature.init(point:))
+        self.historyBreakdowns = item.historyBreakdowns
+        self.byModel = item.byModel
+        self.byProject = item.byProject
+        self.hourlyActivity = item.hourlyActivity
+        self.activityHeatmap = item.activityHeatmap
+    }
+}
+
+private struct ActivityDailyCostSignature: Equatable {
+    var day: String
+    var totalTokens: Int
+    var costUSD: Double
+    var breakdown: TokenBreakdown?
+
+    init(point: CostHistoryPoint) {
+        self.day = point.day
+        self.totalTokens = point.totalTokens
+        self.costUSD = point.costUSD
+        self.breakdown = point.breakdown
     }
 }

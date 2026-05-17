@@ -1438,57 +1438,115 @@ pub fn upsert_sessions(conn: &Connection, sessions: &[crate::models::Session]) -
 /// Recompute session totals from actual turns in DB.
 pub fn recompute_session_totals(conn: &Connection) -> Result<()> {
     conn.execute_batch(
-        "UPDATE sessions SET
-            total_input_tokens = COALESCE((SELECT SUM(input_tokens) FROM turns WHERE turns.session_id = sessions.session_id), 0),
-            total_output_tokens = COALESCE((SELECT SUM(output_tokens) FROM turns WHERE turns.session_id = sessions.session_id), 0),
-            total_cache_read = COALESCE((SELECT SUM(cache_read_tokens) FROM turns WHERE turns.session_id = sessions.session_id), 0),
-            total_cache_creation = COALESCE((SELECT SUM(cache_creation_tokens) FROM turns WHERE turns.session_id = sessions.session_id), 0),
-            total_reasoning_output = COALESCE((SELECT SUM(reasoning_output_tokens) FROM turns WHERE turns.session_id = sessions.session_id), 0),
-            total_estimated_cost_nanos = COALESCE((SELECT SUM(estimated_cost_nanos) FROM turns WHERE turns.session_id = sessions.session_id), 0),
-            turn_count = COALESCE((SELECT COUNT(*) FROM turns WHERE turns.session_id = sessions.session_id), 0),
-            total_credits = (SELECT SUM(credits) FROM turns WHERE turns.session_id = sessions.session_id),
-            provider = COALESCE((
-                SELECT provider FROM turns
-                WHERE turns.session_id = sessions.session_id
-                ORDER BY timestamp DESC, id DESC
-                LIMIT 1
-            ), provider),
-            model = COALESCE((
-                SELECT model FROM turns
-                WHERE turns.session_id = sessions.session_id AND model IS NOT NULL AND model != ''
-                ORDER BY timestamp DESC, id DESC
-                LIMIT 1
-            ), model),
-            pricing_version = COALESCE((
-                SELECT CASE
+        "DROP TABLE IF EXISTS temp.session_rollups;
+         DROP TABLE IF EXISTS temp.session_latest_provider;
+         DROP TABLE IF EXISTS temp.session_latest_model;
+
+         CREATE TEMP TABLE session_rollups (
+             session_id TEXT PRIMARY KEY,
+             total_input_tokens INTEGER NOT NULL,
+             total_output_tokens INTEGER NOT NULL,
+             total_cache_read INTEGER NOT NULL,
+             total_cache_creation INTEGER NOT NULL,
+             total_reasoning_output INTEGER NOT NULL,
+             total_estimated_cost_nanos INTEGER NOT NULL,
+             turn_count INTEGER NOT NULL,
+             total_credits REAL,
+             pricing_version TEXT NOT NULL,
+             billing_mode TEXT NOT NULL,
+             cost_confidence TEXT NOT NULL
+         ) WITHOUT ROWID;
+
+         INSERT INTO session_rollups
+         SELECT session_id,
+                COALESCE(SUM(input_tokens), 0),
+                COALESCE(SUM(output_tokens), 0),
+                COALESCE(SUM(cache_read_tokens), 0),
+                COALESCE(SUM(cache_creation_tokens), 0),
+                COALESCE(SUM(reasoning_output_tokens), 0),
+                COALESCE(SUM(estimated_cost_nanos), 0),
+                COUNT(*),
+                SUM(credits),
+                CASE
                     WHEN COUNT(DISTINCT pricing_version) = 0 THEN ''
                     WHEN COUNT(DISTINCT pricing_version) = 1 THEN MAX(pricing_version)
                     ELSE 'mixed'
-                END
-                FROM turns
-                WHERE turns.session_id = sessions.session_id AND pricing_version IS NOT NULL
-            ), pricing_version),
-            billing_mode = COALESCE((
-                SELECT CASE
-                    WHEN COUNT(DISTINCT billing_mode) = 0 THEN 'estimated_local'
-                    WHEN COUNT(DISTINCT billing_mode) = 1 THEN MAX(billing_mode)
+                END,
+                CASE
+                    WHEN COUNT(DISTINCT CASE
+                        WHEN billing_mode IS NOT NULL AND billing_mode != '' THEN billing_mode
+                    END) = 0 THEN 'estimated_local'
+                    WHEN COUNT(DISTINCT CASE
+                        WHEN billing_mode IS NOT NULL AND billing_mode != '' THEN billing_mode
+                    END) = 1 THEN MAX(CASE
+                        WHEN billing_mode IS NOT NULL AND billing_mode != '' THEN billing_mode
+                    END)
                     ELSE 'mixed'
-                END
-                FROM turns
-                WHERE turns.session_id = sessions.session_id AND billing_mode IS NOT NULL AND billing_mode != ''
-            ), billing_mode),
-            cost_confidence = COALESCE((
-                SELECT CASE
+                END,
+                CASE
                     WHEN SUM(CASE WHEN cost_confidence = 'low' THEN 1 ELSE 0 END) > 0 THEN 'low'
                     WHEN SUM(CASE WHEN cost_confidence = 'medium' THEN 1 ELSE 0 END) > 0 THEN 'medium'
                     WHEN COUNT(*) > 0 THEN 'high'
                     ELSE 'low'
                 END
-                FROM turns
-                WHERE turns.session_id = sessions.session_id
-            ), cost_confidence);
+         FROM turns
+         GROUP BY session_id;
+
+         CREATE TEMP TABLE session_latest_provider AS
+         SELECT session_id, provider
+         FROM (
+             SELECT session_id,
+                    provider,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY session_id
+                        ORDER BY timestamp DESC, id DESC
+                    ) AS rn
+             FROM turns
+         )
+         WHERE rn = 1;
+         CREATE UNIQUE INDEX idx_temp_session_latest_provider
+             ON session_latest_provider(session_id);
+
+         CREATE TEMP TABLE session_latest_model AS
+         SELECT session_id, model
+         FROM (
+             SELECT session_id,
+                    model,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY session_id
+                        ORDER BY timestamp DESC, id DESC
+                    ) AS rn
+             FROM turns
+             WHERE model IS NOT NULL AND model != ''
+         )
+         WHERE rn = 1;
+         CREATE UNIQUE INDEX idx_temp_session_latest_model
+             ON session_latest_model(session_id);
+
+         UPDATE sessions SET
+             total_input_tokens = (SELECT total_input_tokens FROM session_rollups WHERE session_id = sessions.session_id),
+             total_output_tokens = (SELECT total_output_tokens FROM session_rollups WHERE session_id = sessions.session_id),
+             total_cache_read = (SELECT total_cache_read FROM session_rollups WHERE session_id = sessions.session_id),
+             total_cache_creation = (SELECT total_cache_creation FROM session_rollups WHERE session_id = sessions.session_id),
+             total_reasoning_output = (SELECT total_reasoning_output FROM session_rollups WHERE session_id = sessions.session_id),
+             total_estimated_cost_nanos = (SELECT total_estimated_cost_nanos FROM session_rollups WHERE session_id = sessions.session_id),
+             turn_count = (SELECT turn_count FROM session_rollups WHERE session_id = sessions.session_id),
+             total_credits = (SELECT total_credits FROM session_rollups WHERE session_id = sessions.session_id),
+             provider = COALESCE((SELECT provider FROM session_latest_provider WHERE session_id = sessions.session_id), provider),
+             model = COALESCE((SELECT model FROM session_latest_model WHERE session_id = sessions.session_id), model),
+             pricing_version = (SELECT pricing_version FROM session_rollups WHERE session_id = sessions.session_id),
+             billing_mode = (SELECT billing_mode FROM session_rollups WHERE session_id = sessions.session_id),
+             cost_confidence = (SELECT cost_confidence FROM session_rollups WHERE session_id = sessions.session_id)
+         WHERE EXISTS (
+             SELECT 1 FROM session_rollups WHERE session_id = sessions.session_id
+         );
+
          DELETE FROM sessions
-         WHERE NOT EXISTS (SELECT 1 FROM turns WHERE turns.session_id = sessions.session_id);",
+         WHERE NOT EXISTS (SELECT 1 FROM session_rollups WHERE session_id = sessions.session_id);
+
+         DROP TABLE IF EXISTS temp.session_latest_model;
+         DROP TABLE IF EXISTS temp.session_latest_provider;
+         DROP TABLE IF EXISTS temp.session_rollups;",
     )?;
     Ok(())
 }
@@ -1598,92 +1656,147 @@ fn collect_warn<T>(
     .collect()
 }
 
-pub(crate) fn query_dashboard_models(conn: &Connection) -> Result<Vec<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT COALESCE(model, 'unknown') as model
-         FROM turns GROUP BY model
-         ORDER BY SUM(input_tokens + output_tokens) DESC",
-    )?;
-    Ok(collect_warn(
-        stmt.query_map([], |row| row.get(0))?,
-        "dashboard models",
-    ))
+struct DashboardBreakdowns {
+    models: Vec<String>,
+    providers: Vec<ProviderSummary>,
+    confidence: Vec<ConfidenceSummary>,
+    billing_modes: Vec<BillingModeSummary>,
 }
 
-pub(crate) fn query_dashboard_providers(conn: &Connection) -> Result<Vec<ProviderSummary>> {
-    let mut stmt = conn.prepare(
-        "SELECT provider,
-                COUNT(DISTINCT session_id) as sessions,
-                COUNT(*) as turns,
-                COALESCE(SUM(input_tokens), 0) as input,
-                COALESCE(SUM(output_tokens), 0) as output,
-                COALESCE(SUM(cache_read_tokens), 0) as cache_read,
-                COALESCE(SUM(cache_creation_tokens), 0) as cache_creation,
-                COALESCE(SUM(reasoning_output_tokens), 0) as reasoning_output,
-                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
-         FROM turns
-         GROUP BY provider
-         ORDER BY turns DESC",
-    )?;
-    Ok(collect_warn(
-        stmt.query_map([], |row| {
-            let provider: String = row.get(0)?;
-            Ok(ProviderSummary {
-                provider: provider.clone(),
-                sessions: row.get(1)?,
-                turns: row.get(2)?,
-                input: row.get(3)?,
-                output: row.get(4)?,
-                cache_read: row.get(5)?,
-                cache_creation: row.get(6)?,
-                reasoning_output: row.get(7)?,
-                cost: row.get::<_, i64>(8)? as f64 / 1_000_000_000.0,
-            })
-        })?,
-        "dashboard providers",
-    ))
-}
+fn query_dashboard_breakdowns(conn: &Connection) -> Result<DashboardBreakdowns> {
+    #[derive(Debug)]
+    struct RawBreakdown {
+        kind: String,
+        key: String,
+        sessions: i64,
+        turns: i64,
+        input: i64,
+        output: i64,
+        cache_read: i64,
+        cache_creation: i64,
+        reasoning_output: i64,
+        cost_nanos: i64,
+        sort_value: i64,
+    }
 
-pub(crate) fn query_dashboard_confidence(conn: &Connection) -> Result<Vec<ConfidenceSummary>> {
     let mut stmt = conn.prepare(
-        "SELECT COALESCE(cost_confidence, 'low') as cost_confidence,
-                COUNT(*) as turns,
-                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
-         FROM turns
-         GROUP BY cost_confidence
-         ORDER BY turns DESC",
+        "WITH base AS MATERIALIZED (
+            SELECT provider,
+                   COALESCE(model, 'unknown') AS model,
+                   COALESCE(cost_confidence, 'low') AS cost_confidence,
+                   COALESCE(billing_mode, 'estimated_local') AS billing_mode,
+                   session_id,
+                   input_tokens,
+                   output_tokens,
+                   cache_read_tokens,
+                   cache_creation_tokens,
+                   reasoning_output_tokens,
+                   estimated_cost_nanos
+            FROM turns
+        )
+        SELECT 'model' AS kind, model AS key,
+               0 AS sessions, 0 AS turns, 0 AS input, 0 AS output,
+               0 AS cache_read, 0 AS cache_creation, 0 AS reasoning_output,
+               0 AS cost_nanos,
+               COALESCE(SUM(input_tokens + output_tokens), 0) AS sort_value
+        FROM base
+        GROUP BY model
+        UNION ALL
+        SELECT 'provider' AS kind, provider AS key,
+               COUNT(DISTINCT session_id) AS sessions,
+               COUNT(*) AS turns,
+               COALESCE(SUM(input_tokens), 0) AS input,
+               COALESCE(SUM(output_tokens), 0) AS output,
+               COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
+               COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation,
+               COALESCE(SUM(reasoning_output_tokens), 0) AS reasoning_output,
+               COALESCE(SUM(estimated_cost_nanos), 0) AS cost_nanos,
+               COUNT(*) AS sort_value
+        FROM base
+        GROUP BY provider
+        UNION ALL
+        SELECT 'confidence' AS kind, cost_confidence AS key,
+               0 AS sessions,
+               COUNT(*) AS turns,
+               0 AS input, 0 AS output, 0 AS cache_read, 0 AS cache_creation, 0 AS reasoning_output,
+               COALESCE(SUM(estimated_cost_nanos), 0) AS cost_nanos,
+               COUNT(*) AS sort_value
+        FROM base
+        GROUP BY cost_confidence
+        UNION ALL
+        SELECT 'billing' AS kind, billing_mode AS key,
+               0 AS sessions,
+               COUNT(*) AS turns,
+               0 AS input, 0 AS output, 0 AS cache_read, 0 AS cache_creation, 0 AS reasoning_output,
+               COALESCE(SUM(estimated_cost_nanos), 0) AS cost_nanos,
+               COUNT(*) AS sort_value
+        FROM base
+        GROUP BY billing_mode",
     )?;
-    Ok(collect_warn(
-        stmt.query_map([], |row| {
-            Ok(ConfidenceSummary {
-                confidence: row.get(0)?,
-                turns: row.get(1)?,
-                cost: row.get::<_, i64>(2)? as f64 / 1_000_000_000.0,
-            })
-        })?,
-        "dashboard confidence",
-    ))
-}
 
-pub(crate) fn query_dashboard_billing_modes(conn: &Connection) -> Result<Vec<BillingModeSummary>> {
-    let mut stmt = conn.prepare(
-        "SELECT COALESCE(billing_mode, 'estimated_local') as billing_mode,
-                COUNT(*) as turns,
-                COALESCE(SUM(estimated_cost_nanos), 0) as cost_nanos
-         FROM turns
-         GROUP BY billing_mode
-         ORDER BY turns DESC",
-    )?;
-    Ok(collect_warn(
+    let rows: Vec<RawBreakdown> = collect_warn(
         stmt.query_map([], |row| {
-            Ok(BillingModeSummary {
-                billing_mode: row.get(0)?,
-                turns: row.get(1)?,
-                cost: row.get::<_, i64>(2)? as f64 / 1_000_000_000.0,
+            Ok(RawBreakdown {
+                kind: row.get(0)?,
+                key: row.get(1)?,
+                sessions: row.get(2)?,
+                turns: row.get(3)?,
+                input: row.get(4)?,
+                output: row.get(5)?,
+                cache_read: row.get(6)?,
+                cache_creation: row.get(7)?,
+                reasoning_output: row.get(8)?,
+                cost_nanos: row.get(9)?,
+                sort_value: row.get(10)?,
             })
         })?,
-        "dashboard billing modes",
-    ))
+        "dashboard shared breakdowns",
+    );
+
+    let mut model_rows: Vec<(String, i64)> = Vec::new();
+    let mut providers = Vec::new();
+    let mut confidence = Vec::new();
+    let mut billing_modes = Vec::new();
+
+    for row in rows {
+        match row.kind.as_str() {
+            "model" => model_rows.push((row.key, row.sort_value)),
+            "provider" => providers.push(ProviderSummary {
+                provider: row.key,
+                sessions: row.sessions,
+                turns: row.turns,
+                input: row.input,
+                output: row.output,
+                cache_read: row.cache_read,
+                cache_creation: row.cache_creation,
+                reasoning_output: row.reasoning_output,
+                cost: row.cost_nanos as f64 / 1_000_000_000.0,
+            }),
+            "confidence" => confidence.push(ConfidenceSummary {
+                confidence: row.key,
+                turns: row.turns,
+                cost: row.cost_nanos as f64 / 1_000_000_000.0,
+            }),
+            "billing" => billing_modes.push(BillingModeSummary {
+                billing_mode: row.key,
+                turns: row.turns,
+                cost: row.cost_nanos as f64 / 1_000_000_000.0,
+            }),
+            _ => {}
+        }
+    }
+
+    model_rows.sort_by(|left, right| right.1.cmp(&left.1));
+    providers.sort_by(|left, right| right.turns.cmp(&left.turns));
+    confidence.sort_by(|left, right| right.turns.cmp(&left.turns));
+    billing_modes.sort_by(|left, right| right.turns.cmp(&left.turns));
+
+    Ok(DashboardBreakdowns {
+        models: model_rows.into_iter().map(|(model, _)| model).collect(),
+        providers,
+        confidence,
+        billing_modes,
+    })
 }
 
 pub(crate) fn query_dashboard_daily_by_model(
@@ -1753,24 +1866,37 @@ pub(crate) fn query_dashboard_daily_by_model(
 
 pub(crate) fn query_dashboard_sessions(conn: &Connection) -> Result<Vec<SessionRow>> {
     let mut stmt = conn.prepare(
-        "SELECT s.session_id, s.provider, s.project_name, s.first_timestamp, s.last_timestamp,
+        "WITH subagent_turns AS (
+             SELECT session_id,
+                    COUNT(DISTINCT agent_id) AS subagent_count,
+                    COUNT(*) AS subagent_turns,
+                    COALESCE(SUM(estimated_cost_nanos), 0) AS subagent_turns_cost_nanos
+             FROM turns
+             WHERE is_subagent = 1
+             GROUP BY session_id
+         ),
+         agent_costs AS (
+             SELECT session_id,
+                    COALESCE(SUM(cost_nanos), 0) AS agent_sessions_cost_nanos
+             FROM agent_sessions
+             GROUP BY session_id
+         )
+         SELECT s.session_id, s.provider, s.project_name, s.first_timestamp, s.last_timestamp,
                 s.total_input_tokens, s.total_output_tokens,
                 s.total_cache_read, s.total_cache_creation, s.total_reasoning_output,
                 s.total_estimated_cost_nanos, s.model, s.turn_count,
                 s.pricing_version, s.billing_mode, s.cost_confidence,
-                COALESCE((SELECT COUNT(DISTINCT t.agent_id) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_count,
-                COALESCE((SELECT COUNT(*) FROM turns t WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0) as subagent_turns,
+                COALESCE(st.subagent_count, 0) as subagent_count,
+                COALESCE(st.subagent_turns, 0) as subagent_turns,
                 s.title, s.total_credits,
                 ps.custom_label,
                 COALESCE(ps.pinned, 0) AS pinned,
-                COALESCE((SELECT SUM(cost_nanos) FROM agent_sessions
-                          WHERE agent_sessions.session_id = s.session_id), 0)
-                    AS agent_sessions_cost_nanos,
-                COALESCE((SELECT SUM(estimated_cost_nanos) FROM turns t
-                          WHERE t.session_id = s.session_id AND t.is_subagent = 1), 0)
-                    AS subagent_turns_cost_nanos
+                COALESCE(ac.agent_sessions_cost_nanos, 0) AS agent_sessions_cost_nanos,
+                COALESCE(st.subagent_turns_cost_nanos, 0) AS subagent_turns_cost_nanos
          FROM sessions s
          LEFT JOIN project_settings ps ON ps.project_slug = s.project_name
+         LEFT JOIN subagent_turns st ON st.session_id = s.session_id
+         LEFT JOIN agent_costs ac ON ac.session_id = s.session_id
          ORDER BY s.last_timestamp DESC",
     )?;
     Ok(collect_warn(
@@ -3324,10 +3450,11 @@ pub fn query_dashboard_claude_md_size(conn: &Connection) -> crate::models::Claud
 }
 
 pub fn get_dashboard_data(conn: &Connection, tz: TzParams) -> Result<DashboardData> {
-    let all_models = query_dashboard_models(conn)?;
-    let provider_breakdown = query_dashboard_providers(conn)?;
-    let confidence_breakdown = query_dashboard_confidence(conn)?;
-    let billing_mode_breakdown = query_dashboard_billing_modes(conn)?;
+    let shared_breakdowns = query_dashboard_breakdowns(conn)?;
+    let all_models = shared_breakdowns.models;
+    let provider_breakdown = shared_breakdowns.providers;
+    let confidence_breakdown = shared_breakdowns.confidence;
+    let billing_mode_breakdown = shared_breakdowns.billing_modes;
     let daily_by_model = query_dashboard_daily_by_model(conn, &tz)?;
     let sessions_all = query_dashboard_sessions(conn)?;
     let subagent_summary = query_dashboard_subagents(conn);

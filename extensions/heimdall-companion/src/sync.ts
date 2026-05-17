@@ -57,12 +57,11 @@ async function runCapped<T>(
 ): Promise<Array<PoolResult<T>>> {
   if (items.length === 0) return [];
   const out: Array<PoolResult<T>> = new Array(items.length);
-  // Queue carries [originalIndex, id] pairs so results land in input order.
-  const queue: Array<[number, string]> = items.map((id, i) => [i, id]);
+  let nextIndex = 0;
   const worker = async () => {
-    let next: [number, string] | undefined;
-    while ((next = queue.shift()) !== undefined) {
-      const [i, id] = next;
+    while (nextIndex < items.length) {
+      const i = nextIndex++;
+      const id = items[i]!;
       try {
         out[i] = { ok: true, value: await fn(id) };
       } catch (e) {

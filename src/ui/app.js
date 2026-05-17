@@ -4040,33 +4040,66 @@
       merged_into: row?.merged_into ?? ""
     };
   }
+  function collectDisplayRoles(detectedRows, registryRows) {
+    const seen = /* @__PURE__ */ new Set();
+    const roles = [];
+    const add = (rawRole) => {
+      if (rawRole === "unknown" || seen.has(rawRole)) return;
+      seen.add(rawRole);
+      roles.push(rawRole);
+    };
+    for (const row of detectedRows) add(row.raw_role);
+    for (const row of registryRows) add(row.raw_role);
+    return roles;
+  }
+  function firstByRawRole(rows2) {
+    const byRole = /* @__PURE__ */ new Map();
+    for (const row of rows2) {
+      if (!byRole.has(row.raw_role)) byRole.set(row.raw_role, row);
+    }
+    return byRole;
+  }
   function AgentRegistryModal({ project, telemetry, onReload }) {
     const [registryRows, setRegistryRows] = d2([]);
     const [loading, setLoading] = d2(true);
     const [rowStates, setRowStates] = d2({});
-    const detectedForProject = telemetry.detected.filter((d5) => d5.project === project);
-    const allRoles = [
-      .../* @__PURE__ */ new Set([
-        ...detectedForProject.map((d5) => d5.raw_role),
-        ...registryRows.map((r4) => r4.raw_role)
-      ])
-    ].filter((r4) => r4 !== "unknown");
+    const detectedForProject = T2(
+      () => telemetry.detected.filter((d5) => d5.project === project),
+      [project, telemetry.detected]
+    );
+    const allRoles = T2(
+      () => collectDisplayRoles(detectedForProject, registryRows),
+      [detectedForProject, registryRows]
+    );
+    const registryByRole = T2(() => firstByRawRole(registryRows), [registryRows]);
+    const detectedByRole = T2(() => firstByRawRole(detectedForProject), [detectedForProject]);
+    const mergeOptionsByRole = T2(() => {
+      const optionsByRole = /* @__PURE__ */ new Map();
+      for (const rawRole of allRoles) {
+        const options = [];
+        for (const option of allRoles) {
+          if (option !== rawRole) options.push(option);
+        }
+        optionsByRole.set(rawRole, options);
+      }
+      return optionsByRole;
+    }, [allRoles]);
     const load = q2(async () => {
       setLoading(true);
       try {
         const resp = await fetchRegistry(project);
         setRegistryRows(resp.registry);
+        const fetchedRegistryByRole = firstByRawRole(resp.registry);
         const states = {};
-        for (const rawRole of allRoles) {
-          const existing = resp.registry.find((r4) => r4.raw_role === rawRole);
-          states[rawRole] = initialRowState(existing);
+        for (const rawRole of collectDisplayRoles(detectedForProject, resp.registry)) {
+          states[rawRole] = initialRowState(fetchedRegistryByRole.get(rawRole));
         }
         setRowStates(states);
       } catch {
       } finally {
         setLoading(false);
       }
-    }, [project]);
+    }, [project, detectedForProject]);
     y2(() => {
       void load();
     }, [load]);
@@ -4118,7 +4151,6 @@
         setStatus("agent-registry", "error", err instanceof Error ? err.message : String(err), 3e3);
       }
     }
-    const mergeOptions = allRoles.filter((r4) => r4 !== "unknown");
     return /* @__PURE__ */ u4("div", { class: "agent-registry-overlay", onClick: () => registryModalOpen.value = null, children: /* @__PURE__ */ u4(
       "div",
       {
@@ -4157,10 +4189,11 @@
             ] }) }),
             /* @__PURE__ */ u4("tbody", { children: allRoles.map((rawRole) => {
               const state = rowStates[rawRole] ?? initialRowState(void 0);
-              const registered = registryRows.find((r4) => r4.raw_role === rawRole);
-              const detected = detectedForProject.find((d5) => d5.raw_role === rawRole);
+              const registered = registryByRole.get(rawRole);
+              const detected = detectedByRole.get(rawRole);
               const confidence = detected?.confidence ?? "unknown";
               const sessionCount = detected?.count ?? 0;
+              const mergeOptions = mergeOptionsByRole.get(rawRole) ?? [];
               return /* @__PURE__ */ u4("tr", { class: !registered ? "agent-row-unclassified" : "", children: [
                 /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4("span", { class: "model-tag", title: rawRole, children: esc(rawRole) }) }),
                 /* @__PURE__ */ u4("td", { children: /* @__PURE__ */ u4(

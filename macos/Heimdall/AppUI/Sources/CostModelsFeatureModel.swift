@@ -7,6 +7,7 @@ import Observation
 @Observable
 public final class CostModelsFeatureModel {
     private let overview: OverviewFeatureModel
+    @ObservationIgnored private var derivedCache: CostModelsDerivedCache?
 
     public init(overview: OverviewFeatureModel) {
         self.overview = overview
@@ -26,8 +27,61 @@ public final class CostModelsFeatureModel {
 
     /// Merged model rows across all providers, sorted by cost.
     public var byModel: [ProviderModelRow] {
+        self.derivedProjection.byModel
+    }
+
+    /// Merged tool usage across all providers, sorted by invocations.
+    public var byTool: [ProviderToolRow] {
+        self.derivedProjection.byTool
+    }
+
+    /// Merged MCP server rows across all providers, sorted by invocations.
+    public var byMcp: [ProviderMcpRow] {
+        self.derivedProjection.byMcp
+    }
+
+    /// Merged CLI version breakdown across all providers, sorted by cost.
+    public var versionBreakdown: [ProviderVersionRow] {
+        self.derivedProjection.versionBreakdown
+    }
+
+    private var derivedProjection: CostModelsDerivedProjection {
+        let items = self.overview.projection.items
+        let signature = CostModelsDerivedSignature(items: items)
+        if let cache = self.derivedCache, cache.signature == signature {
+            return cache.projection
+        }
+        let projection = CostModelsDerivedProjection(items: items)
+        self.derivedCache = CostModelsDerivedCache(signature: signature, projection: projection)
+        return projection
+    }
+
+    public func refreshAll() async {
+        await self.overview.refreshAll()
+    }
+}
+
+private struct CostModelsDerivedCache {
+    var signature: CostModelsDerivedSignature
+    var projection: CostModelsDerivedProjection
+}
+
+private struct CostModelsDerivedProjection {
+    var byModel: [ProviderModelRow]
+    var byTool: [ProviderToolRow]
+    var byMcp: [ProviderMcpRow]
+    var versionBreakdown: [ProviderVersionRow]
+
+    init(items: [ProviderMenuProjection]) {
+        self.byModel = Self.mergeByModel(items)
+        self.byTool = Self.mergeByTool(items)
+        self.byMcp = Self.mergeByMcp(items)
+        self.versionBreakdown = Self.mergeVersionBreakdown(items)
+    }
+
+    private static func mergeByModel(_ items: [ProviderMenuProjection]) -> [ProviderModelRow] {
         var byName: [String: ProviderModelRow] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for row in item.byModel {
                 if let existing = byName[row.model] {
                     byName[row.model] = ProviderModelRow(
@@ -48,10 +102,9 @@ public final class CostModelsFeatureModel {
         return byName.values.sorted { $0.costUSD > $1.costUSD }
     }
 
-    /// Merged tool usage across all providers, sorted by invocations.
-    public var byTool: [ProviderToolRow] {
+    private static func mergeByTool(_ items: [ProviderMenuProjection]) -> [ProviderToolRow] {
         var byKey: [String: ProviderToolRow] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for row in item.byTool {
                 let key = "\(row.mcpServer ?? "_")/\(row.toolName)"
                 if let existing = byKey[key] {
@@ -72,10 +125,9 @@ public final class CostModelsFeatureModel {
         return byKey.values.sorted { $0.invocations > $1.invocations }
     }
 
-    /// Merged MCP server rows across all providers, sorted by invocations.
-    public var byMcp: [ProviderMcpRow] {
+    private static func mergeByMcp(_ items: [ProviderMenuProjection]) -> [ProviderMcpRow] {
         var byServer: [String: ProviderMcpRow] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for row in item.byMcp {
                 if let existing = byServer[row.server] {
                     byServer[row.server] = ProviderMcpRow(
@@ -92,10 +144,9 @@ public final class CostModelsFeatureModel {
         return byServer.values.sorted { $0.invocations > $1.invocations }
     }
 
-    /// Merged CLI version breakdown across all providers, sorted by cost.
-    public var versionBreakdown: [ProviderVersionRow] {
+    private static func mergeVersionBreakdown(_ items: [ProviderMenuProjection]) -> [ProviderVersionRow] {
         var byVersion: [String: ProviderVersionRow] = [:]
-        for item in self.overview.projection.items {
+        for item in items {
             for row in item.versionBreakdown {
                 if let existing = byVersion[row.version] {
                     byVersion[row.version] = ProviderVersionRow(
@@ -111,8 +162,28 @@ public final class CostModelsFeatureModel {
         }
         return byVersion.values.sorted { $0.costUSD > $1.costUSD }
     }
+}
 
-    public func refreshAll() async {
-        await self.overview.refreshAll()
+private struct CostModelsDerivedSignature: Equatable {
+    var providers: [CostModelsProviderSignature]
+
+    init(items: [ProviderMenuProjection]) {
+        self.providers = items.map(CostModelsProviderSignature.init(item:))
+    }
+}
+
+private struct CostModelsProviderSignature: Equatable {
+    var provider: String
+    var byModel: [ProviderModelRow]
+    var byTool: [ProviderToolRow]
+    var byMcp: [ProviderMcpRow]
+    var versionBreakdown: [ProviderVersionRow]
+
+    init(item: ProviderMenuProjection) {
+        self.provider = item.provider.rawValue
+        self.byModel = item.byModel
+        self.byTool = item.byTool
+        self.byMcp = item.byMcp
+        self.versionBreakdown = item.versionBreakdown
     }
 }
