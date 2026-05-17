@@ -65,7 +65,7 @@ observer.observe(document.body, {
 function currentChatGptConvId(): string | null {
   // URL shape: https://chatgpt.com/c/<conv-id>
   const m = location.pathname.match(/^\/c\/([^/]+)/);
-  return m ? m[1] : null;
+  return m?.[1] ?? null;
 }
 
 function scrapeChatGptCitations(): void {
