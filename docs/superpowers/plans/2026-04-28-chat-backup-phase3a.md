@@ -2,43 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the cookie-paste-CLI fallback for Tier 3 web-chat capture
-(spec §7b). User copies session cookies from DevTools, runs
-`heimdall scrape claude --session-key … --cf-clearance …` (or the chatgpt
-equivalent), and Heimdall fetches the user's conversation list +
-contents from the vendor's private API and writes them under
-`<archive_root>/web/<vendor>/<conv_id>.json` (history-versioned). Phase 3a
-also lays the rails the Phase 3b browser extension will reuse: the
-companion-token bearer + the `POST /api/archive/web-conversation` ingest
-endpoint share the same storage primitive `write_web_conversation()`.
+**Goal:** Ship the cookie-paste-CLI fallback for Tier 3 web-chat capture (spec §7b). User copies session cookies from DevTools, runs `heimdall scrape claude --session-key … --cf-clearance …` (or the chatgpt equivalent), and Heimdall fetches the user's conversation list + contents from the vendor's private API and writes them under `<archive_root>/web/<vendor>/<conv_id>.json` (history-versioned). Phase 3a also lays the rails the Phase 3b browser extension will reuse: the companion-token bearer + the `POST /api/archive/web-conversation` ingest endpoint share the same storage primitive `write_web_conversation()`.
 
-**Architecture:** Three new modules. `src/archive/web/` owns the on-disk
-shape (write + history rotation + listing). `src/archive/companion_token`
-manages the per-install bearer (`~/.heimdall/companion-token`, mode 0600,
-constant-time verify). `src/scrape/{claude,chatgpt}.rs` are reqwest-based
-HTTP clients that the CLI calls *directly* — they do not POST through the
-local HTTP endpoint, so a headless install needs no daemon. The HTTP
-endpoint exists only for Phase 3b's browser extension; both code paths
-land in the same `web/` tree.
+**Architecture:** Three new modules. `src/archive/web/` owns the on-disk shape (write + history rotation + listing). `src/archive/companion_token` manages the per-install bearer (`~/.heimdall/companion-token`, mode 0600, constant-time verify). `src/scrape/{claude,chatgpt}.rs` are reqwest-based HTTP clients that the CLI calls *directly* — they do not POST through the local HTTP endpoint, so a headless install needs no daemon. The HTTP endpoint exists only for Phase 3b's browser extension; both code paths land in the same `web/` tree.
 
-**Tech Stack:** Rust 2024, `reqwest = "0.12"` (already a dep), `subtle = "2"`
-for constant-time bearer comparison (small new dep), the existing
-`anyhow`/`thiserror`/`tracing`/`serde` ecosystem.
+**Tech Stack:** Rust 2024, `reqwest = "0.12"` (already a dep), `subtle = "2"` for constant-time bearer comparison (small new dep), the existing `anyhow`/`thiserror`/`tracing`/`serde` ecosystem.
 
-Spec reference: `docs/superpowers/specs/2026-04-28-chat-backup-design.md`
-§7, §9, and Phase 3a of §10.
+Spec reference: `docs/superpowers/specs/2026-04-28-chat-backup-design.md` §7, §9, and Phase 3a of §10.
 
 ---
 
 ## Non-goals for 3a
 
 - No browser extension (Phase 3b).
-- No dashboard "Web captures" panel (Phase 3b adds it; 3a's data is visible
-  via `find ~/.heimdall/archive/web -name '*.json'` until then).
-- No automatic token refresh — when 401 happens, error message tells the
-  user to copy fresh cookies from DevTools.
-- No Cloudflare challenge solver — the user must supply a fresh
-  `cf_clearance` cookie when the prior one expires.
+- No dashboard "Web captures" panel (Phase 3b adds it; 3a's data is visible via `find ~/.heimdall/archive/web -name '*.json'` until then).
+- No automatic token refresh — when 401 happens, error message tells the user to copy fresh cookies from DevTools.
+- No Cloudflare challenge solver — the user must supply a fresh `cf_clearance` cookie when the prior one expires.
 
 ---
 
@@ -85,8 +64,7 @@ Spec reference: `docs/superpowers/specs/2026-04-28-chat-backup-design.md`
         <conv_id>.history/...
 ```
 
-Captured-at timestamps use the same `%Y-%m-%dT%H%M%S%.6fZ` format as Phase
-1's `snapshot_id` so rotated history filenames sort lexicographically.
+Captured-at timestamps use the same `%Y-%m-%dT%H%M%S%.6fZ` format as Phase 1's `snapshot_id` so rotated history filenames sort lexicographically.
 
 ---
 
@@ -1184,17 +1162,12 @@ Same shape as previous phases. Full Rust suite, cargo fmt --check / fix Phase 3a
 | Error message tells user to refresh cookies on 401 | Tasks 4, 5 (`check_status` helper) |
 | Phase 3b extension uses same endpoint and same token | Task 3 (foundation laid) |
 
-**Out-of-scope:** dashboard "Web captures" panel (Phase 3b), browser
-extension (Phase 3b), `--daemon` poll loop (deferred — `--once` only in
-Phase 3a since live network testing of a daemon mode isn't worth the
-additional CLI complexity until we have real cookies to test against).
+**Out-of-scope:** dashboard "Web captures" panel (Phase 3b), browser extension (Phase 3b), `--daemon` poll loop (deferred — `--once` only in Phase 3a since live network testing of a daemon mode isn't worth the additional CLI complexity until we have real cookies to test against).
 
-**Type consistency:** `WebConversation`, `WriteOutcome`, `ScrapeReport`,
-`Credentials`, `Client` referenced consistently across tasks.
+**Type consistency:** `WebConversation`, `WriteOutcome`, `ScrapeReport`, `Credentials`, `Client` referenced consistently across tasks.
 
 ---
 
 ## Execution Handoff
 
-Plan complete. Execute via subagent-driven-development on `main`
-(continuing the existing direct-to-main posture per user authorization).
+Plan complete. Execute via subagent-driven-development on `main` (continuing the existing direct-to-main posture per user authorization).

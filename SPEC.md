@@ -6,8 +6,7 @@ Local analytics tool that parses Claude Code JSONL transcripts and presents usag
 
 ## JSONL Transcript Format
 
-**Location:** `~/.claude/projects/<project-slug>/<session-uuid>.jsonl`
-Subagent sessions: `~/.claude/projects/<project-slug>/subagents/<session-uuid>.jsonl`
+**Location:** `~/.claude/projects/<project-slug>/<session-uuid>.jsonl` Subagent sessions: `~/.claude/projects/<project-slug>/subagents/<session-uuid>.jsonl`
 
 ### Record Types
 
@@ -246,9 +245,7 @@ Options:
 
 ### Charting
 
-Use ApexCharts 4.x loaded from CDN (with graceful degradation note for offline).
-Charts are themed through CSS custom properties in `src/ui/lib/charts.ts` so they
-follow the industrial-design palette and respond to the `data-theme` toggle.
+Use ApexCharts 4.x loaded from CDN (with graceful degradation note for offline). Charts are themed through CSS custom properties in `src/ui/lib/charts.ts` so they follow the industrial-design palette and respond to the `data-theme` toggle.
 
 ## Rust Crate Dependencies
 

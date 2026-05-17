@@ -2,28 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the account-export ZIP importer described in spec §6 — drop a
-`claude-export-*.zip` or `chatgpt-*.zip` into a watched folder (or pass it
-explicitly to `heimdall import-export <zip>`) and Heimdall will parse it,
-preserve the original ZIP verbatim, split conversations into per-conversation
-JSON files under `~/.heimdall/archive/exports/<vendor>/<date>/`, write a
-parser-versioned `metadata.json`, and surface the import in the dashboard.
+**Goal:** Ship the account-export ZIP importer described in spec §6 — drop a `claude-export-*.zip` or `chatgpt-*.zip` into a watched folder (or pass it explicitly to `heimdall import-export <zip>`) and Heimdall will parse it, preserve the original ZIP verbatim, split conversations into per-conversation JSON files under `~/.heimdall/archive/exports/<vendor>/<date>/`, write a parser-versioned `metadata.json`, and surface the import in the dashboard.
 
-**Architecture:** A new `src/archive/imports/` submodule owns the importer.
-Vendor detection is a small ZIP-signature probe; OpenAI gets a typed serde
-parser (well-documented schema), Anthropic gets a defensive `serde_json::Value`
-walker (undocumented schema). The CLI gains an `import-export` subcommand
-group; the daemon-style `--watch` runs in foreground and ingests as ZIPs land
-in `~/Downloads` (or any user-specified directory). The dashboard "Backup"
-tab grows a second "Imports" panel served by a new `GET /api/archive/imports`
-endpoint.
+**Architecture:** A new `src/archive/imports/` submodule owns the importer. Vendor detection is a small ZIP-signature probe; OpenAI gets a typed serde parser (well-documented schema), Anthropic gets a defensive `serde_json::Value` walker (undocumented schema). The CLI gains an `import-export` subcommand group; the daemon-style `--watch` runs in foreground and ingests as ZIPs land in `~/Downloads` (or any user-specified directory). The dashboard "Backup" tab grows a second "Imports" panel served by a new `GET /api/archive/imports` endpoint.
 
-**Tech Stack:** Rust 2024, `zip = "2"` (new dep), `serde_json::Value` for
-defensive parsing, `notify = "6"` (already a dep — used by the scanner watcher)
-for the watch loop, plus existing `axum`, Preact + Tailwind v4 for the panel.
+**Tech Stack:** Rust 2024, `zip = "2"` (new dep), `serde_json::Value` for defensive parsing, `notify = "6"` (already a dep — used by the scanner watcher) for the watch loop, plus existing `axum`, Preact + Tailwind v4 for the panel.
 
-Spec reference: `docs/superpowers/specs/2026-04-28-chat-backup-design.md` §6
-and Phase 2 of §10.
+Spec reference: `docs/superpowers/specs/2026-04-28-chat-backup-design.md` §6 and Phase 2 of §10.
 
 ---
 
@@ -84,9 +69,7 @@ and Phase 2 of §10.
       metadata.json
 ```
 
-The import directory id reuses Phase 1's microsecond timestamp format so
-back-to-back imports don't collide. Each import is *independent* of snapshots
-(distinct subtree); they share `archive.lock` only when triggered concurrently.
+The import directory id reuses Phase 1's microsecond timestamp format so back-to-back imports don't collide. Each import is *independent* of snapshots (distinct subtree); they share `archive.lock` only when triggered concurrently.
 
 ---
 
@@ -268,12 +251,7 @@ git commit -m "feat(archive): imports module skeleton + ZIP vendor detection"
 - Create: `src/archive/imports/openai.rs`
 - Modify: `src/archive/imports/mod.rs` (`pub mod openai;`)
 
-The schema is well-documented (spec §C of research): `conversations.json`
-is an array of conversations, each with `id`, `title`, `create_time`,
-`update_time`, `mapping: HashMap<NodeId, Node>`, `current_node`, optional
-`is_archived`. Each `Node` has `id`, optional `message`, optional `parent`
-(NodeId), `children: Vec<NodeId>`. Each `message` has `id`, `author{role}`,
-`create_time`, `content{content_type, parts}`, etc.
+The schema is well-documented (spec §C of research): `conversations.json` is an array of conversations, each with `id`, `title`, `create_time`, `update_time`, `mapping: HashMap<NodeId, Node>`, `current_node`, optional `is_archived`. Each `Node` has `id`, optional `message`, optional `parent` (NodeId), `children: Vec<NodeId>`. Each `message` has `id`, `author{role}`, `create_time`, `content{content_type, parts}`, etc.
 
 - [ ] **Step 1: Typed parser with forward-compat extras**
 
@@ -422,11 +400,7 @@ git commit -m "feat(archive): OpenAI export parser with forward-compat extras"
 - Create: `src/archive/imports/anthropic.rs`
 - Modify: `src/archive/imports/mod.rs` (`pub mod anthropic;`)
 
-Schema is **not publicly documented**. We parse defensively: walk every
-top-level JSON file in the ZIP, treat each `Value` as the source of truth,
-extract the normalized form `(conversation_id, title, created_at,
-updated_at, messages[])` using best-effort field mapping. Store unknown
-fields verbatim under `extras`. Record the schema fingerprint we observed.
+Schema is **not publicly documented**. We parse defensively: walk every top-level JSON file in the ZIP, treat each `Value` as the source of truth, extract the normalized form `(conversation_id, title, created_at, updated_at, messages[])` using best-effort field mapping. Store unknown fields verbatim under `extras`. Record the schema fingerprint we observed.
 
 - [ ] **Step 1: Defensive parser**
 
@@ -1040,11 +1014,7 @@ Dispatch arm:
         }
 ```
 
-(`watch::run_watch` is the function from Task 6 — for Task 5 we ship the
-import-only path; the `--watch` flag returns an error like "watch mode
-ships in Task 6" until Task 6 lands. Practical alternative: write the
-watch.rs stub returning `anyhow::bail!("watch mode not yet implemented")`
-in Task 5 so this dispatch arm compiles, then Task 6 fills it in.)
+(`watch::run_watch` is the function from Task 6 — for Task 5 we ship the import-only path; the `--watch` flag returns an error like "watch mode ships in Task 6" until Task 6 lands. Practical alternative: write the watch.rs stub returning `anyhow::bail!("watch mode not yet implemented")` in Task 5 so this dispatch arm compiles, then Task 6 fills it in.)
 
 - [ ] **Step 2: Stub `watch.rs` so the build passes**
 
@@ -1316,9 +1286,7 @@ Register in `src/server/mod.rs::build_router`:
 
 - [ ] **Step 3: Server test**
 
-In `src/server/tests.rs`, model the new test on the existing
-`api_archive_list_returns_empty_array_when_no_snapshots` test — same
-shape, hit `/api/archive/imports`, expect `[]`.
+In `src/server/tests.rs`, model the new test on the existing `api_archive_list_returns_empty_array_when_no_snapshots` test — same shape, hit `/api/archive/imports`, expect `[]`.
 
 - [ ] **Step 4: Dashboard panel**
 
@@ -1394,11 +1362,7 @@ export interface ImportMeta {
 export const archiveImports = signal<ImportMeta[]>([]);
 ```
 
-In `src/ui/app.tsx` (where `BackupPanel` is mounted), add a sibling
-`ImportsPanel` mount and a `loadArchiveImports()` helper that fetches
-`/api/archive/imports`. Mount both inside the existing `#backup-panel`
-container or split into a second `#imports-panel` container — pick what
-matches Phase 1's pattern.
+In `src/ui/app.tsx` (where `BackupPanel` is mounted), add a sibling `ImportsPanel` mount and a `loadArchiveImports()` helper that fetches `/api/archive/imports`. Mount both inside the existing `#backup-panel` container or split into a second `#imports-panel` container — pick what matches Phase 1's pattern.
 
 - [ ] **Step 6: Build + commit**
 
@@ -1453,16 +1417,12 @@ git add -p && git commit -m "chore(archive): tidy fixups from Phase 2 final inte
 | Dashboard imports panel + endpoint | Task 7 |
 | Defensive parsing preserves originals | Task 4 (write_conversation_json gets the original `Value`, not the typed struct) |
 
-**Placeholder scan:** None. The Anthropic detection heuristic explicitly
-acknowledges its "until a real export is observed" status — that's a
-documented limitation, not a placeholder.
+**Placeholder scan:** None. The Anthropic detection heuristic explicitly acknowledges its "until a real export is observed" status — that's a documented limitation, not a placeholder.
 
-**Type consistency:** `Vendor`, `ImportReport`, `ImportMetadata`,
-`ImportSummary`, `ImportMeta` (TS) all consistent across tasks.
+**Type consistency:** `Vendor`, `ImportReport`, `ImportMetadata`, `ImportSummary`, `ImportMeta` (TS) all consistent across tasks.
 
 ---
 
 ## Execution Handoff
 
-Plan complete. Execute via subagent-driven-development on `main`
-(continuing the Phase 1 posture per user authorization).
+Plan complete. Execute via subagent-driven-development on `main` (continuing the Phase 1 posture per user authorization).

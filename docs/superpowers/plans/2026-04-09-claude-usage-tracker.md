@@ -87,8 +87,7 @@ fn main() {
 
 - [ ] **Step 4: Verify it compiles**
 
-Run: `cargo build`
-Expected: Compiles with no errors.
+Run: `cargo build` Expected: Compiles with no errors.
 
 - [ ] **Step 5: Commit**
 
@@ -212,8 +211,7 @@ fn main() {
 
 - [ ] **Step 3: Verify it compiles**
 
-Run: `cargo build`
-Expected: Compiles with no errors.
+Run: `cargo build` Expected: Compiles with no errors.
 
 - [ ] **Step 4: Commit**
 
@@ -442,8 +440,7 @@ fn main() {
 
 - [ ] **Step 3: Run tests**
 
-Run: `cargo test pricing`
-Expected: All tests pass.
+Run: `cargo test pricing` Expected: All tests pass.
 
 - [ ] **Step 4: Commit**
 
@@ -830,8 +827,7 @@ fn main() {
 
 - [ ] **Step 4: Run tests**
 
-Run: `cargo test scanner::db`
-Expected: All tests pass.
+Run: `cargo test scanner::db` Expected: All tests pass.
 
 - [ ] **Step 5: Commit**
 
@@ -1235,8 +1231,7 @@ mod tests {
 
 - [ ] **Step 2: Run tests**
 
-Run: `cargo test scanner::parser`
-Expected: All tests pass.
+Run: `cargo test scanner::parser` Expected: All tests pass.
 
 - [ ] **Step 3: Commit**
 
@@ -1392,8 +1387,7 @@ Add to `[dependencies]`: `dirs = "6"`
 
 - [ ] **Step 3: Run full tests**
 
-Run: `cargo test`
-Expected: All tests pass.
+Run: `cargo test` Expected: All tests pass.
 
 - [ ] **Step 4: Commit**
 
@@ -1428,8 +1422,7 @@ The files are large (HTML ~100 lines, CSS ~180 lines, JS ~600 lines). Create the
 
 - [ ] **Step 2: Verify files exist**
 
-Run: `ls src/ui/`
-Expected: `index.html style.css app.js`
+Run: `ls src/ui/` Expected: `index.html style.css app.js`
 
 - [ ] **Step 3: Commit**
 
@@ -1578,8 +1571,7 @@ fn main() {
 
 - [ ] **Step 5: Verify it compiles**
 
-Run: `cargo build`
-Expected: Compiles (UI files must exist first from Task 7).
+Run: `cargo build` Expected: Compiles (UI files must exist first from Task 7).
 
 - [ ] **Step 6: Commit**
 
@@ -1808,8 +1800,7 @@ fn cmd_stats(db_path: &std::path::Path) -> Result<()> {
 
 - [ ] **Step 2: Verify it compiles and runs**
 
-Run: `cargo build && cargo run – --help`
-Expected: Shows CLI help text with all subcommands.
+Run: `cargo build && cargo run – --help` Expected: Shows CLI help text with all subcommands.
 
 - [ ] **Step 3: Commit**
 
@@ -1824,25 +1815,19 @@ git commit -m "feat: add CLI entry point with all commands"
 
 - [ ] **Step 1: Run all tests**
 
-Run: `cargo test`
-Expected: All tests pass.
+Run: `cargo test` Expected: All tests pass.
 
 - [ ] **Step 2: Run clippy**
 
-Run: `cargo clippy – -D warnings`
-Expected: No warnings.
+Run: `cargo clippy – -D warnings` Expected: No warnings.
 
 - [ ] **Step 3: Run fmt check**
 
-Run: `cargo fmt --check`
-Expected: No formatting issues.
+Run: `cargo fmt --check` Expected: No formatting issues.
 
 - [ ] **Step 4: Test with real data (if available)**
 
-Run: `cargo run – scan`
-Run: `cargo run – today`
-Run: `cargo run – stats`
-Expected: Scans ~/.claude/projects/ and shows results.
+Run: `cargo run – scan` Run: `cargo run – today` Run: `cargo run – stats` Expected: Scans ~/.claude/projects/ and shows results.
 
 - [ ] **Step 5: Final commit**
 

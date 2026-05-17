@@ -2,43 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the browser-extension companion (spec §7a) — a Manifest V3
-WebExtension that runs in the user's logged-in claude.ai / chatgpt.com tab,
-issues in-page fetches against the same private endpoints the page itself
-uses (sidestepping Cloudflare entirely), and POSTs each captured
-conversation to Heimdall's `POST /api/archive/web-conversation` endpoint
-(already shipped in Phase 3a). Plus the dashboard "Web captures" panel
-that surfaces the resulting `<archive_root>/web/` tree.
+**Goal:** Ship the browser-extension companion (spec §7a) — a Manifest V3 WebExtension that runs in the user's logged-in claude.ai / chatgpt.com tab, issues in-page fetches against the same private endpoints the page itself uses (sidestepping Cloudflare entirely), and POSTs each captured conversation to Heimdall's `POST /api/archive/web-conversation` endpoint (already shipped in Phase 3a). Plus the dashboard "Web captures" panel that surfaces the resulting `<archive_root>/web/` tree.
 
-**Architecture:** New sibling project at `extensions/heimdall-companion/`
-(TypeScript + esbuild + Vitest, mirroring the dashboard tooling). Single
-source tree builds Chrome and Firefox bundles via webextension-polyfill.
-The extension talks ONLY to localhost; no third-party network. Heimdall
-gains a `GET /api/archive/web-conversations` listing endpoint plus a
-companion-heartbeat endpoint so the dashboard can show "extension last
-seen N min ago". The Phase 1 dashboard "Backup" tab grows a fourth panel
-("Web captures") below Snapshots and Imports.
+**Architecture:** New sibling project at `extensions/heimdall-companion/` (TypeScript + esbuild + Vitest, mirroring the dashboard tooling). Single source tree builds Chrome and Firefox bundles via webextension-polyfill. The extension talks ONLY to localhost; no third-party network. Heimdall gains a `GET /api/archive/web-conversations` listing endpoint plus a companion-heartbeat endpoint so the dashboard can show "extension last seen N min ago". The Phase 1 dashboard "Backup" tab grows a fourth panel ("Web captures") below Snapshots and Imports.
 
-**Tech Stack:** TypeScript 5, esbuild, `webextension-polyfill`,
-Vitest + happy-dom, Manifest V3 service worker pattern. Rust side reuses
-Phase 3a's `WebConversation`/`WriteOutcome` and adds two listing
-endpoints.
+**Tech Stack:** TypeScript 5, esbuild, `webextension-polyfill`, Vitest + happy-dom, Manifest V3 service worker pattern. Rust side reuses Phase 3a's `WebConversation`/`WriteOutcome` and adds two listing endpoints.
 
-Spec reference: `docs/superpowers/specs/2026-04-28-chat-backup-design.md`
-§7a, §8, §9, and Phase 3b of §10.
+Spec reference: `docs/superpowers/specs/2026-04-28-chat-backup-design.md` §7a, §8, §9, and Phase 3b of §10.
 
 ---
 
 ## Non-goals for 3b
 
-- No store distribution (Chrome Web Store / Firefox AMO / Safari TestFlight)
-  — v1 is sideload/unpacked only. Store packaging is a follow-up.
-- No automatic refresh of the user's session on the vendor side — the
-  extension piggybacks on whatever session the live tab already has.
-- No conversation deletion / merging — every capture is append-only via
-  the existing storage primitive (history rotation handled by Phase 3a).
-- No "drag-drop ZIP" feature in the Web captures panel — that lives in
-  the existing Imports panel from Phase 2.
+- No store distribution (Chrome Web Store / Firefox AMO / Safari TestFlight) — v1 is sideload/unpacked only. Store packaging is a follow-up.
+- No automatic refresh of the user's session on the vendor side — the extension piggybacks on whatever session the live tab already has.
+- No conversation deletion / merging — every capture is append-only via the existing storage primitive (history rotation handled by Phase 3a).
+- No "drag-drop ZIP" feature in the Web captures panel — that lives in the existing Imports panel from Phase 2.
 
 ---
 
@@ -115,8 +94,7 @@ Spec reference: `docs/superpowers/specs/2026-04-28-chat-backup-design.md`
 }
 ```
 
-Updated on every successful POST. Listing endpoint serves it back so the
-dashboard can render "extension last seen N min ago".
+Updated on every successful POST. Listing endpoint serves it back so the dashboard can render "extension last seen N min ago".
 
 ### Extension `chrome.storage.local` schema
 
@@ -138,11 +116,7 @@ dashboard can render "extension last seen N min ago".
 
 1. Content-script fetch: list conversation IDs + `updated_at`.
 2. Diff against `lastSeenUpdatedAt[conv_id]` from local storage.
-3. For each changed (or never-seen) conv: fetch its body in-page,
-   compute `schema_fingerprint = SHA256(sorted top-level keys)`, POST
-   `WebConversation { vendor, conversation_id, captured_at, schema_fingerprint, payload }`
-   to `<heimdallUrl>/api/archive/web-conversation` with
-   `Authorization: Bearer <companionToken>`.
+3. For each changed (or never-seen) conv: fetch its body in-page, compute `schema_fingerprint = SHA256(sorted top-level keys)`, POST `WebConversation { vendor, conversation_id, captured_at, schema_fingerprint, payload }` to `<heimdallUrl>/api/archive/web-conversation` with `Authorization: Bearer <companionToken>`.
 4. On success, update `lastSeenUpdatedAt[conv_id]`.
 5. Send a heartbeat POST regardless of whether any captures fired.
 6. Increment `telemetry.totalCaptures` (or `totalErrors`).
@@ -154,11 +128,8 @@ dashboard can render "extension last seen N min ago".
 - TypeScript strict mode; explicit `any` is a lint error.
 - esbuild + tsc are separate steps (tsc for type-checking only).
 - Vitest for unit tests, happy-dom for DOM-flavoured tests.
-- Conventional-commit prefixes: `feat(extension):`, `feat(server):`,
-  `feat(ui):`, `feat(archive):`, `chore(extension):`.
-- The extension never imports Heimdall Rust source — it only knows the
-  HTTP wire shape (documented in the manifest reader's mind, not in
-  shared types).
+- Conventional-commit prefixes: `feat(extension):`, `feat(server):`, `feat(ui):`, `feat(archive):`, `chore(extension):`.
+- The extension never imports Heimdall Rust source — it only knows the HTTP wire shape (documented in the manifest reader's mind, not in shared types).
 
 ---
 
@@ -221,8 +192,7 @@ pub fn read_heartbeat(archive_root: &Path) -> Result<Option<CompanionHeartbeat>>
 }
 ```
 
-Add 2 unit tests: `record_heartbeat_creates_file` and
-`record_heartbeat_appends_unique_vendors`.
+Add 2 unit tests: `record_heartbeat_creates_file` and `record_heartbeat_appends_unique_vendors`.
 
 - [ ] **Step 2: HTTP handlers**
 
@@ -320,8 +290,7 @@ In `src/server/mod.rs::build_router` (alongside `/api/archive/web-conversation`)
 
 - [ ] **Step 4: Server tests**
 
-3 new tests in `src/server/tests.rs`, all using the existing `HOME_LOCK`
-mutex pattern from Phase 3a:
+3 new tests in `src/server/tests.rs`, all using the existing `HOME_LOCK` mutex pattern from Phase 3a:
 
 - `web_conversations_returns_empty_listing_when_no_captures` — GET `/api/archive/web-conversations` against a fresh tempdir → `{"conversations": [], "heartbeat": null}`.
 - `companion_heartbeat_requires_bearer` — POST without bearer → 401.
@@ -343,8 +312,7 @@ git commit -m "feat(server): web-conversations listing + companion-heartbeat end
 
 **Files (all created in `extensions/heimdall-companion/`):**
 
-- `package.json`, `tsconfig.json`, `vitest.config.ts`, `build.mjs`,
-  `manifest.json`, `manifest.firefox.json`, root `README.md`.
+- `package.json`, `tsconfig.json`, `vitest.config.ts`, `build.mjs`, `manifest.json`, `manifest.firefox.json`, root `README.md`.
 - Add `extensions/heimdall-companion/{node_modules,dist}/` to root `.gitignore`.
 
 - [ ] **Step 1: package.json**
@@ -520,10 +488,8 @@ extensions/heimdall-companion/dist/
 `extensions/heimdall-companion/README.md` documents:
 - Sideload steps for Chrome (Developer mode → Load unpacked → `dist/chrome/`).
 - Sideload for Firefox (about:debugging → Load Temporary Add-on → `dist/firefox/manifest.json`).
-- Pair-with-Heimdall flow: run `heimdall companion-token show`, paste the
-  hex into the extension's options page.
-- Disclaimer: uses claude.ai / chatgpt.com private endpoints; you own
-  your account data; your session credentials never leave your browser.
+- Pair-with-Heimdall flow: run `heimdall companion-token show`, paste the hex into the extension's options page.
+- Disclaimer: uses claude.ai / chatgpt.com private endpoints; you own your account data; your session credentials never leave your browser.
 
 ```
 cd extensions/heimdall-companion && npm install
@@ -749,11 +715,7 @@ describe('postConversation', () => {
 });
 ```
 
-`chrome.runtime.getManifest()` is referenced in `heimdall.ts` for the
-heartbeat. Tests don't exercise that path directly (`postHeartbeat` is
-covered by integration); if Vitest complains about `chrome` global, add
-a small mock at the top of heimdall.test.ts:
-`(globalThis as any).chrome = { runtime: { getManifest: () => ({ version: '0.1.0' }) } };`.
+`chrome.runtime.getManifest()` is referenced in `heimdall.ts` for the heartbeat. Tests don't exercise that path directly (`postHeartbeat` is covered by integration); if Vitest complains about `chrome` global, add a small mock at the top of heimdall.test.ts: `(globalThis as any).chrome = { runtime: { getManifest: () => ({ version: '0.1.0' }) } };`.
 
 - [ ] **Step 6: Run + commit**
 
@@ -773,9 +735,7 @@ git commit -m "feat(extension): storage + heimdall client + types"
 - Create: `extensions/heimdall-companion/src/vendors/claude.ts`
 - Create: `extensions/heimdall-companion/src/vendors/chatgpt.ts`
 
-The fetchers run inside the user's logged-in tab (the background sw uses
-`chrome.scripting.executeScript` to invoke them). They issue same-origin
-fetches against `claude.ai` and `chatgpt.com` private APIs.
+The fetchers run inside the user's logged-in tab (the background sw uses `chrome.scripting.executeScript` to invoke them). They issue same-origin fetches against `claude.ai` and `chatgpt.com` private APIs.
 
 - [ ] **Step 1: claude.ts**
 
@@ -1376,25 +1336,21 @@ export const companionHeartbeat = signal<CompanionHeartbeat | null>(null);
 
 - [ ] **Step 2: WebCapturesPanel.tsx**
 
-Mirror the existing `BackupPanel.tsx`/`ImportsPanel.tsx` no-hooks pattern.
-Render:
+Mirror the existing `BackupPanel.tsx`/`ImportsPanel.tsx` no-hooks pattern. Render:
 - Heartbeat strip: "Companion: connected (Claude + ChatGPT) · last seen 14m ago" or "Companion: not paired — install extension at extensions/heimdall-companion/" with a link to the dashboard's pair-token reveal.
 - Counts per vendor.
 - Table: Vendor / Conversation ID / Captured / History versions.
 - Refresh button calling `onReload`.
 
-(Full code mirrors ImportsPanel — keep it concise; use `esc()` from
-`../lib/format` and the existing `data-table` class.)
+(Full code mirrors ImportsPanel — keep it concise; use `esc()` from `../lib/format` and the existing `data-table` class.)
 
 - [ ] **Step 3: WebCapturesPanel.test.tsx**
 
-3 tests modeled on ImportsPanel's tests: empty state, rows-per-capture,
-heartbeat strip rendering when present.
+3 tests modeled on ImportsPanel's tests: empty state, rows-per-capture, heartbeat strip rendering when present.
 
 - [ ] **Step 4: index.html mount**
 
-Add `<div id="web-captures-panel" class="bento-full"></div>` next to
-the existing `imports-panel` and `backup-panel` mounts.
+Add `<div id="web-captures-panel" class="bento-full"></div>` next to the existing `imports-panel` and `backup-panel` mounts.
 
 - [ ] **Step 5: app.tsx wiring**
 
@@ -1433,11 +1389,7 @@ git commit -m "feat(ui): web captures panel with heartbeat strip + per-vendor ta
 
 ## Task 8: Final integration check
 
-Identical to Phase 1/2/3a's final task: full Rust + TS suite, clippy/fmt
-clean, CLI smoke (`heimdall companion-token show` still works,
-`/api/archive/web-conversations` registered, `extensions/heimdall-companion`
-typechecks + tests green), single tidy commit only if drift was found,
-and a `git log --oneline 44c3361..HEAD` summary.
+Identical to Phase 1/2/3a's final task: full Rust + TS suite, clippy/fmt clean, CLI smoke (`heimdall companion-token show` still works, `/api/archive/web-conversations` registered, `extensions/heimdall-companion` typechecks + tests green), single tidy commit only if drift was found, and a `git log --oneline 44c3361..HEAD` summary.
 
 ---
 
@@ -1456,16 +1408,12 @@ and a `git log --oneline 44c3361..HEAD` summary.
 | §8 dashboard "Web captures" panel + heartbeat | Task 7 |
 | §9 companion-token bearer (extension paired via hex paste) | Phase 3a (reused) |
 
-**Out of scope:** store distribution, ChatGPT macOS Keychain reader,
-Cowork session import, conversation diff/restore back into vendor.
+**Out of scope:** store distribution, ChatGPT macOS Keychain reader, Cowork session import, conversation diff/restore back into vendor.
 
-**Type consistency:** `WebConversation`, `WebConversationSummary`,
-`CompanionHeartbeat`, `ExtensionConfig`, `VendorState`, `SyncResult`,
-`VendorAdapter` referenced consistently across Rust + TypeScript.
+**Type consistency:** `WebConversation`, `WebConversationSummary`, `CompanionHeartbeat`, `ExtensionConfig`, `VendorState`, `SyncResult`, `VendorAdapter` referenced consistently across Rust + TypeScript.
 
 ---
 
 ## Execution Handoff
 
-Plan complete. Execute via subagent-driven-development on `main`
-(continuing the existing direct-to-main posture).
+Plan complete. Execute via subagent-driven-development on `main` (continuing the existing direct-to-main posture).

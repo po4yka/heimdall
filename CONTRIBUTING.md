@@ -95,9 +95,7 @@ For dashboard changes that can't be unit-tested, manually verify in a browser ag
 
 1. Push your branch and open a PR against `main`.
 2. Fill in the [PR template](.github/PULL_REQUEST_TEMPLATE.md) — especially the test plan.
-3. Make sure CI passes:
-   - `cargo build`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
-   - `tsc --noEmit` if `src/ui/` was touched
+3. Make sure CI passes: - `cargo build`, `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check` - `tsc --noEmit` if `src/ui/` was touched
 4. Be ready to iterate. Reviewers may ask for changes; please squash review fixups into the original commit when reasonable, or keep them as fixup commits and let the reviewer squash on merge.
 
 ## Adding a scanner provider, waste detector, or analytics view

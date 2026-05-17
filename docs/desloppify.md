@@ -30,12 +30,8 @@ These are the rules that cannot be derived from a generic style guide. They appe
 
 ### Backend (Rust under `src/`, excluding `src/ui/`)
 
-- **No panic-on-error in library code.** Anything that panics on a recoverable error is banned in `src/scanner/`, `src/server/`, `src/pricing/`, `src/oauth/`, `src/optimizer/`, `src/agent_status/`, `src/scheduler/`, and `src/hook/`. That includes `.unwrap()`, `.expect("...")` on `Result` / `Option`, `panic!`, `unreachable!`, `unimplemented!`, and `todo!`. Acceptable in `tests/`, `#[cfg(test)]` modules, and `main.rs` / CLI glue.
-  - **BAD:** `let conn = open_db(path).unwrap();`
-  - **GOOD:** `let conn = open_db(path)?;` (with a `thiserror`-derived error at the function boundary)
-- **Library errors via `thiserror`; CLI/main via `anyhow`.** Library functions return `Result<T, ThisErrorEnum>` so callers can match; `main.rs` and CLI glue use `anyhow::Result<T>` and `?` to bubble.
-  - **BAD:** `pub fn parse(...) -> anyhow::Result<Vec<Turn>>` in a library module.
-  - **GOOD:** `pub fn parse(...) -> Result<Vec<Turn>, ParseError>` with `#[derive(thiserror::Error)]`.
+- **No panic-on-error in library code.** Anything that panics on a recoverable error is banned in `src/scanner/`, `src/server/`, `src/pricing/`, `src/oauth/`, `src/optimizer/`, `src/agent_status/`, `src/scheduler/`, and `src/hook/`. That includes `.unwrap()`, `.expect("...")` on `Result` / `Option`, `panic!`, `unreachable!`, `unimplemented!`, and `todo!`. Acceptable in `tests/`, `#[cfg(test)]` modules, and `main.rs` / CLI glue. - **BAD:** `let conn = open_db(path).unwrap();` - **GOOD:** `let conn = open_db(path)?;` (with a `thiserror`-derived error at the function boundary)
+- **Library errors via `thiserror`; CLI/main via `anyhow`.** Library functions return `Result<T, ThisErrorEnum>` so callers can match; `main.rs` and CLI glue use `anyhow::Result<T>` and `?` to bubble. - **BAD:** `pub fn parse(...) -> anyhow::Result<Vec<Turn>>` in a library module. - **GOOD:** `pub fn parse(...) -> Result<Vec<Turn>, ParseError>` with `#[derive(thiserror::Error)]`.
 - **All SQL lives in `src/scanner/db.rs`.** No inline SQL in handlers, providers, or detectors. New queries become typed functions in `db.rs` that callers invoke.
 - **Schema migrations are additive only.** `ALTER TABLE ... ADD COLUMN` with a `has_column` guard. No `DROP COLUMN`, no `DROP TABLE`, no value-type narrowing. Backfill defaults via idempotent `UPDATE ... WHERE column IS NULL` after the ADD.
 - **Provider-specific parsing stays per-provider.** Cross-provider helpers in `parser.rs`; per-provider quirks (Pi `responseId` last-wins, Codex cumulative-token cross-check, Claude / Xcode `message.id` dedup) stay in their own provider modules.
@@ -43,12 +39,8 @@ These are the rules that cannot be derived from a generic style guide. They appe
 ### Frontend (TypeScript / Preact under `src/ui/`)
 
 - **TSX is source of truth; `app.js` and `style.css` are committed build output.** Edit `src/ui/*.tsx` and `src/ui/input.css`; never edit the compiled artifacts directly. Rebuild with `npm run build:ui` after source changes and commit the regenerated artifacts alongside source.
-- **Single design system: Inter + Geist Mono.** Inter for UI / headings / body; Geist Mono for numbers, code, tabular columns. Do not introduce any UI face outside this whitelist without a design-system entry — `Doto`, `Space Grotesk`, `Space Mono`, and any other display, body, or monospace face are out by structural rule, not by name.
-  - **BAD:** `font-family: 'Roboto Mono', monospace;` in a new component.
-  - **GOOD:** consume the `--font-mono` token, which resolves to Geist Mono.
-- **All dynamic text passes through `esc()` in `src/ui/lib/format.ts`.** No raw template literals into the DOM, no `innerHTML` with user data, no `dangerouslySetInnerHTML`. The `esc()` call is the structural gate; reviewers grep for it.
-  - **BAD:** `<span>{turn.model}</span>` (where `model` arrived from the API).
-  - **GOOD:** `<span>{esc(turn.model)}</span>`.
+- **Single design system: Inter + Geist Mono.** Inter for UI / headings / body; Geist Mono for numbers, code, tabular columns. Do not introduce any UI face outside this whitelist without a design-system entry — `Doto`, `Space Grotesk`, `Space Mono`, and any other display, body, or monospace face are out by structural rule, not by name. - **BAD:** `font-family: 'Roboto Mono', monospace;` in a new component. - **GOOD:** consume the `--font-mono` token, which resolves to Geist Mono.
+- **All dynamic text passes through `esc()` in `src/ui/lib/format.ts`.** No raw template literals into the DOM, no `innerHTML` with user data, no `dangerouslySetInnerHTML`. The `esc()` call is the structural gate; reviewers grep for it. - **BAD:** `<span>{turn.model}</span>` (where `model` arrived from the API). - **GOOD:** `<span>{esc(turn.model)}</span>`.
 - **One chromatic accent per screen.** `--accent-interactive` (`#4A7FA5`) for primary interactive (links, selected, primary buttons). `--accent` (`#D71921`) is reserved for semantic error / destructive / over-limit only. Status colours (`--success`, `--warning`) unchanged.
 - **Sentence-case for UI copy.** ALL-CAPS monospace is reserved for `<th>` table column headers only — stat-card labels, section titles, filter labels, and chart titles use 11–12 px sentence-case in `--text-secondary`.
 

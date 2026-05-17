@@ -113,20 +113,8 @@ Heimdall exposes 9 tools to Claude / Claude Desktop / Cursor at inference time v
 
 The repository ships Codex-native project assets for contributors who use Codex:
 
-- **Custom subagents** live in `.codex/agents/`:
-  - `heimdall_explorer` for read-only codebase mapping
-  - `heimdall_reviewer` for read-only regression review
-  - `heimdall_provider_worker` for scanner/provider implementation
-  - `heimdall_dashboard_worker` for dashboard implementation
-- **Repo-scoped skills** live in `.agents/skills/`:
-  - `heimdall-rust-test-runner` for targeted Rust and UI verification
-  - `heimdall-pr-review` for findings-first branch and diff review
-  - `heimdall-fix-unwraps` for removing production Rust `.unwrap()` paths safely
-  - `heimdall-rust-dependency-audit` for dependency and security audit passes
-  - `heimdall-rust-binary-audit` for release-size and bloat analysis
-  - `heimdall-scanner-provider` for new or changed providers
-  - `heimdall-schema-evolution` for additive schema/data-flow changes
-  - `heimdall-dashboard` for `src/ui/` work and committed UI artifacts
+- **Custom subagents** live in `.codex/agents/`: - `heimdall_explorer` for read-only codebase mapping - `heimdall_reviewer` for read-only regression review - `heimdall_provider_worker` for scanner/provider implementation - `heimdall_dashboard_worker` for dashboard implementation
+- **Repo-scoped skills** live in `.agents/skills/`: - `heimdall-rust-test-runner` for targeted Rust and UI verification - `heimdall-pr-review` for findings-first branch and diff review - `heimdall-fix-unwraps` for removing production Rust `.unwrap()` paths safely - `heimdall-rust-dependency-audit` for dependency and security audit passes - `heimdall-rust-binary-audit` for release-size and bloat analysis - `heimdall-scanner-provider` for new or changed providers - `heimdall-schema-evolution` for additive schema/data-flow changes - `heimdall-dashboard` for `src/ui/` work and committed UI artifacts
 
 Claude Code users have matching repo-local prompts under `.claude/agents/` and `.claude/commands/`.
 
